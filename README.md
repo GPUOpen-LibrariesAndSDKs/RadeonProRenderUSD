@@ -5,7 +5,7 @@ This plugin allows fast GPU or CPU accelerated viewport rendering on all OpenCL 
 
 For more details on USD, please visit the web site [here](http://openusd.org).
 
-![Alt Text](https://www.dropbox.com/s/adqexgc78v35417/ezgif-2-5eb2f04c90.gif)
+![](https://www.dropbox.com/s/adqexgc78v35417/ezgif-2-5eb2f04c90.gif?raw=1)
 
 Prerequisites
 -----------------------------
