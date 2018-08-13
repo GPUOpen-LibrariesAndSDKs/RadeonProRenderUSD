@@ -12,6 +12,8 @@
 
 #include <memory>
 
+#include <GL/glew.h>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApiImpl;
@@ -96,7 +98,7 @@ public:
 
 	void GetFramebufferSize(GfVec2i & resolution) const;
 
-	const float * GetFramebufferData() const;
+	const GLuint GetFramebufferGL() const;
 
 	void DeleteRprApiObject(RprApiObject object);
 

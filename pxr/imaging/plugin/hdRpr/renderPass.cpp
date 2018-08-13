@@ -73,11 +73,22 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 	if (cameraProjMatrix != proj) {
 		rprApi->SetCameraProjectionMatrix(proj);
 	}
+	GLuint rprFb = rprApi->GetFramebufferGL();
 
+	GLint restoreTexture, usdFB;
+	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &usdFB);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, rprFb);
 	rprApi->Render();
 
-	// TODO: BLIT
-	glDrawPixels(fbSize[0], fbSize[1], GL_RGBA, GL_FLOAT, rprApi->GetFramebufferData());
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, rprFb);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, usdFB);
+	glBlitFramebuffer(0, 0, fbSize[0], fbSize[1],
+		0, 0, fbSize[0], fbSize[1],
+		GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, usdFB);
+
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

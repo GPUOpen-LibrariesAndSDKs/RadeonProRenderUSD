@@ -13,7 +13,7 @@
 
 #include "pxr/imaging/pxOsd/tokens.h"
 
-//#define USE_INTEROP
+#define USE_INTEROP
 
 // we lock()/unlock() around rpr calls that might be called multithreaded.
 #define SAFE_DELETE_RPR_OBJECT(x) if(x) {lock(); rprObjectDelete( x ); x = nullptr; unlock();}
@@ -64,12 +64,34 @@ const rpr_render_mode GetRprRenderMode(const HdRprRenderMode & hdRprRenderMode)
 
 const rpr_creation_flags GetRprCreationFlags(const HdRprRenderDevice renderDevice)
 {
+	rpr_creation_flags flags = 0x0;
+
+#ifdef  USE_INTEROP
+	flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
+#endif
+
+
 	switch (renderDevice)
 	{
-	case HdRprRenderDevice::CPU: return RPR_CREATION_FLAGS_ENABLE_CPU;
-	case HdRprRenderDevice::GPU0: return RPR_CREATION_FLAGS_ENABLE_GPU0;
+	case HdRprRenderDevice::CPU:
+	{
+#ifdef  USE_INTEROP
+		TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
+		flags |= RPR_CREATION_FLAGS_ENABLE_GPU0;
+#elif
+		flags |= RPR_CREATION_FLAGS_ENABLE_CPU;
+#endif
+	}
+	break;
+
+	case HdRprRenderDevice::GPU0:
+		flags |= RPR_CREATION_FLAGS_ENABLE_GPU0;
+		break;
+
 	default: return RPR_ERROR_UNSUPPORTED;
 	}
+
+	return flags;
 }
 
 
@@ -539,6 +561,12 @@ public:
 		}
 
 #ifdef USE_INTEROP
+
+		glGenFramebuffers(1, &framebufferGL);
+		glBindFramebuffer(GL_FRAMEBUFFER, framebufferGL);
+
+
+
 		// Allocate an OpenGL texture.
 		glGenTextures(1, &texture2D);
 		glBindTexture(GL_TEXTURE_2D, texture2D);
@@ -548,17 +576,40 @@ public:
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
 		glBindTexture(GL_TEXTURE_2D, 0);
+
+		GLuint depthrenderbuffer;
+		glGenRenderbuffers(1, &depthrenderbuffer);
+		glBindRenderbuffer(GL_RENDERBUFFER, depthrenderbuffer);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthrenderbuffer);
 		
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture2D, 0);
+
+		GLenum glFbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		if ( glFbStatus != GL_FRAMEBUFFER_COMPLETE)
+		{
+			TF_CODING_ERROR("Fail create GL framebuffer. Error code %d", glFbStatus);
+			ClearFramebuffers();
+			return;
+		}
+
 		status = rprContextCreateFramebufferFromGLTexture2D(context, GL_TEXTURE_2D, 0, texture2D, &resolved_buffer);
 		if (status != RPR_SUCCESS)
 		{
+			ClearFramebuffers();
 			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
+			return;
 		}
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindRenderbuffer(GL_RENDERBUFFER, 0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #else
 		status = rprContextCreateFrameBuffer(context, fmt, &framebuffer_desc, &resolved_buffer);
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
+			return;
 		}
 #endif
 		//unlock();
@@ -636,6 +687,11 @@ public:
 	const GfMatrix4d & GetCameraProjectionMatrix() const
 	{
 		return m_cameraProjectionMatrix;
+	}
+
+	const GLuint GetFramebufferGL() const
+	{
+		return framebufferGL;
 	}
 
 	const float * GetFramebufferData()
@@ -739,6 +795,12 @@ public:
 		SAFE_DELETE_RPR_OBJECT(color_buffer);
 		SAFE_DELETE_RPR_OBJECT(resolved_buffer);
 		
+		if (framebufferGL != GL_INVALID_VALUE)
+		{
+			glDeleteFramebuffers(1, &framebufferGL);
+			framebufferGL = INVALID_TEXTURE;
+		}
+
 		if (texture2D != INVALID_TEXTURE)
 		{
 			glDeleteTextures(1, &texture2D);
@@ -783,7 +845,7 @@ private:
 		rpr_int plugins[] = { tahoePluginID };
 
 		const HdRprRenderDevice renderDevice = s_preferences.GetRenderDevice();
-		rpr_int status = rprCreateContext(RPR_API_VERSION, plugins, 1, GetRprCreationFlags(renderDevice) /*| RPR_CREATION_FLAGS_ENABLE_GL_INTEROP*/ , NULL, NULL, &context);
+		rpr_int status = rprCreateContext(RPR_API_VERSION, plugins, 1, GetRprCreationFlags(renderDevice), NULL, NULL, &context);
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail Load %s. Error code %d", k_TahoeLibName, status);
@@ -893,6 +955,7 @@ private:
 	rpr_framebuffer resolved_buffer = nullptr;
 	rpr_post_effect tonemap = nullptr;
 
+	GLuint framebufferGL = GL_INVALID_VALUE;
 	rpr_GLuint texture2D = INVALID_TEXTURE;
 
 	rpr_material_system matsys = nullptr;
@@ -1060,9 +1123,9 @@ HdRprPreferences HdRprApiImpl::s_preferences = HdRprPreferences();
 		m_impl->Render();
 	}
 
-	const float * HdRprApi::GetFramebufferData() const
+	const GLuint HdRprApi::GetFramebufferGL() const
 	{
-		return m_impl->GetFramebufferData();
+		return m_impl->GetFramebufferGL();
 	}
 
 	void HdRprApi::DeleteRprApiObject(RprApiObject object)
