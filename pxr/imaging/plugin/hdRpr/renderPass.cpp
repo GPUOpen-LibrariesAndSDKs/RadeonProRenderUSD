@@ -73,6 +73,8 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 	if (cameraProjMatrix != proj) {
 		rprApi->SetCameraProjectionMatrix(proj);
 	}
+
+#ifdef USE_GL_INTEROP
 	GLuint rprFb = rprApi->GetFramebufferGL();
 
 	GLint restoreTexture, usdFB;
@@ -88,6 +90,10 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 		GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, usdFB);
+#else
+	rprApi->Render();
+	glDrawPixels(fbSize[0], fbSize[1], GL_RGBA, GL_FLOAT, rprApi->GetFramebufferData());
+#endif
 
 }
 

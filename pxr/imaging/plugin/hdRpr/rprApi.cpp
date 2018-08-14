@@ -13,11 +13,10 @@
 
 #include "pxr/imaging/pxOsd/tokens.h"
 
-#define USE_INTEROP
-
 // we lock()/unlock() around rpr calls that might be called multithreaded.
 #define SAFE_DELETE_RPR_OBJECT(x) if(x) {lock(); rprObjectDelete( x ); x = nullptr; unlock();}
 #define INVALID_TEXTURE -1
+#define INVALID_FRAMEBUFFER -1
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -66,7 +65,7 @@ const rpr_creation_flags GetRprCreationFlags(const HdRprRenderDevice renderDevic
 {
 	rpr_creation_flags flags = 0x0;
 
-#ifdef  USE_INTEROP
+#ifdef  USE_GL_INTEROP
 	flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
 #endif
 
@@ -75,10 +74,10 @@ const rpr_creation_flags GetRprCreationFlags(const HdRprRenderDevice renderDevic
 	{
 	case HdRprRenderDevice::CPU:
 	{
-#ifdef  USE_INTEROP
+#ifdef  USE_GL_INTEROP
 		TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
 		flags |= RPR_CREATION_FLAGS_ENABLE_GPU0;
-#elif
+#else
 		flags |= RPR_CREATION_FLAGS_ENABLE_CPU;
 #endif
 	}
@@ -208,24 +207,24 @@ public:
 	{
 		DeleteFramebuffers();
 
-		SAFE_DELETE_RPR_OBJECT(scene);
-		SAFE_DELETE_RPR_OBJECT(camera);
-		SAFE_DELETE_RPR_OBJECT(tonemap);
-		SAFE_DELETE_RPR_OBJECT(matsys);
+		SAFE_DELETE_RPR_OBJECT(m_scene);
+		SAFE_DELETE_RPR_OBJECT(m_camera);
+		SAFE_DELETE_RPR_OBJECT(m_tonemap);
+		SAFE_DELETE_RPR_OBJECT(m_matsys);
 	}
 
 	void CreateScene() {
 		//lock();
-		rprContextCreateScene(context, &scene);
-		rprContextSetScene(context, scene);
+		rprContextCreateScene(m_context, &m_scene);
+		rprContextSetScene(m_context, m_scene);
 		//unlock();
 	}
 
 	void CreateCamera() {
 		//lock();
-		rprContextCreateCamera(context, &camera);
-		rprCameraLookAt(camera, 20.0f, 60.0f, 40.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
-		rprSceneSetCamera(scene, camera);
+		rprContextCreateCamera(m_context, &m_camera);
+		rprCameraLookAt(m_camera, 20.0f, 60.0f, 40.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+		rprSceneSetCamera(m_scene, m_camera);
 		//unlock();
 	}
 
@@ -238,7 +237,7 @@ public:
 		SplitPolygons(indexes, vpf, newIndexes, newVpf);
 		
 		lock();
-		status = rprContextCreateMesh(context,
+		status = rprContextCreateMesh(m_context,
 			(rpr_float const*)points.data(), points.size(), sizeof(GfVec3f),
 			(rpr_float const*)((normals.size() == 0) ? 0 : normals.data()), normals.size(), sizeof(GfVec3f),
 			(rpr_float const*)((uv.size() == 0) ? 0 : uv.data()), uv.size(), sizeof(GfVec2f),
@@ -253,7 +252,7 @@ public:
 			return nullptr;
 		}
 
-		status = rprSceneAttachShape(scene, mesh);
+		status = rprSceneAttachShape(m_scene, mesh);
 		if (status != RPR_SUCCESS) {
 			TF_CODING_ERROR("Fail attach mesh. Error code: %d", status);
 			return nullptr;
@@ -316,14 +315,14 @@ public:
 		rpr_int status;
 		rpr_shape meshInstance;
 		lock();
-		status = rprContextCreateInstance(context, mesh, &meshInstance);
+		status = rprContextCreateInstance(m_context, mesh, &meshInstance);
 		
 		if (status != RPR_SUCCESS) {
 			TF_CODING_ERROR("Fail to create mesh instance. Error code: %d", status);
 			return nullptr;
 		}
 
-		status = rprSceneAttachShape(scene, meshInstance);
+		status = rprSceneAttachShape(m_scene, meshInstance);
 		unlock();
 				
 		if (status != RPR_SUCCESS) {
@@ -346,7 +345,7 @@ public:
 		rpr_int status;
 		rpr_image image = nullptr;
 		//lock();
-		status = rprContextCreateImageFromFile(context, path.c_str(), &image);
+		status = rprContextCreateImageFromFile(m_context, path.c_str(), &image);
 		
 		if (status != RPR_SUCCESS) {
 			TF_CODING_ERROR("Fail to load image %s\n Error code: %d", path.c_str(), status);
@@ -354,12 +353,12 @@ public:
 		
 		// Add an environment light to the scene with the image attached.
 		rpr_light light;
-		status = rprContextCreateEnvironmentLight(context, &light);
+		status = rprContextCreateEnvironmentLight(m_context, &light);
 		status = rprEnvironmentLightSetImage(light, image);
 		status = rprEnvironmentLightSetIntensityScale(light, intensity);
-		status = rprSceneAttachLight(scene, light);
+		status = rprSceneAttachLight(m_scene, light);
 		//unlock();
-		isLightPresent = true;
+		m_isLightPresent = true;
 	}
 
 	void CreateEnvironmentLight(GfVec3f color, float intensity)
@@ -376,17 +375,17 @@ public:
 		rpr_image_desc desc = { 1, 1, 1, 3, 3 };
 		//lock();
 		
-		status = rprContextCreateImage(context, format, &desc, backgroundColor.data(), &image);
+		status = rprContextCreateImage(m_context, format, &desc, backgroundColor.data(), &image);
 		if (status != RPR_SUCCESS)
 			TF_CODING_ERROR("Fail to create image from color.  Error code: %d", status);
 
-		status = rprContextCreateEnvironmentLight(context, &light);
+		status = rprContextCreateEnvironmentLight(m_context, &light);
 		status = rprEnvironmentLightSetImage(light, image);
 		status = rprEnvironmentLightSetIntensityScale(light, intensity);
-		status = rprSceneAttachLight(scene, light);
+		status = rprSceneAttachLight(m_scene, light);
 		//unlock();
 		
-		isLightPresent = true;
+		m_isLightPresent = true;
 	}
 
 	void * CreateRectLightGeometry(const float & width, const float & height)
@@ -411,7 +410,7 @@ public:
 
 		VtVec2fArray uv; // empty
 
-		isLightPresent = true;
+		m_isLightPresent = true;
 
 		return CreateMesh(positions, normals, uv, idx, vpf);
 	}
@@ -447,7 +446,7 @@ public:
 		rpr_material_node material = NULL;
 		//lock();
 		
-		status = rprMaterialSystemCreateNode(matsys, RPR_MATERIAL_NODE_EMISSIVE, &material);
+		status = rprMaterialSystemCreateNode(m_matsys, RPR_MATERIAL_NODE_EMISSIVE, &material);
 		if (status != RPR_SUCCESS) {
 			TF_CODING_ERROR("Fail create emmisive material. Error code: %d", status);
 			return nullptr;
@@ -461,7 +460,7 @@ public:
 			return nullptr;
 		}
 
-		isLightPresent = true;
+		m_isLightPresent = true;
 		
 		return CreateMesh(positions, normals, uv, idx, vpf, material);
 	}
@@ -503,7 +502,7 @@ public:
 			}
 		}
 
-		isLightPresent = true;
+		m_isLightPresent = true;
 
 		return CreateMesh(positions, normals, uv, idx, vpf);
 
@@ -531,16 +530,16 @@ public:
 	{
 		//lock();
 		
-		rprContextCreatePostEffect(context, RPR_POST_EFFECT_TONE_MAP, &tonemap);
-		rprContextAttachPostEffect(context, tonemap);
+		rprContextCreatePostEffect(m_context, RPR_POST_EFFECT_TONE_MAP, &m_tonemap);
+		rprContextAttachPostEffect(m_context, m_tonemap);
 		
 		//unlock();
 	}
 
 	void CreateFramebuffer(const rpr_uint width, const rpr_uint height)
 	{		
-		framebuffer_desc.fb_width = width; 
-		framebuffer_desc.fb_height = height;
+		m_framebufferDesc.fb_width = width; 
+		m_framebufferDesc.fb_height = height;
 		
 		rpr_int status;
 		
@@ -549,7 +548,7 @@ public:
 
 		//lock();
 		
-		status = rprContextCreateFrameBuffer(context, fmt, &framebuffer_desc, &color_buffer);
+		status = rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_colorBuffer);
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
@@ -560,16 +559,16 @@ public:
 			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
 		}
 
-#ifdef USE_INTEROP
+#ifdef USE_GL_INTEROP
 
-		glGenFramebuffers(1, &framebufferGL);
-		glBindFramebuffer(GL_FRAMEBUFFER, framebufferGL);
+		glGenFramebuffers(1, &m_framebufferGL);
+		glBindFramebuffer(GL_FRAMEBUFFER, m_framebufferGL);
 
 
 
 		// Allocate an OpenGL texture.
-		glGenTextures(1, &texture2D);
-		glBindTexture(GL_TEXTURE_2D, texture2D);
+		glGenTextures(1, &m_textureFramebufferGL);
+		glBindTexture(GL_TEXTURE_2D, m_textureFramebufferGL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -577,13 +576,12 @@ public:
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
 		glBindTexture(GL_TEXTURE_2D, 0);
 
-		GLuint depthrenderbuffer;
-		glGenRenderbuffers(1, &depthrenderbuffer);
-		glBindRenderbuffer(GL_RENDERBUFFER, depthrenderbuffer);
+		glGenRenderbuffers(1, &m_depthrenderbufferGL);
+		glBindRenderbuffer(GL_RENDERBUFFER, m_depthrenderbufferGL);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthrenderbuffer);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthrenderbufferGL);
 		
-		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture2D, 0);
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_textureFramebufferGL, 0);
 
 		GLenum glFbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 		if ( glFbStatus != GL_FRAMEBUFFER_COMPLETE)
@@ -593,7 +591,7 @@ public:
 			return;
 		}
 
-		status = rprContextCreateFramebufferFromGLTexture2D(context, GL_TEXTURE_2D, 0, texture2D, &resolved_buffer);
+		status = rprContextCreateFramebufferFromGLTexture2D(m_context, GL_TEXTURE_2D, 0, m_textureFramebufferGL, &m_resolvedBuffer);
 		if (status != RPR_SUCCESS)
 		{
 			ClearFramebuffers();
@@ -605,34 +603,35 @@ public:
 		glBindRenderbuffer(GL_RENDERBUFFER, 0);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #else
-		status = rprContextCreateFrameBuffer(context, fmt, &framebuffer_desc, &resolved_buffer);
+		status = rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_resolvedBuffer);
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
 			return;
 		}
+
+		m_framebufferData.resize(m_framebufferDesc.fb_width * m_framebufferDesc.fb_height * 4, 0.f);
 #endif
 		//unlock();
 		
 		ClearFramebuffers();
 
 		//lock();
-		rprContextSetAOV(context, RPR_AOV_COLOR, color_buffer);
+		rprContextSetAOV(m_context, RPR_AOV_COLOR, m_colorBuffer);
 		//unlock();
-		bufferData.resize(framebuffer_desc.fb_width * framebuffer_desc.fb_height * 4, 0.f);
 	}
 
 
 	void SetFramebufferDirty(bool isDirty)
 	{
-		isFramebufferDirty = isDirty;
+		m_isFramebufferDirty = isDirty;
 	}
 
 	void ClearFramebuffers()
 	{
 		//lock();
-		rprFrameBufferClear(color_buffer);
-		rprFrameBufferClear(resolved_buffer);
+		rprFrameBufferClear(m_colorBuffer);
+		rprFrameBufferClear(m_resolvedBuffer);
 		//unlock();
 	}
 
@@ -649,7 +648,7 @@ public:
 		GfVec3f at(eye - n);
 
 		//lock();
-		rprCameraLookAt(camera, eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]);
+		rprCameraLookAt(m_camera, eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]);
 		//unlock();
 
 		m_cameraViewMatrix = m;
@@ -661,14 +660,14 @@ public:
 
 		rpr_int status;
 		//lock();
-		status = rprCameraGetInfo(camera, RPR_CAMERA_SENSOR_SIZE, sizeof(sensorSize), &sensorSize, NULL);
+		status = rprCameraGetInfo(m_camera, RPR_CAMERA_SENSOR_SIZE, sizeof(sensorSize), &sensorSize, NULL);
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail to get camera swnsor size parameter. Error code %d", status);
 		}
 
 		const float focalLength = sensorSize[1] * proj[1][1] / 2;
-		status = rprCameraSetFocalLength(camera, focalLength);
+		status = rprCameraSetFocalLength(m_camera, focalLength);
 		
 		//unlock();
 		if (status != RPR_SUCCESS)
@@ -689,50 +688,42 @@ public:
 		return m_cameraProjectionMatrix;
 	}
 
+#ifdef USE_GL_INTEROP
 	const GLuint GetFramebufferGL() const
 	{
-		return framebufferGL;
+		return m_framebufferGL;
 	}
 
+#else
 	const float * GetFramebufferData()
 	{
 		rpr_int status;
-
-#ifdef USE_INTEROP
-		glBindTexture(GL_TEXTURE_2D, texture2D);
-		glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, bufferData.data());
-		glBindTexture(GL_TEXTURE_2D, 0);
-
-		if (GLenum errorCode = glGetError())
-		{
-			TF_CODING_ERROR("Fail get texture pixels. Error code %d", errorCode);
-		}
-#else
 		size_t fb_data_size = 0;
 		//lock();
 		
-		status = rprFrameBufferGetInfo(resolved_buffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fb_data_size);
+		status = rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fb_data_size);
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail to get frafebuffer data size. Error code %d", status);
 		}
 
-		status = rprFrameBufferGetInfo(resolved_buffer, RPR_FRAMEBUFFER_DATA, fb_data_size, bufferData.data(), NULL);
+		status = rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, fb_data_size, m_framebufferData.data(), NULL);
 		
 		//unlock();
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail to get frafebuffer data. Error code %d", status);
 		}
-#endif
 
-		return bufferData.data();
+
+		return m_framebufferData.data();
 	}
+#endif
 
 	void GetFramebufferSize(rpr_int & width, rpr_int & height) const
 	{
-		width = framebuffer_desc.fb_width;
-		height = framebuffer_desc.fb_height;
+		width = m_framebufferDesc.fb_width;
+		height = m_framebufferDesc.fb_height;
 	}
 
 	void ResizeFramebuffer(const GfVec2i & resolution) {
@@ -744,19 +735,19 @@ public:
 	{
 		rpr_int status;
 
-		if (isFramebufferDirty)
+		if (m_isFramebufferDirty)
 		{
 			ClearFramebuffers();
 			SetFramebufferDirty(false);
 		}
 
 		// In case there is no Lights in scene - create dafault
-		if (!isLightPresent)
+		if (!m_isLightPresent)
 		{
 			CreateEnvironmentLight(k_defaultLightColor, 1.f);
 		}
 
-		status = rprContextRender(context);
+		status = rprContextRender(m_context);
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail contex render framebuffer. Error code %d", status);
@@ -768,7 +759,7 @@ public:
 		{
 			
 			//lock();
-			status = rprContextSetParameter1u(context, "rendermode", GetRprRenderMode(renderMode));
+			status = rprContextSetParameter1u(m_context, "rendermode", GetRprRenderMode(renderMode));
 			//unlock();
 			
 			if (status != RPR_SUCCESS)
@@ -782,7 +773,7 @@ public:
 		}
 
 		//lock();
-		status = rprContextResolveFrameBuffer(context, color_buffer, resolved_buffer, false);
+		status = rprContextResolveFrameBuffer(m_context, m_colorBuffer, m_resolvedBuffer, false);
 		//unlock();
 		if (status != RPR_SUCCESS)
 		{
@@ -792,20 +783,29 @@ public:
 
 	void DeleteFramebuffers()
 	{
-		SAFE_DELETE_RPR_OBJECT(color_buffer);
-		SAFE_DELETE_RPR_OBJECT(resolved_buffer);
+		SAFE_DELETE_RPR_OBJECT(m_colorBuffer);
+		SAFE_DELETE_RPR_OBJECT(m_resolvedBuffer);
 		
-		if (framebufferGL != GL_INVALID_VALUE)
+#ifdef USE_GL_INTEROP
+		if (m_depthrenderbufferGL != INVALID_FRAMEBUFFER)
 		{
-			glDeleteFramebuffers(1, &framebufferGL);
-			framebufferGL = INVALID_TEXTURE;
+			glDeleteRenderbuffers(1, &m_depthrenderbufferGL);
+			m_depthrenderbufferGL = INVALID_FRAMEBUFFER;
 		}
 
-		if (texture2D != INVALID_TEXTURE)
+		if (m_framebufferGL != INVALID_FRAMEBUFFER)
 		{
-			glDeleteTextures(1, &texture2D);
-			texture2D = INVALID_TEXTURE;
+			glDeleteFramebuffers(1, &m_framebufferGL);
+			m_framebufferGL = INVALID_FRAMEBUFFER;
 		}
+
+		if (m_textureFramebufferGL != INVALID_TEXTURE)
+		{
+			glDeleteTextures(1, &m_textureFramebufferGL);
+			m_textureFramebufferGL = INVALID_TEXTURE;
+		}
+#endif
+		
 	}
 
 	void DeleteRprObject(void * object)
@@ -825,7 +825,7 @@ public:
 		{
 			TF_CODING_ERROR("Fail reset mesh material. Error code %d", status);
 		}
-		status = rprSceneDetachShape(scene, mesh);
+		status = rprSceneDetachShape(m_scene, mesh);
 		unlock();
 		
 		if (status != RPR_SUCCESS)
@@ -845,7 +845,7 @@ private:
 		rpr_int plugins[] = { tahoePluginID };
 
 		const HdRprRenderDevice renderDevice = s_preferences.GetRenderDevice();
-		rpr_int status = rprCreateContext(RPR_API_VERSION, plugins, 1, GetRprCreationFlags(renderDevice), NULL, NULL, &context);
+		rpr_int status = rprCreateContext(RPR_API_VERSION, plugins, 1, GetRprCreationFlags(renderDevice), NULL, NULL, &m_context);
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail Load %s. Error code %d", k_TahoeLibName, status);
@@ -856,14 +856,14 @@ private:
 			TF_CODING_ERROR("Fail get texture pixels. Error code %d", errorCode);
 		}
 
-		status = rprContextSetActivePlugin(context, plugins[0]);
+		status = rprContextSetActivePlugin(m_context, plugins[0]);
 
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail Set plugin %s resolve. Error code %d", k_TahoeLibName, status);
 		}
 		
-		rprContextSetParameter1u(context, "yflip", 0);
+		rprContextSetParameter1u(m_context, "yflip", 0);
 		//unlock();
 		
 	}
@@ -873,7 +873,7 @@ private:
 		rpr_int status;
 		//lock();
 		
-		status = rprContextCreateMaterialSystem(context, 0, &matsys);
+		status = rprContextCreateMaterialSystem(m_context, 0, &m_matsys);
 		//unlock();
 	
 		if (status != RPR_SUCCESS)
@@ -882,8 +882,8 @@ private:
 			return;
 		}
 
-		m_rprMaterialFactory.reset(new RprMaterialFactory(matsys));
-		m_rprxMaterialFactory.reset(new RprXMaterialFactory(matsys, context));
+		m_rprMaterialFactory.reset(new RprMaterialFactory(m_matsys));
+		m_rprxMaterialFactory.reset(new RprXMaterialFactory(m_matsys, m_context));
 	}
 
 	void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes, VtIntArray & out_newVpf)
@@ -947,22 +947,25 @@ private:
 
 	static HdRprPreferences s_preferences;
 
-	rpr_context context = nullptr;
-	rpr_scene scene = nullptr;
-	rpr_camera camera = nullptr;
+	rpr_context m_context = nullptr;
+	rpr_scene m_scene = nullptr;
+	rpr_camera m_camera = nullptr;
 
-	rpr_framebuffer color_buffer = nullptr;
-	rpr_framebuffer resolved_buffer = nullptr;
-	rpr_post_effect tonemap = nullptr;
+	rpr_framebuffer m_colorBuffer = nullptr;
+	rpr_framebuffer m_resolvedBuffer = nullptr;
+	rpr_post_effect m_tonemap = nullptr;
 
-	GLuint framebufferGL = GL_INVALID_VALUE;
-	rpr_GLuint texture2D = INVALID_TEXTURE;
+#ifdef USE_GL_INTEROP
+	GLuint m_framebufferGL = INVALID_FRAMEBUFFER;
+	GLuint m_depthrenderbufferGL;
+	rpr_GLuint m_textureFramebufferGL = INVALID_TEXTURE;
+#else
+	std::vector<float> m_framebufferData;
+#endif
 
-	rpr_material_system matsys = nullptr;
+	rpr_material_system m_matsys = nullptr;
 
-	rpr_framebuffer_desc framebuffer_desc = {};
-
-	std::vector<float> bufferData;
+	rpr_framebuffer_desc m_framebufferDesc = {};
 
 	GfMatrix4d m_cameraViewMatrix = GfMatrix4d(1.f);
 	GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
@@ -971,9 +974,9 @@ private:
 	std::unique_ptr<RprMaterialFactory> m_rprMaterialFactory;
 	std::unique_ptr<RprXMaterialFactory> m_rprxMaterialFactory;
 
-	bool isLightPresent = false;
+	bool m_isLightPresent = false;
 
-	bool isFramebufferDirty = true;
+	bool m_isFramebufferDirty = true;
 	// simple spinlock for locking RPR calls
 	std::atomic_flag m_lock = ATOMIC_FLAG_INIT;
 };
@@ -1123,10 +1126,17 @@ HdRprPreferences HdRprApiImpl::s_preferences = HdRprPreferences();
 		m_impl->Render();
 	}
 
+#ifdef USE_GL_INTEROP
 	const GLuint HdRprApi::GetFramebufferGL() const
 	{
 		return m_impl->GetFramebufferGL();
 	}
+#else
+	const float * HdRprApi::GetFramebufferData() const
+	{
+		return m_impl->GetFramebufferData();
+	}
+#endif
 
 	void HdRprApi::DeleteRprApiObject(RprApiObject object)
 	{
