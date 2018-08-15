@@ -4,6 +4,9 @@
 #include "RadeonProRender.h"
 #include "RadeonProRender_GL.h"
 
+#include "../RprTools.h"
+#include "../RprTools.cpp"
+
 #include "material.h"
 #include "materialFactory.h"
 #include "materialAdapter.h"
@@ -60,8 +63,33 @@ const rpr_render_mode GetRprRenderMode(const HdRprRenderMode & hdRprRenderMode)
 	}
 }
 
+rpr_creation_flags getAllCompatibleGpuFlags()
+{
+	rpr_creation_flags flags = 0x0;
+	const rpr_creation_flags allGpuFlags = RPR_CREATION_FLAGS_ENABLE_GPU0
+		| RPR_CREATION_FLAGS_ENABLE_GPU1
+		| RPR_CREATION_FLAGS_ENABLE_GPU2
+		| RPR_CREATION_FLAGS_ENABLE_GPU3
+		| RPR_CREATION_FLAGS_ENABLE_GPU4
+		| RPR_CREATION_FLAGS_ENABLE_GPU5
+		| RPR_CREATION_FLAGS_ENABLE_GPU6
+		| RPR_CREATION_FLAGS_ENABLE_GPU7;
 
-const rpr_creation_flags GetRprCreationFlags(const HdRprRenderDevice renderDevice)
+#ifdef WIN32
+	RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_WINDOWS;
+#elif defined __linux__
+	RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_LINUX;
+#elif defined __APPLE__
+	RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_MACOS;
+	allGpuFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
+#endif
+
+		rprAreDevicesCompatible(k_TahoeLibName, nullptr, false, allGpuFlags, &flags, rprToolOs);
+		return flags;
+}
+
+
+const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevice)
 {
 	rpr_creation_flags flags = 0x0;
 
@@ -76,7 +104,7 @@ const rpr_creation_flags GetRprCreationFlags(const HdRprRenderDevice renderDevic
 	{
 #ifdef  USE_GL_INTEROP
 		TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
-		flags |= RPR_CREATION_FLAGS_ENABLE_GPU0;
+		flags |= getAllCompatibleGpuFlags();
 #else
 		flags |= RPR_CREATION_FLAGS_ENABLE_CPU;
 #endif
@@ -84,7 +112,7 @@ const rpr_creation_flags GetRprCreationFlags(const HdRprRenderDevice renderDevic
 	break;
 
 	case HdRprRenderDevice::GPU0:
-		flags |= RPR_CREATION_FLAGS_ENABLE_GPU0;
+		flags |= getAllCompatibleGpuFlags();
 		break;
 
 	default: return RPR_ERROR_UNSUPPORTED;
@@ -845,7 +873,7 @@ private:
 		rpr_int plugins[] = { tahoePluginID };
 
 		const HdRprRenderDevice renderDevice = s_preferences.GetRenderDevice();
-		rpr_int status = rprCreateContext(RPR_API_VERSION, plugins, 1, GetRprCreationFlags(renderDevice), NULL, NULL, &m_context);
+		rpr_int status = rprCreateContext(RPR_API_VERSION, plugins, 1, getRprCreationFlags(renderDevice), NULL, NULL, &m_context);
 		if (status != RPR_SUCCESS)
 		{
 			TF_CODING_ERROR("Fail Load %s. Error code %d", k_TahoeLibName, status);
