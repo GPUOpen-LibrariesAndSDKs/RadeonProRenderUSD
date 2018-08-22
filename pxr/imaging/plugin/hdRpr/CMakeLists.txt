@@ -26,11 +26,14 @@ pxr_plugin(hdRpr
 		hdSt
         hdx
         usdLux
+		pxOsd
 		${RPR_LIBRARY}
         ${RPR_SUPPORT_LIBRARY}
         ${Boost_LIBRARIES}
         ${TBB_LIBRARIES}
         ${GLEW_LIBRARY}
+		${OPENGL_LIBRARIES}
+		${PYTHON_LIBRARIES}
 
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
