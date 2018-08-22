@@ -424,7 +424,8 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 		}
 		else if (paramName == HdRprTokens->normal)
 		{
-			m_texRprx.insert({ RPRX_UBER_MATERIAL_NORMAL, materialTexture });
+			m_texRprx.insert({ RPRX_UBER_MATERIAL_DIFFUSE_NORMAL, materialTexture });
+			m_texRprx.insert({ RPRX_UBER_MATERIAL_REFLECTION_NORMAL, materialTexture });
 		}
 		else if (paramName == HdRprTokens->displacement)
 		{
