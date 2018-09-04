@@ -16,6 +16,7 @@ TF_DEFINE_PRIVATE_TOKENS(
 	HdRprDomeLightTokens,
 	(exposure)                                  \
 	(intensity)                                 \
+	(transform)                                 \
 	(params)                                    \
 	(texturePath)
 );
@@ -61,6 +62,9 @@ void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
 
 		// Extract the exposure of the light
 		float exposure = sceneDelegate->GetLightParamValue(id, HdRprDomeLightTokens->exposure).Get<float>();
+
+		// Extract the transform of the light
+		GfMatrix4d transform = sceneDelegate->Get(id, HdRprDomeLightTokens->transform).Get<GfMatrix4d>();
 		
 		VtValue texturePathValue = sceneDelegate->GetLightParamValue(id, HdRprDomeLightTokens->texturePath);
 
@@ -72,7 +76,7 @@ void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
 		}
 		
 		float computed_intensity = computeLightIntensity(intensity, exposure);
-		rprApi->CreateEnvironmentLight(path, computed_intensity);
+		rprApi->CreateEnvironmentLight(path, computed_intensity, transform);
 	}
 
 	*dirtyBits = DirtyBits::Clean;
