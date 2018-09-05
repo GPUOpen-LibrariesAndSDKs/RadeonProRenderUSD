@@ -544,7 +544,7 @@ public:
 
 		constexpr int nx = 16, ny = 16;
 
-		const float d = 0.5f*radius;
+		const float d = radius;
 
 		for (int j = ny - 1; j >= 0; j--)
 		{
