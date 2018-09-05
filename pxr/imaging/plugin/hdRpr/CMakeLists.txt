@@ -67,6 +67,24 @@ pxr_plugin(hdRpr
         plugInfo.json
 )
 
+if (APPLE)
+    add_custom_command(TARGET hdRpr
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -id @loader_path/libRadeonProRender64.dylib  ${RPR_LIBRARY})
+
+    add_custom_command(TARGET hdRpr
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -change @loader_path/libRadeonProRender64.dylib ${RPR_LIBRARY} $<TARGET_FILE:hdRpr> )
+
+    add_custom_command(TARGET hdRpr
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -id @rpath/libRprSupport64.dylib  ${RPR_SUPPORT_LIBRARY})
+
+    add_custom_command(TARGET hdRpr
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -change @rpath/libRprSupport64.dylib ${RPR_SUPPORT_LIBRARY} $<TARGET_FILE:hdRpr> )
+endif(APPLE)
+
  _get_install_dir(lib/python/rpr installPrefix)
 
  

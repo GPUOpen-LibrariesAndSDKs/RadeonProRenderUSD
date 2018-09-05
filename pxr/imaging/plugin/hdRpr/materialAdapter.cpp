@@ -1,4 +1,4 @@
-﻿#include "materialAdapter.h"
+#include "materialAdapter.h"
 
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/material.h"

@@ -14,8 +14,6 @@
 
 #include <GL/glew.h>
 
-#define USE_GL_INTEROP
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApiImpl;

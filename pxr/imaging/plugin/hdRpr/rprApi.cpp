@@ -16,6 +16,12 @@
 
 #include "pxr/imaging/pxOsd/tokens.h"
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <mach-o/getsect.h>
+#include <dlfcn.h>
+#endif // __APPLE__
+
 // we lock()/unlock() around rpr calls that might be called multithreaded.
 #define SAFE_DELETE_RPR_OBJECT(x) if(x) {lock(); rprObjectDelete( x ); x = nullptr; unlock();}
 #define INVALID_TEXTURE -1
@@ -31,6 +37,7 @@ namespace
 	const char* k_TahoeLibName = "libTahoe64.so";
 #elif defined __APPLE__
 	const char* k_TahoeLibName = "libTahoe64.dylib";
+    const char* k_RadeonProRenderLibName = "libRadeonProRender64.dylib";
 #endif
 
 	constexpr const rpr_uint k_defaultFbWidth = 800;
@@ -44,6 +51,37 @@ namespace
 	constexpr const char * k_pathToRprPreference = "rprPreferences.dat";
 }
 
+
+std::string GetRprSdkPath()
+{
+#ifdef __APPLE__
+    uint32_t count = _dyld_image_count();
+            std::string pathToRpr;
+            for (uint32_t i = 0; i < count; ++i) {
+                    const mach_header *header = _dyld_get_image_header(i);
+                    if (!header) { break; }
+                    char *code_ptr = NULL;
+                    uint64_t size;
+                    code_ptr = getsectdatafromheader_64((const mach_header_64 *)header, SEG_TEXT, SECT_TEXT, &size);
+                    if (!code_ptr) { continue; }
+                    const uintptr_t slide = _dyld_get_image_vmaddr_slide(i);
+                    const uintptr_t start = (const uintptr_t)code_ptr + slide;
+                    Dl_info info;
+                    if (dladdr((const void *)start, &info)) {
+                            std::string dlpath(info.dli_fname);
+                            std::size_t found = dlpath.find(k_RadeonProRenderLibName);
+                            if(found != std::string::npos)
+                            {
+                                return dlpath.substr(0, found);
+                            }
+                    }
+            }
+    
+    TF_CODING_ERROR("Path to RPR SDK with %s not found", k_RadeonProRenderLibName);
+#endif // __APPLE__
+    
+    return std::string();
+}
 
 const rpr_render_mode GetRprRenderMode(const HdRprRenderMode & hdRprRenderMode) 
 {	
@@ -65,7 +103,11 @@ const rpr_render_mode GetRprRenderMode(const HdRprRenderMode & hdRprRenderMode)
 
 rpr_creation_flags getAllCompatibleGpuFlags()
 {
-	rpr_creation_flags flags = 0x0;
+#ifdef __APPLE__
+    return RPR_CREATION_FLAGS_ENABLE_METAL;
+#else
+    
+    rpr_creation_flags flags = 0x0;
 	const rpr_creation_flags allGpuFlags = RPR_CREATION_FLAGS_ENABLE_GPU0
 		| RPR_CREATION_FLAGS_ENABLE_GPU1
 		| RPR_CREATION_FLAGS_ENABLE_GPU2
@@ -77,15 +119,14 @@ rpr_creation_flags getAllCompatibleGpuFlags()
 
 #ifdef WIN32
 	RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_WINDOWS;
-#elif defined __linux__
+#else
 	RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_LINUX;
-#elif defined __APPLE__
-	RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_MACOS;
-	allGpuFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
-#endif
+#endif // WIN32
+
 
 		rprAreDevicesCompatible(k_TahoeLibName, nullptr, false, allGpuFlags, &flags, rprToolOs);
 		return flags;
+#endif //__APPLE__
 }
 
 
@@ -869,7 +910,9 @@ private:
 	{		
 		//lock();
 		
-		rpr_int tahoePluginID = rprRegisterPlugin(k_TahoeLibName);
+        const std::string rprSdkPath = GetRprSdkPath();
+        const std::string tahoePath = (rprSdkPath.empty()) ? k_TahoeLibName : rprSdkPath + "/" + k_TahoeLibName;
+		rpr_int tahoePluginID = rprRegisterPlugin(tahoePath.c_str());
 		rpr_int plugins[] = { tahoePluginID };
 
 		const HdRprRenderDevice renderDevice = s_preferences.GetRenderDevice();
