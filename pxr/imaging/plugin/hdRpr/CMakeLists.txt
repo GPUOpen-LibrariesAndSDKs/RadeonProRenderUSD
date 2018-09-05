@@ -67,6 +67,10 @@ pxr_plugin(hdRpr
         plugInfo.json
 )
 
+if(WIN32 OR LINUX)
+	add_definitions(-DUSE_GL_INTEROP)
+endif(APPLE)
+
 if (APPLE)
     add_custom_command(TARGET hdRpr
         POST_BUILD COMMAND
