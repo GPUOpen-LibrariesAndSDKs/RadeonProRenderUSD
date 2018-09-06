@@ -26,11 +26,14 @@ pxr_plugin(hdRpr
 		hdSt
         hdx
         usdLux
+		pxOsd
 		${RPR_LIBRARY}
         ${RPR_SUPPORT_LIBRARY}
         ${Boost_LIBRARIES}
         ${TBB_LIBRARIES}
         ${GLEW_LIBRARY}
+		${OPENGL_LIBRARIES}
+		${PYTHON_LIBRARIES}
 
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
@@ -63,6 +66,28 @@ pxr_plugin(hdRpr
     RESOURCE_FILES
         plugInfo.json
 )
+
+if(WIN32 OR LINUX)
+	add_definitions(-DUSE_GL_INTEROP)
+endif(APPLE)
+
+if (APPLE)
+    add_custom_command(TARGET hdRpr
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -id @loader_path/libRadeonProRender64.dylib  ${RPR_LIBRARY})
+
+    add_custom_command(TARGET hdRpr
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -change @loader_path/libRadeonProRender64.dylib ${RPR_LIBRARY} $<TARGET_FILE:hdRpr> )
+
+    add_custom_command(TARGET hdRpr
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -id @rpath/libRprSupport64.dylib  ${RPR_SUPPORT_LIBRARY})
+
+    add_custom_command(TARGET hdRpr
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -change @rpath/libRprSupport64.dylib ${RPR_SUPPORT_LIBRARY} $<TARGET_FILE:hdRpr> )
+endif(APPLE)
 
  _get_install_dir(lib/python/rpr installPrefix)
 
