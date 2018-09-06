@@ -7,6 +7,7 @@
 #include "pxr/usd/sdf/assetPath.h"
 
 #include "RprSupport.h"
+#include <cfloat>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
