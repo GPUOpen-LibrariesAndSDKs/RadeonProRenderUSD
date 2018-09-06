@@ -1,4 +1,4 @@
-﻿#include "materialAdapter.h"
+#include "materialAdapter.h"
 
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/material.h"
@@ -7,6 +7,7 @@
 #include "pxr/usd/sdf/assetPath.h"
 
 #include "RprSupport.h"
+#include <cfloat>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -67,6 +68,11 @@ GfVec4f VtValToVec4f(const VtValue val) {
 	}
 }
 
+
+bool isColorBlack(GfVec4f color)
+{
+	return color[0] <= FLT_EPSILON && color[1] <= FLT_EPSILON && color[2] <= FLT_EPSILON;
+}
 
 bool getNode(const TfToken & type,  const HdMaterialNetwork & materialNetwork, HdMaterialNode & out_node)
 {
@@ -334,8 +340,12 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 		}
 		else if (paramName == HdRprTokens->emissiveColor)
 		{
-			m_vec4fRprxParams.insert({ RPRX_UBER_MATERIAL_EMISSION_WEIGHT , GfVec4f(1.0f) });
-			m_vec4fRprxParams.insert({ RPRX_UBER_MATERIAL_EMISSION_COLOR , VtValToVec4f(paramValue)});
+			GfVec4f emmisionColor = VtValToVec4f(paramValue);
+			if (!isColorBlack(emmisionColor))
+			{
+				m_vec4fRprxParams.insert({ RPRX_UBER_MATERIAL_EMISSION_WEIGHT , GfVec4f(1.0f) });
+				m_vec4fRprxParams.insert({ RPRX_UBER_MATERIAL_EMISSION_COLOR , emmisionColor });
+			}
 		}
 		else if (paramName == HdRprTokens->useSpecularWorkflow)
 		{
