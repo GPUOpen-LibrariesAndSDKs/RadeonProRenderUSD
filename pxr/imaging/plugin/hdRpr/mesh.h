@@ -22,7 +22,7 @@ public:
 		HdSceneDelegate* sceneDelegate,
 		HdRenderParam*   renderParam,
 		HdDirtyBits*     dirtyBits,
-		TfToken const&   reprName,
+		HdReprSelector const&   reprName,
 		bool             forcedRepr
 	) override;
 
@@ -57,16 +57,14 @@ protected:
 	// repr is synced.  InitRepr occurs before dirty bit propagation.
 	//
 	// See HdRprim::InitRepr()
-	virtual void _InitRepr(TfToken const &reprName,
+	virtual void _InitRepr(HdReprSelector const &reprName,
 		HdDirtyBits *dirtyBits) override;
 
 	virtual void _UpdateRepr(HdSceneDelegate *sceneDelegate,
-		TfToken const &reprName,
+		HdReprSelector const &reprName,
 		HdDirtyBits *dirtyBitsState) override;
 
 private:
-
-	void CreateMesh(HdSceneDelegate* sceneDelegate);
 
 	HdRprApiWeakPtr m_rprApiWeakPrt;
 	RprApiObject m_rprMesh = nullptr;
