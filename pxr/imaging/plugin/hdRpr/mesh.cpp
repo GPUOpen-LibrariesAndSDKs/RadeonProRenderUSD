@@ -20,6 +20,11 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_PRIVATE_TOKENS(
+	HdRprMeshTokens,
+	(st)
+);
+
 HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId) : HdMesh(id, instancerId)
 {
 	m_rprApiWeakPrt = rprApiShared;
@@ -107,12 +112,19 @@ void HdRprMesh::Sync(
 
 		VtVec2fArray st;
 
-		// TODO check if 'st' is present to avoid warning 
-		value = sceneDelegate->Get(id, TfToken("st"));
-		if (value.IsHolding<VtVec2fArray>())
-		{
-			st = value.Get<VtVec2fArray>();
+		HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationVertex);
+
+		for (HdPrimvarDescriptor const& pv : primvars) {
+			if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdRprMeshTokens->st)) {
+				value = sceneDelegate->Get(id, pv.name);
+				if (value.IsHolding<VtVec2fArray>())
+				{
+					st = value.Get<VtVec2fArray>();
+					break;
+				}
+			}
 		}
+		
 
 		Hd_VertexAdjacency adjacency;
 		adjacency.BuildAdjacencyTable(&meshTopology);
