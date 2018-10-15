@@ -409,7 +409,7 @@ public:
 		//unlock();
 	}
 
-	void CreateEnvironmentLight(const std::string & path, float intensity)
+	void CreateEnvironmentLight(const std::string & path, float intensity, const GfMatrix4f & transform)
 	{	
 		rpr_int status;
 		rpr_image image = nullptr;
@@ -425,6 +425,7 @@ public:
 		status = rprContextCreateEnvironmentLight(m_context, &light);
 		status = rprEnvironmentLightSetImage(light, image);
 		status = rprEnvironmentLightSetIntensityScale(light, intensity);
+		status = rprLightSetTransform(light, false, transform.GetArray());
 		status = rprSceneAttachLight(m_scene, light);
 		//unlock();
 		m_isLightPresent = true;
@@ -1108,9 +1109,10 @@ HdRprPreferences HdRprApiImpl::s_preferences = HdRprPreferences();
 		m_impl->SetMeshVisibility(prototypeMesh, false);
 	}
 
-	void HdRprApi::CreateEnvironmentLight(const std::string & prthTotexture, float intensity)
+	void HdRprApi::CreateEnvironmentLight(const std::string & prthTotexture, float intensity, const GfMatrix4d & transform)
 	{
-		m_impl->CreateEnvironmentLight(prthTotexture, intensity);
+		GfMatrix4f transformF(transform);
+		m_impl->CreateEnvironmentLight(prthTotexture, intensity, transformF);
 		m_impl->SetFramebufferDirty(true);
 	}
 
