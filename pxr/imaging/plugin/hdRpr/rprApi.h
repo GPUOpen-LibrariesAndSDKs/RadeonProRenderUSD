@@ -78,7 +78,7 @@ public:
 
 	void CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray & transforms, VtArray<RprApiObject> & out_instances);
 
-	void CreateEnvironmentLight(const std::string & prthTotexture, float intensity);
+	void CreateEnvironmentLight(const std::string & prthTotexture, float intensity, const GfMatrix4d & transform);
 
 	RprApiObject CreateRectLightMesh(const float & width, const float & height);
 

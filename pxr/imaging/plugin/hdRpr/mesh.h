@@ -56,9 +56,9 @@ protected:
 	// repr is synced.  InitRepr occurs before dirty bit propagation.
 	//
 	// See HdRprim::InitRepr()
-	virtual void _InitRepr(TfToken const &reprName,
+	virtual void _InitRepr(HdReprSelector const &reprName,
 		HdDirtyBits *dirtyBits) override;
-		
+
 private:
 
 	HdRprApiWeakPtr m_rprApiWeakPrt;

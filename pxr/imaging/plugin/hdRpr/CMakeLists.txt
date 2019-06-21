@@ -63,15 +63,14 @@ pxr_plugin(hdRpr
 		pxOsd
 		Half
 		${RPR_LIBRARY}
-        ${RPR_SUPPORT_LIBRARY}
-        ${Boost_LIBRARIES}
-        ${TBB_LIBRARIES}
-        ${GLEW_LIBRARY}
+    ${RPR_SUPPORT_LIBRARY}
+    ${Boost_LIBRARIES}
+    ${TBB_LIBRARIES}
+    ${GLEW_LIBRARY}
 		${OPENGL_LIBRARIES}
 		${PYTHON_LIBRARIES}
 		
 		${OptLibs}
-	
 
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
@@ -131,6 +130,7 @@ if (APPLE)
     add_custom_command(TARGET hdRpr
         POST_BUILD COMMAND
         ${CMAKE_INSTALL_NAME_TOOL} -change @rpath/libRprSupport64.dylib ${RPR_SUPPORT_LIBRARY} $<TARGET_FILE:hdRpr> )
+
 endif(APPLE)
 
  _get_install_dir(lib/python/rpr installPrefix)

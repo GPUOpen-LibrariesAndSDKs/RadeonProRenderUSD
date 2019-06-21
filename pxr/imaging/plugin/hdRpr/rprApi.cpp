@@ -1546,9 +1546,10 @@ private:
 		m_impl->SetMeshVisibility(prototypeMesh, false);
 	}
 
-	void HdRprApi::CreateEnvironmentLight(const std::string & prthTotexture, float intensity)
+	void HdRprApi::CreateEnvironmentLight(const std::string & prthTotexture, float intensity, const GfMatrix4d & transform)
 	{
-		m_impl->CreateEnvironmentLight(prthTotexture, intensity);
+		GfMatrix4f transformF(transform);
+		m_impl->CreateEnvironmentLight(prthTotexture, intensity, transformF);
 		m_impl->SetFramebufferDirty(true);
 	}
 
