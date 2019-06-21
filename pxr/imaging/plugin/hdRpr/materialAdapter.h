@@ -64,6 +64,7 @@ enum class EMaterialType : int32_t
 	NONE = -1
 	, COLOR = 0
 	, EMISSIVE 
+	, TRANSPERENT
 	, USD_PREVIEW_SURFACE
 	,
 };
@@ -102,8 +103,10 @@ public:
 	}
 
 private:
-	void PoulateColor(const MaterialParams & params);
+	void PoulateRprxColor(const MaterialParams & params);
+	void PoulateRprColor(const MaterialParams & params);
 	void PoulateEmissive(const MaterialParams & params);
+	void PoulateTransparent(const MaterialParams & params);
 	void PoulateUsdPreviewSurface(const MaterialParams & params, const MaterialTextures & textures);
 
 	const EMaterialType m_type;

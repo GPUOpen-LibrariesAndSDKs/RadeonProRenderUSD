@@ -39,6 +39,8 @@ public:
 
 	virtual void AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial * material) = 0;
 
+	virtual void AttachCurveToShape(rpr_shape mesh, const RprApiMaterial * material) = 0;
+
 	virtual void SetMaterialInputs(RprApiMaterial * material, const MaterialAdapter & materialAdapter) = 0;
 };
 
@@ -50,6 +52,8 @@ public:
 	virtual RprApiMaterial * CreateMaterial(const EMaterialType type) override;
 
 	virtual void AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial * material) override;
+
+	virtual void AttachCurveToShape(rpr_shape mesh, const RprApiMaterial * material) override;
 
 	virtual void SetMaterialInputs(RprApiMaterial * material, const MaterialAdapter & materialAdapter) override;
 
@@ -70,6 +74,8 @@ public:
 	virtual RprApiMaterial * CreateMaterial(const EMaterialType type) override;
 
 	virtual void AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial * material) override;
+
+	virtual void AttachCurveToShape(rpr_shape mesh, const RprApiMaterial * material) override;
 
 	virtual void SetMaterialInputs(RprApiMaterial * material, const MaterialAdapter & materialAdapter) override;
 

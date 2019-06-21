@@ -54,7 +54,7 @@ void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
 	if (bits & DirtyParams)
 	{
 		// Get the color of the light
-		// GfVec3f color = sceneDelegate->GetLightParamValue(id, HdTokens->color).Get<GfVec3f>();
+		// GfVec3f color = sceneDelegate->GetLightParamValue(id,HdPrimvarRoleTokens->color).Get<GfVec3f>();
 
 		// Extract intensity
 		float intensity = sceneDelegate->GetLightParamValue(id, HdRprDomeLightTokens->intensity).Get<float>();

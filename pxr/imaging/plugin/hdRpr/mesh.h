@@ -22,8 +22,7 @@ public:
 		HdSceneDelegate* sceneDelegate,
 		HdRenderParam*   renderParam,
 		HdDirtyBits*     dirtyBits,
-		TfToken const&   reprName,
-		bool             forcedRepr
+		TfToken const&   reprName
 	) override;
 
 protected:
@@ -59,14 +58,8 @@ protected:
 	// See HdRprim::InitRepr()
 	virtual void _InitRepr(TfToken const &reprName,
 		HdDirtyBits *dirtyBits) override;
-
-	virtual void _UpdateRepr(HdSceneDelegate *sceneDelegate,
-		TfToken const &reprName,
-		HdDirtyBits *dirtyBitsState) override;
-
+		
 private:
-
-	void CreateMesh(HdSceneDelegate* sceneDelegate);
 
 	HdRprApiWeakPtr m_rprApiWeakPrt;
 	RprApiObject m_rprMesh = nullptr;

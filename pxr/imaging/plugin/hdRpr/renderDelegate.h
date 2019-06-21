@@ -224,7 +224,10 @@ PXR_NAMESPACE_CLOSE_SCOPE
 extern "C"
 {
 	HDRPR_API
-	void SetRprGlobalRenderMode(int renderMode);
+	void SetRprGlobalAov(int aov);
+
+	HDRPR_API
+	void SetRprGlobalFilter(int aov);
 
 	HDRPR_API
 	void SetRprGlobalRenderDevice(int renderDevice);

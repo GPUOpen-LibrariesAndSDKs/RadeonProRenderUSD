@@ -10,7 +10,15 @@
 #include "sphereLight.h"
 #include "rectLight.h"
 #include "material.h"
+#include "renderBuffer.h"
+#include "basisCurves.h"
 #include "tokens.h"
+
+#ifdef USE_VOLUME
+#include "volume.h"
+#include "field.h"
+#endif
+
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -22,6 +30,12 @@ namespace
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES =
 {
 	HdPrimTypeTokens->mesh,
+	HdPrimTypeTokens->basisCurves,
+
+#ifdef USE_VOLUME
+	HdPrimTypeTokens->volume,
+#endif
+	
 };
 
 const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES =
@@ -34,7 +48,9 @@ const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES =
 };
 
 const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES =
-{
+{ 
+	TfToken("openvdbAsset"),
+    HdPrimTypeTokens->renderBuffer
 };
 
 //std::atomic_int HdRprDelegate::_counterResourceRegistry;
@@ -130,6 +146,15 @@ HdRprDelegate::CreateRprim(TfToken const& typeId,
 	if (typeId == HdPrimTypeTokens->mesh) {
 		return new HdRprMesh(rprimId, m_rprApiSharedPtr, instancerId);
 	}
+	else if (typeId == HdPrimTypeTokens->basisCurves) {
+		return new HdRprBasisCurves(rprimId, m_rprApiSharedPtr, instancerId);
+	}
+#ifdef USE_VOLUME
+	else if (typeId == HdPrimTypeTokens->volume)
+	{
+		return new HdRprVolume(rprimId, m_rprApiSharedPtr);
+	}
+#endif
 	else {
 		TF_CODING_ERROR("Unknown Rprim Type %s", typeId.GetText());
 	}
@@ -213,6 +238,19 @@ HdBprim *
 HdRprDelegate::CreateBprim(TfToken const& typeId,
                                     SdfPath const& bprimId)
 {
+	if(typeId == HdPrimTypeTokens->renderBuffer)
+    {
+        return new HdRprRenderBuffer(bprimId, m_rprApiSharedPtr);
+    }
+    TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
+
+#ifdef USE_VOLUME
+	if (typeId == TfToken("openvdbAsset"))
+	{
+		return new HdRprField(bprimId, m_rprApiSharedPtr);
+	}
+#endif
+
 	TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
     return nullptr;
 }
@@ -230,53 +268,45 @@ HdRprDelegate::DestroyBprim(HdBprim *bPrim)
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-
-void SetRprGlobalRenderMode(int renderMode)
+HDRPR_API
+void SetRprGlobalAov(int aov)
 {
-	switch (renderMode)
+	switch (aov)
 	{
+	case 0:
+		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::COLOR);
+		break;
 	case 1:
-		PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::DIRECT_ILLUMINATION);
+		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::NORMAL);
+		break;
+	case 2:
+		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::DEPTH);
+		break;
+	case 3:
+		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::PRIM_ID);
+		break;
+	default:
 		return;
-
-		case 2:
-			PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::DIRECT_ILLUMINATION_NO_SHADOW);
-				return;
-
-		case 3:
-			PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::WIREFRAME);
-			return;
-
-		case 4:
-			PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::MATERIAL_INDEX);
-			return;
-
-		case 5:
-			PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::POSITION);
-			return;
-
-		case 6:
-			PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::NORMAL);
-			return;
-
-		case 7:
-			PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::TEXCOORD);
-			return;
-
-		case 8:
-			PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::AMBIENT_OCCLUSION);
-			return;
-
-		case 9:
-			PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::DIFFUSE);
-			return;
-
-			default:
-				break;
 	}
-		
-	PXR_INTERNAL_NS::HdRprApi::SetRenderMode(PXR_INTERNAL_NS::HdRprRenderMode::GLOBAL_ILLUMINATION);
-	return;
+}
+
+
+void SetRprGlobalFilter(int filterType)
+{
+	switch (filterType)
+	{
+	case 0:
+		PXR_INTERNAL_NS::HdRprApi::SetFilter(PXR_INTERNAL_NS::FilterType::None);
+		return;
+	case 1:
+		PXR_INTERNAL_NS::HdRprApi::SetFilter(PXR_INTERNAL_NS::FilterType::BilateralDenoise);
+		return;
+	case 2:
+		PXR_INTERNAL_NS::HdRprApi::SetFilter(PXR_INTERNAL_NS::FilterType::EawDenoise);
+		return;
+	default:
+		break;
+	}
 }
 
 void SetRprGlobalRenderDevice(int renderDevice)
@@ -284,7 +314,7 @@ void SetRprGlobalRenderDevice(int renderDevice)
 	switch (renderDevice)
 	{
 	case 1:
-		PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::GPU0);
+		PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::GPU);
 		return;
 	default:
 		break;

@@ -84,7 +84,7 @@ VtMatrix4dArray HdRprInstancer::ComputeTransforms(SdfPath const& prototypeId)
 	Sync();
 
 	GfMatrix4d instancerTransform =
-		GetDelegate()->GetInstancerTransform(GetId(), prototypeId);
+		GetDelegate()->GetInstancerTransform(GetId());
 
 	VtIntArray instanceIndices =
 		GetDelegate()->GetInstanceIndices(GetId(), prototypeId);

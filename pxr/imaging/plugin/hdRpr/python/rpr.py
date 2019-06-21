@@ -2,122 +2,110 @@ from pxr import Tf
 from pxr.Usdviewq.plugin import PluginContainer
 
 from ctypes import cdll
-import platform
+from ctypes.util import find_library
 
-if platform.system() == 'Darwin':
-    lib_name = 'hdRpr.dylib'
-elif platform.system() == 'Linux':
-    lib_name = 'hdRpr.so'
-else:
-    lib_name = 'libhdRpr.dll'
-
-def renderModeGlobalIllumination(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(0)
-
-def renderDirectIllumination(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(1)
+import psutil, os
 	
-def renderDirectIlluminationNoShadow(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(2)
+def getRprPath():
+    p = psutil.Process( os.getpid() )
+    for dll in p.memory_maps():
+      if dll.path.find("hdRpr") != -1:
+	   return  dll.path
+    print "hdRpr module not loaded"	   
+    return None
+	   
+def setAov(aov):
+    rprPath = getRprPath()
+    if rprPath is not None:
+	   lib = cdll.LoadLibrary(rprPath)
+	   lib.SetRprGlobalAov(aov)
+	   
+	   
+def setFilter(filter):
+    rprPath = getRprPath()
+    if rprPath is not None:
+	   lib = cdll.LoadLibrary(rprPath)
+	   lib.SetRprGlobalFilter(filter)
+	   
+	   
+def setRenderDevice(renderDeviceId):
+    rprPath = getRprPath()
+    if rprPath is not None:
+	   print rprPath
+	   lib = cdll.LoadLibrary(rprPath)
+	   lib.SetRprGlobalRenderDevice(renderDeviceId)
+	   
 	
-def renderModeWireframe(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(3)
+def ColorAov(usdviewApi):
+    setAov(0)
 	
-def renderMaterialIndex(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(4)
+def NormalAov(usdviewApi):
+    setAov(1)
 
-def renderModePosition(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(5)
-
-def renderModeNormal(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(6)
+def DepthAov(usdviewApi):
+    setAov(2)
 	
-def renderModeTexCoord(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(7)
+def PrimIdAov(usdviewApi):
+    setAov(3)
 	
-def renderModeAO(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(8)
+	
+def NoFilter(usdviewApi):
+    setFilter(0)
 
-def renderModeDiffuse(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderMode(9)
-
-
+def BilateralFilter(usdviewApi):
+    setFilter(1)
+	
+def EawFilter(usdviewApi):
+    setFilter(2)
 	
 	
 def renderDeviceCPU(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderDevice(0)
+    setRenderDevice(0)
 	
 def renderDeviceGPU(usdviewApi):
-    lib = cdll.LoadLibrary(lib_name)
-    lib.SetRprGlobalRenderDevice(1)
+    setRenderDevice(1)
 	
 	
 class RprPluginContainer(PluginContainer):
 
     def registerPlugins(self, plugRegistry, usdviewApi):
 
-        self.rModeGI = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderModeGlobalIllumination",
-            "Global Illumination",
-            renderModeGlobalIllumination)
+        self.aovColor = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.ColorAov",
+            "Color",
+            ColorAov)
 			
-        self.rModeDI = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderDirectIllumination",
-            "Direct Illumination",
-            renderDirectIllumination)
-
-        self.rModeDINS = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderDirectIlluminationNoShadow",
-            "Direct Illumination No Shadow",
-            renderDirectIlluminationNoShadow)
-			
-        self.rModeWF = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderModeWireframe",
-            "Wireframe",
-            renderModeWireframe)
-			
-        self.rModeMat = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderMaterialIndex",
-            "MaterialIndex",
-            renderMaterialIndex)
-
-        self.rModePos = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderModePosition",
-            "Position",
-            renderModePosition)
-			
-        self.rModeNorm = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderModeNormal",
+        self.aovNormal = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.NormalAov",
             "Normal",
-            renderModeNormal)
-			
-        self.rModeTC = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderModeTexCoord",
-            "Texture Coordinate",
-            renderModeTexCoord)
+            NormalAov)
 
-        self.rModeAO = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderModeAO",
-            "ambient occlusion",
-            renderModeAO)
+        
+        self.aovDepth = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.DepthAov",
+            "Depth",
+            DepthAov)
 			
-        self.rModeDF = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderModeDiffuse",
-            "Diffuse",
-            renderModeDiffuse)
+        self.aovPrimId = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.PrimIdAov",
+            "Normal",
+            PrimIdAov)
+
+        self.noFilter = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.NoFilter",
+            "No Filter",
+            NoFilter)
+
+        self.bilateralFilter = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.BilateralFilter",
+            "Bilateral",
+            BilateralFilter)
 			
-			
+        self.eawFilter = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.EawFilter",
+            "EAW",
+            EawFilter)
+				
 			
 			
         self.rDeviceCpu = plugRegistry.registerCommandPlugin(
@@ -135,18 +123,16 @@ class RprPluginContainer(PluginContainer):
     def configureView(self, plugRegistry, plugUIBuilder):
 
         rprMenu = plugUIBuilder.findOrCreateMenu("RPR")
-        renderModeSubMenu = rprMenu.findOrCreateSubmenu("Render Mode")
-        renderModeSubMenu.addItem(self.rModeGI)
-        renderModeSubMenu.addItem(self.rModeDI)		
-        renderModeSubMenu.addItem(self.rModeDINS)
-        renderModeSubMenu.addItem(self.rModeWF)
-        #renderModeSubMenu.addItem(self.rModeMat)		
-        #renderModeSubMenu.addItem(self.rModePos)
-        #renderModeSubMenu.addItem(self.rModeNorm)
-        renderModeSubMenu.addItem(self.rModeTC)		
-        renderModeSubMenu.addItem(self.rModeAO)
-        renderModeSubMenu.addItem(self.rModeDF)
+        renderModeSubMenu = rprMenu.findOrCreateSubmenu("AOV")
+        renderModeSubMenu.addItem(self.aovColor)
+        renderModeSubMenu.addItem(self.aovNormal)
+        renderModeSubMenu.addItem(self.aovDepth)		
+        renderModeSubMenu.addItem(self.aovPrimId)	
 		
+        filterSubMenu = rprMenu.findOrCreateSubmenu("Filter")
+        filterSubMenu.addItem(self.noFilter)
+        filterSubMenu.addItem(self.bilateralFilter)
+        filterSubMenu.addItem(self.eawFilter)
 
         renderDeviceSubMenu = rprMenu.findOrCreateSubmenu("Render Device")
         renderDeviceSubMenu.addItem(self.rDeviceCpu)
