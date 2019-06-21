@@ -94,6 +94,11 @@ RprApiMaterial * RprMaterialFactory::CreateMaterial(const EMaterialType type)
 		materialType = RPR_MATERIAL_NODE_EMISSIVE;
 	}
 
+	if (type == EMaterialType::TRANSPERENT)
+	{
+		materialType = RPR_MATERIAL_NODE_TRANSPARENT;
+	}
+
 	if (!materialType)
 	{
 		return nullptr;
@@ -113,6 +118,12 @@ void RprMaterialFactory::AttachMaterialToShape(rpr_shape mesh, const RprApiMater
 {
 	const RprMaterial * rprMaterial = static_cast<const RprMaterial *>(material);
 	rprShapeSetMaterial(mesh, rprMaterial->GetRootRprMaterialNode());
+}
+
+void RprMaterialFactory::AttachCurveToShape(rpr_shape curve, const RprApiMaterial * material)
+{
+	const RprMaterial * rprMaterial = static_cast<const RprMaterial *>(material);
+	rprCurveSetMaterial(curve, rprMaterial->GetRootRprMaterialNode());
 }
 
 void RprMaterialFactory::SetMaterialInputs(RprApiMaterial * material, const MaterialAdapter & materialAdapter)
@@ -174,6 +185,11 @@ void RprXMaterialFactory::AttachMaterialToShape(rpr_shape mesh, const RprApiMate
 
 	rprxMaterialCommit(m_contextX, rprxMaterial->GetRprxMaterial());
 
+}
+
+void RprXMaterialFactory::AttachCurveToShape(rpr_shape mesh, const RprApiMaterial * material)
+{
+	// No-op
 }
 
 void RprXMaterialFactory::SetMaterialInputs(RprApiMaterial * material, const MaterialAdapter & materialAdapter)

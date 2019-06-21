@@ -78,6 +78,13 @@ endif()
 # Third Party Plugin Package Requirements
 # ----------------------------------------------
 
+if(PXR_ENABLE_OPENVDB_SUPPORT)
+	find_package(OpenVDB REQUIRED)
+endif()
+
+if(PXR_ENABLE_RIF_SUPPORT)
+	find_package(Rif REQUIRED)
+endif()
 
 # ----------------------------------------------
 

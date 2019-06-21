@@ -22,8 +22,7 @@ public:
 		HdSceneDelegate* sceneDelegate,
 		HdRenderParam*   renderParam,
 		HdDirtyBits*     dirtyBits,
-		HdReprSelector const&   reprName,
-		bool             forcedRepr
+		TfToken const&   reprName
 	) override;
 
 protected:
@@ -59,10 +58,6 @@ protected:
 	// See HdRprim::InitRepr()
 	virtual void _InitRepr(HdReprSelector const &reprName,
 		HdDirtyBits *dirtyBits) override;
-
-	virtual void _UpdateRepr(HdSceneDelegate *sceneDelegate,
-		HdReprSelector const &reprName,
-		HdDirtyBits *dirtyBitsState) override;
 
 private:
 

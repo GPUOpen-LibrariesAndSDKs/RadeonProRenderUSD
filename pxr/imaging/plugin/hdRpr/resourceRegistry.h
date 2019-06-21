@@ -4,7 +4,7 @@
 #include "pxr/pxr.h"
 #include "pxr/imaging/hd/resourceRegistry.h"
 /*
-#include "boost/shared_ptr.hpp"
+#include "hboost/shared_ptr.hpp"
 
 PXR_NAMESPACE_OPEN_SCOPE
 

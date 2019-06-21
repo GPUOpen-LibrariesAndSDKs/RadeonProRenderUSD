@@ -2,6 +2,7 @@
 
 #include "RprSupport.h"
 #include "RadeonProRender.h"
+#include "RadeonProRender_CL.h"
 #include "RadeonProRender_GL.h"
 
 #include "../RprTools.h"
@@ -11,16 +12,26 @@
 #include "materialFactory.h"
 #include "materialAdapter.h"
 
-#include <GL/glew.h>
 #include <vector>
 
 #include "pxr/imaging/pxOsd/tokens.h"
 
-#ifdef __APPLE__
+#ifdef USE_RIF
+#include "ImageFilter.h"
+#endif // USE_RIF
+
+#ifdef WIN32
+#include <shlobj_core.h>
+#pragma comment(lib,"Shell32.lib")
+#elif __APPLE__
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
 #include <dlfcn.h>
-#endif // __APPLE__
+#else
+
+#endif // WIN32
+
+#define PRINTER(name) printer(#name, (name))
 
 // we lock()/unlock() around rpr calls that might be called multithreaded.
 #define SAFE_DELETE_RPR_OBJECT(x) if(x) {lock(); rprObjectDelete( x ); x = nullptr; unlock();}
@@ -47,10 +58,64 @@ namespace
 
 	const uint32_t k_diskVertexCount = 32;
 
-	// TODO: change *.dat file location
-	constexpr const char * k_pathToRprPreference = "rprPreferences.dat";
+	constexpr const char * k_pathToRprPreference = "usdRprPreferences.dat";
 }
 
+
+inline bool rprIsErrorCheck(const TfCallContext &context, const rpr_status status, const std::string & messageOnFail)
+{
+
+	if (RPR_SUCCESS == status)
+	{
+		return false;
+	}
+
+	const char * rprErrorString = [](const rpr_status s)-> const char * {
+		switch (s)
+		{
+		case RPR_ERROR_INVALID_API_VERSION: return "invalide api version";
+		case RPR_ERROR_INVALID_PARAMETER: return "invalide parameter";
+		case RPR_ERROR_UNSUPPORTED: return "unsupported";
+		default:
+			break;
+		}
+
+		return "unknown error";
+	}(status);
+
+	const size_t maxBufferSize = 1024;
+	char buffer[maxBufferSize];
+
+	snprintf(buffer, maxBufferSize, "%s %s: %s", "[RPR ERROR] ", messageOnFail.c_str(), rprErrorString);
+	Tf_PostErrorHelper(context, TF_DIAGNOSTIC_CODING_ERROR_TYPE, buffer);
+
+	return true;
+}
+
+#define RPR_ERROR_CHECK(STATUS, MESSAGE_ON_FAIL) rprIsErrorCheck(TF_CALL_CONTEXT, STATUS, MESSAGE_ON_FAIL)
+
+std::string GetRprTmpDir()
+{
+#ifdef WIN32
+
+	char appDataPath[MAX_PATH];
+	// Get path for each computer, non-user specific and non-roaming data.
+	if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath)))
+	{
+		char buff[1024] = {};
+		sprintf(buff, "%s/UsdRpr/", appDataPath);
+		return std::string(buff);
+	}
+#elif defined __linux__
+    return std::string("~/.config/UsdRpr/");
+#elif defined __APPLE__
+    return std::string("~/Library/Application Support/UsdRpr/");
+#endif
+
+
+
+	return std::string();
+}
 
 std::string GetRprSdkPath()
 {
@@ -76,29 +141,11 @@ std::string GetRprSdkPath()
                             }
                     }
             }
-    
+
     TF_CODING_ERROR("Path to RPR SDK with %s not found", k_RadeonProRenderLibName);
 #endif // __APPLE__
-    
-    return std::string();
-}
 
-const rpr_render_mode GetRprRenderMode(const HdRprRenderMode & hdRprRenderMode) 
-{	
-	switch (hdRprRenderMode)
-	{
-	case HdRprRenderMode::GLOBAL_ILLUMINATION : return RPR_RENDER_MODE_GLOBAL_ILLUMINATION;
-	case HdRprRenderMode::DIRECT_ILLUMINATION : return RPR_RENDER_MODE_DIRECT_ILLUMINATION;
-	case HdRprRenderMode::DIRECT_ILLUMINATION_NO_SHADOW: return RPR_RENDER_MODE_DIRECT_ILLUMINATION_NO_SHADOW;
-	case HdRprRenderMode::WIREFRAME: return RPR_RENDER_MODE_WIREFRAME;
-	case HdRprRenderMode::MATERIAL_INDEX: return RPR_RENDER_MODE_MATERIAL_INDEX;
-	case HdRprRenderMode::POSITION: return RPR_RENDER_MODE_POSITION;
-	case HdRprRenderMode::NORMAL: return RPR_RENDER_MODE_NORMAL;
-	case HdRprRenderMode::TEXCOORD: return RPR_RENDER_MODE_TEXCOORD;
-	case HdRprRenderMode::AMBIENT_OCCLUSION: return RPR_RENDER_MODE_AMBIENT_OCCLUSION;
-	case HdRprRenderMode::DIFFUSE : return RPR_RENDER_MODE_DIFFUSE;
-	default: return RPR_ERROR_UNSUPPORTED;
-	}
+    return std::string();
 }
 
 rpr_creation_flags getAllCompatibleGpuFlags()
@@ -106,7 +153,7 @@ rpr_creation_flags getAllCompatibleGpuFlags()
 #ifdef __APPLE__
     return RPR_CREATION_FLAGS_ENABLE_METAL;
 #else
-    
+
     rpr_creation_flags flags = 0x0;
 	const rpr_creation_flags allGpuFlags = RPR_CREATION_FLAGS_ENABLE_GPU0
 		| RPR_CREATION_FLAGS_ENABLE_GPU1
@@ -134,38 +181,108 @@ const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevic
 {
 	rpr_creation_flags flags = 0x0;
 
+
+	if (HdRprRenderDevice::CPU == renderDevice)
+	{
+#ifdef  USE_GL_INTEROP
+
+		TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
+		flags = getAllCompatibleGpuFlags();
+#else
+		flags = RPR_CREATION_FLAGS_ENABLE_CPU;
+#endif
+	}
+	else if (HdRprRenderDevice::GPU == renderDevice)
+	{
+		flags = getAllCompatibleGpuFlags();
+	}
+	else
+	{
+		//TODO: log unknown HdRprRenderDevice
+		return NULL;
+	}
+
+
+	if (flags == 0x0)
+	{
+		// TODO: log no compatible device
+		return NULL;
+	}
+
 #ifdef  USE_GL_INTEROP
 	flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
 #endif
 
-
-	switch (renderDevice)
-	{
-	case HdRprRenderDevice::CPU:
-	{
-#ifdef  USE_GL_INTEROP
-		TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
-		flags |= getAllCompatibleGpuFlags();
-#else
-		flags |= RPR_CREATION_FLAGS_ENABLE_CPU;
-#endif
-	}
-	break;
-
-	case HdRprRenderDevice::GPU0:
-		flags |= getAllCompatibleGpuFlags();
-		break;
-
-	default: return RPR_ERROR_UNSUPPORTED;
-	}
-
 	return flags;
 }
-
 
 class HdRprPreferences
 {
 public:
+
+	static HdRprPreferences & GetInstance() {
+		static HdRprPreferences instance;
+		return instance;
+	}
+
+	void SetAov(const HdRprAov & aov)
+	{
+		m_prefData.Aov = aov;
+		Save();
+		SetDitry(true);
+	}
+
+	const HdRprAov & GetAov() const
+	{
+		return m_prefData.Aov;
+	}
+
+	void SetRenderDevice(const HdRprRenderDevice & renderDevice)
+	{
+		m_prefData.RenderDevice = renderDevice;
+		Save();
+		SetDitry(true);
+	}
+
+	HdRprRenderDevice GetRenderDevice() const
+	{
+		return m_prefData.RenderDevice;
+	}
+
+
+	void SetFilterType(const FilterType & type)
+	{
+		m_prefData.FilterType = type;
+		SetFilterDitry(true);
+	}
+
+	FilterType GetFilterType() const
+	{
+		return m_prefData.FilterType;
+	}
+
+	bool IsDirty() const
+	{
+		return m_isDirty;
+	}
+
+
+	bool IsFilterTypeDirty()
+	{
+		return m_isFilterDirty;
+	}
+
+	void SetDitry(bool isDirty)
+	{
+		m_isDirty = isDirty;
+	}
+
+	void SetFilterDitry(bool isDirty)
+	{
+		m_isFilterDirty = isDirty;
+	}
+
+private:
 	HdRprPreferences()
 	{
 		if (!Load())
@@ -181,51 +298,19 @@ public:
 		Save();
 	}
 
-	void SetRenderMode(const HdRprRenderMode & renderMode)
-	{
-		m_renderMode = renderMode;
-		Save();
-		SetDitry(true);
-	}
-
-	HdRprRenderMode GetRenderMode() const
-	{
-		return m_renderMode;
-	}
-
-	void SetRenderDevice(const HdRprRenderDevice & renderDevice)
-	{
-		m_renderDevice = renderDevice;
-		Save();
-		SetDitry(true);
-	}
-
-	HdRprRenderDevice GetRenderDevice() const
-	{
-		return m_renderDevice;
-	}
-
-	bool IsDirty() const
-	{
-		return m_isDirty;
-	}
-
-	void SetDitry(bool isDirty)
-	{
-		m_isDirty = isDirty;
-	}
-
-private:
 	bool Load()
 	{
-		if (FILE * f = fopen(k_pathToRprPreference, "rb"))
+		std::string tmpDir = GetRprTmpDir();
+		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + "\\" + k_pathToRprPreference;
+
+		if (FILE * f = fopen(rprPreferencePath.c_str(), "rb"))
 		{
-			if (!fread(this, sizeof(this), 1, f))
+			if (!fread(&m_prefData, sizeof(PrefData), 1, f))
 			{
 				TF_CODING_ERROR("Fail to read rpr preferences dat file");
 			}
 			fclose(f);
-			return true;
+			return IsValid();
 		}
 
 		return false;
@@ -233,9 +318,12 @@ private:
 
 	void Save()
 	{
-		if (FILE * f = fopen(k_pathToRprPreference, "wb"))
+		std::string tmpDir = GetRprTmpDir();
+		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + "\\" + k_pathToRprPreference;
+
+		if (FILE * f = fopen(rprPreferencePath.c_str(), "wb"))
 		{
-			if (!fwrite(this, sizeof(this), 1, f))
+			if (!fwrite(&m_prefData, sizeof(PrefData), 1, f))
 			{
 				TF_CODING_ERROR("Fail to write rpr preferences dat file");
 			}
@@ -243,16 +331,30 @@ private:
 		}
 	}
 
-	void SetDefault()
+	bool IsValid()
 	{
-		m_renderDevice = HdRprRenderDevice::CPU;
-		m_renderMode = HdRprRenderMode::GLOBAL_ILLUMINATION;
+		return (m_prefData.RenderDevice >= HdRprRenderDevice::FIRST && m_prefData.RenderDevice <= HdRprRenderDevice::LAST)
+			&& (m_prefData.Aov >= HdRprAov::FIRST && m_prefData.Aov <= HdRprAov::LAST)
+			&& (m_prefData.FilterType >= FilterType::FIRST && m_prefData.FilterType <= FilterType::LAST);
 	}
 
-	HdRprRenderDevice m_renderDevice = HdRprRenderDevice::NONE;
-	HdRprRenderMode m_renderMode = HdRprRenderMode::NONE;
+	void SetDefault()
+	{
+		m_prefData.RenderDevice = HdRprRenderDevice::GPU;
+		m_prefData.Aov = HdRprAov::COLOR;
+		m_prefData.FilterType = FilterType::BilateralDenoise;
+	}
+
+	struct PrefData
+	{
+		HdRprRenderDevice RenderDevice = HdRprRenderDevice::NONE;
+		HdRprAov Aov = HdRprAov::NONE;
+		FilterType FilterType = FilterType::None;
+	} m_prefData;
+	
 
 	bool m_isDirty = true;
+	bool m_isFilterDirty = true;
 
 };
 
@@ -260,16 +362,14 @@ private:
 class HdRprApiImpl
 {
 public:
-	static HdRprPreferences & GetPreferences()
-	{
-		return s_preferences;
-	}
-
 	void Init()
 	{
-		this->InitRpr();
-		this->InitMaterialSystem();
-		this->CreateScene();
+		InitRpr();
+		InitMaterialSystem();
+		CreateScene();
+		CreateFramebuffer(k_defaultFbWidth, k_defaultFbHeight);
+		CreatePosteffects();
+		CreateCamera();
 	}
 
 	void Deinit()
@@ -283,50 +383,60 @@ public:
 	}
 
 	void CreateScene() {
-		//lock();
-		rprContextCreateScene(m_context, &m_scene);
-		rprContextSetScene(m_context, m_scene);
-		//unlock();
+		
+		if (!m_context)
+		{
+			return;
+		}
+
+		if (RPR_ERROR_CHECK(rprContextCreateScene(m_context, &m_scene), "Fail to create scene")) return;
+		if (RPR_ERROR_CHECK(rprContextSetScene(m_context, m_scene), "Fail to set scene")) return;
 	}
 
 	void CreateCamera() {
-		//lock();
-		rprContextCreateCamera(m_context, &m_camera);
-		rprCameraLookAt(m_camera, 20.0f, 60.0f, 40.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
-		rprSceneSetCamera(m_scene, m_camera);
+		if (!m_context)
+		{
+			return;
+		}
+
+		RPR_ERROR_CHECK(rprContextCreateCamera(m_context, &m_camera), "Fail to create camera");
+		RPR_ERROR_CHECK(rprCameraLookAt(m_camera, 20.0f, 60.0f, 40.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f), "Fail to set camera Look At");
+		
+		const rpr_float  sensorSize[] = { 1.f , 1.f};
+		RPR_ERROR_CHECK(rprCameraSetSensorSize(m_camera, sensorSize[0], sensorSize[1]), "Fail to to set camera sensor size");
+		RPR_ERROR_CHECK(rprSceneSetCamera(m_scene, m_camera), "Fail to to set camera to scene");
 		//unlock();
 	}
 
 	void * CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
 	{
+		if (!m_context)
+		{
+			return nullptr;
+		}
+
 		rpr_int status = RPR_SUCCESS;
 		rpr_shape mesh = nullptr;
 
 		VtIntArray newIndexes, newVpf;
 		SplitPolygons(indexes, vpf, newIndexes, newVpf);
-		
+
 		lock();
-		status = rprContextCreateMesh(m_context,
+		if (RPR_ERROR_CHECK(rprContextCreateMesh(m_context,
 			(rpr_float const*)points.data(), points.size(), sizeof(GfVec3f),
 			(rpr_float const*)((normals.size() == 0) ? 0 : normals.data()), normals.size(), sizeof(GfVec3f),
 			(rpr_float const*)((uv.size() == 0) ? 0 : uv.data()), uv.size(), sizeof(GfVec2f),
 			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
 			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
 			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
-			newVpf.data(), newVpf.size(), &mesh);
+			newVpf.data(), newVpf.size(), &mesh)
+			, "Fail create mesh")) {
+			unlock();
+			return nullptr;
+		}
 		unlock();
 
-		if (status != RPR_SUCCESS) {
-			TF_CODING_ERROR("Fail create mesh. Error code: %d", status);
-			return nullptr;
-		}
-
-		status = rprSceneAttachShape(m_scene, mesh);
-		if (status != RPR_SUCCESS) {
-			TF_CODING_ERROR("Fail attach mesh. Error code: %d", status);
-			return nullptr;
-		}
-
+		if (RPR_ERROR_CHECK(rprSceneAttachShape(m_scene, mesh), "Fail attach mesh to scene")) return nullptr;
 
 		if (material)
 		{
@@ -334,106 +444,180 @@ public:
 			rprShapeSetMaterial(mesh, material);
 			unlock();
 		}
-		
+
 		return mesh;
 	}
 
 	void SetMeshTransform(rpr_shape mesh, const GfMatrix4f & transform)
 	{
-		rpr_int status;
 		lock();
-		status = rprShapeSetTransform(mesh, false, transform.GetArray());
+		RPR_ERROR_CHECK(rprShapeSetTransform(mesh, false, transform.GetArray()), "Fail set mesh transformation");
 		unlock();
-		if (status != RPR_SUCCESS) {
-			TF_CODING_ERROR("Fail set mesh transformation. Error code: %d", status);
-		}
 	}
 
 	void SetMeshRefineLevel(rpr_shape mesh, const int level, const TfToken boundaryInterpolation)
 	{
 		rpr_int status;
 		lock();
-		status = rprShapeSetSubdivisionFactor(mesh, level);
+		status = RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, level), "Fail set mesh subdividion");
 		unlock();
+
 		if (status != RPR_SUCCESS) {
-			TF_CODING_ERROR("Fail set mesh subdividion. Error code: %d", status);
+			return;
 		}
 
 		if (level > 0) {
-			rpr_subdiv_boundary_interfop_type interfopType = RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_AND_CORNER 
+			rpr_subdiv_boundary_interfop_type interfopType = RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_AND_CORNER
 				? boundaryInterpolation == PxOsdOpenSubdivTokens->edgeAndCorner :
 				RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
-			status = rprShapeSetSubdivisionBoundaryInterop(mesh, interfopType);
-			if (status != RPR_SUCCESS) {
-				TF_CODING_ERROR("Fail set mesh subdividion boundary. Error code: %d", status);
-			}
+			RPR_ERROR_CHECK(rprShapeSetSubdivisionBoundaryInterop(mesh, interfopType),"Fail set mesh subdividion boundary");
 		}
 	}
 
 	void SetMeshMaterial(rpr_shape mesh, const RprApiMaterial * material)
 	{
 		MaterialFactory * materialFactory = GetMaterialFactory(material->GetType());
-		// all rprmaterial calls in here
+		
+		if (!materialFactory)
+		{
+			return;
+		}
+
 		lock();
 		materialFactory->AttachMaterialToShape(mesh, material);
+		unlock();
+	}
+	void SetMeshHeteroVolume(rpr_shape mesh, const RprApiObject heteroVolume)
+	{
+		RPR_ERROR_CHECK(rprShapeSetHeteroVolume(mesh, heteroVolume), "Fail set mesh hetero volume");
+	}
+
+	void SetCurveMaterial(rpr_shape curve, const RprApiMaterial * material)
+	{
+		MaterialFactory * materialFactory = GetMaterialFactory(material->GetType());
+
+		if (!materialFactory)
+		{
+			return;
+		}
+		
+		lock();
+		materialFactory->AttachCurveToShape(curve, material);
 		unlock();
 	}
 
 	void * CreateMeshInstance(rpr_shape mesh)
 	{
+		if (!m_context)
+		{
+			return nullptr;
+		}
+
 		rpr_int status;
 		rpr_shape meshInstance;
 		lock();
-		status = rprContextCreateInstance(m_context, mesh, &meshInstance);
-		
+		status = RPR_ERROR_CHECK(rprContextCreateInstance(m_context, mesh, &meshInstance), "Fail to create mesh instance");
 		if (status != RPR_SUCCESS) {
-			TF_CODING_ERROR("Fail to create mesh instance. Error code: %d", status);
+			unlock();
 			return nullptr;
 		}
 
-		status = rprSceneAttachShape(m_scene, meshInstance);
+		status = RPR_ERROR_CHECK(rprSceneAttachShape(m_scene, meshInstance), "Fail to attach mesh instance");
+		if (status != RPR_SUCCESS) {
+			unlock();
+			return nullptr;
+		}
+
 		unlock();
-				
-		if (status != RPR_SUCCESS) {
-			TF_CODING_ERROR("Fail attach mesh instance. Error code: %d", status);
-			return nullptr;
-		}
-
 		return meshInstance;
 	}
 
 	void SetMeshVisibility(rpr_shape mesh, bool isVisible)
 	{
-		//lock();
-		rprShapeSetVisibility(mesh, isVisible);
-		//unlock();
+		RPR_ERROR_CHECK(rprShapeSetVisibility(mesh, isVisible), "Fail to set mesh visibility");
 	}
 
-	void CreateEnvironmentLight(const std::string & path, float intensity, const GfMatrix4f & transform)
-	{	
-		rpr_int status;
-		rpr_image image = nullptr;
-		//lock();
-		status = rprContextCreateImageFromFile(m_context, path.c_str(), &image);
-		
-		if (status != RPR_SUCCESS) {
-			TF_CODING_ERROR("Fail to load image %s\n Error code: %d", path.c_str(), status);
+	void * CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width)
+	{
+		if (!m_context || points.empty() || indexes.empty())
+		{
+			return nullptr;
 		}
+
+		const size_t k_segmentSize = 4;
+
+		rpr_int status;
+		rpr_curve curve = 0;
+
+		VtVec3fArray newPoints = points;
+		VtIntArray newIndexes = indexes;
+
+		if (size_t extraPoints = newPoints.size() % k_segmentSize)
+		{
+			newPoints.resize(points.size() + k_segmentSize - extraPoints);
+			newIndexes.resize(indexes.size() + k_segmentSize - extraPoints);
+
+			for (int i = 0; i < k_segmentSize; ++i)
+			{
+				newPoints[newPoints.size() - i - 1] = points[points.size() - i - 1];
+				newIndexes[newIndexes.size() - i - 1] = indexes[indexes.size() - i - 1];
+			}
+
+		}
+
+		const size_t segmentPerCurve = newPoints.size() / k_segmentSize;
+		std::vector<float> curveWidths(points.size(), width);
+		std::vector<int> segmentsPerCurve(points.size(), segmentPerCurve);
 		
-		// Add an environment light to the scene with the image attached.
+		lock();
+		if (RPR_ERROR_CHECK(rprContextCreateCurve(m_context,
+			&curve
+			, newPoints.size()
+			, (float*)newPoints.data()
+			, sizeof(GfVec3f)
+			, newIndexes.size()
+			, 1
+			, (const rpr_uint *)newIndexes.data()
+			, &width, NULL
+			, segmentsPerCurve.data()), "Fail to create curve"))
+		{
+			unlock();
+			return nullptr;
+		};
+		unlock();
+
+
+		if (RPR_ERROR_CHECK(rprSceneAttachCurve(m_scene, curve), "Fail to attach curve")) return nullptr;
+
+		return curve;
+	}
+
+	void CreateEnvironmentLight(const std::string & path, float intensity)
+	{
+		if (!m_context)
+		{
+			return;
+		}
+
 		rpr_light light;
-		status = rprContextCreateEnvironmentLight(m_context, &light);
-		status = rprEnvironmentLightSetImage(light, image);
-		status = rprEnvironmentLightSetIntensityScale(light, intensity);
-		status = rprLightSetTransform(light, false, transform.GetArray());
-		status = rprSceneAttachLight(m_scene, light);
-		//unlock();
+		rpr_image image = nullptr;
+
+		if (RPR_ERROR_CHECK(rprContextCreateImageFromFile(m_context, path.c_str(), &image), std::string("Fail to load image ") + path)) return;
+		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_context, &light), "Fail to create environment light")) return;
+		if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image),"Fail to set image to environment light")) return;
+		if (RPR_ERROR_CHECK(rprEnvironmentLightSetIntensityScale(light, intensity), "Fail to set environment light intencity")) return;
+		if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene, light), "Fail to attach environment light")) return;
+
 		m_isLightPresent = true;
 	}
 
 	void CreateEnvironmentLight(GfVec3f color, float intensity)
 	{
-		rpr_int status;
+		if (!m_context)
+		{
+			return;
+		}
+
 		rpr_image image = nullptr;
 
 		// Add an environment light to the scene with the image attached.
@@ -444,23 +628,19 @@ public:
 		rpr_image_format format = { 3, RPR_COMPONENT_TYPE_FLOAT32 };
 		rpr_image_desc desc = { 1, 1, 1, 3, 3 };
 		//lock();
-		
-		status = rprContextCreateImage(m_context, format, &desc, backgroundColor.data(), &image);
-		if (status != RPR_SUCCESS)
-			TF_CODING_ERROR("Fail to create image from color.  Error code: %d", status);
 
-		status = rprContextCreateEnvironmentLight(m_context, &light);
-		status = rprEnvironmentLightSetImage(light, image);
-		status = rprEnvironmentLightSetIntensityScale(light, intensity);
-		status = rprSceneAttachLight(m_scene, light);
-		//unlock();
-		
+		if (RPR_ERROR_CHECK(rprContextCreateImage(m_context, format, &desc, backgroundColor.data(), &image),"Fail to create image from color")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_context, &light), "Fail to create environment light")) return;
+		if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image), "Fail to set image to environment light")) return;
+		if (RPR_ERROR_CHECK(rprEnvironmentLightSetIntensityScale(light, intensity), "Fail to set environment light intensity")) return;
+		if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene, light), "Fail to attach environment light to scene")) return;
+
 		m_isLightPresent = true;
 	}
 
 	void * CreateRectLightGeometry(const float & width, const float & height)
 	{
-		constexpr float rectVertexCount = 4;
+		constexpr const size_t rectVertexCount = 4;
 		VtVec3fArray positions(rectVertexCount);
 		positions[0] = GfVec3f(width * 0.5f, height * 0.5f, 0.f);
 		positions[1] = GfVec3f(width * 0.5f, height * -0.5f, 0.f);
@@ -487,13 +667,13 @@ public:
 
 	void * CreateDiskLight(const float & width, const float & height, const GfVec3f & color)
 	{
-		
+
 		VtVec3fArray positions;
 		VtVec3fArray normals;
 		VtVec2fArray uv; // empty
 		VtIntArray idx;
 		VtIntArray vpf;
-		
+
 		const float step = M_PI * 2 / k_diskVertexCount;
 		for (int i = 0; i < k_diskVertexCount; ++i)
 		{
@@ -512,26 +692,13 @@ public:
 			vpf.push_back(3);
 		}
 
-		rpr_int status;
 		rpr_material_node material = NULL;
-		//lock();
-		
-		status = rprMaterialSystemCreateNode(m_matsys, RPR_MATERIAL_NODE_EMISSIVE, &material);
-		if (status != RPR_SUCCESS) {
-			TF_CODING_ERROR("Fail create emmisive material. Error code: %d", status);
-			return nullptr;
-		}
 
-		status = rprMaterialNodeSetInputF(material, "color", color[0], color[1], color[2], 0.0f);
-		//unlock();
-		
-		if (status != RPR_SUCCESS) {
-			TF_CODING_ERROR("Fail set material color. Error code: %d", status);
-			return nullptr;
-		}
+		if (RPR_ERROR_CHECK(rprMaterialSystemCreateNode(m_matsys, RPR_MATERIAL_NODE_EMISSIVE, &material), "Fail create emmisive material")) return nullptr;
+		if (RPR_ERROR_CHECK(rprMaterialNodeSetInputF(material, "color", color[0], color[1], color[2], 0.0f),"Fail set material color")) return nullptr;
 
 		m_isLightPresent = true;
-		
+
 		return CreateMesh(positions, normals, uv, idx, vpf, material);
 	}
 
@@ -586,7 +753,7 @@ public:
 		{
 			return nullptr;
 		}
-		
+
 		lock();
 		RprApiMaterial * material = materialFactory->CreateMaterial(materialAdapter.GetType());
 
@@ -596,38 +763,120 @@ public:
 		return material;
 	}
 
+	void * CreateHeterVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & grigSize)
+	{
+		if (!m_context)
+		{
+			return nullptr;
+		}
+
+		rpr_hetero_volume heteroVolume = nullptr;
+
+		rpr_grid rprGridDencity;
+		if (RPR_ERROR_CHECK(rprContextCreateGrid(m_context, &rprGridDencity
+			, grigSize[0], grigSize[1], grigSize[2], &indexesDencity[0]
+			, indexesDencity.size(), RPR_GRID_INDICES_TOPOLOGY_I_U64
+			, &gridDencityData[0], gridDencityData.size() * sizeof(gridDencityData[0])
+			, NULL)
+			, "Fail create dencity grid")) return nullptr;
+
+		rpr_grid rprGridAlbedo;
+		if (RPR_ERROR_CHECK(rprContextCreateGrid(m_context, &rprGridAlbedo
+			, grigSize[0], grigSize[1], grigSize[2], &indexesAlbedo[0]
+			, indexesAlbedo.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
+			, &gridAlbedoData[0], gridAlbedoData.size() * sizeof(gridAlbedoData[0])
+			, NULL)
+			, "Fail create albedo grid")) return nullptr;
+
+		
+
+		if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume( m_context, &heteroVolume), "Fail create hetero dencity volume")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityGrid(heteroVolume, rprGridDencity), "Fail to set density hetero volume")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoGrid(heteroVolume, rprGridAlbedo),"Fail to set albedo hetero volume")) return nullptr;
+		if (RPR_ERROR_CHECK(rprSceneAttachHeteroVolume(m_scene, heteroVolume), "Fail attach hetero volume to scene")) return nullptr;
+
+		return heteroVolume;
+	}
+
+	void SetHeteroVolumeTransform(RprApiObject heteroVolume, const GfMatrix4f & m)
+	{
+		RPR_ERROR_CHECK(rprHeteroVolumeSetTransform(heteroVolume, false, m.GetArray()), "Fail to set hetero volume transform");
+	}
+
+	
+	void * CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & grigSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume)
+	{
+		RprApiObject heteroVolume = CreateHeterVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, grigSize);
+
+		if (!heteroVolume)
+		{
+			return nullptr;
+		}
+
+
+		RprApiObject cubeMesh = CreateCubeMesh(0.5f, 0.5f, 0.5f);
+
+		if (!cubeMesh)
+		{
+			return nullptr;
+		}
+
+
+		MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::TRANSPERENT,
+			MaterialParams{ { TfToken("color"), VtValue(GfVec4f(1.0f, 1.0f, 1.0f, 1.0f))
+				} }); // TODO: use token
+
+		RprApiMaterial * transperantMaterial = CreateMaterial(matAdapter);
+
+		if (!transperantMaterial)
+		{
+			return nullptr;
+		}
+
+		GfMatrix4f meshTransform;
+		GfVec3f volumeSize = GfVec3f(voxelSize[0] * grigSize[0], voxelSize[1] * grigSize[1], voxelSize[2] * grigSize[2]);
+		meshTransform.SetScale(volumeSize);
+
+		SetMeshMaterial(cubeMesh, transperantMaterial);
+		SetMeshHeteroVolume(cubeMesh, heteroVolume);
+		SetMeshTransform(cubeMesh, meshTransform);
+		SetHeteroVolumeTransform(heteroVolume, meshTransform);
+
+		out_mesh = cubeMesh;
+		out_heteroVolume = heteroVolume;
+
+		return heteroVolume;
+	}
+
 	void CreatePosteffects()
 	{
-		//lock();
-		
-		rprContextCreatePostEffect(m_context, RPR_POST_EFFECT_TONE_MAP, &m_tonemap);
-		rprContextAttachPostEffect(m_context, m_tonemap);
-		
-		//unlock();
+		if (!m_context)
+		{
+			return;
+		}
+
+		if(RPR_ERROR_CHECK(rprContextCreatePostEffect(m_context, RPR_POST_EFFECT_TONE_MAP, &m_tonemap), "Fail to create post effect")) return;
+		RPR_ERROR_CHECK(rprContextAttachPostEffect(m_context, m_tonemap), "Fail to attach posteffect");
 	}
 
 	void CreateFramebuffer(const rpr_uint width, const rpr_uint height)
-	{		
-		m_framebufferDesc.fb_width = width; 
+	{
+		if (!m_context)
+		{
+			return;
+		}
+
+		m_framebufferDesc.fb_width = width;
 		m_framebufferDesc.fb_height = height;
-		
-		rpr_int status;
-		
-		
+
 		rpr_framebuffer_format fmt = { 4, RPR_COMPONENT_TYPE_FLOAT32 };
 
-		//lock();
-		
-		status = rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_colorBuffer);
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
-		}
-
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
-		}
+		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_colorBuffer), "Fail create color framebuffer")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_positionBuffer),"Fail create depth framebuffer")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_depthBuffer), "Fail create depth framebuffer")) return;;
+		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_normalBuffer), "Fail create normal framebuffer")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_objId), "Fail create object ID framebuffer")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_uv),"Fail create UV framebuffer")) return ;
 
 #ifdef USE_GL_INTEROP
 
@@ -650,7 +899,7 @@ public:
 		glBindRenderbuffer(GL_RENDERBUFFER, m_depthrenderbufferGL);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthrenderbufferGL);
-		
+
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_textureFramebufferGL, 0);
 
 		GLenum glFbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -661,7 +910,7 @@ public:
 			return;
 		}
 
-		status = rprContextCreateFramebufferFromGLTexture2D(m_context, GL_TEXTURE_2D, 0, m_textureFramebufferGL, &m_resolvedBuffer);
+		rpr_int status = rprContextCreateFramebufferFromGLTexture2D(m_context, GL_TEXTURE_2D, 0, m_textureFramebufferGL, &m_resolvedBuffer);
 		if (status != RPR_SUCCESS)
 		{
 			ClearFramebuffers();
@@ -673,21 +922,25 @@ public:
 		glBindRenderbuffer(GL_RENDERBUFFER, 0);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #else
-		status = rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_resolvedBuffer);
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
-			return;
-		}
-
+		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_resolvedBuffer), "Fail create resolved framebuffer")) return;
 		m_framebufferData.resize(m_framebufferDesc.fb_width * m_framebufferDesc.fb_height * 4, 0.f);
 #endif
 		//unlock();
-		
+
 		ClearFramebuffers();
 
+#ifdef USE_RIF
+		CreateImageFilter();
+#endif // USE_RIF
+	
 		//lock();
-		rprContextSetAOV(m_context, RPR_AOV_COLOR, m_colorBuffer);
+		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_COLOR, m_colorBuffer), "fail to set color AOV");
+		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_WORLD_COORDINATE, m_positionBuffer), "fail to set coordinate AOV");
+		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_DEPTH, m_depthBuffer), "fail to set depth AOV");
+		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_OBJECT_ID, m_objId), "fail to set object id AOV");
+		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_UV, m_uv), "fail to set uv AOV");
+		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_GEOMETRIC_NORMAL, m_normalBuffer), "fail to set normal AOV");
+
 		//unlock();
 	}
 
@@ -700,8 +953,13 @@ public:
 	void ClearFramebuffers()
 	{
 		//lock();
-		rprFrameBufferClear(m_colorBuffer);
-		rprFrameBufferClear(m_resolvedBuffer);
+		RPR_ERROR_CHECK(rprFrameBufferClear(m_colorBuffer), "Fail to clear color framebuffer");
+		RPR_ERROR_CHECK(rprFrameBufferClear(m_positionBuffer), "Fail to clear position framebuffer");
+		RPR_ERROR_CHECK(rprFrameBufferClear(m_depthBuffer), "Fail to clear depth framebuffer");
+		RPR_ERROR_CHECK(rprFrameBufferClear(m_objId), "Fail to clear object ID framebuffer");
+		RPR_ERROR_CHECK(rprFrameBufferClear(m_uv), "Fail to clear uv framebuffer");
+		RPR_ERROR_CHECK(rprFrameBufferClear(m_normalBuffer), "Fail to clear normal framebuffer");
+		RPR_ERROR_CHECK(rprFrameBufferClear(m_resolvedBuffer), "Fail to clear resolved framebuffer");
 		//unlock();
 	}
 
@@ -718,7 +976,7 @@ public:
 		GfVec3f at(eye - n);
 
 		//lock();
-		rprCameraLookAt(m_camera, eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]);
+		RPR_ERROR_CHECK(rprCameraLookAt(m_camera, eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]), "Fail to set camera Look At");
 		//unlock();
 
 		m_cameraViewMatrix = m;
@@ -728,22 +986,10 @@ public:
 	{
 		float sensorSize[2];
 
-		rpr_int status;
-		//lock();
-		status = rprCameraGetInfo(m_camera, RPR_CAMERA_SENSOR_SIZE, sizeof(sensorSize), &sensorSize, NULL);
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail to get camera swnsor size parameter. Error code %d", status);
-		}
-
-		const float focalLength = sensorSize[1] * proj[1][1] / 2;
-		status = rprCameraSetFocalLength(m_camera, focalLength);
+		if(RPR_ERROR_CHECK(rprCameraGetInfo(m_camera, RPR_CAMERA_SENSOR_SIZE, sizeof(sensorSize), &sensorSize, NULL), "Fail to get camera swnsor size parameter")) return;
 		
-		//unlock();
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail to set focal length parameter. Error code %d", status);
-		}
+		const float focalLength = sensorSize[1] * proj[1][1] / 2;
+		if (RPR_ERROR_CHECK(rprCameraSetFocalLength(m_camera, focalLength), "Fail to set focal length parameter")) return;
 
 		m_cameraProjectionMatrix = proj;
 	}
@@ -767,25 +1013,11 @@ public:
 #else
 	const float * GetFramebufferData()
 	{
-		rpr_int status;
 		size_t fb_data_size = 0;
-		//lock();
-		
-		status = rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fb_data_size);
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail to get frafebuffer data size. Error code %d", status);
-		}
 
-		status = rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, fb_data_size, m_framebufferData.data(), NULL);
-		
-		//unlock();
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail to get frafebuffer data. Error code %d", status);
-		}
+		if (RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fb_data_size), "Fail to get frafebuffer data size")) return nullptr;
 
-
+		RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, fb_data_size, m_framebufferData.data(), NULL), "Fail to get frafebuffer data");
 		return m_framebufferData.data();
 	}
 #endif
@@ -799,11 +1031,22 @@ public:
 	void ResizeFramebuffer(const GfVec2i & resolution) {
 		DeleteFramebuffers();
 		CreateFramebuffer(resolution[0], resolution[1]);
+
+		rpr_float  sensorSize[] = { 1.f ,(float)resolution[1] / (float)resolution[0]};
+		RPR_ERROR_CHECK(rprCameraSetSensorSize(m_camera, sensorSize[0], sensorSize[1]), "Fail to set camera sensor size");
 	}
+
+    void SetAov(const HdRprAov & aov)
+    {
+        m_currentAov = aov;
+    }
 
 	void Render()
 	{
-		rpr_int status;
+		if (!m_context)
+		{
+			return;
+		}
 
 		if (m_isFramebufferDirty)
 		{
@@ -811,51 +1054,54 @@ public:
 			SetFramebufferDirty(false);
 		}
 
+
 		// In case there is no Lights in scene - create dafault
 		if (!m_isLightPresent)
 		{
 			CreateEnvironmentLight(k_defaultLightColor, 1.f);
 		}
 
-		status = rprContextRender(m_context);
-		if (status != RPR_SUCCESS)
+		if(RPR_ERROR_CHECK(rprContextRender(m_context),"Fail contex render framebuffer")) return;
+
+        rpr_framebuffer targetFB = GetTargetFB();
+
+       
+
+#ifdef USE_RIF
+		if (HdRprApiImpl::GetPreferences().IsFilterTypeDirty())
 		{
-			TF_CODING_ERROR("Fail contex render framebuffer. Error code %d", status);
+			CreateImageFilter();
 		}
 
-		const HdRprRenderMode renderMode = s_preferences.GetRenderMode();
 
-		if (s_preferences.IsDirty())
+		if (m_imageFilterPtr && m_imageFilterPtr->GetType() != FilterType::None && m_currentAov == HdRprAov::COLOR)
 		{
-			
-			//lock();
-			status = rprContextSetParameter1u(m_context, "rendermode", GetRprRenderMode(renderMode));
+			m_imageFilterPtr->Run();
+		}
+		else
+		{
+			status = rprContextResolveFrameBuffer(m_context, targetFB, m_resolvedBuffer, false);
 			//unlock();
-			
 			if (status != RPR_SUCCESS)
 			{
-				TF_CODING_ERROR("Fail set rendermode. Error code %d", status);
+				TF_CODING_ERROR("Fail contex resolve. Error code %d", status);
 			}
-
-			s_preferences.SetDitry(false);
-			
-			SetFramebufferDirty(true);
 		}
-
-		//lock();
-		status = rprContextResolveFrameBuffer(m_context, m_colorBuffer, m_resolvedBuffer, false);
-		//unlock();
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail contex resolve. Error code %d", status);
-		}
+#else
+		if (RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, targetFB, m_resolvedBuffer, false), "Fail contex resolve")) return;
+#endif // USE_RIF
 	}
 
 	void DeleteFramebuffers()
 	{
 		SAFE_DELETE_RPR_OBJECT(m_colorBuffer);
+		SAFE_DELETE_RPR_OBJECT(m_positionBuffer);
+        SAFE_DELETE_RPR_OBJECT(m_depthBuffer);
+        SAFE_DELETE_RPR_OBJECT(m_objId);
+        SAFE_DELETE_RPR_OBJECT(m_uv);
+        SAFE_DELETE_RPR_OBJECT(m_normalBuffer);
 		SAFE_DELETE_RPR_OBJECT(m_resolvedBuffer);
-		
+
 #ifdef USE_GL_INTEROP
 		if (m_depthrenderbufferGL != INVALID_FRAMEBUFFER)
 		{
@@ -875,7 +1121,7 @@ public:
 			m_textureFramebufferGL = INVALID_TEXTURE;
 		}
 #endif
-		
+
 	}
 
 	void DeleteRprObject(void * object)
@@ -886,21 +1132,22 @@ public:
 	void DeleteMesh(void * mesh)
 	{
 		rpr_int status;
-		
+
 		lock();
-		
-		status = rprShapeSetMaterial(mesh, NULL);
-		
+
+		status = RPR_ERROR_CHECK(rprShapeSetMaterial(mesh, NULL),"Fail reset mesh material") ;
+
 		if (status != RPR_SUCCESS)
 		{
-			TF_CODING_ERROR("Fail reset mesh material. Error code %d", status);
+			unlock();
+			return;
 		}
-		status = rprSceneDetachShape(m_scene, mesh);
+		status = RPR_ERROR_CHECK(rprSceneDetachShape(m_scene, mesh), "Fail detach mesh from scene");
 		unlock();
-		
+
 		if (status != RPR_SUCCESS)
 		{
-			TF_CODING_ERROR("Fail detach mesh from scene. Error code %d", status);
+			return;
 		}
 
 		SAFE_DELETE_RPR_OBJECT(mesh);
@@ -908,55 +1155,107 @@ public:
 
 private:
 	void InitRpr()
-	{		
+	{
 		//lock();
-		
+
         const std::string rprSdkPath = GetRprSdkPath();
+		const std::string rprTmpDir = GetRprTmpDir();
         const std::string tahoePath = (rprSdkPath.empty()) ? k_TahoeLibName : rprSdkPath + "/" + k_TahoeLibName;
 		rpr_int tahoePluginID = rprRegisterPlugin(tahoePath.c_str());
 		rpr_int plugins[] = { tahoePluginID };
 
-		const HdRprRenderDevice renderDevice = s_preferences.GetRenderDevice();
-		rpr_int status = rprCreateContext(RPR_API_VERSION, plugins, 1, getRprCreationFlags(renderDevice), NULL, NULL, &m_context);
-		if (status != RPR_SUCCESS)
+
+		rpr_creation_flags flags = getRprCreationFlags(HdRprPreferences::GetInstance().GetRenderDevice());
+		if (!flags)
 		{
-			TF_CODING_ERROR("Fail Load %s. Error code %d", k_TahoeLibName, status);
-		}
-		
-		if (GLenum errorCode = glGetError())
-		{
-			TF_CODING_ERROR("Fail get texture pixels. Error code %d", errorCode);
+			return;
 		}
 
-		status = rprContextSetActivePlugin(m_context, plugins[0]);
+		if (RPR_ERROR_CHECK(rprCreateContext(RPR_API_VERSION, plugins, 1, flags, NULL, rprTmpDir.c_str(), &m_context), std::string("Fail to create context with plugin ") + k_TahoeLibName)) return;
 
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail Set plugin %s resolve. Error code %d", k_TahoeLibName, status);
+		if(RPR_ERROR_CHECK(rprContextSetActivePlugin(m_context, plugins[0]), "fail to set active plugin")) return;
+
+
+		RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "yflip", 0), "Fail to set context YFLIP parameter");
+
+		GLenum err = glewInit();
+		if (err != GLEW_OK) {
+			TF_CODING_ERROR("Fail init GLEW. Error code %d", glewGetErrorString(err));
 		}
-		
-		rprContextSetParameter1u(m_context, "yflip", 0);
-		//unlock();
-		
 	}
 
 	void InitMaterialSystem()
 	{
-		rpr_int status;
-		//lock();
-		
-		status = rprContextCreateMaterialSystem(m_context, 0, &m_matsys);
-		//unlock();
-	
-		if (status != RPR_SUCCESS)
+		if (!m_context)
 		{
-			TF_CODING_ERROR("Fail create Material System resolve. Error code %d", status);
 			return;
 		}
+
+		if(RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_context, 0, &m_matsys), "Fail create Material System resolve")) return;
 
 		m_rprMaterialFactory.reset(new RprMaterialFactory(m_matsys));
 		m_rprxMaterialFactory.reset(new RprXMaterialFactory(m_matsys, m_context));
 	}
+
+
+#ifdef USE_RIF
+	void CreateImageFilter()
+	{
+		const FilterType filterType = HdRprApiImpl::GetPreferences().GetFilterType();
+		if (filterType == FilterType::None)
+		{
+			m_imageFilterPtr.reset();
+			return;
+		}
+
+
+		m_imageFilterPtr.reset( new ImageFilter(m_context, m_framebufferDesc.fb_width, m_framebufferDesc.fb_height));
+		m_imageFilterPtr->CreateFilter(filterType);
+
+		m_imageFilterPtr->Resize(m_framebufferDesc.fb_width, m_framebufferDesc.fb_height);
+		switch (m_imageFilterPtr->GetType())
+		{
+		case FilterType::BilateralDenoise:
+		{
+			RifParam p = { RifParamType::RifInt, 2.f };
+			m_imageFilterPtr->AddParam("radius", p);
+
+			m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorBuffer, 1.0f);
+			m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthBuffer, 1.0f);
+		}
+		break;
+		case FilterType::EawDenoise:
+		{
+			RifParam rifParam;
+			rifParam.mData.f = 1.f;
+			rifParam.mType = RifParamType::RifFloat;
+			m_imageFilterPtr->AddParam("colorSigma", rifParam);
+			m_imageFilterPtr->AddParam("normalSigma", rifParam);
+			m_imageFilterPtr->AddParam("depthSigma", rifParam);
+			m_imageFilterPtr->AddParam("transSigma", rifParam);
+
+			m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorBuffer, 1.0f);
+			m_imageFilterPtr->SetInput(RifFilterInput::RifWorldCoordinate, m_positionBuffer, 1.0f);
+			m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthBuffer, 1.0f);
+			m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_normalBuffer, 1.0f);
+			m_imageFilterPtr->SetInput(RifFilterInput::RifTrans, m_objId, 1.0f);
+			m_imageFilterPtr->SetInput(RifFilterInput::RifObjectId, m_objId, 1.0f);
+		}
+		break;
+		default:
+			return;
+		}
+
+		//m_imageFilterPtr->SetOutput(m_resolvedBuffer);
+		m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
+		m_imageFilterPtr->AttachFilter();
+	}
+
+	void DeleteImageFilter()
+	{
+		m_imageFilterPtr.reset();
+	}
+#endif // USE_RIF
 
 	void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes, VtIntArray & out_newVpf)
 	{
@@ -965,7 +1264,7 @@ private:
 
 		out_newIndexes.reserve(indexes.size());
 		out_newVpf.reserve(vpf.size());
-		
+
 		VtIntArray::const_iterator idxIt = indexes.begin();
 		for (const int vCount : vpf)
 		{
@@ -992,21 +1291,142 @@ private:
 			}
 		}
 	}
-	
+
 
 	MaterialFactory * GetMaterialFactory(const EMaterialType type)
 	{
 		switch (type)
 		{
-		case EMaterialType::COLOR:
 		case EMaterialType::USD_PREVIEW_SURFACE:
 			return m_rprxMaterialFactory.get();
 
+		case EMaterialType::COLOR:
 		case EMaterialType::EMISSIVE:
+		case EMaterialType::TRANSPERENT:
 			return m_rprMaterialFactory.get();
 		}
-		
+
+		TF_CODING_WARNING("Unknown material type");
 		return nullptr;
+	}
+
+    const rpr_framebuffer GetTargetFB() const
+    {
+		switch (HdRprPreferences::GetInstance().GetAov())
+        {
+            case HdRprAov::COLOR: return m_colorBuffer;
+            case HdRprAov::NORMAL: return m_normalBuffer;
+            case HdRprAov::PRIM_ID: return m_objId;
+            case HdRprAov::DEPTH: return m_depthBuffer;
+            case HdRprAov::UV: return m_uv;
+
+            default:
+                break;
+        }
+
+		TF_CODING_WARNING("Unknown terget aov type. Used default: HdRprAov::COLOR");
+		return m_colorBuffer;
+    }
+
+	void * CreateCubeMesh(const float & width, const float & height, const float & depth)
+	{
+		constexpr const size_t cubeVertexCount = 24;
+		constexpr const size_t cubeNormalCount = 24;
+		constexpr const size_t cubeIndexCount = 36;
+		constexpr const size_t cubeVpfCount = 12;
+
+		VtVec3fArray position(cubeVertexCount);
+		position[0] = GfVec3f(-width, height, -depth);
+		position[1] = GfVec3f(width, height, -depth);
+		position[2] = GfVec3f(width, height, depth);
+		position[3] = GfVec3f(-width, height, depth);
+
+		position[4] = GfVec3f(-width, -height, -depth);
+		position[5] = GfVec3f(width, -height, -depth);
+		position[6] = GfVec3f(width, -height, depth);
+		position[7] = GfVec3f(-width, -height, depth);
+
+		position[8] = GfVec3f(-width, -height, depth);
+		position[9] = GfVec3f(-width, -height, -depth);
+		position[10] = GfVec3f(-width, height, -depth);
+		position[11] = GfVec3f(-width, height, depth);
+
+		position[12] = GfVec3f(width, -height, depth);
+		position[13] = GfVec3f(width, -height, -depth);
+		position[14] = GfVec3f(width, height, -depth);
+		position[15] = GfVec3f(width, height, depth);
+
+		position[16] = GfVec3f(-width, -height, -depth);
+		position[17] = GfVec3f(width, -height, -depth);
+		position[18] = GfVec3f(width, height, -depth);
+		position[19] = GfVec3f(-width, height, -depth);
+
+		position[20] = GfVec3f(-width, -height, depth);
+		position[21] = GfVec3f(width, -height, depth);
+		position[22] = GfVec3f(width, height, depth);
+		position[23] = GfVec3f(-width, height, depth);
+
+		VtVec3fArray normals(cubeNormalCount);
+		normals[0] = GfVec3f(0.f, 1.f, 0.f);
+		normals[1] = GfVec3f(0.f, 1.f, 0.f);
+		normals[2] = GfVec3f(0.f, 1.f, 0.f);
+		normals[3] = GfVec3f(0.f, 1.f, 0.f);
+
+		normals[4] = GfVec3f(0.f, -1.f, 0.f);
+		normals[5] = GfVec3f(0.f, -1.f, 0.f);
+		normals[6] = GfVec3f(0.f, -1.f, 0.f);
+		normals[7] = GfVec3f(0.f, -1.f, 0.f);
+
+		normals[8] = GfVec3f(-1.f, 0.f, 0.f);
+		normals[9] = GfVec3f(-1.f, 0.f, 0.f);
+		normals[10] = GfVec3f(-1.f, 0.f, 0.f);
+		normals[11] = GfVec3f(-1.f, 0.f, 0.f);
+
+		normals[12] = GfVec3f(1.f, 0.f, 0.f);
+		normals[13] = GfVec3f(1.f, 0.f, 0.f);
+		normals[14] = GfVec3f(1.f, 0.f, 0.f);
+		normals[15] = GfVec3f(1.f, 0.f, 0.f);
+
+		normals[16] = GfVec3f(0.f, 0.f, -1.f);
+		normals[17] = GfVec3f(0.f, 0.f, -1.f);
+		normals[18] = GfVec3f(0.f, 0.f, -1.f);
+		normals[19] = GfVec3f(0.f, 0.f, -1.f);
+
+		normals[20] = GfVec3f(0.f, 0.f, 1.f);
+		normals[21] = GfVec3f(0.f, 0.f, 1.f);
+		normals[22] = GfVec3f(0.f, 0.f, 1.f);
+		normals[23] = GfVec3f(0.f, 0.f, 1.f);
+
+		VtIntArray indexes(cubeIndexCount);
+		{
+			std::array<int, cubeIndexCount> indexArray =
+			{
+				3,1,0,
+				2,1,3,
+
+				6,4,5,
+				7,4,6,
+
+				11,9,8,
+				10,9,11,
+
+				14,12,13,
+				15,12,14,
+
+				19,17,16,
+				18,17,19,
+
+				22,20,21,
+				23,20,22
+			};
+
+			memcpy(indexes.data(), indexArray.data(), sizeof(int) * cubeIndexCount);
+		}
+
+		VtIntArray vpf(cubeVpfCount, 3);
+		VtVec2fArray uv; // empty
+
+		return CreateMesh(position, normals, uv, indexes, vpf);
 	}
 
 	void lock() {
@@ -1017,13 +1437,16 @@ private:
 		m_lock.clear(std::memory_order_release);
 	}
 
-	static HdRprPreferences s_preferences;
-
 	rpr_context m_context = nullptr;
 	rpr_scene m_scene = nullptr;
 	rpr_camera m_camera = nullptr;
 
 	rpr_framebuffer m_colorBuffer = nullptr;
+	rpr_framebuffer m_positionBuffer = nullptr;
+    rpr_framebuffer m_depthBuffer = nullptr;
+    rpr_framebuffer m_normalBuffer = nullptr;
+    rpr_framebuffer m_objId = nullptr;
+    rpr_framebuffer m_uv = nullptr;
 	rpr_framebuffer m_resolvedBuffer = nullptr;
 	rpr_post_effect m_tonemap = nullptr;
 
@@ -1049,11 +1472,18 @@ private:
 	bool m_isLightPresent = false;
 
 	bool m_isFramebufferDirty = true;
+
+    bool m_isRenderModeDirty = true;
+
+    HdRprAov m_currentAov = HdRprAov::COLOR;
+
 	// simple spinlock for locking RPR calls
 	std::atomic_flag m_lock = ATOMIC_FLAG_INIT;
-};
 
-HdRprPreferences HdRprApiImpl::s_preferences = HdRprPreferences();
+#ifdef USE_RIF
+	std::unique_ptr<ImageFilter> m_imageFilterPtr;
+#endif // USE_RIF
+};
 
 	HdRprApi::HdRprApi() : m_impl(new HdRprApiImpl)
 	{
@@ -1064,22 +1494,24 @@ HdRprPreferences HdRprApiImpl::s_preferences = HdRprPreferences();
 		delete m_impl;
 	}
 
-	void HdRprApi::SetRenderMode(const HdRprRenderMode & renderMode)
-	{
-		HdRprApiImpl::GetPreferences().SetRenderMode(renderMode);
-	}
-
 	void HdRprApi::SetRenderDevice(const HdRprRenderDevice & renderMode)
 	{
-		HdRprApiImpl::GetPreferences().SetRenderDevice(renderMode);
+		HdRprPreferences::GetInstance().SetRenderDevice(renderMode);
+	}
+
+	void HdRprApi::SetFilter(const FilterType & type)
+	{
+		HdRprPreferences::GetInstance().SetFilterType(type);
+	}
+
+	void HdRprApi::SetAov(const HdRprAov & aov)
+	{
+		HdRprPreferences::GetInstance().SetAov(aov);
 	}
 
 	void HdRprApi::Init()
 	{
 		m_impl->Init();
-		m_impl->CreateFramebuffer(k_defaultFbWidth, k_defaultFbHeight);
-		m_impl->CreatePosteffects();
-		m_impl->CreateCamera();
 	}
 
 	void HdRprApi::Deinit()
@@ -1092,8 +1524,13 @@ HdRprPreferences HdRprApiImpl::s_preferences = HdRprPreferences();
 		return m_impl->CreateMesh(points, normals, uv, indexes, vpf);
 	}
 
+	RprApiObject HdRprApi::CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width)
+	{
+		return m_impl->CreateCurve(points, indexes, width);
+	}
+
 	void HdRprApi::CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray & transforms, VtArray<RprApiObject>& out_instances)
-	{		
+	{
 		out_instances.clear();
 		out_instances.reserve(transforms.size());
 		for (const GfMatrix4d & transform : transforms)
@@ -1134,6 +1571,11 @@ HdRprPreferences HdRprApiImpl::s_preferences = HdRprPreferences();
 		m_impl->SetFramebufferDirty(true);
 	}
 
+	void HdRprApi::CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & gridSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume)
+	{
+		m_impl->CreateVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, gridSize, voxelSize, out_mesh, out_heteroVolume);
+	}
+
 	RprApiMaterial * HdRprApi::CreateMaterial(MaterialAdapter & materialAdapter)
 	{
 		return m_impl->CreateMaterial(materialAdapter);
@@ -1160,6 +1602,11 @@ HdRprPreferences HdRprApiImpl::s_preferences = HdRprPreferences();
 	void HdRprApi::SetMeshMaterial(RprApiObject mesh, const RprApiMaterial * material)
 	{
 		m_impl->SetMeshMaterial(mesh, material);
+	}
+
+	void HdRprApi::SetCurveMaterial(RprApiObject curve, const RprApiMaterial * material)
+	{
+		m_impl->SetCurveMaterial(curve, material);
 	}
 
 	const GfMatrix4d & HdRprApi::GetCameraViewMatrix() const

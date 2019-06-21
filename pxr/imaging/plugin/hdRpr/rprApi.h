@@ -29,24 +29,32 @@ enum class HdRprRenderDevice
 {
 	NONE = -1,
 	CPU = 0,
-	GPU0
+	GPU,
+	FIRST = CPU,
+	LAST = GPU
 };
 
-enum class HdRprRenderMode
+enum class HdRprAov
 {
-	NONE = -1,
-	GLOBAL_ILLUMINATION = 0,
-	DIRECT_ILLUMINATION,
-	DIRECT_ILLUMINATION_NO_SHADOW,
-	WIREFRAME,
-	MATERIAL_INDEX,
-	POSITION,
-	NORMAL,
-	TEXCOORD,
-	AMBIENT_OCCLUSION,
-	DIFFUSE,
+    NONE = -1,
+    COLOR = 0,
+    NORMAL,
+    DEPTH,
+    PRIM_ID,
+    UV,
+	FIRST = COLOR,
+	LAST = UV
 };
 
+enum class FilterType
+{
+	None = -1,
+	BilateralDenoise,
+	LwrDenoise,
+	EawDenoise,
+	FIRST = BilateralDenoise,
+	LAST = EawDenoise
+};
 
 class HdRprApi final
 {
@@ -54,15 +62,19 @@ public:
 	HdRprApi();
 	~HdRprApi();
 
-	static void SetRenderMode(const HdRprRenderMode & renderMode);
-
 	static void SetRenderDevice(const HdRprRenderDevice & renderMode);
+
+	static void SetFilter(const FilterType & type);
+
+	static void SetAov(const HdRprAov & aov);
 
 	void Init();
 
 	void Deinit();
 
 	RprApiObject CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf);
+
+	RprApiObject CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width);
 
 	void CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray & transforms, VtArray<RprApiObject> & out_instances);
 
@@ -74,6 +86,8 @@ public:
 
 	RprApiObject CreateDiskLight(const float & width, const float & height, const GfVec3f & color);
 
+	void CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & grigSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume);
+
 	RprApiMaterial * CreateMaterial(MaterialAdapter & materialAdapter);
 
 	void SetMeshTransform(RprApiObject mesh, const GfMatrix4d & transform);
@@ -81,6 +95,8 @@ public:
 	void SetMeshRefineLevel(RprApiObject mesh, int level, TfToken boundaryInterpolation);
 
 	void SetMeshMaterial(RprApiObject mesh, const RprApiMaterial * material);
+
+	void SetCurveMaterial(RprApiObject curve, const RprApiMaterial * material);
 
 	void ClearFramebuffer();
 
@@ -95,7 +111,7 @@ public:
 	void Resize(const GfVec2i & resolution);
 
 	void Render();
-
+    
 	void GetFramebufferSize(GfVec2i & resolution) const;
 
 #ifdef USE_GL_INTEROP

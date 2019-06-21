@@ -66,22 +66,11 @@ HdRprMesh::_InitRepr(HdReprSelector const &reprName,
 	// No-op
 }
 
-void HdRprMesh::_UpdateRepr(HdSceneDelegate * sceneDelegate, HdReprSelector const & reprName, HdDirtyBits * dirtyBitsState)
-{
-	TF_UNUSED(sceneDelegate);
-	TF_UNUSED(reprName);
-	TF_UNUSED(dirtyBitsState);
-
-	// No-op
-}
-
-
 void HdRprMesh::Sync(
 	HdSceneDelegate * sceneDelegate
 	, HdRenderParam * renderParam
 	, HdDirtyBits * dirtyBits
-	, HdReprSelector const & reprName
-	, bool forcedRepr)
+	, TfToken const & reprName)
 {
 	HD_TRACE_FUNCTION();
 	HF_MALLOC_TAG_FUNCTION();
@@ -112,17 +101,11 @@ void HdRprMesh::Sync(
 
 		VtVec2fArray st;
 
-		HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationVertex);
 
-		for (HdPrimvarDescriptor const& pv : primvars) {
-			if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdRprMeshTokens->st)) {
-				value = sceneDelegate->Get(id, pv.name);
-				if (value.IsHolding<VtVec2fArray>())
-				{
-					st = value.Get<VtVec2fArray>();
-					break;
-				}
-			}
+		value = sceneDelegate->Get(id, TfToken("st"));
+		if (value.IsHolding<VtVec2fArray>())
+		{
+			st = value.Get<VtVec2fArray>();
 		}
 		
 
@@ -146,15 +129,15 @@ void HdRprMesh::Sync(
 		if (material == NULL) {
 			// get Color
 			HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant);
-			
+
 			TF_FOR_ALL(primvarIt, primvars) {
-				if (primvarIt->name == HdTokens->color) {
-					VtValue val = sceneDelegate->Get(id, HdTokens->color);
-				
+				if (primvarIt->name == HdTokens->displayColor) {
+					VtValue val = sceneDelegate->Get(id, HdTokens->displayColor);
+
 					if (!val.IsEmpty()) {
-						VtArray<GfVec4f> color = val.Get<VtArray<GfVec4f>>();
-						MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::COLOR, 
-							MaterialParams{{ HdTokens->color, VtValue(color[0]) }});
+						VtArray<GfVec3f> color = val.Get<VtArray<GfVec3f>>();
+						MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::COLOR,
+							MaterialParams{{HdPrimvarRoleTokens->color, VtValue(color[0]) }});
 						RprApiMaterial * rprMaterial = rprApi->CreateMaterial(matAdapter);
 
 						rprApi->SetMeshMaterial(m_rprMesh, rprMaterial);
@@ -182,7 +165,7 @@ void HdRprMesh::Sync(
 		TfToken boundaryInterpolation = sceneDelegate->GetSubdivTags(id).GetVertexInterpolationRule();
 		rprApi->SetMeshRefineLevel(m_rprMesh, refineLevel, boundaryInterpolation);
 	}
-	
+
 	if (HdRprInstancer *instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId())))
 	{
 		VtMatrix4dArray transforms = instancer->ComputeTransforms(_sharedData.rprimID);

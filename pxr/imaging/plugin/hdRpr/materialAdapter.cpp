@@ -242,10 +242,15 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const MaterialParams 
 	switch (type)
 	{
 	case EMaterialType::COLOR:
-		PoulateColor(params);
+		PoulateRprxColor(params);
 		break;
+
 	case EMaterialType::EMISSIVE:
 		PoulateEmissive(params);
+		break;
+
+	case EMaterialType::TRANSPERENT:
+		PoulateTransparent(params);
 		break;
 
 	case EMaterialType::USD_PREVIEW_SURFACE:
@@ -279,24 +284,22 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const HdMaterialNetwo
 	}
 }
 
-void MaterialAdapter::PoulateColor(const MaterialParams & params)
+void MaterialAdapter::PoulateRprxColor(const MaterialParams & params)
 {
 	for (MaterialParams::const_iterator param = params.begin(); param != params.end(); ++param)
 	{
 		const TfToken & paramName = param->first;
+		const VtValue & paramValue = param->second;
 
-		if (paramName == HdTokens->color)
+		if (paramName == HdRprTokens->color)
 		{
-			const VtValue & paramValue = param->second;
-			m_vec4fRprxParams.insert({ RPRX_UBER_MATERIAL_DIFFUSE_WEIGHT , GfVec4f(1.0f) });
-			m_vec4fRprxParams.insert({ RPRX_UBER_MATERIAL_REFLECTION_WEIGHT , GfVec4f(1.0f) });
-			m_vec4fRprxParams.insert({ RPRX_UBER_MATERIAL_DIFFUSE_COLOR , VtValToVec4f(paramValue) });
+			m_vec4fRprParams.insert({ HdRprTokens->color, VtValToVec4f(paramValue) });
 		}
 	}
 }
 
 
-void MaterialAdapter::PoulateEmissive(const MaterialParams & params)
+void MaterialAdapter::PoulateRprColor(const MaterialParams & params)
 {
 	
 	for (MaterialParams::const_iterator param = params.begin(); param != params.end(); ++param)
@@ -311,6 +314,16 @@ void MaterialAdapter::PoulateEmissive(const MaterialParams & params)
 
 	}
 	
+}
+
+void MaterialAdapter::PoulateEmissive(const MaterialParams & params)
+{
+	PoulateRprColor(params);
+}
+
+void MaterialAdapter::PoulateTransparent(const MaterialParams & params)
+{
+	PoulateRprColor(params);
 }
 
 void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, const MaterialTextures & textures)
@@ -379,11 +392,6 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 		{
 			m_vec4fRprxParams.insert({ RPRX_UBER_MATERIAL_REFRACTION_WEIGHT, GfVec4f(1.0f) - VtValToVec4f(paramValue)});
 		}
-		/*
-		else if (paramName == TfToken("normal"))
-		{
-			m_vec4fRprxParams.insert({ RPRX_UBER_MATERIAL_REFRACTION_WEIGHT, VtValToVec4f(paramValue)});
-		}*/
 
 	}
 
