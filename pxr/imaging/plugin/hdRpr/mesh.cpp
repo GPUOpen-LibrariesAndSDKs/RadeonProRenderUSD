@@ -20,11 +20,6 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PRIVATE_TOKENS(
-	HdRprMeshTokens,
-	(st)
-);
-
 HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId) : HdMesh(id, instancerId)
 {
 	m_rprApiWeakPrt = rprApiShared;
@@ -57,7 +52,7 @@ HdRprMesh::GetInitialDirtyBitsMask() const
 }
 
 void
-HdRprMesh::_InitRepr(HdReprSelector const &reprName,
+HdRprMesh::_InitRepr(TfToken const &reprName,
 	HdDirtyBits *dirtyBits)
 {
 	TF_UNUSED(reprName);
@@ -107,7 +102,6 @@ void HdRprMesh::Sync(
 		{
 			st = value.Get<VtVec2fArray>();
 		}
-		
 
 		Hd_VertexAdjacency adjacency;
 		adjacency.BuildAdjacencyTable(&meshTopology);

@@ -49,7 +49,6 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 	// Extract viewport
 	const GfVec4f & vp = renderPassState->GetViewport();
 	GfVec2i fbSize(vp[2], vp[3]);
-	GfVec2i fbOffset(vp[0], vp[1]);
 
 
 	// Change viewport if it is modified
@@ -86,7 +85,7 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, usdWriteFB);
 	glBlitFramebuffer(0, 0, fbSize[0], fbSize[1],
-		fbOffset[0], fbOffset[1], fbSize[0] + fbOffset[0], fbSize[1] + fbOffset[1],
+		0, 0, fbSize[0], fbSize[1],
 		GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 
 	glBindFramebuffer(GL_READ_FRAMEBUFFER_BINDING, usdReadFB);
