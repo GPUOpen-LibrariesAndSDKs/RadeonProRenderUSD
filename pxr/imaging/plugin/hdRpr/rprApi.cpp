@@ -227,38 +227,38 @@ public:
 
 	void SetAov(const HdRprAov & aov)
 	{
-		m_prefData.Aov = aov;
+		m_prefData.mAov = aov;
 		Save();
 		SetDitry(true);
 	}
 
 	const HdRprAov & GetAov() const
 	{
-		return m_prefData.Aov;
+		return m_prefData.mAov;
 	}
 
 	void SetRenderDevice(const HdRprRenderDevice & renderDevice)
 	{
-		m_prefData.RenderDevice = renderDevice;
+		m_prefData.mRenderDevice = renderDevice;
 		Save();
 		SetDitry(true);
 	}
 
 	HdRprRenderDevice GetRenderDevice() const
 	{
-		return m_prefData.RenderDevice;
+		return m_prefData.mRenderDevice;
 	}
 
 
 	void SetFilterType(const FilterType & type)
 	{
-		m_prefData.FilterType = type;
+		m_prefData.mFilterType = type;
 		SetFilterDitry(true);
 	}
 
 	FilterType GetFilterType() const
 	{
-		return m_prefData.FilterType;
+		return m_prefData.mFilterType;
 	}
 
 	bool IsDirty() const
@@ -333,23 +333,23 @@ private:
 
 	bool IsValid()
 	{
-		return (m_prefData.RenderDevice >= HdRprRenderDevice::FIRST && m_prefData.RenderDevice <= HdRprRenderDevice::LAST)
-			&& (m_prefData.Aov >= HdRprAov::FIRST && m_prefData.Aov <= HdRprAov::LAST)
-			&& (m_prefData.FilterType >= FilterType::FIRST && m_prefData.FilterType <= FilterType::LAST);
+		return (m_prefData.mRenderDevice >= HdRprRenderDevice::FIRST && m_prefData.mRenderDevice <= HdRprRenderDevice::LAST)
+			&& (m_prefData.mAov >= HdRprAov::FIRST && m_prefData.mAov <= HdRprAov::LAST)
+			&& (m_prefData.mFilterType >= FilterType::FIRST && m_prefData.mFilterType <= FilterType::LAST);
 	}
 
 	void SetDefault()
 	{
-		m_prefData.RenderDevice = HdRprRenderDevice::GPU;
-		m_prefData.Aov = HdRprAov::COLOR;
-		m_prefData.FilterType = FilterType::BilateralDenoise;
+		m_prefData.mRenderDevice = HdRprRenderDevice::GPU;
+		m_prefData.mAov = HdRprAov::COLOR;
+		m_prefData.mFilterType = FilterType::BilateralDenoise;
 	}
 
 	struct PrefData
 	{
-		HdRprRenderDevice RenderDevice = HdRprRenderDevice::NONE;
-		HdRprAov Aov = HdRprAov::NONE;
-		FilterType FilterType = FilterType::None;
+		HdRprRenderDevice mRenderDevice = HdRprRenderDevice::NONE;
+		HdRprAov mAov = HdRprAov::NONE;
+		FilterType mFilterType = FilterType::None;
 	} m_prefData;
 	
 
