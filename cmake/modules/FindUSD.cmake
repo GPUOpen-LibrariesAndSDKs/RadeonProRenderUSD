@@ -10,6 +10,16 @@ find_path(USD_LIBRARY_DIR
           PATHS ${USD_ROOT}/lib
                 $ENV{USD_ROOT}/lib
           DOC "USD Libraries directory")
+set(USD_LIBRARY_MONOLITHIC FALSE)
+
+if(NOT DEFINED ${USD_LIBRARY_DIR})
+    find_path(USD_LIBRARY_DIR 
+              NAMES libusd_ms.dylib libusd_ms.dll libusd_ms.so
+              PATHS ${USD_ROOT}/lib
+                    $ENV{USD_ROOT}/lib
+              DOC "USD Libraries directory")
+    set(USD_LIBRARY_MONOLITHIC TRUE)
+endif()
 
 if(USD_INCLUDE_DIR AND EXISTS "${USD_INCLUDE_DIR}/pxr/pxr.h")
     foreach(_usd_comp MAJOR MINOR PATCH)

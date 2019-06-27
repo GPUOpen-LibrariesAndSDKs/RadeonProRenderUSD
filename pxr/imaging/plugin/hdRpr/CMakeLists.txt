@@ -44,12 +44,15 @@ if(PXR_ENABLE_RIF_SUPPORT)
 	
 
 endif(PXR_ENABLE_RIF_SUPPORT)
-		
-pxr_plugin(hdRpr
-   LIBRARIES
-		arch
-		sdf
-		trace
+
+if(${USD_LIBRARY_MONOLITHIC})
+    set(USD_LIBRARIES
+            usd_ms)
+else()
+    set(USD_LIBRARIES
+        arch
+        sdf
+        trace
         plug
         tf
         vt
@@ -60,9 +63,14 @@ pxr_plugin(hdRpr
 		hdSt
         hdx
         usdLux
-		pxOsd
-		Half
-		${RPR_LIBRARY}
+        pxOsd)
+endif()
+        
+pxr_plugin(hdRpr
+   LIBRARIES
+        Half
+        ${USD_LIBRARIES}
+        ${RPR_LIBRARY}
         ${RPR_SUPPORT_LIBRARY}
         ${Boost_LIBRARIES}
         ${TBB_LIBRARIES}

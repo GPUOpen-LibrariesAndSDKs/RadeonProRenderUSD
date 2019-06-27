@@ -29,6 +29,10 @@ elseif (UNIX)
     if (NOT RIF_LOCATION_LIB)
         set (RIF_LOCATION_LIB ${RIF_LOCATION}/CentOS7/Bin/Release/x64)
     endif ()
+
+    if (NOT RIF_LOCATION_INCLUDE)
+        set (RIF_LOCATION_INCLUDE ${RIF_LOCATION}/CentOS7/RadeonImageFilters)
+    endif ()
 endif()
 
 find_library(RIF_LIBRARY
