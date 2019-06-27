@@ -12,15 +12,12 @@ find_path(USD_LIBRARY_DIR
           DOC "USD Libraries directory")
 set(USD_LIBRARY_MONOLITHIC FALSE)
 
-message( ${USD_LIBRARY_DIR} )
-
 if(NOT USD_LIBRARY_DIR)
     find_path(USD_LIBRARY_DIR 
               NAMES libusd_ms.dylib libusd_ms.dll libusd_ms.so
               PATHS ${USD_ROOT}/lib
                     $ENV{USD_ROOT}/lib
               DOC "USD Libraries directory")
-    message( ${USD_LIBRARY_DIR} )
     set(USD_LIBRARY_MONOLITHIC TRUE)
 endif()
 
