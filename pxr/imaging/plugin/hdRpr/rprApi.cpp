@@ -1068,7 +1068,7 @@ public:
        
 
 #ifdef USE_RIF
-		if (HdRprApiImpl::GetPreferences().IsFilterTypeDirty())
+		if (HdRprPreferences::GetInstance().IsFilterTypeDirty())
 		{
 			CreateImageFilter();
 		}
@@ -1080,7 +1080,7 @@ public:
 		}
 		else
 		{
-			status = rprContextResolveFrameBuffer(m_context, targetFB, m_resolvedBuffer, false);
+			auto status = rprContextResolveFrameBuffer(m_context, targetFB, m_resolvedBuffer, false);
 			//unlock();
 			if (status != RPR_SUCCESS)
 			{
@@ -1180,7 +1180,7 @@ private:
 
 		GLenum err = glewInit();
 		if (err != GLEW_OK) {
-			TF_CODING_ERROR("Fail init GLEW. Error code %d", glewGetErrorString(err));
+			TF_CODING_ERROR("Fail init GLEW. Error code %s", glewGetErrorString(err));
 		}
 	}
 
@@ -1201,13 +1201,12 @@ private:
 #ifdef USE_RIF
 	void CreateImageFilter()
 	{
-		const FilterType filterType = HdRprApiImpl::GetPreferences().GetFilterType();
+		const FilterType filterType = HdRprPreferences::GetInstance().GetFilterType();
 		if (filterType == FilterType::None)
 		{
 			m_imageFilterPtr.reset();
 			return;
 		}
-
 
 		m_imageFilterPtr.reset( new ImageFilter(m_context, m_framebufferDesc.fb_width, m_framebufferDesc.fb_height));
 		m_imageFilterPtr->CreateFilter(filterType);
@@ -1217,7 +1216,7 @@ private:
 		{
 		case FilterType::BilateralDenoise:
 		{
-			RifParam p = { RifParamType::RifInt, 2.f };
+			RifParam p = { RifParamType::RifInt, {2} };
 			m_imageFilterPtr->AddParam("radius", p);
 
 			m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorBuffer, 1.0f);
@@ -1246,8 +1245,11 @@ private:
 			return;
 		}
 
-		//m_imageFilterPtr->SetOutput(m_resolvedBuffer);
+#ifdef USE_GL_INTEROP
 		m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
+#else
+		m_imageFilterPtr->SetOutput(m_resolvedBuffer);
+#endif
 		m_imageFilterPtr->AttachFilter();
 	}
 
@@ -1304,6 +1306,8 @@ private:
 		case EMaterialType::EMISSIVE:
 		case EMaterialType::TRANSPERENT:
 			return m_rprMaterialFactory.get();
+		default:
+				break;
 		}
 
 		TF_CODING_WARNING("Unknown material type");

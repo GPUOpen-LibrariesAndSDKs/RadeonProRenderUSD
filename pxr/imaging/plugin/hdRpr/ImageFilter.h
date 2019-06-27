@@ -113,7 +113,6 @@ protected:
 
 class RifContextGPU final : public RifContextWrapper
 {
-	const rif_processor_type rifProcessorType = RIF_PROCESSOR_GPU;
 	const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_OPENCL;
 
 public:
@@ -127,7 +126,6 @@ public:
 
 class RifContextGPUMetal final : public RifContextWrapper
 {
-	const rif_processor_type rifProcessorType = RIF_PROCESSOR_GPU;
 	const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_METAL;
     
 public:
@@ -140,7 +138,6 @@ public:
 
 class RifContextCPU final : public RifContextWrapper
 {
-	const rif_processor_type rifProcessorType = RIF_PROCESSOR_CPU;
 	const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_OPENCL;
 
 public:
@@ -171,7 +168,7 @@ protected:
 		float           mSigma;
 	};
 
-	std::unordered_map<RifFilterInput, InputTraits> mInputs;
+	std::unordered_map<RifFilterInput, InputTraits, std::hash<std::underlying_type<RifFilterInput>::type>> mInputs;
 	std::unordered_map<std::string, RifParam> mParams;
 
 public:

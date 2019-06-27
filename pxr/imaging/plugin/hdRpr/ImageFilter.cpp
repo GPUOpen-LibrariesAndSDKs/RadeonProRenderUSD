@@ -242,7 +242,7 @@ RifContextGPU::RifContextGPU(const rpr_context rprContext)
 {
 	int deviceCount = 0;
 
-	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, rifProcessorType, &deviceCount);
+	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, &deviceCount);
 	assert(RIF_SUCCESS == rifStatus);
 	assert(deviceCount != 0);
 
@@ -332,7 +332,7 @@ void RifContextGPU::UpdateInputs(const RifFilterWrapper* rifFilter) const
 RifContextCPU::RifContextCPU(const rpr_context rprContext)
 {
 	int deviceCount = 0;
-	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, rifProcessorType, &deviceCount);
+	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, &deviceCount);
 	assert(RIF_SUCCESS == rifStatus);
 	assert(deviceCount != 0);
 
@@ -341,7 +341,7 @@ RifContextCPU::RifContextCPU(const rpr_context rprContext)
 
 	std::vector<rpr_char> path = GetRprCachePath(rprContext);
 
-	rifStatus = rifCreateContext(RIF_API_VERSION, rifBackendApiType, rifProcessorType, 0, path.data(), &mRifContextHandle);
+	rifStatus = rifCreateContext(RIF_API_VERSION, rifBackendApiType, 0, path.data(), &mRifContextHandle);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
@@ -430,7 +430,7 @@ void RifContextCPU::UpdateInputs(const RifFilterWrapper* rifFilter) const
 RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 {
 	int deviceCount = 0;
-	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, rifProcessorType, &deviceCount);
+	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, &deviceCount);
 	assert(RIF_SUCCESS == rifStatus);
 	assert(deviceCount != 0);
 
@@ -444,7 +444,7 @@ RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 	std::vector<rpr_char> path = GetRprCachePath(rprContext);
 
 	// we find the active gpu from the rpr contextFlags and then use that to create the rif context
-	rifStatus = rifCreateContext(RIF_API_VERSION, rifBackendApiType, rifProcessorType, GpuDeviceIdUsed(contextFlags), path.data(), &mRifContextHandle);
+	rifStatus = rifCreateContext(RIF_API_VERSION, rifBackendApiType, GpuDeviceIdUsed(contextFlags), path.data(), &mRifContextHandle);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
