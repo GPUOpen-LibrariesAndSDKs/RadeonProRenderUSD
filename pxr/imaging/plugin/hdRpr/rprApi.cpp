@@ -103,11 +103,11 @@ std::string GetRprTmpDir()
 	if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath)))
 	{
 		char buff[1024] = {};
-		sprintf(buff, "%s/UsdRpr/", appDataPath);
+		sprintf(buff, "%s\\UsdRpr\\", appDataPath);
 		return std::string(buff);
 	}
 #elif defined __linux__
-    return std::string("~/.config/UsdRpr/");
+    return getenv("HOME") + std::string("/.config/UsdRpr/");
 #elif defined __APPLE__
     return std::string("~/Library/Application Support/UsdRpr/");
 #endif
@@ -301,7 +301,7 @@ private:
 	bool Load()
 	{
 		std::string tmpDir = GetRprTmpDir();
-		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + "\\" + k_pathToRprPreference;
+		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + k_pathToRprPreference;
 
 		if (FILE * f = fopen(rprPreferencePath.c_str(), "rb"))
 		{
@@ -319,7 +319,8 @@ private:
 	void Save()
 	{
 		std::string tmpDir = GetRprTmpDir();
-		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + "\\" + k_pathToRprPreference;
+		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + k_pathToRprPreference;
+		// TODO: Create intermediate directories
 
 		if (FILE * f = fopen(rprPreferencePath.c_str(), "wb"))
 		{
