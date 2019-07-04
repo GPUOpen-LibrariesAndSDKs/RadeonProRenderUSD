@@ -28,12 +28,13 @@ def setFilter(filter):
 	   lib.SetRprGlobalFilter(filter)
 	   
 	   
-def setRenderDevice(renderDeviceId):
+def setRenderDevice(usdviewApi, renderDeviceId):
     rprPath = getRprPath()
     if rprPath is not None:
-	   print rprPath
-	   lib = cdll.LoadLibrary(rprPath)
-	   lib.SetRprGlobalRenderDevice(renderDeviceId)
+        lib = cdll.LoadLibrary(rprPath)
+        lib.SetRprGlobalRenderDevice(renderDeviceId)
+        usdviewApi._UsdviewApi__appController._reopenStage()
+        usdviewApi._UsdviewApi__appController._rendererPluginChanged('HdRprPlugin')
 	   
 	
 def ColorAov(usdviewApi):
@@ -60,12 +61,12 @@ def EawFilter(usdviewApi):
 	
 	
 def renderDeviceCPU(usdviewApi):
-    setRenderDevice(0)
-	
+    setRenderDevice(usdviewApi, 0)
+
 def renderDeviceGPU(usdviewApi):
-    setRenderDevice(1)
-	
-	
+    setRenderDevice(usdviewApi, 1)
+
+
 class RprPluginContainer(PluginContainer):
 
     def registerPlugins(self, plugRegistry, usdviewApi):

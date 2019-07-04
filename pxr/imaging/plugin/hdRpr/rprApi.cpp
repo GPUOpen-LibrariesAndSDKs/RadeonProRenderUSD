@@ -1498,9 +1498,9 @@ private:
 		delete m_impl;
 	}
 
-	void HdRprApi::SetRenderDevice(const HdRprRenderDevice & renderMode)
+	void HdRprApi::SetRenderDevice(const HdRprRenderDevice & renderDevice)
 	{
-		HdRprPreferences::GetInstance().SetRenderDevice(renderMode);
+		HdRprPreferences::GetInstance().SetRenderDevice(renderDevice);
 	}
 
 	void HdRprApi::SetFilter(const FilterType & type)
