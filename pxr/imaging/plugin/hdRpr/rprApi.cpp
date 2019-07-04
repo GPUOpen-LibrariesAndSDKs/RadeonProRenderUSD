@@ -250,15 +250,15 @@ public:
 	}
 
 
-	void SetFilterType(const FilterType & type)
+	void SetDenoising(bool enableDenoising)
 	{
-		m_prefData.mFilterType = type;
-		SetFilterDitry(true);
+		m_prefData.mEnableDenoising = enableDenoising;
+		SetFilterDirty(true);
 	}
 
-	FilterType GetFilterType() const
+	bool IsDenoisingEnabled() const
 	{
-		return m_prefData.mFilterType;
+		return m_prefData.mEnableDenoising;
 	}
 
 	bool IsDirty() const
@@ -277,7 +277,7 @@ public:
 		m_isDirty = isDirty;
 	}
 
-	void SetFilterDitry(bool isDirty)
+	void SetFilterDirty(bool isDirty)
 	{
 		m_isFilterDirty = isDirty;
 	}
@@ -334,22 +334,21 @@ private:
 	bool IsValid()
 	{
 		return (m_prefData.mRenderDevice >= HdRprRenderDevice::FIRST && m_prefData.mRenderDevice <= HdRprRenderDevice::LAST)
-			&& (m_prefData.mAov >= HdRprAov::FIRST && m_prefData.mAov <= HdRprAov::LAST)
-			&& (m_prefData.mFilterType >= FilterType::FIRST && m_prefData.mFilterType <= FilterType::LAST);
+			&& (m_prefData.mAov >= HdRprAov::FIRST && m_prefData.mAov <= HdRprAov::LAST);
 	}
 
 	void SetDefault()
 	{
 		m_prefData.mRenderDevice = HdRprRenderDevice::GPU;
 		m_prefData.mAov = HdRprAov::COLOR;
-		m_prefData.mFilterType = FilterType::BilateralDenoise;
+		m_prefData.mEnableDenoising = true;
 	}
 
 	struct PrefData
 	{
-		HdRprRenderDevice mRenderDevice = HdRprRenderDevice::NONE;
-		HdRprAov mAov = HdRprAov::NONE;
-		FilterType mFilterType = FilterType::None;
+		HdRprRenderDevice mRenderDevice = HdRprRenderDevice::GPU;
+		HdRprAov mAov = HdRprAov::COLOR;
+		bool mEnableDenoising = true;
 	} m_prefData;
 	
 
@@ -875,6 +874,7 @@ public:
 		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_positionBuffer),"Fail create depth framebuffer")) return;
 		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_depthBuffer), "Fail create depth framebuffer")) return;;
 		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_normalBuffer), "Fail create normal framebuffer")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_albedoBuffer), "Fail create diffuse albedo framebuffer")) return;
 		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_objId), "Fail create object ID framebuffer")) return;
 		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_uv),"Fail create UV framebuffer")) return ;
 
@@ -1036,11 +1036,6 @@ public:
 		RPR_ERROR_CHECK(rprCameraSetSensorSize(m_camera, sensorSize[0], sensorSize[1]), "Fail to set camera sensor size");
 	}
 
-    void SetAov(const HdRprAov & aov)
-    {
-        m_currentAov = aov;
-    }
-
 	void Render()
 	{
 		if (!m_context)
@@ -1071,10 +1066,11 @@ public:
 		if (HdRprPreferences::GetInstance().IsFilterTypeDirty())
 		{
 			CreateImageFilter();
+			HdRprPreferences::GetInstance().SetFilterDirty(false);
 		}
 
 
-		if (m_imageFilterPtr && m_imageFilterPtr->GetType() != FilterType::None && m_currentAov == HdRprAov::COLOR)
+		if (m_imageFilterPtr && HdRprPreferences::GetInstance().GetAov() == HdRprAov::COLOR)
 		{
 			m_imageFilterPtr->Run();
 		}
@@ -1096,10 +1092,11 @@ public:
 	{
 		SAFE_DELETE_RPR_OBJECT(m_colorBuffer);
 		SAFE_DELETE_RPR_OBJECT(m_positionBuffer);
-        SAFE_DELETE_RPR_OBJECT(m_depthBuffer);
-        SAFE_DELETE_RPR_OBJECT(m_objId);
-        SAFE_DELETE_RPR_OBJECT(m_uv);
-        SAFE_DELETE_RPR_OBJECT(m_normalBuffer);
+		SAFE_DELETE_RPR_OBJECT(m_depthBuffer);
+		SAFE_DELETE_RPR_OBJECT(m_objId);
+		SAFE_DELETE_RPR_OBJECT(m_uv);
+		SAFE_DELETE_RPR_OBJECT(m_normalBuffer);
+		SAFE_DELETE_RPR_OBJECT(m_albedoBuffer);
 		SAFE_DELETE_RPR_OBJECT(m_resolvedBuffer);
 
 #ifdef USE_GL_INTEROP
@@ -1201,49 +1198,20 @@ private:
 #ifdef USE_RIF
 	void CreateImageFilter()
 	{
-		const FilterType filterType = HdRprPreferences::GetInstance().GetFilterType();
-		if (filterType == FilterType::None)
+		if (!HdRprPreferences::GetInstance().IsDenoisingEnabled())
 		{
 			m_imageFilterPtr.reset();
 			return;
 		}
 
 		m_imageFilterPtr.reset( new ImageFilter(m_context, m_framebufferDesc.fb_width, m_framebufferDesc.fb_height));
-		m_imageFilterPtr->CreateFilter(filterType);
+		m_imageFilterPtr->CreateFilter();
 
 		m_imageFilterPtr->Resize(m_framebufferDesc.fb_width, m_framebufferDesc.fb_height);
-		switch (m_imageFilterPtr->GetType())
-		{
-		case FilterType::BilateralDenoise:
-		{
-			RifParam p = { RifParamType::RifInt, {2} };
-			m_imageFilterPtr->AddParam("radius", p);
-
-			m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorBuffer, 1.0f);
-			m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthBuffer, 1.0f);
-		}
-		break;
-		case FilterType::EawDenoise:
-		{
-			RifParam rifParam;
-			rifParam.mData.f = 1.f;
-			rifParam.mType = RifParamType::RifFloat;
-			m_imageFilterPtr->AddParam("colorSigma", rifParam);
-			m_imageFilterPtr->AddParam("normalSigma", rifParam);
-			m_imageFilterPtr->AddParam("depthSigma", rifParam);
-			m_imageFilterPtr->AddParam("transSigma", rifParam);
-
-			m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorBuffer, 1.0f);
-			m_imageFilterPtr->SetInput(RifFilterInput::RifWorldCoordinate, m_positionBuffer, 1.0f);
-			m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthBuffer, 1.0f);
-			m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_normalBuffer, 1.0f);
-			m_imageFilterPtr->SetInput(RifFilterInput::RifTrans, m_objId, 1.0f);
-			m_imageFilterPtr->SetInput(RifFilterInput::RifObjectId, m_objId, 1.0f);
-		}
-		break;
-		default:
-			return;
-		}
+		m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorBuffer, 1.0f);
+		m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_normalBuffer, 1.0f);
+		m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthBuffer, 1.0f);
+		m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_albedoBuffer, 1.0f);
 
 #ifdef USE_GL_INTEROP
 		m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
@@ -1320,6 +1288,7 @@ private:
         {
             case HdRprAov::COLOR: return m_colorBuffer;
             case HdRprAov::NORMAL: return m_normalBuffer;
+            case HdRprAov::ALBEDO: return m_albedoBuffer;
             case HdRprAov::PRIM_ID: return m_objId;
             case HdRprAov::DEPTH: return m_depthBuffer;
             case HdRprAov::UV: return m_uv;
@@ -1449,6 +1418,7 @@ private:
 	rpr_framebuffer m_positionBuffer = nullptr;
     rpr_framebuffer m_depthBuffer = nullptr;
     rpr_framebuffer m_normalBuffer = nullptr;
+    rpr_framebuffer m_albedoBuffer = nullptr;
     rpr_framebuffer m_objId = nullptr;
     rpr_framebuffer m_uv = nullptr;
 	rpr_framebuffer m_resolvedBuffer = nullptr;
@@ -1479,8 +1449,6 @@ private:
 
     bool m_isRenderModeDirty = true;
 
-    HdRprAov m_currentAov = HdRprAov::COLOR;
-
 	// simple spinlock for locking RPR calls
 	std::atomic_flag m_lock = ATOMIC_FLAG_INIT;
 
@@ -1503,9 +1471,9 @@ private:
 		HdRprPreferences::GetInstance().SetRenderDevice(renderMode);
 	}
 
-	void HdRprApi::SetFilter(const FilterType & type)
+	void HdRprApi::SetDenoising(bool enableDenoising)
 	{
-		HdRprPreferences::GetInstance().SetFilterType(type);
+		HdRprPreferences::GetInstance().SetDenoising(enableDenoising);
 	}
 
 	void HdRprApi::SetAov(const HdRprAov & aov)

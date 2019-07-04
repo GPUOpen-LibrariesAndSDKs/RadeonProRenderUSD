@@ -227,7 +227,7 @@ extern "C"
 	void SetRprGlobalAov(int aov);
 
 	HDRPR_API
-	void SetRprGlobalFilter(int aov);
+	void SetRprGlobalDenoising(int aov);
 
 	HDRPR_API
 	void SetRprGlobalRenderDevice(int renderDevice);

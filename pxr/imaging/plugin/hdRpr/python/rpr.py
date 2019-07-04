@@ -21,11 +21,11 @@ def setAov(aov):
 	   lib.SetRprGlobalAov(aov)
 	   
 	   
-def setFilter(filter):
+def setDenoising(enabled):
     rprPath = getRprPath()
     if rprPath is not None:
 	   lib = cdll.LoadLibrary(rprPath)
-	   lib.SetRprGlobalFilter(filter)
+	   lib.SetRprGlobalDenosing(enabled)
 	   
 	   
 def setRenderDevice(renderDeviceId):
@@ -50,15 +50,11 @@ def PrimIdAov(usdviewApi):
 	
 	
 def NoFilter(usdviewApi):
-    setFilter(0)
+    setDenoising(0)
 
-def BilateralFilter(usdviewApi):
-    setFilter(1)
-	
-def EawFilter(usdviewApi):
-    setFilter(2)
-	
-	
+def AIDenoiseFilter(usdviewApi):
+    setDenoising(1)
+
 def renderDeviceCPU(usdviewApi):
     setRenderDevice(0)
 	
@@ -93,21 +89,14 @@ class RprPluginContainer(PluginContainer):
 
         self.noFilter = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.NoFilter",
-            "No Filter",
+            "Disable",
             NoFilter)
 
-        self.bilateralFilter = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.BilateralFilter",
-            "Bilateral",
-            BilateralFilter)
-			
-        self.eawFilter = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.EawFilter",
-            "EAW",
-            EawFilter)
-				
-			
-			
+        self.aiDenoiseFilter = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.AIDenoiseFilter",
+            "Enable",
+            AIDenoiseFilter)
+
         self.rDeviceCpu = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.renderDeviceCPU",
             "CPU",
@@ -129,10 +118,8 @@ class RprPluginContainer(PluginContainer):
         renderModeSubMenu.addItem(self.aovDepth)		
         renderModeSubMenu.addItem(self.aovPrimId)	
 		
-        filterSubMenu = rprMenu.findOrCreateSubmenu("Filter")
+        filterSubMenu = rprMenu.findOrCreateSubmenu("Denoise")
         filterSubMenu.addItem(self.noFilter)
-        filterSubMenu.addItem(self.bilateralFilter)
-        filterSubMenu.addItem(self.eawFilter)
 
         renderDeviceSubMenu = rprMenu.findOrCreateSubmenu("Render Device")
         renderDeviceSubMenu.addItem(self.rDeviceCpu)
