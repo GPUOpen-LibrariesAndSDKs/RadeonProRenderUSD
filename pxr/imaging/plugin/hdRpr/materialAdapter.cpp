@@ -5,6 +5,7 @@
 
 #include "pxr/base/gf/vec3f.h"
 #include "pxr/usd/sdf/assetPath.h"
+#include <pxr/usd/ar/resolver.h>
 
 #include "RprSupport.h"
 #include <cfloat>
@@ -186,7 +187,12 @@ void getTextures(const  HdMaterialNetwork & materialNetwork, MaterialTextures & 
 			// Get image path
 			if (param.IsHolding<SdfAssetPath>())
 			{
-				materialNode.Path = param.Get<SdfAssetPath>().GetAssetPath();
+				auto& assetPath = param.UncheckedGet<SdfAssetPath>();
+				if (assetPath.GetResolvedPath().empty()) {
+					materialNode.Path = pxr::ArGetResolver().Resolve(assetPath.GetAssetPath());
+				} else {
+					materialNode.Path = assetPath.GetResolvedPath();
+				}
 			}
 			else
 			{
