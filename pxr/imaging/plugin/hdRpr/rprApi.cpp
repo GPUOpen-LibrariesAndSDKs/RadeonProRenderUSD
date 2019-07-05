@@ -97,7 +97,6 @@ inline bool rprIsErrorCheck(const TfCallContext &context, const rpr_status statu
 std::string GetRprTmpDir()
 {
 #ifdef WIN32
-
 	char appDataPath[MAX_PATH];
 	// Get path for each computer, non-user specific and non-roaming data.
 	if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath)))
@@ -111,8 +110,6 @@ std::string GetRprTmpDir()
 #elif defined __APPLE__
     return std::string("~/Library/Application Support/UsdRpr/");
 #endif
-
-
 
 	return std::string();
 }
@@ -184,13 +181,7 @@ const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevic
 
 	if (HdRprRenderDevice::CPU == renderDevice)
 	{
-#ifdef  USE_GL_INTEROP
-
-		TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
-		flags = getAllCompatibleGpuFlags();
-#else
 		flags = RPR_CREATION_FLAGS_ENABLE_CPU;
-#endif
 	}
 	else if (HdRprRenderDevice::GPU == renderDevice)
 	{
@@ -198,21 +189,10 @@ const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevic
 	}
 	else
 	{
-		//TODO: log unknown HdRprRenderDevice
+		TF_CODING_ERROR("Unknown HdRprRenderDevice");
 		return NULL;
 	}
-
-
-	if (flags == 0x0)
-	{
-		// TODO: log no compatible device
-		return NULL;
-	}
-
-#ifdef  USE_GL_INTEROP
-	flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
-#endif
-
+	
 	return flags;
 }
 
@@ -249,7 +229,6 @@ public:
 		return m_prefData.mRenderDevice;
 	}
 
-
 	void SetFilterType(const FilterType & type)
 	{
 		m_prefData.mFilterType = type;
@@ -265,7 +244,6 @@ public:
 	{
 		return m_isDirty;
 	}
-
 
 	bool IsFilterTypeDirty()
 	{
@@ -355,7 +333,6 @@ private:
 
 	bool m_isDirty = true;
 	bool m_isFilterDirty = true;
-
 };
 
 
@@ -878,53 +855,52 @@ public:
 		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_objId), "Fail create object ID framebuffer")) return;
 		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_uv),"Fail create UV framebuffer")) return ;
 
-#ifdef USE_GL_INTEROP
-
-		glGenFramebuffers(1, &m_framebufferGL);
-		glBindFramebuffer(GL_FRAMEBUFFER, m_framebufferGL);
-
+		if (m_useGlInterop) {
+			glGenFramebuffers(1, &m_framebufferGL);
+			glBindFramebuffer(GL_FRAMEBUFFER, m_framebufferGL);
 
 
-		// Allocate an OpenGL texture.
-		glGenTextures(1, &m_textureFramebufferGL);
-		glBindTexture(GL_TEXTURE_2D, m_textureFramebufferGL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
-		glBindTexture(GL_TEXTURE_2D, 0);
 
-		glGenRenderbuffers(1, &m_depthrenderbufferGL);
-		glBindRenderbuffer(GL_RENDERBUFFER, m_depthrenderbufferGL);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthrenderbufferGL);
+			// Allocate an OpenGL texture.
+			glGenTextures(1, &m_textureFramebufferGL);
+			glBindTexture(GL_TEXTURE_2D, m_textureFramebufferGL);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
+			glBindTexture(GL_TEXTURE_2D, 0);
 
-		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_textureFramebufferGL, 0);
+			glGenRenderbuffers(1, &m_depthrenderbufferGL);
+			glBindRenderbuffer(GL_RENDERBUFFER, m_depthrenderbufferGL);
+			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthrenderbufferGL);
 
-		GLenum glFbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-		if ( glFbStatus != GL_FRAMEBUFFER_COMPLETE)
-		{
-			TF_CODING_ERROR("Fail create GL framebuffer. Error code %d", glFbStatus);
-			ClearFramebuffers();
-			return;
+			glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_textureFramebufferGL, 0);
+
+			GLenum glFbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+			if ( glFbStatus != GL_FRAMEBUFFER_COMPLETE)
+			{
+				TF_CODING_ERROR("Fail create GL framebuffer. Error code %d", glFbStatus);
+				ClearFramebuffers();
+				return;
+			}
+
+			rpr_int status = rprContextCreateFramebufferFromGLTexture2D(m_context, GL_TEXTURE_2D, 0, m_textureFramebufferGL, &m_resolvedBuffer);
+			if (status != RPR_SUCCESS)
+			{
+				ClearFramebuffers();
+				TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
+				return;
+			}
+
+			glBindTexture(GL_TEXTURE_2D, 0);
+			glBindRenderbuffer(GL_RENDERBUFFER, 0);
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		} else {
+			if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_resolvedBuffer), "Fail create resolved framebuffer")) return;
+			m_framebufferData.resize(m_framebufferDesc.fb_width * m_framebufferDesc.fb_height * 4, 0.f);
 		}
-
-		rpr_int status = rprContextCreateFramebufferFromGLTexture2D(m_context, GL_TEXTURE_2D, 0, m_textureFramebufferGL, &m_resolvedBuffer);
-		if (status != RPR_SUCCESS)
-		{
-			ClearFramebuffers();
-			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
-			return;
-		}
-
-		glBindTexture(GL_TEXTURE_2D, 0);
-		glBindRenderbuffer(GL_RENDERBUFFER, 0);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-#else
-		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_resolvedBuffer), "Fail create resolved framebuffer")) return;
-		m_framebufferData.resize(m_framebufferDesc.fb_width * m_framebufferDesc.fb_height * 4, 0.f);
-#endif
 		//unlock();
 
 		ClearFramebuffers();
@@ -1004,13 +980,11 @@ public:
 		return m_cameraProjectionMatrix;
 	}
 
-#ifdef USE_GL_INTEROP
 	const GLuint GetFramebufferGL() const
 	{
 		return m_framebufferGL;
 	}
 
-#else
 	const float * GetFramebufferData()
 	{
 		size_t fb_data_size = 0;
@@ -1020,7 +994,6 @@ public:
 		RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, fb_data_size, m_framebufferData.data(), NULL), "Fail to get frafebuffer data");
 		return m_framebufferData.data();
 	}
-#endif
 
 	void GetFramebufferSize(rpr_int & width, rpr_int & height) const
 	{
@@ -1102,26 +1075,25 @@ public:
         SAFE_DELETE_RPR_OBJECT(m_normalBuffer);
 		SAFE_DELETE_RPR_OBJECT(m_resolvedBuffer);
 
-#ifdef USE_GL_INTEROP
-		if (m_depthrenderbufferGL != INVALID_FRAMEBUFFER)
-		{
-			glDeleteRenderbuffers(1, &m_depthrenderbufferGL);
-			m_depthrenderbufferGL = INVALID_FRAMEBUFFER;
-		}
+		if (m_useGlInterop) {
+			if (m_depthrenderbufferGL != INVALID_FRAMEBUFFER)
+			{
+				glDeleteRenderbuffers(1, &m_depthrenderbufferGL);
+				m_depthrenderbufferGL = INVALID_FRAMEBUFFER;
+			}
 
-		if (m_framebufferGL != INVALID_FRAMEBUFFER)
-		{
-			glDeleteFramebuffers(1, &m_framebufferGL);
-			m_framebufferGL = INVALID_FRAMEBUFFER;
-		}
+			if (m_framebufferGL != INVALID_FRAMEBUFFER)
+			{
+				glDeleteFramebuffers(1, &m_framebufferGL);
+				m_framebufferGL = INVALID_FRAMEBUFFER;
+			}
 
-		if (m_textureFramebufferGL != INVALID_TEXTURE)
-		{
-			glDeleteTextures(1, &m_textureFramebufferGL);
-			m_textureFramebufferGL = INVALID_TEXTURE;
+			if (m_textureFramebufferGL != INVALID_TEXTURE)
+			{
+				glDeleteTextures(1, &m_textureFramebufferGL);
+				m_textureFramebufferGL = INVALID_TEXTURE;
+			}
 		}
-#endif
-
 	}
 
 	void DeleteRprObject(void * object)
@@ -1152,11 +1124,25 @@ public:
 
 		SAFE_DELETE_RPR_OBJECT(mesh);
 	}
+	
+	bool IsGlInteropUsed() const {
+		return m_useGlInterop;
+	}
 
 private:
 	void InitRpr()
 	{
 		//lock();
+
+		// TODO: Query info from HdRprPreferences
+		m_useGlInterop = HdRprApiImpl::EnableGLInterop();
+		if (m_useGlInterop) {
+			GLenum err = glewInit();
+			if (err != GLEW_OK) {
+				TF_CODING_WARNING("Failed to init GLEW. Error code: %s. Disabling GL interop", glewGetErrorString(err));
+				m_useGlInterop = false;
+			}
+		}
 
         const std::string rprSdkPath = GetRprSdkPath();
 		const std::string rprTmpDir = GetRprTmpDir();
@@ -1164,24 +1150,26 @@ private:
 		rpr_int tahoePluginID = rprRegisterPlugin(tahoePath.c_str());
 		rpr_int plugins[] = { tahoePluginID };
 
-
-		rpr_creation_flags flags = getRprCreationFlags(HdRprPreferences::GetInstance().GetRenderDevice());
+		auto renderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
+		if (m_useGlInterop && renderDevice == HdRprRenderDevice::CPU) {
+			TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
+			renderDevice = HdRprRenderDevice::GPU;
+		}
+		rpr_creation_flags flags = getRprCreationFlags(renderDevice);
 		if (!flags)
 		{
+			TF_CODING_ERROR("Could not find compatible device");
 			return;
 		}
-
+		if (m_useGlInterop) {
+			flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
+		}
 		if (RPR_ERROR_CHECK(rprCreateContext(RPR_API_VERSION, plugins, 1, flags, NULL, rprTmpDir.c_str(), &m_context), std::string("Fail to create context with plugin ") + k_TahoeLibName)) return;
 
 		if(RPR_ERROR_CHECK(rprContextSetActivePlugin(m_context, plugins[0]), "fail to set active plugin")) return;
 
 
 		RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "yflip", 0), "Fail to set context YFLIP parameter");
-
-		GLenum err = glewInit();
-		if (err != GLEW_OK) {
-			TF_CODING_ERROR("Fail init GLEW. Error code %s", glewGetErrorString(err));
-		}
 	}
 
 	void InitMaterialSystem()
@@ -1245,11 +1233,11 @@ private:
 			return;
 		}
 
-#ifdef USE_GL_INTEROP
-		m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
-#else
-		m_imageFilterPtr->SetOutput(m_resolvedBuffer);
-#endif
+		if (m_useGlInterop) {
+			m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
+		} else {
+			m_imageFilterPtr->SetOutput(m_resolvedBuffer);
+		}
 		m_imageFilterPtr->AttachFilter();
 	}
 
@@ -1440,6 +1428,15 @@ private:
 	void unlock() {
 		m_lock.clear(std::memory_order_release);
 	}
+	
+	static bool EnableGLInterop() {
+		// TODO: consider putting a selection on GUI settings
+#ifdef USE_GL_INTEROP
+		return true;
+#else
+		return false;
+#endif
+	}
 
 	rpr_context m_context = nullptr;
 	rpr_scene m_scene = nullptr;
@@ -1454,13 +1451,11 @@ private:
 	rpr_framebuffer m_resolvedBuffer = nullptr;
 	rpr_post_effect m_tonemap = nullptr;
 
-#ifdef USE_GL_INTEROP
+	bool m_useGlInterop = EnableGLInterop();
 	GLuint m_framebufferGL = INVALID_FRAMEBUFFER;
 	GLuint m_depthrenderbufferGL;
 	rpr_GLuint m_textureFramebufferGL = INVALID_TEXTURE;
-#else
 	std::vector<float> m_framebufferData;
-#endif
 
 	rpr_material_system m_matsys = nullptr;
 
@@ -1649,17 +1644,15 @@ private:
 		m_impl->Render();
 	}
 
-#ifdef USE_GL_INTEROP
 	const GLuint HdRprApi::GetFramebufferGL() const
 	{
 		return m_impl->GetFramebufferGL();
 	}
-#else
+
 	const float * HdRprApi::GetFramebufferData() const
 	{
 		return m_impl->GetFramebufferData();
 	}
-#endif
 
 	void HdRprApi::DeleteRprApiObject(RprApiObject object)
 	{
@@ -1669,6 +1662,11 @@ private:
 	void HdRprApi::DeleteMesh(RprApiObject mesh)
 	{
 		m_impl->DeleteMesh(mesh);
+	}
+
+	bool HdRprApi::IsGlInteropUsed() const
+	{
+		return m_impl->IsGlInteropUsed();
 	}
 
 
