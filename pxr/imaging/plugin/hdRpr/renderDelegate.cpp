@@ -322,3 +322,8 @@ void SetRprGlobalRenderDevice(int renderDevice)
 
 	PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::CPU);
 }
+
+const char* GetRprTmpDir()
+{
+	return PXR_INTERNAL_NS::HdRprApi::GetTmpDir();
+}
