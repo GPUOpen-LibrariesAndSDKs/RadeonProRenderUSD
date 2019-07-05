@@ -1,11 +1,14 @@
 from pxr import Tf
 from pxr.Usdviewq.plugin import PluginContainer
 
-from ctypes import cdll
+from ctypes import cdll, c_char_p
 from ctypes.util import find_library
 
+from os import makedirs
+from os import path
+
 import psutil, os
-	
+
 def getRprPath():
     p = psutil.Process( os.getpid() )
     for dll in p.memory_maps():
@@ -14,10 +17,17 @@ def getRprPath():
     print "hdRpr module not loaded"	   
     return None
 	   
+def createRprTmpDirIfNeeded(rprLib):
+    rprLib.GetRprTmpDir.restype = c_char_p
+    rprTmpDir = rprLib.GetRprTmpDir()
+    if not path.exists(rprTmpDir):
+        makedirs(rprTmpDir)
+
 def setAov(aov):
     rprPath = getRprPath()
     if rprPath is not None:
 	   lib = cdll.LoadLibrary(rprPath)
+	   createRprTmpDirIfNeeded(lib)
 	   lib.SetRprGlobalAov(aov)
 	   
 	   
@@ -25,14 +35,15 @@ def setFilter(filter):
     rprPath = getRprPath()
     if rprPath is not None:
 	   lib = cdll.LoadLibrary(rprPath)
+	   createRprTmpDirIfNeeded(lib)
 	   lib.SetRprGlobalFilter(filter)
 	   
 	   
 def setRenderDevice(renderDeviceId):
     rprPath = getRprPath()
     if rprPath is not None:
-	   print rprPath
 	   lib = cdll.LoadLibrary(rprPath)
+	   createRprTmpDirIfNeeded(lib)
 	   lib.SetRprGlobalRenderDevice(renderDeviceId)
 	   
 	
