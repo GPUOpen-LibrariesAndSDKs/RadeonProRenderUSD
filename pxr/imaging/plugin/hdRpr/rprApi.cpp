@@ -321,7 +321,6 @@ private:
 	{
 		std::string tmpDir = HdRprApi::GetTmpDir();
 		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + k_pathToRprPreference;
-		// TODO: Create intermediate directories
 
 		if (FILE * f = fopen(rprPreferencePath.c_str(), "wb"))
 		{
