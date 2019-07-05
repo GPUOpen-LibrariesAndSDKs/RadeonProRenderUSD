@@ -58,7 +58,7 @@ namespace
 
 	const uint32_t k_diskVertexCount = 32;
 
-	constexpr const char * k_pathToRprPreference = "usdRprPreferences.dat";
+	constexpr const char * k_pathToRprPreference = "hdRprPreferences.dat";
 }
 
 
@@ -101,17 +101,17 @@ const char* HdRprApi::GetTmpDir() {
 	if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath)))
 	{
 		static char path[MAX_PATH];
-		snprintf(path, sizeof(path), "%s\\UsdRpr\\", appDataPath);
+		snprintf(path, sizeof(path), "%s\\hdRPR\\", appDataPath);
 		return path;
 	}
 #elif defined __linux__
 	if (auto homeEnv = getenv("HOME")) {
 		static char path[PATH_MAX];
-		snprintf(path, sizeof(path), "%s/.config/UsdRpr/", homeEnv);
+		snprintf(path, sizeof(path), "%s/.config/hdRPR/", homeEnv);
 		return path;
 	}
 #elif defined __APPLE__
-	return "~/Library/Application Support/UsdRpr/";
+	return "~/Library/Application Support/hdRPR/";
 #else
 #warning "Unknown platform"
 #endif
