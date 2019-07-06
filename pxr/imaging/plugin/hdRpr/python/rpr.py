@@ -4,9 +4,6 @@ from pxr.Usdviewq.plugin import PluginContainer
 from ctypes import cdll, c_char_p
 from ctypes.util import find_library
 
-from os import makedirs
-from os import path
-
 import psutil, os
 
 def getRprPath():
@@ -20,8 +17,13 @@ def getRprPath():
 def createRprTmpDirIfNeeded(rprLib):
     rprLib.GetRprTmpDir.restype = c_char_p
     rprTmpDir = rprLib.GetRprTmpDir()
-    if not path.exists(rprTmpDir):
-        makedirs(rprTmpDir)
+    if not os.path.exists(rprTmpDir):
+        os.makedirs(rprTmpDir)
+
+def reemitStage(usdviewApi):
+    usdviewApi._UsdviewApi__appController._reopenStage()
+    usdviewApi._UsdviewApi__appController._rendererPluginChanged('HdRprPlugin')
+
 
 def setAov(aov):
     rprPath = getRprPath()
@@ -39,12 +41,13 @@ def setFilter(filter):
 	   lib.SetRprGlobalFilter(filter)
 	   
 	   
-def setRenderDevice(renderDeviceId):
+def setRenderDevice(usdviewApi, renderDeviceId):
     rprPath = getRprPath()
     if rprPath is not None:
-	   lib = cdll.LoadLibrary(rprPath)
-	   createRprTmpDirIfNeeded(lib)
-	   lib.SetRprGlobalRenderDevice(renderDeviceId)
+        lib = cdll.LoadLibrary(rprPath)
+        createRprTmpDirIfNeeded(lib)
+        lib.SetRprGlobalRenderDevice(renderDeviceId)
+        reemitStage(usdviewApi)
 	   
 	
 def ColorAov(usdviewApi):
@@ -71,12 +74,12 @@ def EawFilter(usdviewApi):
 	
 	
 def renderDeviceCPU(usdviewApi):
-    setRenderDevice(0)
-	
+    setRenderDevice(usdviewApi, 0)
+
 def renderDeviceGPU(usdviewApi):
-    setRenderDevice(1)
-	
-	
+    setRenderDevice(usdviewApi, 1)
+
+
 class RprPluginContainer(PluginContainer):
 
     def registerPlugins(self, plugRegistry, usdviewApi):
