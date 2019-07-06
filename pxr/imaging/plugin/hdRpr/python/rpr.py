@@ -52,17 +52,19 @@ def setRenderDevice(usdviewApi, renderDeviceId):
 	
 def ColorAov(usdviewApi):
     setAov(0)
-	
+
 def NormalAov(usdviewApi):
     setAov(1)
 
 def DepthAov(usdviewApi):
     setAov(2)
-	
-def PrimIdAov(usdviewApi):
+
+def UVAov(usdviewApi):
     setAov(3)
-	
-	
+
+def PrimIdAov(usdviewApi):
+    setAov(4)
+
 def NoFilter(usdviewApi):
     setFilter(0)
 
@@ -88,21 +90,25 @@ class RprPluginContainer(PluginContainer):
             "RprPluginContainer.ColorAov",
             "Color",
             ColorAov)
-			
+
         self.aovNormal = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.NormalAov",
             "Normal",
             NormalAov)
 
-        
         self.aovDepth = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.DepthAov",
             "Depth",
             DepthAov)
-			
+
+        self.aovUV = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.UVAov",
+            "primvars:st",
+            UVAov)
+
         self.aovPrimId = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.PrimIdAov",
-            "Normal",
+            "PrimId",
             PrimIdAov)
 
         self.noFilter = plugRegistry.registerCommandPlugin(
@@ -126,13 +132,12 @@ class RprPluginContainer(PluginContainer):
             "RprPluginContainer.renderDeviceCPU",
             "CPU",
             renderDeviceCPU)
-			
+
         self.rDeviceGpu = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.renderDeviceGPU",
             "GPU",
             renderDeviceGPU)
 
-			
 
     def configureView(self, plugRegistry, plugUIBuilder):
 
@@ -140,8 +145,9 @@ class RprPluginContainer(PluginContainer):
         renderModeSubMenu = rprMenu.findOrCreateSubmenu("AOV")
         renderModeSubMenu.addItem(self.aovColor)
         renderModeSubMenu.addItem(self.aovNormal)
-        renderModeSubMenu.addItem(self.aovDepth)		
-        renderModeSubMenu.addItem(self.aovPrimId)	
+        renderModeSubMenu.addItem(self.aovDepth)
+        renderModeSubMenu.addItem(self.aovUV)
+        renderModeSubMenu.addItem(self.aovPrimId)
 		
         filterSubMenu = rprMenu.findOrCreateSubmenu("Filter")
         filterSubMenu.addItem(self.noFilter)
