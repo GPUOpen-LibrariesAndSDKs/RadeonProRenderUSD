@@ -58,7 +58,7 @@ namespace
 
 	const uint32_t k_diskVertexCount = 32;
 
-	constexpr const char * k_pathToRprPreference = "usdRprPreferences.dat";
+	constexpr const char * k_pathToRprPreference = "hdRprPreferences.dat";
 }
 
 
@@ -94,24 +94,28 @@ inline bool rprIsErrorCheck(const TfCallContext &context, const rpr_status statu
 
 #define RPR_ERROR_CHECK(STATUS, MESSAGE_ON_FAIL) rprIsErrorCheck(TF_CALL_CONTEXT, STATUS, MESSAGE_ON_FAIL)
 
-std::string GetRprTmpDir()
-{
+const char* HdRprApi::GetTmpDir() {
 #ifdef WIN32
 	char appDataPath[MAX_PATH];
 	// Get path for each computer, non-user specific and non-roaming data.
 	if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath)))
 	{
-		char buff[1024] = {};
-		sprintf(buff, "%s/UsdRpr/", appDataPath);
-		return std::string(buff);
+		static char path[MAX_PATH];
+		snprintf(path, sizeof(path), "%s\\hdRPR\\", appDataPath);
+		return path;
 	}
 #elif defined __linux__
-    return std::string("~/.config/UsdRpr/");
+	if (auto homeEnv = getenv("HOME")) {
+		static char path[PATH_MAX];
+		snprintf(path, sizeof(path), "%s/.config/hdRPR/", homeEnv);
+		return path;
+	}
 #elif defined __APPLE__
-    return std::string("~/Library/Application Support/UsdRpr/");
+	return "~/Library/Application Support/hdRPR/";
+#else
+#warning "Unknown platform"
 #endif
-
-	return std::string();
+return std::string();
 }
 
 std::string GetRprSdkPath()
@@ -278,8 +282,8 @@ private:
 
 	bool Load()
 	{
-		std::string tmpDir = GetRprTmpDir();
-		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + "\\" + k_pathToRprPreference;
+		std::string tmpDir = HdRprApi::GetTmpDir();
+		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + k_pathToRprPreference;
 
 		if (FILE * f = fopen(rprPreferencePath.c_str(), "rb"))
 		{
@@ -296,8 +300,8 @@ private:
 
 	void Save()
 	{
-		std::string tmpDir = GetRprTmpDir();
-		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + "\\" + k_pathToRprPreference;
+		std::string tmpDir = HdRprApi::GetTmpDir();
+		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + k_pathToRprPreference;
 
 		if (FILE * f = fopen(rprPreferencePath.c_str(), "wb"))
 		{
@@ -1145,7 +1149,7 @@ private:
 		}
 
         const std::string rprSdkPath = GetRprSdkPath();
-		const std::string rprTmpDir = GetRprTmpDir();
+		const std::string rprTmpDir = HdRprApi::GetTmpDir();
         const std::string tahoePath = (rprSdkPath.empty()) ? k_TahoeLibName : rprSdkPath + "/" + k_TahoeLibName;
 		rpr_int tahoePluginID = rprRegisterPlugin(tahoePath.c_str());
 		rpr_int plugins[] = { tahoePluginID };
@@ -1493,9 +1497,9 @@ private:
 		delete m_impl;
 	}
 
-	void HdRprApi::SetRenderDevice(const HdRprRenderDevice & renderMode)
+	void HdRprApi::SetRenderDevice(const HdRprRenderDevice & renderDevice)
 	{
-		HdRprPreferences::GetInstance().SetRenderDevice(renderMode);
+		HdRprPreferences::GetInstance().SetRenderDevice(renderDevice);
 	}
 
 	void HdRprApi::SetFilter(const FilterType & type)

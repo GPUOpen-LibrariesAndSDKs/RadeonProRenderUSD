@@ -67,6 +67,8 @@ public:
 	static void SetFilter(const FilterType & type);
 
 	static void SetAov(const HdRprAov & aov);
+	
+	static const char* GetTmpDir();
 
 	void Init();
 
