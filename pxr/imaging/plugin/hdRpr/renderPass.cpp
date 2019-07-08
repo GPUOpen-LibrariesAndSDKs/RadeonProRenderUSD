@@ -74,26 +74,26 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 		rprApi->SetCameraProjectionMatrix(proj);
 	}
 
-#ifdef USE_GL_INTEROP
-	GLuint rprFb = rprApi->GetFramebufferGL();
-	GLint restoreTexture, usdReadFB, usdWriteFB;
-	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &usdReadFB);
-	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &usdWriteFB);
+	if (rprApi->IsGlInteropUsed()) {
+		GLuint rprFb = rprApi->GetFramebufferGL();
+		GLint restoreTexture, usdReadFB, usdWriteFB;
+		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &usdReadFB);
+		glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &usdWriteFB);
 
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, rprFb);
-	rprApi->Render();
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, rprFb);
+		rprApi->Render();
 
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, usdWriteFB);
-	glBlitFramebuffer(0, 0, fbSize[0], fbSize[1],
-		0, 0, fbSize[0], fbSize[1],
-		GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, usdWriteFB);
+		glBlitFramebuffer(0, 0, fbSize[0], fbSize[1],
+						  0, 0, fbSize[0], fbSize[1],
+						  GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 
-	glBindFramebuffer(GL_READ_FRAMEBUFFER_BINDING, usdReadFB);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER_BINDING, usdWriteFB);
-#else
-	rprApi->Render();
-	glDrawPixels(fbSize[0], fbSize[1], GL_RGBA, GL_FLOAT, rprApi->GetFramebufferData());
-#endif
+		glBindFramebuffer(GL_READ_FRAMEBUFFER_BINDING, usdReadFB);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER_BINDING, usdWriteFB);
+	} else {
+		rprApi->Render();
+		glDrawPixels(fbSize[0], fbSize[1], GL_RGBA, GL_FLOAT, rprApi->GetFramebufferData());
+	}
 
 }
 
