@@ -111,11 +111,15 @@ const char* HdRprApi::GetTmpDir() {
 		return path;
 	}
 #elif defined __APPLE__
-	return "~/Library/Application Support/hdRPR/";
+    if (auto homeEnv = getenv("HOME")) {
+        static char path[PATH_MAX];
+        snprintf(path, sizeof(path), "%s/Library/Application Support/hdRPR", homeEnv);
+        return path;
+    }
 #else
 #warning "Unknown platform"
 #endif
-return std::string();
+	return "";
 }
 
 std::string GetRprSdkPath()
@@ -389,7 +393,7 @@ public:
 		//unlock();
 	}
 
-	void * CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
+	void * CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
 	{
 		if (!m_context)
 		{
@@ -400,7 +404,17 @@ public:
 		rpr_shape mesh = nullptr;
 
 		VtIntArray newIndexes, newVpf;
-		SplitPolygons(indexes, vpf, newIndexes, newVpf);
+		SplitPolygons(pointIndexes, vpf, newIndexes, newVpf);
+
+		VtIntArray newUvIndexes;
+		if (!uvIndexes.empty()) {
+			SplitPolygons(uvIndexes, vpf, newUvIndexes);
+		}
+		
+		VtIntArray newNormalIndexes;
+		if (!normalIndexes.empty()) {
+			SplitPolygons(normalIndexes, vpf, newNormalIndexes);
+		}
 
 		lock();
 		if (RPR_ERROR_CHECK(rprContextCreateMesh(m_context,
@@ -408,8 +422,8 @@ public:
 			(rpr_float const*)((normals.size() == 0) ? 0 : normals.data()), normals.size(), sizeof(GfVec3f),
 			(rpr_float const*)((uv.size() == 0) ? 0 : uv.data()), uv.size(), sizeof(GfVec2f),
 			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
-			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
-			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
+			(rpr_int const*)(!newNormalIndexes.empty() ? newNormalIndexes.data() : newIndexes.data()), sizeof(rpr_int),
+			(rpr_int const*)(!newUvIndexes.empty() ? newUvIndexes.data() : newIndexes.data()), sizeof(rpr_int),
 			newVpf.data(), newVpf.size(), &mesh)
 			, "Fail create mesh")) {
 			unlock();
@@ -643,7 +657,7 @@ public:
 
 		m_isLightPresent = true;
 
-		return CreateMesh(positions, normals, uv, idx, vpf);
+		return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
 	}
 
 	void * CreateDiskLight(const float & width, const float & height, const GfVec3f & color)
@@ -680,7 +694,7 @@ public:
 
 		m_isLightPresent = true;
 
-		return CreateMesh(positions, normals, uv, idx, vpf, material);
+		return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf, material);
 	}
 
 	void * CreateSphereLightGeometry(const float & radius)
@@ -722,7 +736,7 @@ public:
 
 		m_isLightPresent = true;
 
-		return CreateMesh(positions, normals, uv, idx, vpf);
+		return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
 
 	}
 
@@ -1286,6 +1300,36 @@ private:
 		}
 	}
 
+	void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes)
+	{
+		out_newIndexes.clear();
+		out_newIndexes.reserve(indexes.size());
+
+		VtIntArray::const_iterator idxIt = indexes.begin();
+		for (const int vCount : vpf)
+		{
+			if (vCount == 3 || vCount == 4)
+			{
+				for (int i = 0; i < vCount; ++i)
+				{
+					out_newIndexes.push_back(*idxIt);
+					++idxIt;
+				}
+			}
+			else
+			{
+				constexpr int triangleVertexCount = 3;
+				for (int i = 0; i < vCount - 2; ++i)
+				{
+					out_newIndexes.push_back(*(idxIt + i + 0));
+					out_newIndexes.push_back(*(idxIt + i + 1));
+					out_newIndexes.push_back(*(idxIt + i + 2));
+				}
+				idxIt += vCount;
+			}
+		}
+	}
+
 
 	MaterialFactory * GetMaterialFactory(const EMaterialType type)
 	{
@@ -1422,7 +1466,7 @@ private:
 		VtIntArray vpf(cubeVpfCount, 3);
 		VtVec2fArray uv; // empty
 
-		return CreateMesh(position, normals, uv, indexes, vpf);
+		return CreateMesh(position, indexes, normals, VtIntArray(), uv, VtIntArray(), vpf);
 	}
 
 	void lock() {
@@ -1522,9 +1566,9 @@ private:
 		m_impl->Deinit();
 	}
 
-	RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf)
+	RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf)
 	{
-		return m_impl->CreateMesh(points, normals, uv, indexes, vpf);
+		return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf);
 	}
 
 	RprApiObject HdRprApi::CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width)
