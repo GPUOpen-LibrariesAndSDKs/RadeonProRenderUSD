@@ -115,7 +115,7 @@ const char* HdRprApi::GetTmpDir() {
 #else
 #warning "Unknown platform"
 #endif
-return std::string();
+return "";
 }
 
 std::string GetRprSdkPath()
