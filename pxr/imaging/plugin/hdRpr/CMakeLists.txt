@@ -172,3 +172,7 @@ install(
 }
     \")")
 
+install(
+    FILES ${RPR_LIBRARY} ${RPR_SUPPORT_LIBRARY} ${OptLibs}
+    DESTINATION lib
+    )
