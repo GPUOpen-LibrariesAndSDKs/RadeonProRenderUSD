@@ -173,6 +173,6 @@ install(
     \")")
 
 install(
-    FILES ${RPR_LIBRARY} ${RPR_SUPPORT_LIBRARY} ${OptLibs}
+    FILES ${RPR_LIBRARY} ${RPR_SUPPORT_LIBRARY} ${RPR_TAHOE_LIBRARY} ${OptLibs}
     DESTINATION lib
     )
