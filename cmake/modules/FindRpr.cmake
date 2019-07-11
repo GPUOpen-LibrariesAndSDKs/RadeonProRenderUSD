@@ -36,6 +36,12 @@ find_library(RPR_SUPPORT_LIBRARY
         "Radeon ProRender Support library path"
 )
 
+find_library(RPR_TAHOE_LIBRARY
+    NAMES libTahoe64 Tahoe64
+    HINTS
+        "${RPR_LOCATION_LIB}"
+    DOC
+        "Radeon ProRender tahoe library path")
 
 include(FindPackageHandleStandardArgs)
 
@@ -44,4 +50,5 @@ find_package_handle_standard_args(Rpr
         RPR_LOCATION_INCLUDE
         RPR_LIBRARY
         RPR_SUPPORT_LIBRARY
+        RPR_TAHOE_LIBRARY
 )
