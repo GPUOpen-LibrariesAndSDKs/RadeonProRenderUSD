@@ -1,19 +1,22 @@
 from pxr import Tf
+from pxr.Plug import Registry
 from pxr.Usdviewq.plugin import PluginContainer
 
 from ctypes import cdll, c_char_p
 from ctypes.util import find_library
 
-import psutil, os
+import os
 
-def getRprPath():
-    p = psutil.Process( os.getpid() )
-    for dll in p.memory_maps():
-      if dll.path.find("hdRpr") != -1:
-	   return  dll.path
-    print "hdRpr module not loaded"	   
-    return None
-	   
+def getRprPath(_pathCache=[None]):
+    if _pathCache[0]:
+        return _pathCache[0]
+
+    rprPluginType = Registry.FindTypeByName('HdRprPlugin')
+    plugin = Registry().GetPluginForType(rprPluginType)
+    if plugin and plugin.path:
+        _pathCache[0] = plugin.path
+    return _pathCache[0]
+
 def createRprTmpDirIfNeeded(rprLib):
     rprLib.GetRprTmpDir.restype = c_char_p
     rprTmpDir = rprLib.GetRprTmpDir()
