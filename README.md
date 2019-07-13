@@ -99,7 +99,3 @@ If you want the RPR menu added to USDView (allows selecting device, and view mod
 PXR_PLUGINPATH_NAME=${USD_ROOT}/lib/python/rpr
 ```  
 Where USD_ROOT is your USD install directory.
-
-Install psuit:
-pip install psutil
-
