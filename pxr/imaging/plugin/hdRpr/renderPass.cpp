@@ -76,7 +76,7 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 
 	if (rprApi->IsGlInteropUsed()) {
 		GLuint rprFb = rprApi->GetFramebufferGL();
-		GLint restoreTexture, usdReadFB, usdWriteFB;
+		GLint usdReadFB, usdWriteFB;
 		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &usdReadFB);
 		glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &usdWriteFB);
 
