@@ -5,8 +5,8 @@
 #include "RadeonProRender_CL.h"
 #include "RadeonProRender_GL.h"
 
-#include "../RprTools.h"
-#include "../RprTools.cpp"
+#include "RprTools.h"
+#include "RprTools.cpp"
 
 #include "material.h"
 #include "materialFactory.h"
