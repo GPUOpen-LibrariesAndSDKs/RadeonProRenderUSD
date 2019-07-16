@@ -389,7 +389,7 @@ public:
 		//unlock();
 	}
 
-	void * CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
+	void * CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const InterpolationType normalsInterpolation, const VtVec2fArray & uv, const InterpolationType uvInterpolation, const VtIntArray & indexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
 	{
 		if (!m_context)
 		{
@@ -402,14 +402,50 @@ public:
 		VtIntArray newIndexes, newVpf;
 		SplitPolygons(indexes, vpf, newIndexes, newVpf);
 
+		VtIntArray faceVertexIndices;
+		auto buildFaceVertexIndices = [&faceVertexIndices, &indexes]() {
+			if (faceVertexIndices.size() == 0) {
+				faceVertexIndices.reserve(indexes.size());
+				for (int i = 0, numFaceVerts = static_cast<int>(indexes.size()); i < numFaceVerts; ++i) {
+					faceVertexIndices.push_back(i);
+				}
+			}
+		};
+
+		rpr_int const* pointIndices = (rpr_int const*)newIndexes.data();
+		rpr_int const* normalIndices = pointIndices;
+		rpr_int const* uvIndices = pointIndices;
+
+		if (normalsInterpolation == InterpolationType::FaceVarying)
+		{
+			if (ARCH_UNLIKELY(normals.size() != indexes.size())) {
+				RPR_ERROR_CHECK(RPR_ERROR_INVALID_PARAMETER,
+								"Normals specified as per-face-vertex,"
+								" but number of normals not the same as number of face-vertices");
+			}
+			buildFaceVertexIndices();
+			normalIndices = (rpr_int const*)faceVertexIndices.data();
+		}
+
+		if (uvInterpolation == InterpolationType::FaceVarying)
+		{
+			if (ARCH_UNLIKELY(uv.size() != indexes.size())) {
+				RPR_ERROR_CHECK(RPR_ERROR_INVALID_PARAMETER,
+								"UVs specified as per-face-vertex,"
+								" but number of uvs not the same as number of face-vertices");
+			}
+			buildFaceVertexIndices();
+			uvIndices = (rpr_int const*)faceVertexIndices.data();
+		}
+
 		lock();
 		if (RPR_ERROR_CHECK(rprContextCreateMesh(m_context,
 			(rpr_float const*)points.data(), points.size(), sizeof(GfVec3f),
 			(rpr_float const*)((normals.size() == 0) ? 0 : normals.data()), normals.size(), sizeof(GfVec3f),
 			(rpr_float const*)((uv.size() == 0) ? 0 : uv.data()), uv.size(), sizeof(GfVec2f),
-			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
-			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
-			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
+			pointIndices, sizeof(rpr_int),
+			normalIndices, sizeof(rpr_int),
+			uvIndices, sizeof(rpr_int),
 			newVpf.data(), newVpf.size(), &mesh)
 			, "Fail create mesh")) {
 			unlock();
@@ -427,6 +463,11 @@ public:
 		}
 
 		return mesh;
+	}
+
+	inline void * CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
+	{
+		return CreateMesh(points, normals, InterpolationType::Vertex, uv, InterpolationType::Vertex, indexes, vpf, material);
 	}
 
 	void SetMeshTransform(rpr_shape mesh, const GfMatrix4f & transform)
@@ -1524,8 +1565,14 @@ private:
 
 	RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf)
 	{
-		return m_impl->CreateMesh(points, normals, uv, indexes, vpf);
+		return m_impl->CreateMesh(points, normals, InterpolationType::Vertex, uv, InterpolationType::Vertex, indexes, vpf);
 	}
+
+	RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const InterpolationType normalsInterpolation, const VtVec2fArray & uv, const InterpolationType uvInterpolation, const VtIntArray & indexes, const VtIntArray & vpf)
+	{
+		return m_impl->CreateMesh(points, normals, normalsInterpolation, uv, uvInterpolation, indexes, vpf);
+	}
+
 
 	RprApiObject HdRprApi::CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width)
 	{

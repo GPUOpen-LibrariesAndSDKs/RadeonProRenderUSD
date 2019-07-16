@@ -18,6 +18,8 @@
 
 #include "pxr/imaging/pxOsd/subdivTags.h"
 
+#include "pxr/usd/usdUtils/pipeline.h"
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId) : HdMesh(id, instancerId)
@@ -95,12 +97,42 @@ void HdRprMesh::Sync(
 		VtVec3fArray points = value.Get<VtVec3fArray>();
 
 		VtVec2fArray st;
+		InterpolationType stInterpolation = InterpolationType::NONE;
 
+		const HdInterpolation hdInterpTypes[] = {
+				HdInterpolationVertex,
+				HdInterpolationFaceVarying
+		};
 
-		value = sceneDelegate->Get(id, TfToken("st"));
-		if (value.IsHolding<VtVec2fArray>())
-		{
-			st = value.Get<VtVec2fArray>();
+		// If we just try to get st, and there are none, it will raise a scary error...
+		// but there's no "easy" way to check if st / uvs are defined - so we use
+		// GetPrimvarDescriptors, and iterate through all
+		size_t numInterpTypes = sizeof(hdInterpTypes) / sizeof(decltype(hdInterpTypes[0]));
+		for (size_t i = 0; i < numInterpTypes; ++i) {
+			auto primvars = GetPrimvarDescriptors(sceneDelegate, hdInterpTypes[i]);
+			for (HdPrimvarDescriptor const& pv: primvars) {
+				if (pv.name == UsdUtilsGetPrimaryUVSetName()) {
+					VtValue normalsValue = sceneDelegate->Get(id, pv.name);
+					if (normalsValue.IsHolding<VtVec2fArray>()) {
+						switch(hdInterpTypes[i])
+						{
+						case HdInterpolationVertex:
+							stInterpolation = InterpolationType::Vertex;
+							break;
+						case HdInterpolationFaceVarying:
+							stInterpolation = InterpolationType::FaceVarying;
+							break;
+						default:
+							TF_CODING_ERROR("UVs had unsupported interpolation type: %d", hdInterpTypes[i]);
+							break;
+						}
+						if (ARCH_LIKELY(stInterpolation != InterpolationType::NONE)) {
+							st = normalsValue.UncheckedGet<VtVec2fArray>();
+						}
+						break;
+					}
+				}
+			}
 		}
 
 		Hd_VertexAdjacency adjacency;
@@ -116,7 +148,7 @@ void HdRprMesh::Sync(
 		{
 			rprApi->DeleteMesh(m_rprMesh);
 		}
-		m_rprMesh = rprApi->CreateMesh(points, normals, st, indexes, vertexPerFace);
+		m_rprMesh = rprApi->CreateMesh(points, normals, InterpolationType::Vertex, st, stInterpolation, indexes, vertexPerFace);
 
 		const HdRprMaterial * material = static_cast<const HdRprMaterial *>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(GetId())));
 

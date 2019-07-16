@@ -63,6 +63,7 @@ else()
 		hdSt
         hdx
         usdLux
+        usdUtils
         pxOsd)
 endif()
         

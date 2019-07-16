@@ -56,6 +56,15 @@ enum class FilterType
 	LAST = EawDenoise
 };
 
+enum class InterpolationType
+{
+	NONE = -1,
+	Vertex = 0,
+	FaceVarying,
+	FIRST = Vertex,
+	LAST = FaceVarying
+};
+
 class HdRprApi final
 {
 public:
@@ -75,6 +84,8 @@ public:
 	void Deinit();
 
 	RprApiObject CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf);
+
+	RprApiObject CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const InterpolationType normalsInterpolation, const VtVec2fArray & uv, const InterpolationType uvInterpolation, const VtIntArray & indexes, const VtIntArray & vpf);
 
 	RprApiObject CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width);
 
