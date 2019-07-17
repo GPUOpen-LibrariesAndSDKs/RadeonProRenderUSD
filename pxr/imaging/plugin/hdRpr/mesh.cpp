@@ -22,6 +22,40 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+namespace {
+	template<typename OutputType>
+	void ReadPrimvar(HdSceneDelegate * sceneDelegate, SdfPath const& primId, TfToken primvarName,
+				HdPrimvarDescriptor const& primvarDescriptor, OutputType& outValue,
+				InterpolationType& outInterpolation)
+	{
+		// if outInterpolation is non-None, we assume we've already read this primvar
+		if (outInterpolation != InterpolationType::NONE)
+		{
+			return;
+		}
+		if (primvarDescriptor.name == primvarName) {
+			VtValue normalsValue = sceneDelegate->Get(primId, primvarName);
+			if (normalsValue.IsHolding<OutputType>()) {
+				switch(primvarDescriptor.interpolation)
+				{
+				case HdInterpolationVertex:
+					outInterpolation = InterpolationType::Vertex;
+					break;
+				case HdInterpolationFaceVarying:
+					outInterpolation = InterpolationType::FaceVarying;
+					break;
+				default:
+					TF_CODING_ERROR("UVs had unsupported interpolation type: %d",
+									primvarDescriptor.interpolation);
+					return;
+				}
+				outValue = normalsValue.UncheckedGet<OutputType>();
+				return;
+			}
+		}
+	}
+}
+
 HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId) : HdMesh(id, instancerId)
 {
 	m_rprApiWeakPrt = rprApiShared;
@@ -99,6 +133,9 @@ void HdRprMesh::Sync(
 		VtVec2fArray st;
 		InterpolationType stInterpolation = InterpolationType::NONE;
 
+		VtVec3fArray normals;
+		InterpolationType normalsInterpolation = InterpolationType::NONE;
+
 		const HdInterpolation hdInterpTypes[] = {
 				HdInterpolationVertex,
 				HdInterpolationFaceVarying
@@ -111,35 +148,20 @@ void HdRprMesh::Sync(
 		for (size_t i = 0; i < numInterpTypes; ++i) {
 			auto primvars = GetPrimvarDescriptors(sceneDelegate, hdInterpTypes[i]);
 			for (HdPrimvarDescriptor const& pv: primvars) {
-				if (pv.name == UsdUtilsGetPrimaryUVSetName()) {
-					VtValue normalsValue = sceneDelegate->Get(id, pv.name);
-					if (normalsValue.IsHolding<VtVec2fArray>()) {
-						switch(hdInterpTypes[i])
-						{
-						case HdInterpolationVertex:
-							stInterpolation = InterpolationType::Vertex;
-							break;
-						case HdInterpolationFaceVarying:
-							stInterpolation = InterpolationType::FaceVarying;
-							break;
-						default:
-							TF_CODING_ERROR("UVs had unsupported interpolation type: %d", hdInterpTypes[i]);
-							break;
-						}
-						if (ARCH_LIKELY(stInterpolation != InterpolationType::NONE)) {
-							st = normalsValue.UncheckedGet<VtVec2fArray>();
-						}
-						break;
-					}
-				}
+				ReadPrimvar(sceneDelegate, id, UsdUtilsGetPrimaryUVSetName(), pv, st, stInterpolation);
+				ReadPrimvar(sceneDelegate, id, HdTokens->normals, pv, normals, normalsInterpolation);
 			}
 		}
 
-		Hd_VertexAdjacency adjacency;
-		adjacency.BuildAdjacencyTable(&meshTopology);
+		if (normalsInterpolation == InterpolationType::NONE)
+		{
+			Hd_VertexAdjacency adjacency;
+			adjacency.BuildAdjacencyTable(&meshTopology);
 
-		//VtVec3fArray normals = adjacency.ComputeSmoothNormals(points.size(), points.cdata());
-		VtVec3fArray normals = Hd_SmoothNormals::ComputeSmoothNormals(&adjacency, points.size(), points.cdata());
+			//VtVec3fArray normals = adjacency.ComputeSmoothNormals(points.size(), points.cdata());
+			normals = Hd_SmoothNormals::ComputeSmoothNormals(&adjacency, points.size(), points.cdata());
+			normalsInterpolation = InterpolationType::Vertex;
+		}
 
 		const VtIntArray & indexes = meshTopology.GetFaceVertexIndices();
 		const VtIntArray & vertexPerFace = meshTopology.GetFaceVertexCounts();
@@ -148,7 +170,7 @@ void HdRprMesh::Sync(
 		{
 			rprApi->DeleteMesh(m_rprMesh);
 		}
-		m_rprMesh = rprApi->CreateMesh(points, normals, InterpolationType::Vertex, st, stInterpolation, indexes, vertexPerFace);
+		m_rprMesh = rprApi->CreateMesh(points, normals, normalsInterpolation, st, stInterpolation, indexes, vertexPerFace);
 
 		const HdRprMaterial * material = static_cast<const HdRprMaterial *>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(GetId())));
 
