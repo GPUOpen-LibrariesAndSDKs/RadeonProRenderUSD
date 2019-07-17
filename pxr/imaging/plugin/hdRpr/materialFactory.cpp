@@ -226,7 +226,7 @@ void RprXMaterialFactory::SetMaterialInputs(RprApiMaterial * material, const Mat
 		rpr_image img = NULL;
 		rpr_material_node materialNode = NULL;
 
-		auto textureData = pxr::GlfUVTextureData::New(texParam.second.Path, INT_MAX, 0, 0, 0, 0);
+		auto textureData = GlfUVTextureData::New(texParam.second.Path, INT_MAX, 0, 0, 0, 0);
 		if (!textureData || !textureData->Read(0, false)) {
 			TF_CODING_ERROR("Failed to read image %s", texParam.second.Path.c_str());
 			continue;

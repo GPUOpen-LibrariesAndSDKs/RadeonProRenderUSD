@@ -189,7 +189,7 @@ void getTextures(const  HdMaterialNetwork & materialNetwork, MaterialTextures & 
 			{
 				auto& assetPath = param.UncheckedGet<SdfAssetPath>();
 				if (assetPath.GetResolvedPath().empty()) {
-					materialNode.Path = pxr::ArGetResolver().Resolve(assetPath.GetAssetPath());
+					materialNode.Path = ArGetResolver().Resolve(assetPath.GetAssetPath());
 				} else {
 					materialNode.Path = assetPath.GetResolvedPath();
 				}
