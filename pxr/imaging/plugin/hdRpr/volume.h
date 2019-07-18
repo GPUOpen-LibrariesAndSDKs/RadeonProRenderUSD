@@ -34,7 +34,7 @@ protected:
 	virtual void _InitRepr(TfToken const &reprName,
 		HdDirtyBits *dirtyBits) override;
 
-	HdRprApiWeakPtr m_rprApiWeakPrt;
+	HdRprApiWeakPtr m_rprApiWeakPtr;
 
 	RprApiObject m_rprCubeMesh = nullptr;
 	RprApiObject m_rprHeteroVolume = nullptr;

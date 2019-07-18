@@ -33,10 +33,9 @@ static float computeLightIntensity(float intensity, float exposure)
 }
 
 HdRprLightBase::~HdRprLightBase() {
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
-	if (m_lightMesh)
-	{
-		rprApi->DeleteMesh(m_lightMesh);
+	if (auto rprApi = m_rprApiWeakPtr.lock()) {
+        rprApi->DeleteMesh(m_lightMesh);
+        rprApi->DeleteMaterial(m_lightMaterial);
 	}
 }
 
@@ -49,7 +48,7 @@ bool HdRprLightBase::IsDirtyMaterial(const GfVec3f & emissionColor)
 
 RprApiMaterial * HdRprLightBase::CreateLightMaterial(const GfVec3f & illumColor)
 {
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
+	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
 	if (!rprApi)
 	{
 		TF_CODING_ERROR("RprApi is expired");
@@ -68,7 +67,7 @@ void HdRprLightBase::Sync(HdSceneDelegate *sceneDelegate,
 {
 	SdfPath const & id = GetId();
 	
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
+	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
 	if (!rprApi)
 	{
 		TF_CODING_ERROR("RprApi is expired");

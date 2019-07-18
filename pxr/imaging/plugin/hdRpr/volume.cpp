@@ -167,7 +167,7 @@ void fillGridOnWithDefaultColor(TPtr grid, VtVec4fArray & out_grid, VtArray<size
 
 HdRprVolume::HdRprVolume(SdfPath const& id, HdRprApiSharedPtr rprApi): HdVolume(id)
 {
-	m_rprApiWeakPrt = rprApi;
+	m_rprApiWeakPtr = rprApi;
 }
 
 HdRprVolume::~HdRprVolume()
@@ -364,7 +364,7 @@ void HdRprVolume::Sync(
 
 		file.close();
 
-		HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
+		HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
 		if (!rprApi)
 		{
 			TF_CODING_ERROR("RprApi is expired");

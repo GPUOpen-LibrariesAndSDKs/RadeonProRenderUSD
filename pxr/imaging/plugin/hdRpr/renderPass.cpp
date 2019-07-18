@@ -22,7 +22,7 @@ HdRprRenderPass::HdRprRenderPass(HdRenderIndex * index
 )
 	: HdRenderPass(index, collection)
 {
-	m_rprApiWeakPrt = rprApiShader;
+	m_rprApiWeakPtr = rprApiShader;
 }
 
 HdRprRenderPass::~HdRprRenderPass()
@@ -39,7 +39,7 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 		return;
 	}
 
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
+	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
 	if (!rprApi)
 	{
 		TF_CODING_ERROR("RprApi is expired");

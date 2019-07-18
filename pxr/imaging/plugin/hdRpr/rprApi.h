@@ -91,6 +91,7 @@ public:
 	void CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & grigSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume);
 
 	RprApiMaterial * CreateMaterial(MaterialAdapter & materialAdapter);
+	void DeleteMaterial(RprApiMaterial* rprApiMaterial);
 
 	void SetMeshTransform(RprApiObject mesh, const GfMatrix4d & transform);
 

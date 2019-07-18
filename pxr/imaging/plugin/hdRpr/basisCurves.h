@@ -30,8 +30,9 @@ protected:
 		HdDirtyBits *dirtyBits) override;
 
 private:
-	HdRprApiWeakPtr m_rprApiWeakPrt;
+	HdRprApiWeakPtr m_rprApiWeakPtr;
 	RprApiObject m_rprCurve = nullptr;
+	std::vector<RprApiMaterial*> m_rprMaterials;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

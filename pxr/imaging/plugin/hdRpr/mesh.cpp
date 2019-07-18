@@ -22,9 +22,14 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId) : HdMesh(id, instancerId)
 {
-	m_rprApiWeakPrt = rprApiShared;
+	m_rprApiWeakPtr = rprApiShared;
 }
 
+HdRprMesh::~HdRprMesh() {
+    if (auto rprApi = m_rprApiWeakPtr.lock()) {
+        rprApi->DeleteMaterial(m_fallbackMaterial);
+    }
+}
 
 HdDirtyBits
 HdRprMesh::_PropagateDirtyBits(HdDirtyBits bits) const
@@ -77,7 +82,7 @@ void HdRprMesh::Sync(
 		forcedRepr,
 		&originalDirtyBits); */ // removed with 0.8.5+
 
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
+	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
 	if (!rprApi)
 	{
 		TF_CODING_ERROR("RprApi is expired");
@@ -193,9 +198,9 @@ void HdRprMesh::Sync(
 						VtArray<GfVec3f> color = val.Get<VtArray<GfVec3f>>();
 						MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::COLOR,
 							MaterialParams{{HdPrimvarRoleTokens->color, VtValue(color[0]) }});
-						RprApiMaterial * rprMaterial = rprApi->CreateMaterial(matAdapter);
+						m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
 
-						rprApi->SetMeshMaterial(m_rprMesh, rprMaterial);
+						rprApi->SetMeshMaterial(m_rprMesh, m_fallbackMaterial);
 					}
 					break;
 				}

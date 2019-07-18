@@ -44,7 +44,7 @@ const TfTokenVector & HdRprRectLight::FetchLightGeometryParamNames() const
 RprApiObject HdRprRectLight::CreateLightMesh(std::map<TfToken, float> & params)
 {
 	
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
+	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
 	if (!rprApi)
 	{
 		TF_CODING_ERROR("RprApi is expired");

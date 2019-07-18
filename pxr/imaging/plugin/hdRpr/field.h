@@ -23,7 +23,7 @@ public:
 protected:
 	virtual HdDirtyBits GetInitialDirtyBitsMask() const override;
 
-	HdRprApiWeakPtr m_rprApiWeakPrt;
+	HdRprApiWeakPtr m_rprApiWeakPtr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

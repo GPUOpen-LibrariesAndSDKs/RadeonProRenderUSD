@@ -51,7 +51,7 @@ private:
 	// -----------------------------------------------------------------------
 	// Internal API
 
-	HdRprApiWeakPtr m_rprApiWeakPrt;
+	HdRprApiWeakPtr m_rprApiWeakPtr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

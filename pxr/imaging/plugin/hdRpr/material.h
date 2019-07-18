@@ -40,7 +40,7 @@ public:
 	const RprApiMaterial * GetRprMaterialObject() const;
 
 private:
-	HdRprApiWeakPtr m_rprApiWeakPrt;
+	HdRprApiWeakPtr m_rprApiWeakPtr;
 
 	RprApiMaterial * m_rprMaterial = nullptr;
 };

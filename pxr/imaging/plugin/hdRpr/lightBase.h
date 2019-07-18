@@ -16,7 +16,7 @@ class HdRprLightBase : public HdLight {
 public:
 	HdRprLightBase(SdfPath const & id, HdRprApiSharedPtr rprApi)
 		: HdLight(id)
-		, m_rprApiWeakPrt(rprApi) {}
+		, m_rprApiWeakPtr(rprApi) {}
 
 	~HdRprLightBase();
 
@@ -62,7 +62,7 @@ protected:
 	// Normalize Light Color with surface area
 	virtual GfVec3f NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & emmisionColor) = 0;
 
-	HdRprApiWeakPtr m_rprApiWeakPrt;
+	HdRprApiWeakPtr m_rprApiWeakPtr;
 
 	// Mesh with emmisive material
 	RprApiObject m_lightMesh = nullptr;
