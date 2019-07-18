@@ -68,7 +68,6 @@ endif()
         
 pxr_plugin(hdRpr
    LIBRARIES
-        Half
         ${USD_LIBRARIES}
         ${RPR_LIBRARY}
         ${RPR_SUPPORT_LIBRARY}
