@@ -98,7 +98,7 @@ void HdRprMesh::Sync(
 			auto interpolation = static_cast<HdInterpolation>(i);
 			primvarDescsPerInterpolation[i] = sceneDelegate->GetPrimvarDescriptors(id, interpolation);
 		}
-		auto getPrimvarInterpolation = [&primvarDescsPerInterpolation](pxr::TfToken const& token) -> HdInterpolation {
+		auto getPrimvarInterpolation = [&primvarDescsPerInterpolation](TfToken const& token) -> HdInterpolation {
 			auto it = std::find_if(primvarDescsPerInterpolation, primvarDescsPerInterpolation + HdInterpolationCount,
 				[&token](HdPrimvarDescriptorVector const& descriptors) {
 				return std::any_of(descriptors.begin(), descriptors.end(), [&token](HdPrimvarDescriptor const& descriptor) {
@@ -127,7 +127,7 @@ void HdRprMesh::Sync(
 			{
 				stIndexes = value.UncheckedGet<VtIntArray>();
 			} else {
-				auto stInterpolation = getPrimvarInterpolation(pxr::TfToken("st"));
+				auto stInterpolation = getPrimvarInterpolation(TfToken("st"));
 				if (stInterpolation == HdInterpolationFaceVarying) {
 					stIndexes.reserve(indexes.size());
 					for (size_t i = 0; i < indexes.size(); ++i) {
@@ -152,7 +152,7 @@ void HdRprMesh::Sync(
 			if (value.IsHolding<VtIntArray>() && value.GetArraySize() > 0) {
 				normalIndexes = value.UncheckedGet<VtIntArray>();
 			} else {
-				auto normalsInterpolation = getPrimvarInterpolation(pxr::TfToken("normals"));
+				auto normalsInterpolation = getPrimvarInterpolation(TfToken("normals"));
 				if (normalsInterpolation == HdInterpolationFaceVarying) {
 					normalIndexes.reserve(indexes.size());
 					for (size_t i = 0; i < indexes.size(); ++i) {
