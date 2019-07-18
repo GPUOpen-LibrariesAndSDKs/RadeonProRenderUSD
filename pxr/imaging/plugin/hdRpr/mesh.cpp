@@ -90,33 +90,94 @@ void HdRprMesh::Sync(
 	{
 		HdMeshTopology meshTopology = GetMeshTopology(sceneDelegate);
 
+		const VtIntArray & indexes = meshTopology.GetFaceVertexIndices();
+		const VtIntArray & vertexPerFace = meshTopology.GetFaceVertexCounts();
+
+		HdPrimvarDescriptorVector primvarDescsPerInterpolation[HdInterpolationCount];
+		for (int i = 0; i < HdInterpolationCount; ++i) {
+			auto interpolation = static_cast<HdInterpolation>(i);
+			primvarDescsPerInterpolation[i] = sceneDelegate->GetPrimvarDescriptors(id, interpolation);
+		}
+		auto getPrimvarInterpolation = [&primvarDescsPerInterpolation](pxr::TfToken const& token) -> HdInterpolation {
+			auto it = std::find_if(primvarDescsPerInterpolation, primvarDescsPerInterpolation + HdInterpolationCount,
+				[&token](HdPrimvarDescriptorVector const& descriptors) {
+				return std::any_of(descriptors.begin(), descriptors.end(), [&token](HdPrimvarDescriptor const& descriptor) {
+					return descriptor.name == token;
+				});
+			});
+			return static_cast<HdInterpolation>(std::distance(primvarDescsPerInterpolation, it));
+		};
+
 		VtValue value;
 		value = sceneDelegate->Get(id, HdTokens->points);
 		VtVec3fArray points = value.Get<VtVec3fArray>();
 
 		VtVec2fArray st;
-
-
-		value = sceneDelegate->Get(id, TfToken("st"));
+		float timeSamples[1] = {0.0f};
+		sceneDelegate->SamplePrimvar(id, TfToken("st"), 1, timeSamples, &value);
 		if (value.IsHolding<VtVec2fArray>())
 		{
 			st = value.Get<VtVec2fArray>();
 		}
 
-		Hd_VertexAdjacency adjacency;
-		adjacency.BuildAdjacencyTable(&meshTopology);
+		VtIntArray stIndexes;
+		if (!st.empty()) {
+			value = sceneDelegate->Get(id, TfToken("primvars:st:indices"));
+			if (value.IsHolding<VtIntArray>() && value.GetArraySize() > 0)
+			{
+				stIndexes = value.UncheckedGet<VtIntArray>();
+			} else {
+				auto stInterpolation = getPrimvarInterpolation(pxr::TfToken("st"));
+				if (stInterpolation == HdInterpolationFaceVarying) {
+					stIndexes.reserve(indexes.size());
+					for (size_t i = 0; i < indexes.size(); ++i) {
+						stIndexes.push_back(i);
+					}
+				} else if (stInterpolation == HdInterpolationVertex) {
+					// stIndexes same as pointIndexes
+				} else {
+					TF_CODING_WARNING("Not handled st primvar interpolation type");
+				}
+			}
+		}
 
-		//VtVec3fArray normals = adjacency.ComputeSmoothNormals(points.size(), points.cdata());
-		VtVec3fArray normals = Hd_SmoothNormals::ComputeSmoothNormals(&adjacency, points.size(), points.cdata());
+		VtVec3fArray normals;
+		VtIntArray normalIndexes;
+		sceneDelegate->SamplePrimvar(id, HdTokens->normals, 1, timeSamples, &value);
+		if (value.IsHolding<VtVec3fArray>())
+		{
+			normals = value.UncheckedGet<VtVec3fArray>();
+			
+			value = sceneDelegate->Get(id, TfToken("primvars:normals:indices"));
+			if (value.IsHolding<VtIntArray>() && value.GetArraySize() > 0) {
+				normalIndexes = value.UncheckedGet<VtIntArray>();
+			} else {
+				auto normalsInterpolation = getPrimvarInterpolation(pxr::TfToken("normals"));
+				if (normalsInterpolation == HdInterpolationFaceVarying) {
+					normalIndexes.reserve(indexes.size());
+					for (size_t i = 0; i < indexes.size(); ++i) {
+						normalIndexes.push_back(i);
+					}
+				} else if (normalsInterpolation == HdInterpolationVertex) {
+					// normalIndexes same as pointIndexes
+				} else {
+					TF_CODING_WARNING("Not handled normal primvar interpolation type");
+				}
+			}
+		}
+		else
+		{
+			Hd_VertexAdjacency adjacency;
+			adjacency.BuildAdjacencyTable(&meshTopology);
 
-		const VtIntArray & indexes = meshTopology.GetFaceVertexIndices();
-		const VtIntArray & vertexPerFace = meshTopology.GetFaceVertexCounts();
+			normals = Hd_SmoothNormals::ComputeSmoothNormals(&adjacency, points.size(), points.cdata());
+		}
 
 		if (m_rprMesh)
 		{
 			rprApi->DeleteMesh(m_rprMesh);
 		}
-		m_rprMesh = rprApi->CreateMesh(points, normals, st, indexes, vertexPerFace);
+		m_rprMesh = rprApi->CreateMesh(points, indexes, normals, normalIndexes, st, stIndexes, vertexPerFace);
 
 		const HdRprMaterial * material = static_cast<const HdRprMaterial *>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(GetId())));
 

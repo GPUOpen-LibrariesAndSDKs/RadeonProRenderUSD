@@ -74,7 +74,7 @@ public:
 
 	void Deinit();
 
-	RprApiObject CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf);
+	RprApiObject CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf);
 
 	RprApiObject CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width);
 
