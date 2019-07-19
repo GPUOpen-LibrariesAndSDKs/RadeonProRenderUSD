@@ -53,14 +53,17 @@ RprApiObject HdRprSphereLight::CreateLightMesh(std::map<TfToken, float> & params
 
 GfVec3f HdRprSphereLight::NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & inColor)
 {
+	// Approximating the area of a stretched ellipsoid using the Knud Thomsen formula:
+	// http://www.numericana.com/answer/ellipsoid.htm
 	constexpr const double p = 1.6075;
 	constexpr const double pinv = 1. / 1.6075;
+	const float radius = params[HdRprSphereLightTokens->radius];
 
-	const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength();
-	const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength();
-	const double sz = GfVec3d(transform[0][2], transform[1][2], transform[2][2]).GetLength();
+	const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * radius;
+	const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * radius;
+	const double sz = GfVec3d(transform[0][2], transform[1][2], transform[2][2]).GetLength() * radius;
 
-	return  inColor * static_cast<float>(3. / pow((pow(sx, p) * pow(sy, p) + pow(sx, p) * pow(sz, p) + pow(sy, p) * pow(sz, p)), pinv));
+	return inColor * static_cast<float>(pow(3. / (pow(sx, p) * pow(sy, p) + pow(sx, p) * pow(sz, p) + pow(sy, p) * pow(sz, p)), pinv));
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
