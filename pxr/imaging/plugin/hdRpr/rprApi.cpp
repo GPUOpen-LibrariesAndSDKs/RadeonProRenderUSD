@@ -400,7 +400,6 @@ public:
 			return nullptr;
 		}
 
-		rpr_int status = RPR_SUCCESS;
 		rpr_shape mesh = nullptr;
 
 		VtIntArray newIndexes, newVpf;
@@ -541,7 +540,6 @@ public:
 
 		const size_t k_segmentSize = 4;
 
-		rpr_int status;
 		rpr_curve curve = 0;
 
 		VtVec3fArray newPoints = points;
@@ -1519,8 +1517,6 @@ private:
 	bool m_isLightPresent = false;
 
 	bool m_isFramebufferDirty = true;
-
-    bool m_isRenderModeDirty = true;
 
     HdRprAov m_currentAov = HdRprAov::COLOR;
 
