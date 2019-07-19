@@ -1474,8 +1474,6 @@ private:
 
 	bool m_isFramebufferDirty = true;
 
-    bool m_isRenderModeDirty = true;
-
     HdRprAov m_currentAov = HdRprAov::COLOR;
 
 	// simple spinlock for locking RPR calls
