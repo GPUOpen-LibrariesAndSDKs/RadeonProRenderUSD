@@ -18,6 +18,8 @@
 
 #include "pxr/imaging/pxOsd/subdivTags.h"
 
+#include "pxr/usd/usdUtils/pipeline.h"
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId) : HdMesh(id, instancerId)
@@ -98,46 +100,47 @@ void HdRprMesh::Sync(
 			auto interpolation = static_cast<HdInterpolation>(i);
 			primvarDescsPerInterpolation[i] = sceneDelegate->GetPrimvarDescriptors(id, interpolation);
 		}
-		auto getPrimvarInterpolation = [&primvarDescsPerInterpolation](TfToken const& token) -> HdInterpolation {
+		auto getPrimvarIndices = [&primvarDescsPerInterpolation, &indexes, &sceneDelegate, &id](
+				TfToken const& primvarName, VtIntArray& outIndices) {
 			auto it = std::find_if(primvarDescsPerInterpolation, primvarDescsPerInterpolation + HdInterpolationCount,
-				[&token](HdPrimvarDescriptorVector const& descriptors) {
-				return std::any_of(descriptors.begin(), descriptors.end(), [&token](HdPrimvarDescriptor const& descriptor) {
-					return descriptor.name == token;
+				[&primvarName](HdPrimvarDescriptorVector const& descriptors) {
+				return std::any_of(descriptors.begin(), descriptors.end(), [&primvarName](HdPrimvarDescriptor const& descriptor) {
+					return descriptor.name == primvarName;
 				});
 			});
-			return static_cast<HdInterpolation>(std::distance(primvarDescsPerInterpolation, it));
+			auto interpolationType = static_cast<HdInterpolation>(std::distance(primvarDescsPerInterpolation, it));
+
+			if (interpolationType == HdInterpolationFaceVarying) {
+				outIndices.reserve(indexes.size());
+				for (size_t i = 0; i < indexes.size(); ++i) {
+					outIndices.push_back(i);
+				}
+			} else if (interpolationType == HdInterpolationVertex
+				// HdInterpolationCount implies no interpolation specified - assume vertex
+				|| interpolationType == HdInterpolationCount) {
+				// stIndexes same as pointIndexes - do nothing
+				return;
+			} else {
+				TF_CODING_WARNING("Not handled %s primvar interpolation type: %d", primvarName.GetText(),
+								  interpolationType);
+			}
 		};
 
 		VtValue value;
 		value = sceneDelegate->Get(id, HdTokens->points);
 		VtVec3fArray points = value.Get<VtVec3fArray>();
 
-		VtVec2fArray st;
 		float timeSamples[1] = {0.0f};
-		sceneDelegate->SamplePrimvar(id, TfToken("st"), 1, timeSamples, &value);
+
+		auto stToken = UsdUtilsGetPrimaryUVSetName();
+		VtVec2fArray st;
+		VtIntArray stIndexes;
+		sceneDelegate->SamplePrimvar(id, stToken, 1, timeSamples, &value);
 		if (value.IsHolding<VtVec2fArray>())
 		{
-			st = value.Get<VtVec2fArray>();
-		}
-
-		VtIntArray stIndexes;
-		if (!st.empty()) {
-			value = sceneDelegate->Get(id, TfToken("primvars:st:indices"));
-			if (value.IsHolding<VtIntArray>() && value.GetArraySize() > 0)
-			{
-				stIndexes = value.UncheckedGet<VtIntArray>();
-			} else {
-				auto stInterpolation = getPrimvarInterpolation(TfToken("st"));
-				if (stInterpolation == HdInterpolationFaceVarying) {
-					stIndexes.reserve(indexes.size());
-					for (size_t i = 0; i < indexes.size(); ++i) {
-						stIndexes.push_back(i);
-					}
-				} else if (stInterpolation == HdInterpolationVertex) {
-					// stIndexes same as pointIndexes
-				} else {
-					TF_CODING_WARNING("Not handled st primvar interpolation type");
-				}
+			st = value.UncheckedGet<VtVec2fArray>();
+			if (!st.empty()) {
+				getPrimvarIndices(stToken, stIndexes);
 			}
 		}
 
@@ -147,22 +150,8 @@ void HdRprMesh::Sync(
 		if (value.IsHolding<VtVec3fArray>())
 		{
 			normals = value.UncheckedGet<VtVec3fArray>();
-			
-			value = sceneDelegate->Get(id, TfToken("primvars:normals:indices"));
-			if (value.IsHolding<VtIntArray>() && value.GetArraySize() > 0) {
-				normalIndexes = value.UncheckedGet<VtIntArray>();
-			} else {
-				auto normalsInterpolation = getPrimvarInterpolation(TfToken("normals"));
-				if (normalsInterpolation == HdInterpolationFaceVarying) {
-					normalIndexes.reserve(indexes.size());
-					for (size_t i = 0; i < indexes.size(); ++i) {
-						normalIndexes.push_back(i);
-					}
-				} else if (normalsInterpolation == HdInterpolationVertex) {
-					// normalIndexes same as pointIndexes
-				} else {
-					TF_CODING_WARNING("Not handled normal primvar interpolation type");
-				}
+			if (!normals.empty()) {
+				getPrimvarIndices(HdTokens->normals, normalIndexes);
 			}
 		}
 		else
