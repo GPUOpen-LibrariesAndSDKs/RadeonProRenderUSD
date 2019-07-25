@@ -20,7 +20,7 @@ class HdRprApiImpl;
 class RprMaterialObject;
 struct MaterialNode;
 
-class RprApiMaterial;
+struct RprApiMaterial;
 class MaterialAdapter;
 
 typedef void * RprApiObject;
@@ -46,6 +46,25 @@ enum class HdRprAov
 	LAST = UV
 };
 
+enum class HdRprHybridQuality
+{
+	NONE = -1,
+	LOW = 0,
+	MEDIUM,
+	HIGH,
+	FIRST = LOW,
+	LAST = HIGH
+};
+
+enum class HdRprPluginType : int
+{
+	NONE = -1,
+	TAHOE = 0,
+	HYBRID,
+	FIRST = TAHOE,
+	LAST = HYBRID
+};
+
 enum class FilterType
 {
 	None = -1,
@@ -63,6 +82,10 @@ public:
 	~HdRprApi();
 
 	static void SetRenderDevice(const HdRprRenderDevice & renderMode);
+
+	static void SetHybridQuality(HdRprHybridQuality quality);
+
+	static void SetRendererPlugin(HdRprPluginType plugin);
 
 	static void SetFilter(const FilterType & type);
 

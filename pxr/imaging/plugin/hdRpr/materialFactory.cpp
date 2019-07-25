@@ -127,10 +127,6 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
                 format.type = RPR_COMPONENT_TYPE_UINT8;
                 bytesPerChannel = 1;
                 break;
-            case GL_HALF_FLOAT:
-                format.type = RPR_COMPONENT_TYPE_FLOAT16;
-                bytesPerChannel = 2;
-                break;
             case GL_FLOAT:
                 format.type = RPR_COMPONENT_TYPE_FLOAT32;
                 bytesPerChannel = 4;
@@ -143,9 +139,6 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         switch (textureData->GLFormat()) {
             case GL_RED:
                 format.num_components = 1;
-                break;
-            case GL_RG:
-                format.num_components = 2;
                 break;
             case GL_RGB:
                 format.num_components = 3;

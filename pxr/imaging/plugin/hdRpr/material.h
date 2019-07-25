@@ -11,7 +11,7 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-class RprApiMaterial;
+struct RprApiMaterial;
 
 
 class HdRprMaterial final : public HdMaterial {

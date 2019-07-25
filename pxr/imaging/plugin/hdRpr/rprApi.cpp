@@ -41,14 +41,22 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 namespace
 {
-#ifdef WIN32
-	const char* k_TahoeLibName = "Tahoe64.dll";
-#elif defined __linux__
-	const char* k_TahoeLibName = "libTahoe64.so";
-#elif defined __APPLE__
-	const char* k_TahoeLibName = "libTahoe64.dylib";
-    const char* k_RadeonProRenderLibName = "libRadeonProRender64.dylib";
+#if defined __APPLE__
+	const char* k_RadeonProRenderLibName = "libRadeonProRender64.dylib";
 #endif
+
+	const char* k_PluginLibNames[] = {
+#ifdef WIN32
+		"Tahoe64.dll",
+		"Hybrid.dll",
+#elif defined __linux__
+		"libTahoe64.so",
+		"libHybrid.so",
+#elif defined __APPLE__
+		"libTahoe64.dylib",
+		"libHybrid.dylib",
+#endif
+	};
 
 	constexpr const rpr_uint k_defaultFbWidth = 800;
 	constexpr const rpr_uint k_defaultFbHeight = 600;
@@ -152,7 +160,7 @@ std::string GetRprSdkPath()
     return std::string();
 }
 
-rpr_creation_flags getAllCompatibleGpuFlags()
+rpr_creation_flags getAllCompatibleGpuFlags(const char* pluginName, const char* cachePath)
 {
 #ifdef __APPLE__
     return RPR_CREATION_FLAGS_ENABLE_METAL;
@@ -175,13 +183,13 @@ rpr_creation_flags getAllCompatibleGpuFlags()
 #endif // WIN32
 
 
-		rprAreDevicesCompatible(k_TahoeLibName, nullptr, false, allGpuFlags, &flags, rprToolOs);
+		rprAreDevicesCompatible(pluginName, cachePath, false, allGpuFlags, &flags, rprToolOs);
 		return flags;
 #endif //__APPLE__
 }
 
 
-const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevice)
+const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevice, const char* pluginName, const char* cachePath)
 {
 	rpr_creation_flags flags = 0x0;
 
@@ -192,7 +200,7 @@ const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevic
 	}
 	else if (HdRprRenderDevice::GPU == renderDevice)
 	{
-		flags = getAllCompatibleGpuFlags();
+		flags = getAllCompatibleGpuFlags(pluginName, cachePath);
 	}
 	else
 	{
@@ -234,6 +242,41 @@ public:
 	HdRprRenderDevice GetRenderDevice() const
 	{
 		return m_prefData.mRenderDevice;
+	}
+
+	void SetHybridQuality(HdRprHybridQuality quality)
+	{
+		if (m_prefData.mHybridQuality != quality)
+		{
+			m_prefData.mHybridQuality = quality;
+			Save();
+			SetDitry(true);
+		}
+	}
+
+	HdRprHybridQuality GetHybridQuality() const
+	{
+		if (m_prefData.mHybridQuality == HdRprHybridQuality::MEDIUM) {
+			// temporarily disable until issues on hybrid side is not solved
+			//   otherwise driver crashes guaranteed
+			return HdRprHybridQuality::HIGH;
+		}
+		return m_prefData.mHybridQuality;
+	}
+
+	void SetPlugin(HdRprPluginType plugin)
+	{
+		if (m_prefData.mPlugin != plugin)
+		{
+			m_prefData.mPlugin = plugin;
+			Save();
+			SetDitry(true);
+		}
+	}
+
+	HdRprPluginType GetPlugin()
+	{
+		return m_prefData.mPlugin;
 	}
 
 	void SetFilterType(const FilterType & type)
@@ -328,6 +371,8 @@ private:
 		m_prefData.mRenderDevice = HdRprRenderDevice::GPU;
 		m_prefData.mAov = HdRprAov::COLOR;
 		m_prefData.mFilterType = FilterType::BilateralDenoise;
+		m_prefData.mPlugin = HdRprPluginType::HYBRID;
+		m_prefData.mHybridQuality = HdRprHybridQuality::LOW;
 	}
 
 	struct PrefData
@@ -335,6 +380,8 @@ private:
 		HdRprRenderDevice mRenderDevice = HdRprRenderDevice::NONE;
 		HdRprAov mAov = HdRprAov::NONE;
 		FilterType mFilterType = FilterType::None;
+		HdRprPluginType mPlugin = HdRprPluginType::HYBRID;
+		HdRprHybridQuality mHybridQuality = HdRprHybridQuality::LOW;
 	} m_prefData;
 	
 
@@ -455,6 +502,12 @@ public:
 
 	void SetMeshRefineLevel(rpr_shape mesh, const int level, const TfToken boundaryInterpolation)
 	{
+		if (m_currentPlugin == HdRprPluginType::HYBRID)
+		{
+			// Not supported
+			return;
+		}
+
 		rpr_int status;
 		lock();
 		status = RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, level), "Fail set mesh subdividion");
@@ -589,7 +642,14 @@ public:
 		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_context, &light), "Fail to create environment light")) return;
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image),"Fail to set image to environment light")) return;
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetIntensityScale(light, intensity), "Fail to set environment light intencity")) return;
-		if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene, light), "Fail to attach environment light")) return;
+		if (m_currentPlugin == HdRprPluginType::HYBRID)
+		{
+			if (RPR_ERROR_CHECK(rprSceneSetEnvironmentLight(m_scene, light), "Fail to set environment light")) return;
+		}
+		else
+		{
+			if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene, light), "Fail to attach environment light to scene")) return;
+		}
 
 		m_isLightPresent = true;
 	}
@@ -607,17 +667,25 @@ public:
 		rpr_light light;
 
 		// Set the background image to a solid color.
-		std::array<float, 3> backgroundColor = { color[0],  color[1],  color[2]};
+		std::array<float, 3> backgroundColor = { color[0],  color[1],  color[2] };
 		rpr_image_format format = { 3, RPR_COMPONENT_TYPE_FLOAT32 };
-		rpr_image_desc desc = { 1, 1, 1, 3, 3 };
+		int imageSize = m_currentPlugin == HdRprPluginType::HYBRID ? 64 : 1;
+		rpr_image_desc desc = { imageSize, imageSize, 0, imageSize * imageSize * 3 * sizeof(float), 0 };
+		std::vector<std::array<float, 3>> imageData(imageSize * imageSize, backgroundColor);
 		//lock();
 
-		if (RPR_ERROR_CHECK(rprContextCreateImage(m_context, format, &desc, backgroundColor.data(), &image),"Fail to create image from color")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateImage(m_context, format, &desc, imageData.data(), &image),"Fail to create image from color")) return;
 		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_context, &light), "Fail to create environment light")) return;
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image), "Fail to set image to environment light")) return;
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetIntensityScale(light, intensity), "Fail to set environment light intensity")) return;
-		if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene, light), "Fail to attach environment light to scene")) return;
-
+		if (m_currentPlugin == HdRprPluginType::HYBRID)
+		{
+			if (RPR_ERROR_CHECK(rprSceneSetEnvironmentLight(m_scene, light), "Fail to set environment light")) return;
+		}
+		else
+		{
+			if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene, light), "Fail to attach environment light to scene")) return;
+		}
 		m_isLightPresent = true;
 	}
 
@@ -730,6 +798,11 @@ public:
 
 	RprApiMaterial* CreateMaterial(const MaterialAdapter & materialAdapter)
 	{
+		if (!m_context)
+		{
+			return nullptr;
+		}
+		
 		lock();
 		auto material = m_rprMaterialFactory->CreateMaterial(materialAdapter.GetType(), materialAdapter);
 		unlock();
@@ -837,8 +910,13 @@ public:
 			return;
 		}
 
-		if(RPR_ERROR_CHECK(rprContextCreatePostEffect(m_context, RPR_POST_EFFECT_TONE_MAP, &m_tonemap), "Fail to create post effect")) return;
-		RPR_ERROR_CHECK(rprContextAttachPostEffect(m_context, m_tonemap), "Fail to attach posteffect");
+		if (m_currentPlugin == HdRprPluginType::TAHOE)
+		{
+			if (!RPR_ERROR_CHECK(rprContextCreatePostEffect(m_context, RPR_POST_EFFECT_TONE_MAP, &m_tonemap), "Fail to create post effect"))
+			{
+				RPR_ERROR_CHECK(rprContextAttachPostEffect(m_context, m_tonemap), "Fail to attach posteffect");
+			}
+		}
 	}
 
 	void CreateFramebuffer(const rpr_uint width, const rpr_uint height)
@@ -920,8 +998,13 @@ public:
 		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_DEPTH, m_depthBuffer), "fail to set depth AOV");
 		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_OBJECT_ID, m_objId), "fail to set object id AOV");
 		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_UV, m_uv), "fail to set uv AOV");
-		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_GEOMETRIC_NORMAL, m_normalBuffer), "fail to set normal AOV");
-
+		auto normalAovId = RPR_AOV_GEOMETRIC_NORMAL;
+		if (m_currentPlugin == HdRprPluginType::HYBRID)
+		{
+			// TODO: remove me when Hybrid gain RPR_AOV_GEOMETRIC_NORMAL support
+			normalAovId = RPR_AOV_SHADING_NORMAL;
+		}
+		RPR_ERROR_CHECK(rprContextSetAOV(m_context, normalAovId, m_normalBuffer), "fail to set normal AOV");
 		//unlock();
 	}
 
@@ -994,9 +1077,34 @@ public:
 	{
 		size_t fb_data_size = 0;
 
-		if (RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fb_data_size), "Fail to get frafebuffer data size")) return nullptr;
+		rpr_framebuffer framebuffer = nullptr;
+		if (m_currentPlugin == HdRprPluginType::TAHOE)
+		{
+			framebuffer = m_resolvedBuffer;
+		}
+		else if (m_currentPlugin == HdRprPluginType::HYBRID)
+		{
+			// So as Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
+			//   we have to distinguish renders with filter and without
+			if (m_isRenderedWithFilter)
+			{
+				framebuffer = m_resolvedBuffer;
+			}
+			else
+			{
+				framebuffer = GetTargetFB();
+			}
+		}
 
-		RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, fb_data_size, m_framebufferData.data(), NULL), "Fail to get frafebuffer data");
+		if (!framebuffer)
+		{
+			TF_CODING_ERROR("Could not get framebuffer data: invalid framebuffer");
+			return nullptr;
+		}
+
+		if (RPR_ERROR_CHECK(rprFrameBufferGetInfo(framebuffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fb_data_size), "Fail to get frafebuffer data size")) return nullptr;
+
+		RPR_ERROR_CHECK(rprFrameBufferGetInfo(framebuffer, RPR_FRAMEBUFFER_DATA, fb_data_size, m_framebufferData.data(), NULL), "Fail to get frafebuffer data");
 		return m_framebufferData.data();
 	}
 
@@ -1026,6 +1134,16 @@ public:
 			return;
 		}
 
+		auto& preferences = HdRprPreferences::GetInstance();
+		if (preferences.IsDirty())
+		{
+			if (m_currentPlugin == HdRprPluginType::HYBRID)
+			{
+				rprContextSetParameter1u(m_context, "render_quality", int(preferences.GetHybridQuality()));
+			}
+			preferences.SetDitry(false);
+		}
+
 		if (m_isFramebufferDirty)
 		{
 			ClearFramebuffers();
@@ -1044,7 +1162,7 @@ public:
         rpr_framebuffer targetFB = GetTargetFB();
 
        
-
+		m_isRenderedWithFilter = false;
 #ifdef USE_RIF
 		if (HdRprPreferences::GetInstance().IsFilterTypeDirty())
 		{
@@ -1054,20 +1172,15 @@ public:
 
 		if (m_imageFilterPtr && m_imageFilterPtr->GetType() != FilterType::None && m_currentAov == HdRprAov::COLOR)
 		{
+			m_isRenderedWithFilter = true;
 			m_imageFilterPtr->Run();
 		}
 		else
-		{
-			auto status = rprContextResolveFrameBuffer(m_context, targetFB, m_resolvedBuffer, false);
-			//unlock();
-			if (status != RPR_SUCCESS)
-			{
-				TF_CODING_ERROR("Fail contex resolve. Error code %d", status);
-			}
-		}
-#else
-		if (RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, targetFB, m_resolvedBuffer, false), "Fail contex resolve")) return;
 #endif // USE_RIF
+		if (m_currentPlugin == HdRprPluginType::TAHOE)
+		{
+			RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, targetFB, m_resolvedBuffer, false), "Fail to resolve framebuffer");
+		}
 	}
 
 	void DeleteFramebuffers()
@@ -1143,42 +1256,89 @@ private:
 	{
 		//lock();
 
+		const std::string rprSdkPath = GetRprSdkPath();
+		auto registerPlugin = [this, &rprSdkPath](HdRprPluginType plugin) -> rpr_int {
+			m_currentPlugin = plugin;
+			int pluginIdx = static_cast<int>(m_currentPlugin);
+			int numPlugins = sizeof(k_PluginLibNames) / sizeof(k_PluginLibNames[0]);
+			if (pluginIdx < 0 || pluginIdx >= numPlugins) {
+				TF_RUNTIME_ERROR("Invalid plugin requested: index out of bounds - %d", pluginIdx);
+				return -1;
+			}
+
+			const char* pluginName = k_PluginLibNames[pluginIdx];
+			const std::string pluginPath = (rprSdkPath.empty()) ? pluginName : rprSdkPath + "/" + pluginName;
+			return rprRegisterPlugin(pluginPath.c_str());
+		};
+
+		auto requestedPlugin = HdRprPreferences::GetInstance().GetPlugin();
+		rpr_int pluginID = registerPlugin(requestedPlugin);
+		if (pluginID == -1)
+		{
+			TF_WARN("Failed to register the requested one renderer plugin. Trying to register first working one");
+			for (auto plugin = HdRprPluginType::FIRST; plugin != HdRprPluginType::LAST; plugin = HdRprPluginType(int(plugin) + 1))
+			{
+				if (plugin == requestedPlugin)
+					continue;
+				pluginID = registerPlugin(plugin);
+				if (pluginID != -1)
+				{
+					HdRprPreferences::GetInstance().SetPlugin(plugin);
+					break;
+				}
+			}
+		}
+		if (pluginID == -1)
+		{
+			TF_CODING_ERROR("Could not register any of known renderer plugins");
+			return;
+		}
+        
+        rpr_int plugins[] = { pluginID };
+
 		// TODO: Query info from HdRprPreferences
 		m_useGlInterop = HdRprApiImpl::EnableGLInterop();
-		if (m_useGlInterop) {
+		if (m_currentPlugin == HdRprPluginType::HYBRID)
+		{
+			m_useGlInterop = false;
+		}
+		if (m_useGlInterop)
+		{
 			GLenum err = glewInit();
-			if (err != GLEW_OK) {
-				TF_CODING_WARNING("Failed to init GLEW. Error code: %s. Disabling GL interop", glewGetErrorString(err));
+			if (err != GLEW_OK)
+			{
+				TF_WARN("Failed to init GLEW. Error code: %s. Disabling GL interop", glewGetErrorString(err));
 				m_useGlInterop = false;
 			}
 		}
 
-        const std::string rprSdkPath = GetRprSdkPath();
-		const std::string rprTmpDir = HdRprApi::GetTmpDir();
-        const std::string tahoePath = (rprSdkPath.empty()) ? k_TahoeLibName : rprSdkPath + "/" + k_TahoeLibName;
-		rpr_int tahoePluginID = rprRegisterPlugin(tahoePath.c_str());
-		rpr_int plugins[] = { tahoePluginID };
-
 		auto renderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
-		if (m_useGlInterop && renderDevice == HdRprRenderDevice::CPU) {
-			TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
+		if (m_useGlInterop && renderDevice == HdRprRenderDevice::CPU)
+		{
+			TF_WARN("Do not support GL Interop with CPU device. Switched to GPU.");
 			renderDevice = HdRprRenderDevice::GPU;
 		}
-		rpr_creation_flags flags = getRprCreationFlags(renderDevice);
+		auto cachePath = HdRprApi::GetTmpDir();
+		auto pluginName = k_PluginLibNames[int(m_currentPlugin)];
+		rpr_creation_flags flags = getRprCreationFlags(renderDevice, pluginName, cachePath);
 		if (!flags)
 		{
 			TF_CODING_ERROR("Could not find compatible device");
 			return;
 		}
-		if (m_useGlInterop) {
+		if (m_useGlInterop)
+		{
 			flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
 		}
-		if (RPR_ERROR_CHECK(rprCreateContext(RPR_API_VERSION, plugins, 1, flags, NULL, rprTmpDir.c_str(), &m_context), std::string("Fail to create context with plugin ") + k_TahoeLibName)) return;
+		if (RPR_ERROR_CHECK(rprCreateContext(RPR_API_VERSION, plugins, 1, flags, nullptr, cachePath, &m_context), std::string("Fail to create context with plugin ") + pluginName)) return;
 
 		if(RPR_ERROR_CHECK(rprContextSetActivePlugin(m_context, plugins[0]), "fail to set active plugin")) return;
 
-
 		RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "yflip", 0), "Fail to set context YFLIP parameter");
+		if (m_currentPlugin == HdRprPluginType::HYBRID)
+		{
+			RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "render_quality", int(HdRprPreferences::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
+		}
 	}
 
 	void InitMaterialSystem()
@@ -1489,7 +1649,10 @@ private:
 
 	bool m_isFramebufferDirty = true;
 
+	bool m_isRenderedWithFilter = false;
+
     HdRprAov m_currentAov = HdRprAov::COLOR;
+	HdRprPluginType m_currentPlugin = HdRprPluginType::NONE;
 
     std::vector<RprApiMaterial*> m_materialsToRelease;
 
@@ -1513,6 +1676,16 @@ private:
 	void HdRprApi::SetRenderDevice(const HdRprRenderDevice & renderDevice)
 	{
 		HdRprPreferences::GetInstance().SetRenderDevice(renderDevice);
+	}
+
+	void HdRprApi::SetRendererPlugin(HdRprPluginType plugin)
+	{
+		HdRprPreferences::GetInstance().SetPlugin(plugin);
+	}
+
+	void HdRprApi::SetHybridQuality(HdRprHybridQuality quality)
+	{
+		HdRprPreferences::GetInstance().SetHybridQuality(quality);
 	}
 
 	void HdRprApi::SetFilter(const FilterType & type)

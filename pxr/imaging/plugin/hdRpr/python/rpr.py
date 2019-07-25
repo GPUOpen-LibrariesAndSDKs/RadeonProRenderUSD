@@ -51,7 +51,21 @@ def setRenderDevice(usdviewApi, renderDeviceId):
         createRprTmpDirIfNeeded(lib)
         lib.SetRprGlobalRenderDevice(renderDeviceId)
         reemitStage(usdviewApi)
-	   
+
+def setRendererPlugin(usdviewApi, rendererPluginId):
+    rprPath = getRprPath()
+    if rprPath is not None:
+        lib = cdll.LoadLibrary(rprPath)
+        createRprTmpDirIfNeeded(lib)
+        lib.SetRprRendererPlugin(rendererPluginId)
+        reemitStage(usdviewApi)
+
+def setHybridQuality(usdviewApi, quality):
+    rprPath = getRprPath()
+    if rprPath is not None:
+        lib = cdll.LoadLibrary(rprPath)
+        createRprTmpDirIfNeeded(lib)
+        lib.SetRprHybridQuality(quality)
 	
 def ColorAov(usdviewApi):
     setAov(0)
@@ -83,6 +97,18 @@ def renderDeviceCPU(usdviewApi):
 
 def renderDeviceGPU(usdviewApi):
     setRenderDevice(usdviewApi, 1)
+
+def SetTahoe(usdviewApi):
+    setRendererPlugin(usdviewApi, 0)
+def SetHybrid(usdviewApi):
+    setRendererPlugin(usdviewApi, 1)
+
+def SetHybridLowQuality(usdviewApi):
+    setHybridQuality(usdviewApi, 0)
+def SetHybridMediumQuality(usdviewApi):
+    setHybridQuality(usdviewApi, 1)
+def SetHybridHighQuality(usdviewApi):
+    setHybridQuality(usdviewApi, 2)
 
 
 class RprPluginContainer(PluginContainer):
@@ -141,6 +167,28 @@ class RprPluginContainer(PluginContainer):
             "GPU",
             renderDeviceGPU)
 
+        self.setTahoe = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setTahoe",
+            "Tahoe",
+            SetTahoe)
+        self.setHybrid = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setHybrid",
+            "Hybrid",
+            SetHybrid)
+
+        self.setHybridLowQuality = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setHybridLowQuality",
+            "Low",
+            SetHybridLowQuality)
+        self.setHybridMediumQuality = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setHybridMediumQuality",
+            "Medium",
+            SetHybridMediumQuality)
+        self.setHybridHighQuality = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setHybridHighQuality",
+            "High",
+            SetHybridHighQuality)
+
 
     def configureView(self, plugRegistry, plugUIBuilder):
 
@@ -151,7 +199,7 @@ class RprPluginContainer(PluginContainer):
         renderModeSubMenu.addItem(self.aovDepth)
         renderModeSubMenu.addItem(self.aovUV)
         renderModeSubMenu.addItem(self.aovPrimId)
-		
+        
         filterSubMenu = rprMenu.findOrCreateSubmenu("Filter")
         filterSubMenu.addItem(self.noFilter)
         filterSubMenu.addItem(self.bilateralFilter)
@@ -160,6 +208,16 @@ class RprPluginContainer(PluginContainer):
         renderDeviceSubMenu = rprMenu.findOrCreateSubmenu("Render Device")
         renderDeviceSubMenu.addItem(self.rDeviceCpu)
         renderDeviceSubMenu.addItem(self.rDeviceGpu)
+
+        renderPluginMenu = rprMenu.findOrCreateSubmenu("Renderer Plugin")
+        renderPluginMenu.addItem(self.setTahoe)
+        renderPluginMenu.addItem(self.setHybrid)
+
+        hybridSettingsMenu = rprMenu.findOrCreateSubmenu("Hybrid Settings")
+        hybridQualityMenu = hybridSettingsMenu.findOrCreateSubmenu("Quality")
+        hybridQualityMenu.addItem(self.setHybridLowQuality)
+        hybridQualityMenu.addItem(self.setHybridMediumQuality)
+        hybridQualityMenu.addItem(self.setHybridHighQuality)
 		
 		
 Tf.Type.Define(RprPluginContainer)

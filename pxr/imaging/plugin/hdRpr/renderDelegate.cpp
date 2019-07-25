@@ -326,6 +326,16 @@ void SetRprGlobalRenderDevice(int renderDevice)
 	PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::CPU);
 }
 
+void SetRprRendererPlugin(int pluginIdx)
+{
+	PXR_INTERNAL_NS::HdRprApi::SetRendererPlugin(PXR_INTERNAL_NS::HdRprPluginType(pluginIdx));
+}
+
+void SetRprHybridQuality(int quality)
+{
+	PXR_INTERNAL_NS::HdRprApi::SetHybridQuality(PXR_INTERNAL_NS::HdRprHybridQuality(quality));
+}
+
 const char* GetRprTmpDir()
 {
 	return PXR_INTERNAL_NS::HdRprApi::GetTmpDir();
