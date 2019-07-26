@@ -1320,11 +1320,24 @@ private:
 		}
 		auto cachePath = HdRprApi::GetTmpDir();
 		auto pluginName = k_PluginLibNames[int(m_currentPlugin)];
-		rpr_creation_flags flags = getRprCreationFlags(renderDevice, pluginName, cachePath);
-		if (!flags)
+		rpr_creation_flags flags;
+		if (m_currentPlugin == HdRprPluginType::HYBRID)
 		{
-			TF_CODING_ERROR("Could not find compatible device");
-			return;
+			// Call to getRprCreationFlags is broken in case of hybrid:
+			//   1) getRprCreationFlags uses 'rprContextGetInfo' to query device compatibility,
+			//        but hybrid plugin does not support such call
+			//   2) Hybrid is working only on GPU
+			//   3) MultiGPU can be enabled only through vulkan interop
+			flags = RPR_CREATION_FLAGS_ENABLE_GPU0;
+		}
+		else
+		{
+			flags = getRprCreationFlags(renderDevice, pluginName, cachePath);
+			if (!flags)
+			{
+				TF_CODING_ERROR("Could not find compatible device");
+				return;
+			}
 		}
 		if (m_useGlInterop)
 		{
