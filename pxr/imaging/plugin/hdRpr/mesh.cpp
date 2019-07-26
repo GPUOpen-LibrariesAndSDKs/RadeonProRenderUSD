@@ -30,6 +30,7 @@ HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath
 HdRprMesh::~HdRprMesh() {
     if (auto rprApi = m_rprApiWeakPtr.lock()) {
         rprApi->DeleteMaterial(m_fallbackMaterial);
+		rprApi->DeleteMesh(m_rprMesh);
     }
 }
 

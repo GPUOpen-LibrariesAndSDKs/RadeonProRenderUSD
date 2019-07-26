@@ -412,10 +412,11 @@ public:
 
 		DeleteFramebuffers();
 
-		SAFE_DELETE_RPR_OBJECT(m_scene);
-		SAFE_DELETE_RPR_OBJECT(m_camera);
-		SAFE_DELETE_RPR_OBJECT(m_tonemap);
-		SAFE_DELETE_RPR_OBJECT(m_matsys);
+        for (auto rprObject : m_rprObjectsToRelease)
+        {
+            SAFE_DELETE_RPR_OBJECT(rprObject);
+        }
+		SAFE_DELETE_RPR_OBJECT(m_context);
 	}
 
 	void CreateScene() {
@@ -426,6 +427,7 @@ public:
 		}
 
 		if (RPR_ERROR_CHECK(rprContextCreateScene(m_context, &m_scene), "Fail to create scene")) return;
+        m_rprObjectsToRelease.push_back(m_scene);
 		if (RPR_ERROR_CHECK(rprContextSetScene(m_context, m_scene), "Fail to set scene")) return;
 	}
 
@@ -436,6 +438,7 @@ public:
 		}
 
 		RPR_ERROR_CHECK(rprContextCreateCamera(m_context, &m_camera), "Fail to create camera");
+        m_rprObjectsToRelease.push_back(m_camera);
 		RPR_ERROR_CHECK(rprCameraLookAt(m_camera, 20.0f, 60.0f, 40.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f), "Fail to set camera Look At");
 		
 		const rpr_float  sensorSize[] = { 1.f , 1.f};
@@ -639,7 +642,9 @@ public:
 		rpr_image image = nullptr;
 
 		if (RPR_ERROR_CHECK(rprContextCreateImageFromFile(m_context, path.c_str(), &image), std::string("Fail to load image ") + path)) return;
+        m_rprObjectsToRelease.push_back(image);
 		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_context, &light), "Fail to create environment light")) return;
+        m_rprObjectsToRelease.push_back(light);
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image),"Fail to set image to environment light")) return;
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetIntensityScale(light, intensity), "Fail to set environment light intencity")) return;
 		if (m_currentPlugin == HdRprPluginType::HYBRID)
@@ -675,7 +680,9 @@ public:
 		//lock();
 
 		if (RPR_ERROR_CHECK(rprContextCreateImage(m_context, format, &desc, imageData.data(), &image),"Fail to create image from color")) return;
+        m_rprObjectsToRelease.push_back(image);
 		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_context, &light), "Fail to create environment light")) return;
+        m_rprObjectsToRelease.push_back(light);
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image), "Fail to set image to environment light")) return;
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetIntensityScale(light, intensity), "Fail to set environment light intensity")) return;
 		if (m_currentPlugin == HdRprPluginType::HYBRID)
@@ -746,6 +753,7 @@ public:
 		rpr_material_node material = NULL;
 
 		if (RPR_ERROR_CHECK(rprMaterialSystemCreateNode(m_matsys, RPR_MATERIAL_NODE_EMISSIVE, &material), "Fail create emmisive material")) return nullptr;
+        m_rprObjectsToRelease.push_back(material);
 		if (RPR_ERROR_CHECK(rprMaterialNodeSetInputF(material, "color", color[0], color[1], color[2], 0.0f),"Fail set material color")) return nullptr;
 
 		m_isLightPresent = true;
@@ -833,6 +841,7 @@ public:
 			, &gridDencityData[0], gridDencityData.size() * sizeof(gridDencityData[0])
 			, NULL)
 			, "Fail create dencity grid")) return nullptr;
+        m_rprObjectsToRelease.push_back(rprGridDencity);
 
 		rpr_grid rprGridAlbedo;
 		if (RPR_ERROR_CHECK(rprContextCreateGrid(m_context, &rprGridAlbedo
@@ -841,7 +850,7 @@ public:
 			, &gridAlbedoData[0], gridAlbedoData.size() * sizeof(gridAlbedoData[0])
 			, NULL)
 			, "Fail create albedo grid")) return nullptr;
-
+        m_rprObjectsToRelease.push_back(rprGridAlbedo);
 		
 
 		if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume( m_context, &heteroVolume), "Fail create hetero dencity volume")) return nullptr;
@@ -914,6 +923,7 @@ public:
 		{
 			if (!RPR_ERROR_CHECK(rprContextCreatePostEffect(m_context, RPR_POST_EFFECT_TONE_MAP, &m_tonemap), "Fail to create post effect"))
 			{
+                m_rprObjectsToRelease.push_back(m_tonemap);
 				RPR_ERROR_CHECK(rprContextAttachPostEffect(m_context, m_tonemap), "Fail to attach posteffect");
 			}
 		}
@@ -1362,7 +1372,7 @@ private:
 		}
 
 		if(RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_context, 0, &m_matsys), "Fail create Material System resolve")) return;
-
+        m_rprObjectsToRelease.push_back(m_matsys);
 		m_rprMaterialFactory.reset(new RprMaterialFactory(m_matsys, m_context));
 	}
 
@@ -1668,6 +1678,7 @@ private:
 	HdRprPluginType m_currentPlugin = HdRprPluginType::NONE;
 
     std::vector<RprApiMaterial*> m_materialsToRelease;
+    std::vector<void*> m_rprObjectsToRelease;
 
 	// simple spinlock for locking RPR calls
 	std::atomic_flag m_lock = ATOMIC_FLAG_INIT;

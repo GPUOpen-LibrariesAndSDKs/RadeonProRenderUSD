@@ -164,7 +164,7 @@ HdRprDelegate::CreateRprim(TfToken const& typeId,
 void
 HdRprDelegate::DestroyRprim(HdRprim *rPrim)
 {
-
+	delete rPrim;
 }
 
 HdSprim *
@@ -264,6 +264,7 @@ HdRprDelegate::CreateFallbackBprim(TfToken const& typeId)
 void
 HdRprDelegate::DestroyBprim(HdBprim *bPrim)
 {
+	delete bPrim;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
@@ -339,4 +340,9 @@ void SetRprHybridQuality(int quality)
 const char* GetRprTmpDir()
 {
 	return PXR_INTERNAL_NS::HdRprApi::GetTmpDir();
+}
+
+int GetRprPluginType()
+{
+	return PXR_INTERNAL_NS::HdRprApi::GetPluginType();
 }

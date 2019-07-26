@@ -32,11 +32,11 @@ if(WIN32)
     set(RPR_BIN_LOCATION ${RPR_LOCATION}/binWin64)
 
     if (EXISTS "${RPR_BIN_LOCATION}/Tahoe64.dll")
-        set(${RPR_TAHOE_BINARY} ${RPR_BIN_LOCATION}/Tahoe64.dll)
+        set(RPR_TAHOE_BINARY ${RPR_BIN_LOCATION}/Tahoe64.dll)
     endif()
 
     if (EXISTS "${RPR_BIN_LOCATION}/Hybrid.dll")
-        set(${RPR_HYBRID_BINARY} ${RPR_BIN_LOCATION}/Hybrid.dll)
+        set(RPR_HYBRID_BINARY ${RPR_BIN_LOCATION}/Hybrid.dll)
     endif()
 
     set(RPR_BINARIES
