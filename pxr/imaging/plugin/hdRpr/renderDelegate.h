@@ -240,6 +240,9 @@ extern "C"
 
 	HDRPR_API
 	const char* GetRprTmpDir();
+
+	HDRPR_API
+	int GetRprPluginType();
 }
 
 #endif // HDRPR_RENDER_DELEGATE_H

@@ -2,10 +2,13 @@ from pxr import Tf
 from pxr.Plug import Registry
 from pxr.Usdviewq.plugin import PluginContainer
 
-from ctypes import cdll, c_char_p
+from ctypes import cdll, c_char_p, c_int
 from ctypes.util import find_library
 
 import os
+
+TahoePluginType = 0
+HybridPluginType = 1
 
 def getRprPath(_pathCache=[None]):
     if _pathCache[0]:
@@ -16,6 +19,10 @@ def getRprPath(_pathCache=[None]):
     if plugin and plugin.path:
         _pathCache[0] = plugin.path
     return _pathCache[0]
+
+def currentPluginType(rprLib):
+    rprLib.GetRprPluginType.restype = c_int
+    return rprLib.GetRprPluginType()
 
 def createRprTmpDirIfNeeded(rprLib):
     rprLib.GetRprTmpDir.restype = c_char_p
@@ -66,6 +73,9 @@ def setHybridQuality(usdviewApi, quality):
         lib = cdll.LoadLibrary(rprPath)
         createRprTmpDirIfNeeded(lib)
         lib.SetRprHybridQuality(quality)
+        if currentPluginType(lib) != HybridPluginType:
+            lib.SetRprRendererPlugin(HybridPluginType)
+            reemitStage(usdviewApi)
 	
 def ColorAov(usdviewApi):
     setAov(0)
@@ -99,9 +109,7 @@ def renderDeviceGPU(usdviewApi):
     setRenderDevice(usdviewApi, 1)
 
 def SetTahoe(usdviewApi):
-    setRendererPlugin(usdviewApi, 0)
-def SetHybrid(usdviewApi):
-    setRendererPlugin(usdviewApi, 1)
+    setRendererPlugin(usdviewApi, TahoePluginType)
 
 def SetHybridLowQuality(usdviewApi):
     setHybridQuality(usdviewApi, 0)
@@ -169,12 +177,8 @@ class RprPluginContainer(PluginContainer):
 
         self.setTahoe = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.setTahoe",
-            "Tahoe",
+            "Full",
             SetTahoe)
-        self.setHybrid = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.setHybrid",
-            "Hybrid",
-            SetHybrid)
 
         self.setHybridLowQuality = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.setHybridLowQuality",
@@ -209,15 +213,11 @@ class RprPluginContainer(PluginContainer):
         renderDeviceSubMenu.addItem(self.rDeviceCpu)
         renderDeviceSubMenu.addItem(self.rDeviceGpu)
 
-        renderPluginMenu = rprMenu.findOrCreateSubmenu("Renderer Plugin")
-        renderPluginMenu.addItem(self.setTahoe)
-        renderPluginMenu.addItem(self.setHybrid)
-
-        hybridSettingsMenu = rprMenu.findOrCreateSubmenu("Hybrid Settings")
-        hybridQualityMenu = hybridSettingsMenu.findOrCreateSubmenu("Quality")
-        hybridQualityMenu.addItem(self.setHybridLowQuality)
-        hybridQualityMenu.addItem(self.setHybridMediumQuality)
-        hybridQualityMenu.addItem(self.setHybridHighQuality)
+        renderQualityMenu = rprMenu.findOrCreateSubmenu("Render Quality")
+        renderQualityMenu.addItem(self.setHybridLowQuality)
+        renderQualityMenu.addItem(self.setHybridMediumQuality)
+        renderQualityMenu.addItem(self.setHybridHighQuality)
+        renderQualityMenu.addItem(self.setTahoe)
 		
 		
 Tf.Type.Define(RprPluginContainer)

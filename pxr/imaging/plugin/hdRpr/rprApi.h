@@ -93,6 +93,8 @@ public:
 	
 	static const char* GetTmpDir();
 
+	static int GetPluginType();
+
 	void Init();
 
 	void Deinit();

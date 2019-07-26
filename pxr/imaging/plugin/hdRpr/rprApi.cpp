@@ -1864,5 +1864,10 @@ private:
 		return m_impl->IsGlInteropUsed();
 	}
 
+	int HdRprApi::GetPluginType()
+	{
+		return int(HdRprPreferences::GetInstance().GetPlugin());
+	}
+
 
 PXR_NAMESPACE_CLOSE_SCOPE
