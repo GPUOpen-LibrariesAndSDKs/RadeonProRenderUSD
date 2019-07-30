@@ -521,9 +521,9 @@ public:
 		}
 
 		if (level > 0) {
-			rpr_subdiv_boundary_interfop_type interfopType = RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_AND_CORNER
-				? boundaryInterpolation == PxOsdOpenSubdivTokens->edgeAndCorner :
-				RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
+			rpr_subdiv_boundary_interfop_type interfopType = boundaryInterpolation == PxOsdOpenSubdivTokens->edgeAndCorner ?
+                RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_AND_CORNER :
+                RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
 			RPR_ERROR_CHECK(rprShapeSetSubdivisionBoundaryInterop(mesh, interfopType),"Fail set mesh subdividion boundary");
 		}
 	}

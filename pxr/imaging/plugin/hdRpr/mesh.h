@@ -63,7 +63,7 @@ protected:
 private:
 
 	HdRprApiWeakPtr m_rprApiWeakPtr;
-	RprApiObject m_rprMesh = nullptr;
+    std::vector<RprApiObject> m_rprMeshes;
 	VtArray<RprApiObject> m_rprMeshInstances;
 	RprApiMaterial* m_fallbackMaterial = nullptr;
 };
