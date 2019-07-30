@@ -1,5 +1,6 @@
 ﻿#include "materialFactory.h"
 
+#include <pxr/usd/ar/resolver.h>
 #include <pxr/imaging/glf/uvTextureData.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -258,6 +259,15 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         rpr_material_node outTexture = getTextureMaterialNode(m_context, m_matSys, matTex);
         if (!outTexture) {
             continue;
+        }
+
+        // SIGGRAPH HACK: Fix for models from Apple AR quick look gallery.
+        //   Of all the available ways to load images, none of them gives the opportunity to
+        //   get the gamma of the image and does not convert the image to linear space
+        if ((paramId == RPR_UBER_MATERIAL_INPUT_DIFFUSE_COLOR ||
+            paramId == RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR) &&
+            ArGetResolver().GetExtension(matTex.Path) == "png") {
+            rprImageSetGamma(material->materialImages.back(), 2.2f);
         }
 
         rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outTexture);
