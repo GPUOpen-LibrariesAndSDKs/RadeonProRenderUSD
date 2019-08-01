@@ -674,8 +674,8 @@ public:
 		// Set the background image to a solid color.
 		std::array<float, 3> backgroundColor = { color[0],  color[1],  color[2] };
 		rpr_image_format format = { 3, RPR_COMPONENT_TYPE_FLOAT32 };
-		int imageSize = m_currentPlugin == HdRprPluginType::HYBRID ? 64 : 1;
-		rpr_image_desc desc = { imageSize, imageSize, 0, imageSize * imageSize * 3 * sizeof(float), 0 };
+		rpr_uint imageSize = m_currentPlugin == HdRprPluginType::HYBRID ? 64 : 1;
+		rpr_image_desc desc = { imageSize, imageSize, 0, static_cast<rpr_uint>(imageSize * imageSize * 3 * sizeof(float)), 0 };
 		std::vector<std::array<float, 3>> imageData(imageSize * imageSize, backgroundColor);
 		//lock();
 
