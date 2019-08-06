@@ -1,5 +1,7 @@
 ﻿#include "materialFactory.h"
 
+#include <pxr/imaging/glf/uvTextureData.h>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 #define SAFE_DELETE_RPR_OBJECT(x) if(x) {rprObjectDelete( x ); x = nullptr;}
@@ -212,7 +214,7 @@ void RprXMaterialFactory::SetMaterialInputs(RprApiMaterial * material, const Mat
 		rprxMaterialSetParameterU(m_contextX, rprxMaterial->GetRprxMaterial(), paramId, paramValue);
 	}
 
-	for (auto texParam : materialAdapter.GetTexRprxParams())
+	for (auto const& texParam : materialAdapter.GetTexRprxParams())
 	{
 		rpr_int status;
 		const uint32_t & paramId = texParam.first;
@@ -224,10 +226,60 @@ void RprXMaterialFactory::SetMaterialInputs(RprApiMaterial * material, const Mat
 		rpr_image img = NULL;
 		rpr_material_node materialNode = NULL;
 
-		status = rprContextCreateImageFromFile(m_context, texParam.second.Path.c_str(), &img);
-		if (status != RPR_SUCCESS)
-		{
-			TF_CODING_ERROR("Fail create image %s  Error code %d", texParam.second.Path.c_str(), status);
+		auto textureData = GlfUVTextureData::New(texParam.second.Path, INT_MAX, 0, 0, 0, 0);
+		if (!textureData || !textureData->Read(0, false)) {
+			TF_CODING_ERROR("Failed to read image %s", texParam.second.Path.c_str());
+			continue;
+		}
+
+		rpr_image_format format = {};
+		int bytesPerChannel = 0;
+		switch (textureData->GLType()) {
+			case GL_UNSIGNED_BYTE:
+				format.type = RPR_COMPONENT_TYPE_UINT8;
+				bytesPerChannel = 1;
+				break;
+			case GL_HALF_FLOAT:
+				format.type = RPR_COMPONENT_TYPE_FLOAT16;
+				bytesPerChannel = 2;
+				break;
+			case GL_FLOAT:
+				format.type = RPR_COMPONENT_TYPE_FLOAT32;
+				bytesPerChannel = 4;
+				break;
+			default:
+				TF_CODING_ERROR("Failed to create image %s. Unsupported pixel data GLtype: %#x", texParam.second.Path.c_str(), textureData->GLType());
+				continue;
+		}
+
+		switch (textureData->GLFormat()) {
+			case GL_RED:
+				format.num_components = 1;
+				break;
+			case GL_RG:
+				format.num_components = 2;
+				break;
+			case GL_RGB:
+				format.num_components = 3;
+				break;
+			case GL_RGBA:
+				format.num_components = 4;
+				break;
+			default:
+				TF_CODING_ERROR("Failed to create image %s. Unsupported pixel data GLformat: %#x", texParam.second.Path.c_str(), textureData->GLFormat());
+				continue;
+		}
+		int bytesPerPixel = bytesPerChannel * format.num_components;
+
+		rpr_image_desc desc = {};
+		desc.image_width = textureData->ResizedWidth();
+		desc.image_height = textureData->ResizedHeight();
+		desc.image_depth = 1;
+		desc.image_row_pitch = bytesPerPixel * desc.image_width;
+		desc.image_slice_pitch = desc.image_row_pitch * desc.image_height;
+		status = rprContextCreateImage(m_context, format, &desc, textureData->GetRawBuffer(), &img);
+		if (status != RPR_SUCCESS) {
+			TF_CODING_ERROR("Failed to create image %s  Error code %d", texParam.second.Path.c_str(), status);
 			continue;
 		}
 

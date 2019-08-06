@@ -58,12 +58,14 @@ public:
 	static void SetDenoising(bool enableDenoising);
 
 	static void SetAov(const HdRprAov & aov);
+	
+	static const char* GetTmpDir();
 
 	void Init();
 
 	void Deinit();
 
-	RprApiObject CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf);
+	RprApiObject CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf);
 
 	RprApiObject CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width);
 
@@ -105,17 +107,15 @@ public:
     
 	void GetFramebufferSize(GfVec2i & resolution) const;
 
-#ifdef USE_GL_INTEROP
 	const GLuint GetFramebufferGL() const;
 
-#else
 	const float * GetFramebufferData() const;
-
-#endif
 
 	void DeleteRprApiObject(RprApiObject object);
 
 	void DeleteMesh(RprApiObject mesh);
+
+	bool IsGlInteropUsed() const;
 
 private:
 	HdRprApiImpl * m_impl = nullptr;

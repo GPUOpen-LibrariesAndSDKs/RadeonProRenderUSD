@@ -58,7 +58,7 @@ namespace
 
 	const uint32_t k_diskVertexCount = 32;
 
-	constexpr const char * k_pathToRprPreference = "usdRprPreferences.dat";
+	constexpr const char * k_pathToRprPreference = "hdRprPreferences.dat";
 }
 
 
@@ -94,27 +94,32 @@ inline bool rprIsErrorCheck(const TfCallContext &context, const rpr_status statu
 
 #define RPR_ERROR_CHECK(STATUS, MESSAGE_ON_FAIL) rprIsErrorCheck(TF_CALL_CONTEXT, STATUS, MESSAGE_ON_FAIL)
 
-std::string GetRprTmpDir()
-{
+const char* HdRprApi::GetTmpDir() {
 #ifdef WIN32
-
 	char appDataPath[MAX_PATH];
 	// Get path for each computer, non-user specific and non-roaming data.
 	if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath)))
 	{
-		char buff[1024] = {};
-		sprintf(buff, "%s/UsdRpr/", appDataPath);
-		return std::string(buff);
+		static char path[MAX_PATH];
+		snprintf(path, sizeof(path), "%s\\hdRPR\\", appDataPath);
+		return path;
 	}
 #elif defined __linux__
-    return std::string("~/.config/UsdRpr/");
+	if (auto homeEnv = getenv("HOME")) {
+		static char path[PATH_MAX];
+		snprintf(path, sizeof(path), "%s/.config/hdRPR/", homeEnv);
+		return path;
+	}
 #elif defined __APPLE__
-    return std::string("~/Library/Application Support/UsdRpr/");
+    if (auto homeEnv = getenv("HOME")) {
+        static char path[PATH_MAX];
+        snprintf(path, sizeof(path), "%s/Library/Application Support/hdRPR", homeEnv);
+        return path;
+    }
+#else
+#warning "Unknown platform"
 #endif
-
-
-
-	return std::string();
+	return "";
 }
 
 std::string GetRprSdkPath()
@@ -184,13 +189,7 @@ const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevic
 
 	if (HdRprRenderDevice::CPU == renderDevice)
 	{
-#ifdef  USE_GL_INTEROP
-
-		TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
-		flags = getAllCompatibleGpuFlags();
-#else
 		flags = RPR_CREATION_FLAGS_ENABLE_CPU;
-#endif
 	}
 	else if (HdRprRenderDevice::GPU == renderDevice)
 	{
@@ -198,21 +197,10 @@ const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevic
 	}
 	else
 	{
-		//TODO: log unknown HdRprRenderDevice
+		TF_CODING_ERROR("Unknown HdRprRenderDevice");
 		return NULL;
 	}
-
-
-	if (flags == 0x0)
-	{
-		// TODO: log no compatible device
-		return NULL;
-	}
-
-#ifdef  USE_GL_INTEROP
-	flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
-#endif
-
+	
 	return flags;
 }
 
@@ -249,7 +237,6 @@ public:
 		return m_prefData.mRenderDevice;
 	}
 
-
 	void SetDenoising(bool enableDenoising)
 	{
 		m_prefData.mEnableDenoising = enableDenoising;
@@ -265,7 +252,6 @@ public:
 	{
 		return m_isDirty;
 	}
-
 
 	bool IsFilterTypeDirty()
 	{
@@ -300,8 +286,8 @@ private:
 
 	bool Load()
 	{
-		std::string tmpDir = GetRprTmpDir();
-		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + "\\" + k_pathToRprPreference;
+		std::string tmpDir = HdRprApi::GetTmpDir();
+		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + k_pathToRprPreference;
 
 		if (FILE * f = fopen(rprPreferencePath.c_str(), "rb"))
 		{
@@ -318,8 +304,8 @@ private:
 
 	void Save()
 	{
-		std::string tmpDir = GetRprTmpDir();
-		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + "\\" + k_pathToRprPreference;
+		std::string tmpDir = HdRprApi::GetTmpDir();
+		std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + k_pathToRprPreference;
 
 		if (FILE * f = fopen(rprPreferencePath.c_str(), "wb"))
 		{
@@ -354,7 +340,6 @@ private:
 
 	bool m_isDirty = true;
 	bool m_isFilterDirty = true;
-
 };
 
 
@@ -407,18 +392,27 @@ public:
 		//unlock();
 	}
 
-	void * CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
+	void * CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
 	{
 		if (!m_context)
 		{
 			return nullptr;
 		}
 
-		rpr_int status = RPR_SUCCESS;
 		rpr_shape mesh = nullptr;
 
 		VtIntArray newIndexes, newVpf;
-		SplitPolygons(indexes, vpf, newIndexes, newVpf);
+		SplitPolygons(pointIndexes, vpf, newIndexes, newVpf);
+
+		VtIntArray newUvIndexes;
+		if (!uvIndexes.empty()) {
+			SplitPolygons(uvIndexes, vpf, newUvIndexes);
+		}
+		
+		VtIntArray newNormalIndexes;
+		if (!normalIndexes.empty()) {
+			SplitPolygons(normalIndexes, vpf, newNormalIndexes);
+		}
 
 		lock();
 		if (RPR_ERROR_CHECK(rprContextCreateMesh(m_context,
@@ -426,8 +420,8 @@ public:
 			(rpr_float const*)((normals.size() == 0) ? 0 : normals.data()), normals.size(), sizeof(GfVec3f),
 			(rpr_float const*)((uv.size() == 0) ? 0 : uv.data()), uv.size(), sizeof(GfVec2f),
 			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
-			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
-			(rpr_int const*)newIndexes.data(), sizeof(rpr_int),
+			(rpr_int const*)(!newNormalIndexes.empty() ? newNormalIndexes.data() : newIndexes.data()), sizeof(rpr_int),
+			(rpr_int const*)(!newUvIndexes.empty() ? newUvIndexes.data() : newIndexes.data()), sizeof(rpr_int),
 			newVpf.data(), newVpf.size(), &mesh)
 			, "Fail create mesh")) {
 			unlock();
@@ -545,7 +539,6 @@ public:
 
 		const size_t k_segmentSize = 4;
 
-		rpr_int status;
 		rpr_curve curve = 0;
 
 		VtVec3fArray newPoints = points;
@@ -661,7 +654,7 @@ public:
 
 		m_isLightPresent = true;
 
-		return CreateMesh(positions, normals, uv, idx, vpf);
+		return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
 	}
 
 	void * CreateDiskLight(const float & width, const float & height, const GfVec3f & color)
@@ -698,7 +691,7 @@ public:
 
 		m_isLightPresent = true;
 
-		return CreateMesh(positions, normals, uv, idx, vpf, material);
+		return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf, material);
 	}
 
 	void * CreateSphereLightGeometry(const float & radius)
@@ -740,7 +733,7 @@ public:
 
 		m_isLightPresent = true;
 
-		return CreateMesh(positions, normals, uv, idx, vpf);
+		return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
 
 	}
 
@@ -878,53 +871,52 @@ public:
 		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_objId), "Fail create object ID framebuffer")) return;
 		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_uv),"Fail create UV framebuffer")) return ;
 
-#ifdef USE_GL_INTEROP
-
-		glGenFramebuffers(1, &m_framebufferGL);
-		glBindFramebuffer(GL_FRAMEBUFFER, m_framebufferGL);
-
+		if (m_useGlInterop) {
+			glGenFramebuffers(1, &m_framebufferGL);
+			glBindFramebuffer(GL_FRAMEBUFFER, m_framebufferGL);
 
 
-		// Allocate an OpenGL texture.
-		glGenTextures(1, &m_textureFramebufferGL);
-		glBindTexture(GL_TEXTURE_2D, m_textureFramebufferGL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
-		glBindTexture(GL_TEXTURE_2D, 0);
 
-		glGenRenderbuffers(1, &m_depthrenderbufferGL);
-		glBindRenderbuffer(GL_RENDERBUFFER, m_depthrenderbufferGL);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthrenderbufferGL);
+			// Allocate an OpenGL texture.
+			glGenTextures(1, &m_textureFramebufferGL);
+			glBindTexture(GL_TEXTURE_2D, m_textureFramebufferGL);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
+			glBindTexture(GL_TEXTURE_2D, 0);
 
-		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_textureFramebufferGL, 0);
+			glGenRenderbuffers(1, &m_depthrenderbufferGL);
+			glBindRenderbuffer(GL_RENDERBUFFER, m_depthrenderbufferGL);
+			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthrenderbufferGL);
 
-		GLenum glFbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-		if ( glFbStatus != GL_FRAMEBUFFER_COMPLETE)
-		{
-			TF_CODING_ERROR("Fail create GL framebuffer. Error code %d", glFbStatus);
-			ClearFramebuffers();
-			return;
+			glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_textureFramebufferGL, 0);
+
+			GLenum glFbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+			if ( glFbStatus != GL_FRAMEBUFFER_COMPLETE)
+			{
+				TF_CODING_ERROR("Fail create GL framebuffer. Error code %d", glFbStatus);
+				ClearFramebuffers();
+				return;
+			}
+
+			rpr_int status = rprContextCreateFramebufferFromGLTexture2D(m_context, GL_TEXTURE_2D, 0, m_textureFramebufferGL, &m_resolvedBuffer);
+			if (status != RPR_SUCCESS)
+			{
+				ClearFramebuffers();
+				TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
+				return;
+			}
+
+			glBindTexture(GL_TEXTURE_2D, 0);
+			glBindRenderbuffer(GL_RENDERBUFFER, 0);
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		} else {
+			if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_resolvedBuffer), "Fail create resolved framebuffer")) return;
+			m_framebufferData.resize(m_framebufferDesc.fb_width * m_framebufferDesc.fb_height * 4, 0.f);
 		}
-
-		rpr_int status = rprContextCreateFramebufferFromGLTexture2D(m_context, GL_TEXTURE_2D, 0, m_textureFramebufferGL, &m_resolvedBuffer);
-		if (status != RPR_SUCCESS)
-		{
-			ClearFramebuffers();
-			TF_CODING_ERROR("Fail create framebuffer. Error code %d", status);
-			return;
-		}
-
-		glBindTexture(GL_TEXTURE_2D, 0);
-		glBindRenderbuffer(GL_RENDERBUFFER, 0);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-#else
-		if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_resolvedBuffer), "Fail create resolved framebuffer")) return;
-		m_framebufferData.resize(m_framebufferDesc.fb_width * m_framebufferDesc.fb_height * 4, 0.f);
-#endif
 		//unlock();
 
 		ClearFramebuffers();
@@ -1004,13 +996,11 @@ public:
 		return m_cameraProjectionMatrix;
 	}
 
-#ifdef USE_GL_INTEROP
 	const GLuint GetFramebufferGL() const
 	{
 		return m_framebufferGL;
 	}
 
-#else
 	const float * GetFramebufferData()
 	{
 		size_t fb_data_size = 0;
@@ -1020,7 +1010,6 @@ public:
 		RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, fb_data_size, m_framebufferData.data(), NULL), "Fail to get frafebuffer data");
 		return m_framebufferData.data();
 	}
-#endif
 
 	void GetFramebufferSize(rpr_int & width, rpr_int & height) const
 	{
@@ -1099,26 +1088,25 @@ public:
 		SAFE_DELETE_RPR_OBJECT(m_albedoBuffer);
 		SAFE_DELETE_RPR_OBJECT(m_resolvedBuffer);
 
-#ifdef USE_GL_INTEROP
-		if (m_depthrenderbufferGL != INVALID_FRAMEBUFFER)
-		{
-			glDeleteRenderbuffers(1, &m_depthrenderbufferGL);
-			m_depthrenderbufferGL = INVALID_FRAMEBUFFER;
-		}
+		if (m_useGlInterop) {
+			if (m_depthrenderbufferGL != INVALID_FRAMEBUFFER)
+			{
+				glDeleteRenderbuffers(1, &m_depthrenderbufferGL);
+				m_depthrenderbufferGL = INVALID_FRAMEBUFFER;
+			}
 
-		if (m_framebufferGL != INVALID_FRAMEBUFFER)
-		{
-			glDeleteFramebuffers(1, &m_framebufferGL);
-			m_framebufferGL = INVALID_FRAMEBUFFER;
-		}
+			if (m_framebufferGL != INVALID_FRAMEBUFFER)
+			{
+				glDeleteFramebuffers(1, &m_framebufferGL);
+				m_framebufferGL = INVALID_FRAMEBUFFER;
+			}
 
-		if (m_textureFramebufferGL != INVALID_TEXTURE)
-		{
-			glDeleteTextures(1, &m_textureFramebufferGL);
-			m_textureFramebufferGL = INVALID_TEXTURE;
+			if (m_textureFramebufferGL != INVALID_TEXTURE)
+			{
+				glDeleteTextures(1, &m_textureFramebufferGL);
+				m_textureFramebufferGL = INVALID_TEXTURE;
+			}
 		}
-#endif
-
 	}
 
 	void DeleteRprObject(void * object)
@@ -1149,36 +1137,52 @@ public:
 
 		SAFE_DELETE_RPR_OBJECT(mesh);
 	}
+	
+	bool IsGlInteropUsed() const {
+		return m_useGlInterop;
+	}
 
 private:
 	void InitRpr()
 	{
 		//lock();
 
+		// TODO: Query info from HdRprPreferences
+		m_useGlInterop = HdRprApiImpl::EnableGLInterop();
+		if (m_useGlInterop) {
+			GLenum err = glewInit();
+			if (err != GLEW_OK) {
+				TF_CODING_WARNING("Failed to init GLEW. Error code: %s. Disabling GL interop", glewGetErrorString(err));
+				m_useGlInterop = false;
+			}
+		}
+
         const std::string rprSdkPath = GetRprSdkPath();
-		const std::string rprTmpDir = GetRprTmpDir();
+		const std::string rprTmpDir = HdRprApi::GetTmpDir();
         const std::string tahoePath = (rprSdkPath.empty()) ? k_TahoeLibName : rprSdkPath + "/" + k_TahoeLibName;
 		rpr_int tahoePluginID = rprRegisterPlugin(tahoePath.c_str());
 		rpr_int plugins[] = { tahoePluginID };
 
-
-		rpr_creation_flags flags = getRprCreationFlags(HdRprPreferences::GetInstance().GetRenderDevice());
+		auto renderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
+		if (m_useGlInterop && renderDevice == HdRprRenderDevice::CPU) {
+			TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
+			renderDevice = HdRprRenderDevice::GPU;
+		}
+		rpr_creation_flags flags = getRprCreationFlags(renderDevice);
 		if (!flags)
 		{
+			TF_CODING_ERROR("Could not find compatible device");
 			return;
 		}
-
+		if (m_useGlInterop) {
+			flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
+		}
 		if (RPR_ERROR_CHECK(rprCreateContext(RPR_API_VERSION, plugins, 1, flags, NULL, rprTmpDir.c_str(), &m_context), std::string("Fail to create context with plugin ") + k_TahoeLibName)) return;
 
 		if(RPR_ERROR_CHECK(rprContextSetActivePlugin(m_context, plugins[0]), "fail to set active plugin")) return;
 
 
 		RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "yflip", 0), "Fail to set context YFLIP parameter");
-
-		GLenum err = glewInit();
-		if (err != GLEW_OK) {
-			TF_CODING_ERROR("Fail init GLEW. Error code %s", glewGetErrorString(err));
-		}
 	}
 
 	void InitMaterialSystem()
@@ -1213,11 +1217,11 @@ private:
 		m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthBuffer, 1.0f);
 		m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_albedoBuffer, 1.0f);
 
-#ifdef USE_GL_INTEROP
-		m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
-#else
-		m_imageFilterPtr->SetOutput(m_resolvedBuffer);
-#endif
+		if (m_useGlInterop) {
+			m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
+		} else {
+			m_imageFilterPtr->SetOutput(m_resolvedBuffer);
+		}
 		m_imageFilterPtr->AttachFilter();
 	}
 
@@ -1256,6 +1260,36 @@ private:
 					out_newIndexes.push_back(*(idxIt + i + 1));
 					out_newIndexes.push_back(*(idxIt + i + 2));
 					out_newVpf.push_back(triangleVertexCount);
+				}
+				idxIt += vCount;
+			}
+		}
+	}
+
+	void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes)
+	{
+		out_newIndexes.clear();
+		out_newIndexes.reserve(indexes.size());
+
+		VtIntArray::const_iterator idxIt = indexes.begin();
+		for (const int vCount : vpf)
+		{
+			if (vCount == 3 || vCount == 4)
+			{
+				for (int i = 0; i < vCount; ++i)
+				{
+					out_newIndexes.push_back(*idxIt);
+					++idxIt;
+				}
+			}
+			else
+			{
+				constexpr int triangleVertexCount = 3;
+				for (int i = 0; i < vCount - 2; ++i)
+				{
+					out_newIndexes.push_back(*(idxIt + i + 0));
+					out_newIndexes.push_back(*(idxIt + i + 1));
+					out_newIndexes.push_back(*(idxIt + i + 2));
 				}
 				idxIt += vCount;
 			}
@@ -1399,7 +1433,7 @@ private:
 		VtIntArray vpf(cubeVpfCount, 3);
 		VtVec2fArray uv; // empty
 
-		return CreateMesh(position, normals, uv, indexes, vpf);
+		return CreateMesh(position, indexes, normals, VtIntArray(), uv, VtIntArray(), vpf);
 	}
 
 	void lock() {
@@ -1408,6 +1442,15 @@ private:
 
 	void unlock() {
 		m_lock.clear(std::memory_order_release);
+	}
+	
+	static bool EnableGLInterop() {
+		// TODO: consider putting a selection on GUI settings
+#ifdef USE_GL_INTEROP
+		return true;
+#else
+		return false;
+#endif
 	}
 
 	rpr_context m_context = nullptr;
@@ -1424,13 +1467,11 @@ private:
 	rpr_framebuffer m_resolvedBuffer = nullptr;
 	rpr_post_effect m_tonemap = nullptr;
 
-#ifdef USE_GL_INTEROP
+	bool m_useGlInterop = EnableGLInterop();
 	GLuint m_framebufferGL = INVALID_FRAMEBUFFER;
 	GLuint m_depthrenderbufferGL;
 	rpr_GLuint m_textureFramebufferGL = INVALID_TEXTURE;
-#else
 	std::vector<float> m_framebufferData;
-#endif
 
 	rpr_material_system m_matsys = nullptr;
 
@@ -1448,6 +1489,7 @@ private:
 	bool m_isFramebufferDirty = true;
 
     bool m_isRenderModeDirty = true;
+    HdRprAov m_currentAov = HdRprAov::COLOR;
 
 	// simple spinlock for locking RPR calls
 	std::atomic_flag m_lock = ATOMIC_FLAG_INIT;
@@ -1466,9 +1508,9 @@ private:
 		delete m_impl;
 	}
 
-	void HdRprApi::SetRenderDevice(const HdRprRenderDevice & renderMode)
+	void HdRprApi::SetRenderDevice(const HdRprRenderDevice & renderDevice)
 	{
-		HdRprPreferences::GetInstance().SetRenderDevice(renderMode);
+		HdRprPreferences::GetInstance().SetRenderDevice(renderDevice);
 	}
 
 	void HdRprApi::SetDenoising(bool enableDenoising)
@@ -1491,9 +1533,9 @@ private:
 		m_impl->Deinit();
 	}
 
-	RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtVec3fArray & normals, const VtVec2fArray & uv, const VtIntArray & indexes, const VtIntArray & vpf)
+	RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf)
 	{
-		return m_impl->CreateMesh(points, normals, uv, indexes, vpf);
+		return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf);
 	}
 
 	RprApiObject HdRprApi::CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width)
@@ -1617,17 +1659,15 @@ private:
 		m_impl->Render();
 	}
 
-#ifdef USE_GL_INTEROP
 	const GLuint HdRprApi::GetFramebufferGL() const
 	{
 		return m_impl->GetFramebufferGL();
 	}
-#else
+
 	const float * HdRprApi::GetFramebufferData() const
 	{
 		return m_impl->GetFramebufferData();
 	}
-#endif
 
 	void HdRprApi::DeleteRprApiObject(RprApiObject object)
 	{
@@ -1637,6 +1677,11 @@ private:
 	void HdRprApi::DeleteMesh(RprApiObject mesh)
 	{
 		m_impl->DeleteMesh(mesh);
+	}
+
+	bool HdRprApi::IsGlInteropUsed() const
+	{
+		return m_impl->IsGlInteropUsed();
 	}
 
 

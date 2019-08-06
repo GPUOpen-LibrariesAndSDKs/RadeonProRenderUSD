@@ -63,12 +63,12 @@ else()
 		hdSt
         hdx
         usdLux
+        usdUtils
         pxOsd)
 endif()
         
 pxr_plugin(hdRpr
    LIBRARIES
-        Half
         ${USD_LIBRARIES}
         ${RPR_LIBRARY}
         ${RPR_SUPPORT_LIBRARY}
@@ -119,6 +119,15 @@ pxr_plugin(hdRpr
         plugInfo.json
 )
 
+# LINUX is not listed in default system variables (https://cmake.org/cmake/help/3.15/manual/cmake-variables.7.html)
+if(NOT DEFINED LINUX)
+	if(UNIX AND NOT APPLE AND NOT CYGWIN)
+		set(LINUX TRUE)
+	else(UNIX AND NOT APPLE AND NOT CYGWIN)
+		SET(LINUX FALSE)
+	endif(UNIX AND NOT APPLE AND NOT CYGWIN)
+endif(NOT DEFINED LINUX)
+
 if(WIN32 OR LINUX)
 	add_definitions(-DUSE_GL_INTEROP)
 endif(WIN32 OR LINUX)
@@ -163,3 +172,7 @@ install(
 }
     \")")
 
+install(
+    FILES ${RPR_LIBRARY} ${RPR_SUPPORT_LIBRARY} ${RPR_TAHOE_LIBRARY} ${OptLibs}
+    DESTINATION lib
+    )

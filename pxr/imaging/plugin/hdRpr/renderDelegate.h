@@ -231,6 +231,9 @@ extern "C"
 
 	HDRPR_API
 	void SetRprGlobalRenderDevice(int renderDevice);
+
+	HDRPR_API
+	const char* GetRprTmpDir();
 }
 
 #endif // HDRPR_RENDER_DELEGATE_H

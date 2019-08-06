@@ -283,6 +283,9 @@ void SetRprGlobalAov(int aov)
 		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::DEPTH);
 		break;
 	case 3:
+		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::UV);
+		break;
+	case 4:
 		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::PRIM_ID);
 		break;
 	default:
@@ -308,4 +311,9 @@ void SetRprGlobalRenderDevice(int renderDevice)
 	}
 
 	PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::CPU);
+}
+
+const char* GetRprTmpDir()
+{
+	return PXR_INTERNAL_NS::HdRprApi::GetTmpDir();
 }

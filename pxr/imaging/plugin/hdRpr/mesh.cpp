@@ -18,6 +18,8 @@
 
 #include "pxr/imaging/pxOsd/subdivTags.h"
 
+#include "pxr/usd/usdUtils/pipeline.h"
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId) : HdMesh(id, instancerId)
@@ -90,33 +92,81 @@ void HdRprMesh::Sync(
 	{
 		HdMeshTopology meshTopology = GetMeshTopology(sceneDelegate);
 
+		const VtIntArray & indexes = meshTopology.GetFaceVertexIndices();
+		const VtIntArray & vertexPerFace = meshTopology.GetFaceVertexCounts();
+
+		HdPrimvarDescriptorVector primvarDescsPerInterpolation[HdInterpolationCount];
+		for (int i = 0; i < HdInterpolationCount; ++i) {
+			auto interpolation = static_cast<HdInterpolation>(i);
+			primvarDescsPerInterpolation[i] = sceneDelegate->GetPrimvarDescriptors(id, interpolation);
+		}
+		auto getPrimvarIndices = [&primvarDescsPerInterpolation, &indexes, &sceneDelegate, &id](
+				TfToken const& primvarName, VtIntArray& outIndices) {
+			auto it = std::find_if(primvarDescsPerInterpolation, primvarDescsPerInterpolation + HdInterpolationCount,
+				[&primvarName](HdPrimvarDescriptorVector const& descriptors) {
+				return std::any_of(descriptors.begin(), descriptors.end(), [&primvarName](HdPrimvarDescriptor const& descriptor) {
+					return descriptor.name == primvarName;
+				});
+			});
+			auto interpolationType = static_cast<HdInterpolation>(std::distance(primvarDescsPerInterpolation, it));
+
+			if (interpolationType == HdInterpolationFaceVarying) {
+				outIndices.reserve(indexes.size());
+				for (size_t i = 0; i < indexes.size(); ++i) {
+					outIndices.push_back(i);
+				}
+			} else if (interpolationType == HdInterpolationVertex
+				// HdInterpolationCount implies no interpolation specified - assume vertex
+				|| interpolationType == HdInterpolationCount) {
+				// stIndexes same as pointIndexes - do nothing
+				return;
+			} else {
+				TF_CODING_WARNING("Not handled %s primvar interpolation type: %d", primvarName.GetText(),
+								  interpolationType);
+			}
+		};
+
 		VtValue value;
 		value = sceneDelegate->Get(id, HdTokens->points);
 		VtVec3fArray points = value.Get<VtVec3fArray>();
 
+		float timeSamples[1] = {0.0f};
+
+		auto stToken = UsdUtilsGetPrimaryUVSetName();
 		VtVec2fArray st;
-
-
-		value = sceneDelegate->Get(id, TfToken("st"));
+		VtIntArray stIndexes;
+		sceneDelegate->SamplePrimvar(id, stToken, 1, timeSamples, &value);
 		if (value.IsHolding<VtVec2fArray>())
 		{
-			st = value.Get<VtVec2fArray>();
+			st = value.UncheckedGet<VtVec2fArray>();
+			if (!st.empty()) {
+				getPrimvarIndices(stToken, stIndexes);
+			}
 		}
 
-		Hd_VertexAdjacency adjacency;
-		adjacency.BuildAdjacencyTable(&meshTopology);
+		VtVec3fArray normals;
+		VtIntArray normalIndexes;
+		sceneDelegate->SamplePrimvar(id, HdTokens->normals, 1, timeSamples, &value);
+		if (value.IsHolding<VtVec3fArray>())
+		{
+			normals = value.UncheckedGet<VtVec3fArray>();
+			if (!normals.empty()) {
+				getPrimvarIndices(HdTokens->normals, normalIndexes);
+			}
+		}
+		else
+		{
+			Hd_VertexAdjacency adjacency;
+			adjacency.BuildAdjacencyTable(&meshTopology);
 
-		//VtVec3fArray normals = adjacency.ComputeSmoothNormals(points.size(), points.cdata());
-		VtVec3fArray normals = Hd_SmoothNormals::ComputeSmoothNormals(&adjacency, points.size(), points.cdata());
-
-		const VtIntArray & indexes = meshTopology.GetFaceVertexIndices();
-		const VtIntArray & vertexPerFace = meshTopology.GetFaceVertexCounts();
+			normals = Hd_SmoothNormals::ComputeSmoothNormals(&adjacency, points.size(), points.cdata());
+		}
 
 		if (m_rprMesh)
 		{
 			rprApi->DeleteMesh(m_rprMesh);
 		}
-		m_rprMesh = rprApi->CreateMesh(points, normals, st, indexes, vertexPerFace);
+		m_rprMesh = rprApi->CreateMesh(points, indexes, normals, normalIndexes, st, stIndexes, vertexPerFace);
 
 		const HdRprMaterial * material = static_cast<const HdRprMaterial *>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(GetId())));
 

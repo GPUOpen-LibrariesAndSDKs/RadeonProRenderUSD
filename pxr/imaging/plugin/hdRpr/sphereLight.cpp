@@ -53,14 +53,41 @@ RprApiObject HdRprSphereLight::CreateLightMesh(std::map<TfToken, float> & params
 
 GfVec3f HdRprSphereLight::NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & inColor)
 {
-	constexpr const double p = 1.6075;
-	constexpr const double pinv = 1. / 1.6075;
+	float radius = params[HdRprSphereLightTokens->radius];
+	if (radius <= 0.0f)
+	{
+		   radius = 1.0f;
+	}
 
-	const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength();
-	const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength();
-	const double sz = GfVec3d(transform[0][2], transform[1][2], transform[2][2]).GetLength();
+	const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * radius;
+	const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * radius;
+	const double sz = GfVec3d(transform[0][2], transform[1][2], transform[2][2]).GetLength() * radius;
 
-	return  inColor * static_cast<float>(3. / pow((pow(sx, p) * pow(sy, p) + pow(sx, p) * pow(sz, p) + pow(sy, p) * pow(sz, p)), pinv));
+	if (sx == 0. && sy == 0. && sz == 0.)
+	{
+		return inColor;
+	}
+
+	float scaleFactor = 1.0f;
+	if (sx == sy && sy == sz)
+	{
+		// Can use the simple formula for surface area of a sphere
+		scaleFactor = static_cast<float>(1. / (sx * sx));
+	}
+	else
+	{
+		// Approximating the area of a stretched ellipsoid using the Knud Thomsen formula:
+		// http://www.numericana.com/answer/ellipsoid.htm
+		constexpr const double p = 1.6075;
+		constexpr const double pinv = 1. / 1.6075;
+		double sx_p = pow(sx, p);
+		double sy_p = pow(sy, p);
+		double sz_p = pow(sz, p);
+
+		scaleFactor = static_cast<float>(pow(3. / (sx_p * sy_p + sx_p * sz_p + sy_p * sz_p), pinv));
+	}
+
+	return inColor * scaleFactor;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
