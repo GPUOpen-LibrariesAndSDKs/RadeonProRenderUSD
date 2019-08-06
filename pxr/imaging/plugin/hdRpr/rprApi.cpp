@@ -1,6 +1,5 @@
 #include "rprApi.h"
 
-#include "RprSupport.h"
 #include "RadeonProRender.h"
 #include "RadeonProRender_CL.h"
 #include "RadeonProRender_GL.h"
@@ -70,7 +69,7 @@ inline bool rprIsErrorCheck(const TfCallContext &context, const rpr_status statu
 		return false;
 	}
 
-	const char * rprErrorString = [](const rpr_status s)-> const char * {
+	std::string rprErrorString = [](const rpr_status s) -> std::string {
 		switch (s)
 		{
 		case RPR_ERROR_INVALID_API_VERSION: return "invalide api version";
@@ -80,13 +79,13 @@ inline bool rprIsErrorCheck(const TfCallContext &context, const rpr_status statu
 			break;
 		}
 
-		return "unknown error";
+		return "error code - " + std::to_string(s);
 	}(status);
 
 	const size_t maxBufferSize = 1024;
 	char buffer[maxBufferSize];
 
-	snprintf(buffer, maxBufferSize, "%s %s: %s", "[RPR ERROR] ", messageOnFail.c_str(), rprErrorString);
+	snprintf(buffer, maxBufferSize, "%s %s: %s", "[RPR ERROR] ", messageOnFail.c_str(), rprErrorString.c_str());
 	Tf_PostErrorHelper(context, TF_DIAGNOSTIC_CODING_ERROR_TYPE, buffer);
 
 	return true;
@@ -359,6 +358,11 @@ public:
 
 	void Deinit()
 	{
+	    for (auto material : m_materialsToRelease) {
+	        DeleteMaterial(material);
+	    }
+	    m_materialsToRelease.clear();
+
 		DeleteFramebuffers();
 
 		SAFE_DELETE_RPR_OBJECT(m_scene);
@@ -470,15 +474,8 @@ public:
 
 	void SetMeshMaterial(rpr_shape mesh, const RprApiMaterial * material)
 	{
-		MaterialFactory * materialFactory = GetMaterialFactory(material->GetType());
-		
-		if (!materialFactory)
-		{
-			return;
-		}
-
 		lock();
-		materialFactory->AttachMaterialToShape(mesh, material);
+		m_rprMaterialFactory->AttachMaterialToShape(mesh, material);
 		unlock();
 	}
 	void SetMeshHeteroVolume(rpr_shape mesh, const RprApiObject heteroVolume)
@@ -488,15 +485,8 @@ public:
 
 	void SetCurveMaterial(rpr_shape curve, const RprApiMaterial * material)
 	{
-		MaterialFactory * materialFactory = GetMaterialFactory(material->GetType());
-
-		if (!materialFactory)
-		{
-			return;
-		}
-		
 		lock();
-		materialFactory->AttachCurveToShape(curve, material);
+		m_rprMaterialFactory->AttachCurveToShape(curve, material);
 		unlock();
 	}
 
@@ -738,23 +728,21 @@ public:
 
 	}
 
-	RprApiMaterial * CreateMaterial(const MaterialAdapter & materialAdapter)
+	RprApiMaterial* CreateMaterial(const MaterialAdapter & materialAdapter)
 	{
-		MaterialFactory * materialFactory = GetMaterialFactory(materialAdapter.GetType());
-
-		if (!materialFactory)
-		{
-			return nullptr;
-		}
-
 		lock();
-		RprApiMaterial * material = materialFactory->CreateMaterial(materialAdapter.GetType());
-
-		materialFactory->SetMaterialInputs(material, materialAdapter);
+		auto material = m_rprMaterialFactory->CreateMaterial(materialAdapter.GetType(), materialAdapter);
 		unlock();
 
 		return material;
 	}
+
+    void DeleteMaterial(RprApiMaterial* material)
+    {
+        lock();
+        m_rprMaterialFactory->DeleteMaterial(material);
+        unlock();
+    }
 
 	void * CreateHeterVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & grigSize)
 	{
@@ -825,6 +813,7 @@ public:
 		{
 			return nullptr;
 		}
+        m_materialsToRelease.push_back(transperantMaterial);
 
 		GfMatrix4f meshTransform;
 		GfVec3f volumeSize = GfVec3f(voxelSize[0] * grigSize[0], voxelSize[1] * grigSize[1], voxelSize[2] * grigSize[2]);
@@ -1119,7 +1108,11 @@ public:
 
 	void DeleteMesh(void * mesh)
 	{
-		rpr_int status;
+	    if (!mesh) {
+	        return;
+	    }
+
+	    rpr_int status;
 
 		lock();
 
@@ -1197,8 +1190,7 @@ private:
 
 		if(RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_context, 0, &m_matsys), "Fail create Material System resolve")) return;
 
-		m_rprMaterialFactory.reset(new RprMaterialFactory(m_matsys));
-		m_rprxMaterialFactory.reset(new RprXMaterialFactory(m_matsys, m_context));
+		m_rprMaterialFactory.reset(new RprMaterialFactory(m_matsys, m_context));
 	}
 
 
@@ -1328,27 +1320,7 @@ private:
 		}
 	}
 
-
-	MaterialFactory * GetMaterialFactory(const EMaterialType type)
-	{
-		switch (type)
-		{
-		case EMaterialType::USD_PREVIEW_SURFACE:
-			return m_rprxMaterialFactory.get();
-
-		case EMaterialType::COLOR:
-		case EMaterialType::EMISSIVE:
-		case EMaterialType::TRANSPERENT:
-			return m_rprMaterialFactory.get();
-		default:
-				break;
-		}
-
-		TF_CODING_WARNING("Unknown material type");
-		return nullptr;
-	}
-
-    const rpr_framebuffer GetTargetFB() const
+	const rpr_framebuffer GetTargetFB() const
     {
 		switch (HdRprPreferences::GetInstance().GetAov())
         {
@@ -1512,13 +1484,14 @@ private:
 
 
 	std::unique_ptr<RprMaterialFactory> m_rprMaterialFactory;
-	std::unique_ptr<RprXMaterialFactory> m_rprxMaterialFactory;
 
 	bool m_isLightPresent = false;
 
 	bool m_isFramebufferDirty = true;
 
     HdRprAov m_currentAov = HdRprAov::COLOR;
+
+    std::vector<RprApiMaterial*> m_materialsToRelease;
 
 	// simple spinlock for locking RPR calls
 	std::atomic_flag m_lock = ATOMIC_FLAG_INIT;
@@ -1621,6 +1594,11 @@ private:
 	RprApiMaterial * HdRprApi::CreateMaterial(MaterialAdapter & materialAdapter)
 	{
 		return m_impl->CreateMaterial(materialAdapter);
+	}
+
+	void HdRprApi::DeleteMaterial(RprApiMaterial *rprApiMaterial)
+	{
+	    m_impl->DeleteMaterial(rprApiMaterial);
 	}
 
 	void HdRprApi::ClearFramebuffer()

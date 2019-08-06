@@ -6,7 +6,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprField::HdRprField(SdfPath const& id, HdRprApiSharedPtr rprApi) : HdField(id)
 {
-	m_rprApiWeakPrt = rprApi;
+	m_rprApiWeakPtr = rprApi;
 }
 
 HdRprField::~HdRprField()

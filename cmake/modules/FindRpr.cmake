@@ -18,30 +18,23 @@ elseif (UNIX)
     endif ()
 endif()
 
-message("RPR location: ${RPR_LOCATION}")
-
 find_library(RPR_LIBRARY
     NAMES  libRadeonProRender64 RadeonProRender64
-    HINTS
+    PATHS
         "${RPR_LOCATION_LIB}"
     DOC
         "Radeon ProRender library path"
-)
-
-find_library(RPR_SUPPORT_LIBRARY
-    NAMES  libSupport64 RprSupport64
-    HINTS
-        "${RPR_LOCATION_LIB}"
-    DOC
-        "Radeon ProRender Support library path"
+    NO_DEFAULT_PATH
 )
 
 find_library(RPR_TAHOE_LIBRARY
     NAMES libTahoe64 Tahoe64
-    HINTS
+    PATHS
         "${RPR_LOCATION_LIB}"
     DOC
-        "Radeon ProRender tahoe library path")
+        "Radeon ProRender tahoe library path"
+    NO_DEFAULT_PATH
+)
 
 include(FindPackageHandleStandardArgs)
 
@@ -49,6 +42,5 @@ find_package_handle_standard_args(Rpr
     REQUIRED_VARS
         RPR_LOCATION_INCLUDE
         RPR_LIBRARY
-        RPR_SUPPORT_LIBRARY
         RPR_TAHOE_LIBRARY
 )

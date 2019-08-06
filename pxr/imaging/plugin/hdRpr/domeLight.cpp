@@ -42,7 +42,7 @@ void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
 {
 	SdfPath const & id = GetId();
 
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
+	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
 	if (!rprApi)
 	{
 		TF_CODING_ERROR("RprApi is expired");

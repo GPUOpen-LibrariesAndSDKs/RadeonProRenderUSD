@@ -17,6 +17,7 @@ public:
 	HF_MALLOC_TAG_NEW("new HdRprMesh");
 
 	HdRprMesh(SdfPath const& id, HdRprApiSharedPtr rprApi, SdfPath const& instancerId = SdfPath());
+	~HdRprMesh() override;
 
 	virtual void Sync(
 		HdSceneDelegate* sceneDelegate,
@@ -61,9 +62,10 @@ protected:
 		
 private:
 
-	HdRprApiWeakPtr m_rprApiWeakPrt;
+	HdRprApiWeakPtr m_rprApiWeakPtr;
 	RprApiObject m_rprMesh = nullptr;
 	VtArray<RprApiObject> m_rprMeshInstances;
+	RprApiMaterial* m_fallbackMaterial = nullptr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

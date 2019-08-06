@@ -2,16 +2,6 @@ set(PXR_PREFIX pxr/imaging)
 set(PXR_PACKAGE hdRpr)
 add_custom_target(shared_libs)
 
-include(FindPackageHandleStandardArgs)
-
-find_package_handle_standard_args(Rpr
-    REQUIRED_VARS
-        RPR_LOCATION_INCLUDE
-		RPR_LIBRARY
-		RPR_SUPPORT_LIBRARY
-)
-
-
 set(OptLibs ${ARGN})
 set(OptIncludeDir ${ARGN})
 set(OptClass${ARGN})
@@ -71,7 +61,6 @@ pxr_plugin(hdRpr
    LIBRARIES
         ${USD_LIBRARIES}
         ${RPR_LIBRARY}
-        ${RPR_SUPPORT_LIBRARY}
         ${Boost_LIBRARIES}
         ${TBB_LIBRARIES}
         ${GLEW_LIBRARY}
@@ -140,14 +129,6 @@ if (APPLE)
     add_custom_command(TARGET hdRpr
         POST_BUILD COMMAND
         ${CMAKE_INSTALL_NAME_TOOL} -change @loader_path/libRadeonProRender64.dylib ${RPR_LIBRARY} $<TARGET_FILE:hdRpr> )
-
-    add_custom_command(TARGET hdRpr
-        POST_BUILD COMMAND
-        ${CMAKE_INSTALL_NAME_TOOL} -id @rpath/libRprSupport64.dylib  ${RPR_SUPPORT_LIBRARY})
-
-    add_custom_command(TARGET hdRpr
-        POST_BUILD COMMAND
-        ${CMAKE_INSTALL_NAME_TOOL} -change @rpath/libRprSupport64.dylib ${RPR_SUPPORT_LIBRARY} $<TARGET_FILE:hdRpr> )
 endif(APPLE)
 
  _get_install_dir(lib/python/rpr installPrefix)
@@ -173,6 +154,6 @@ install(
     \")")
 
 install(
-    FILES ${RPR_LIBRARY} ${RPR_SUPPORT_LIBRARY} ${RPR_TAHOE_LIBRARY} ${OptLibs}
+    FILES ${RPR_LIBRARY} ${RPR_TAHOE_LIBRARY} ${OptLibs}
     DESTINATION lib
     )
