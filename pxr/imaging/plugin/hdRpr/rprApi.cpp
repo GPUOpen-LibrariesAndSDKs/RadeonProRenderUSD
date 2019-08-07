@@ -152,36 +152,46 @@ std::string GetRprSdkPath()
     return std::string();
 }
 
-rpr_creation_flags getAllCompatibleGpuFlags()
+rpr_creation_flags getAllCompatibleGpuFlags(rpr_int pluginID, const char* cachePath)
 {
-#ifdef __APPLE__
-    return RPR_CREATION_FLAGS_ENABLE_METAL;
-#else
-
-    rpr_creation_flags flags = 0x0;
-	const rpr_creation_flags allGpuFlags = RPR_CREATION_FLAGS_ENABLE_GPU0
-		| RPR_CREATION_FLAGS_ENABLE_GPU1
-		| RPR_CREATION_FLAGS_ENABLE_GPU2
-		| RPR_CREATION_FLAGS_ENABLE_GPU3
-		| RPR_CREATION_FLAGS_ENABLE_GPU4
-		| RPR_CREATION_FLAGS_ENABLE_GPU5
-		| RPR_CREATION_FLAGS_ENABLE_GPU6
-		| RPR_CREATION_FLAGS_ENABLE_GPU7;
-
+    rpr_creation_flags additionalFlags = 0x0;
 #ifdef WIN32
-	RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_WINDOWS;
+    RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_WINDOWS;
+#elif defined(__APPLE__)
+    RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_MACOS;
+    additionalFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
 #else
-	RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_LINUX;
+    RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_LINUX;
 #endif // WIN32
 
+    rpr_creation_flags creationFlags = 0x0;
+#define TEST_GPU_COMPATIBILITY(index) \
+    if (rprIsDeviceCompatible(pluginID, RPRTD_GPU ## index, cachePath, false, rprToolOs, additionalFlags) == RPRTC_COMPATIBLE) { \
+        creationFlags |= RPR_CREATION_FLAGS_ENABLE_GPU ## index; \
+    }
 
-		rprAreDevicesCompatible(k_TahoeLibName, nullptr, false, allGpuFlags, &flags, rprToolOs);
-		return flags;
-#endif //__APPLE__
+    TEST_GPU_COMPATIBILITY(0);
+    TEST_GPU_COMPATIBILITY(1);
+    TEST_GPU_COMPATIBILITY(2);
+    TEST_GPU_COMPATIBILITY(3);
+    TEST_GPU_COMPATIBILITY(4);
+    TEST_GPU_COMPATIBILITY(5);
+    TEST_GPU_COMPATIBILITY(6);
+    TEST_GPU_COMPATIBILITY(7);
+    TEST_GPU_COMPATIBILITY(8);
+    TEST_GPU_COMPATIBILITY(9);
+    TEST_GPU_COMPATIBILITY(10);
+    TEST_GPU_COMPATIBILITY(11);
+    TEST_GPU_COMPATIBILITY(12);
+    TEST_GPU_COMPATIBILITY(13);
+    TEST_GPU_COMPATIBILITY(14);
+    TEST_GPU_COMPATIBILITY(15);
+
+    return creationFlags;
 }
 
 
-const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevice)
+const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevice, rpr_int pluginID, const char* cachePath)
 {
 	rpr_creation_flags flags = 0x0;
 
@@ -192,7 +202,7 @@ const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevic
 	}
 	else if (HdRprRenderDevice::GPU == renderDevice)
 	{
-		flags = getAllCompatibleGpuFlags();
+		flags = getAllCompatibleGpuFlags(pluginID, cachePath);
 	}
 	else
 	{
@@ -1056,6 +1066,10 @@ public:
             RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_depthBuffer, m_depthFilterBuffer, true), "Failed to resolve filter buffer");
             RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_normalBuffer, m_normalFilterBuffer, true), "Failed to resolve filter buffer");
             RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_albedoBuffer, m_albedoFilterBuffer, true), "Failed to resolve filter buffer");
+#ifdef __APPLE__
+            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_objId, m_transFilterBuffer, true), "Failed to resolve filter buffer");
+            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_positionBuffer, m_positionFilterBuffer, true), "Failed to resolve filter buffer");
+#endif __APPLE__
 			m_imageFilterPtr->Run();
 		}
 		else
@@ -1167,7 +1181,7 @@ private:
 			TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
 			renderDevice = HdRprRenderDevice::GPU;
 		}
-		rpr_creation_flags flags = getRprCreationFlags(renderDevice);
+		rpr_creation_flags flags = getRprCreationFlags(renderDevice, tahoePluginID, rprTmpDir.c_str());
 		if (!flags)
 		{
 			TF_CODING_ERROR("Could not find compatible device");
@@ -1221,6 +1235,14 @@ private:
 		m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthFilterBuffer, 1.0f);
 		m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_albedoFilterBuffer, 1.0f);
 
+#ifdef __APPLE__
+        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_transFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_positionFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+        m_imageFilterPtr->SetInput(RifFilterInput::RifTrans, m_transFilterBuffer, 1.0f);
+        m_imageFilterPtr->SetInput(RifFilterInput::RifObjectId, m_transFilterBuffer, 1.0f);
+        m_imageFilterPtr->SetInput(RifFilterInput::RifWorldCoordinate, m_positionFilterBuffer, 1.0f);
+#endif // __APPLE__
+
 		if (m_useGlInterop) {
 			m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
 		} else {
@@ -1235,6 +1257,8 @@ private:
         SAFE_DELETE_RPR_OBJECT(m_normalFilterBuffer);
         SAFE_DELETE_RPR_OBJECT(m_depthFilterBuffer);
         SAFE_DELETE_RPR_OBJECT(m_albedoFilterBuffer);
+        SAFE_DELETE_RPR_OBJECT(m_transFilterBuffer);
+        SAFE_DELETE_RPR_OBJECT(m_positionFilterBuffer);
         m_imageFilterPtr.reset();
 	}
 #endif // USE_RIF
@@ -1459,6 +1483,8 @@ private:
     rpr_framebuffer m_depthFilterBuffer = nullptr;
     rpr_framebuffer m_normalFilterBuffer = nullptr;
     rpr_framebuffer m_albedoFilterBuffer = nullptr;
+    rpr_framebuffer m_transFilterBuffer = nullptr;
+    rpr_framebuffer m_positionFilterBuffer = nullptr;
 
 	bool m_useGlInterop = EnableGLInterop();
 	GLuint m_framebufferGL = INVALID_FRAMEBUFFER;
