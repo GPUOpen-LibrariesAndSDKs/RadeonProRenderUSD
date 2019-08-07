@@ -42,10 +42,10 @@ struct MaterialTexture
 	EWrapMode WrapS = EWrapMode::NONE;
 	EWrapMode WrapT = EWrapMode::NONE;
 
-	bool IsScaleEmable = false;
+	bool IsScaleEnabled = false;
 	GfVec4f Scale;
 
-	bool IsBiasEmable = false;
+	bool IsBiasEnabled = false;
 	GfVec4f Bias;
 };
 
@@ -102,6 +102,11 @@ public:
 		return m_texRprx;
 	}
 
+	const MaterialTexture& GetDisplacementTexture() const
+	{
+	    return m_displacementTexture;
+	}
+
 private:
 	void PoulateRprxColor(const MaterialParams & params);
 	void PoulateRprColor(const MaterialParams & params);
@@ -115,6 +120,8 @@ private:
 	MaterialRprxParamsVec4f m_vec4fRprxParams;
 	MaterialRprxParamsU	m_uRprxParams;
 	MaterialRprxParamsTexture m_texRprx;
+
+    MaterialTexture m_displacementTexture;
 };
 
 

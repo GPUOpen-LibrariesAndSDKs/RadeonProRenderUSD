@@ -15,12 +15,16 @@ void generateIndexes(const size_t count, VtIntArray & out_Vector)
 
 HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id, HdRprApiSharedPtr rprApi,
 	SdfPath const& instancerId) : HdBasisCurves(id, instancerId) {
-		m_rprApiWeakPrt = rprApi;
+		m_rprApiWeakPtr = rprApi;
 	}
 
 HdRprBasisCurves::~HdRprBasisCurves()
 {
-	// No-op
+	if (auto rprApi = m_rprApiWeakPtr.lock()) {
+	    for (auto material : m_rprMaterials) {
+	        rprApi->DeleteMaterial(material);
+	    }
+	}
 }
 
 
@@ -46,7 +50,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate * sceneDelegate, HdRenderParam * ren
 	TF_UNUSED(renderParam);
 
 
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
+	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
 	if (!rprApi)
 	{
 		TF_CODING_ERROR("RprApi is expired");
@@ -121,6 +125,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate * sceneDelegate, HdRenderParam * ren
 				RprApiMaterial * rprMaterial = rprApi->CreateMaterial(matAdapter);
 
 				rprApi->SetCurveMaterial(m_rprCurve, rprMaterial);
+                m_rprMaterials.push_back(rprMaterial);
 			}
 		}
 		else if (material &&  material->GetRprMaterialObject())

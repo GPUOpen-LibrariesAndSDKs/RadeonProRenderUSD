@@ -16,7 +16,7 @@ class HdRprDomeLight : public HdSprim {
 public:
 	HdRprDomeLight(SdfPath const & id, HdRprApiSharedPtr rprApi)
 		: HdSprim(id)
-		, m_rprApiWeakPrt(rprApi) {}
+		, m_rprApiWeakPtr(rprApi) {}
 
 	// change tracking for HdStLight
 	enum DirtyBits : HdDirtyBits {
@@ -44,7 +44,7 @@ public:
 	virtual HdDirtyBits GetInitialDirtyBitsMask() const override;
 
 protected:
-	HdRprApiWeakPtr m_rprApiWeakPrt;
+	HdRprApiWeakPtr m_rprApiWeakPtr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

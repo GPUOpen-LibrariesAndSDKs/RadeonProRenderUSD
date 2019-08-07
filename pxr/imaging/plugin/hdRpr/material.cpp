@@ -47,18 +47,21 @@ static const bool getMaterial(const HdMaterialNetworkMap & networkMap, EMaterial
 
 HdRprMaterial::HdRprMaterial(SdfPath const & id, HdRprApiSharedPtr rprApi) : HdMaterial(id) 
 {
-	m_rprApiWeakPrt = rprApi;
+	m_rprApiWeakPtr = rprApi;
 }
 
 HdRprMaterial::~HdRprMaterial()
 {
+    if (auto rprApi = m_rprApiWeakPtr.lock()) {
+        rprApi->DeleteMaterial(m_rprMaterial);
+    }
 }
 
 void HdRprMaterial::Sync(HdSceneDelegate *sceneDelegate,
 	HdRenderParam   *renderParam,
 	HdDirtyBits     *dirtyBits)
 {
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPrt.lock();
+	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
 	if (!rprApi)
 	{
 		TF_CODING_ERROR("RprApi is expired");
