@@ -41,7 +41,7 @@ def setDenoising(enabled):
     if rprPath is not None:
         lib = cdll.LoadLibrary(rprPath)
         createRprTmpDirIfNeeded(lib)
-        lib.SetRprGlobalDenosing(enabled)
+        lib.SetRprGlobalDenoising(enabled)
 
 	   
 def setRenderDevice(usdviewApi, renderDeviceId):
@@ -143,6 +143,7 @@ class RprPluginContainer(PluginContainer):
 		
         filterSubMenu = rprMenu.findOrCreateSubmenu("Denoise")
         filterSubMenu.addItem(self.noFilter)
+        filterSubMenu.addItem(self.aiDenoiseFilter)
 
         renderDeviceSubMenu = rprMenu.findOrCreateSubmenu("Render Device")
         renderDeviceSubMenu.addItem(self.rDeviceCpu)

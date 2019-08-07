@@ -916,6 +916,7 @@ public:
 	
 		//lock();
 		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_COLOR, m_colorBuffer), "fail to set color AOV");
+        RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_DIFFUSE_ALBEDO, m_albedoBuffer), "fail to set albedo AOV");
 		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_WORLD_COORDINATE, m_positionBuffer), "fail to set coordinate AOV");
 		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_DEPTH, m_depthBuffer), "fail to set depth AOV");
 		RPR_ERROR_CHECK(rprContextSetAOV(m_context, RPR_AOV_OBJECT_ID, m_objId), "fail to set object id AOV");
@@ -935,6 +936,7 @@ public:
 	{
 		//lock();
 		RPR_ERROR_CHECK(rprFrameBufferClear(m_colorBuffer), "Fail to clear color framebuffer");
+        RPR_ERROR_CHECK(rprFrameBufferClear(m_albedoBuffer), "Fail to clear color framebuffer");
 		RPR_ERROR_CHECK(rprFrameBufferClear(m_positionBuffer), "Fail to clear position framebuffer");
 		RPR_ERROR_CHECK(rprFrameBufferClear(m_depthBuffer), "Fail to clear depth framebuffer");
 		RPR_ERROR_CHECK(rprFrameBufferClear(m_objId), "Fail to clear object ID framebuffer");
@@ -1050,6 +1052,10 @@ public:
 
 		if (m_imageFilterPtr && HdRprPreferences::GetInstance().GetAov() == HdRprAov::COLOR)
 		{
+            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_colorBuffer, m_colorFilterBuffer, true), "Failed to resolve filter buffer");
+            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_depthBuffer, m_depthFilterBuffer, true), "Failed to resolve filter buffer");
+            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_normalBuffer, m_normalFilterBuffer, true), "Failed to resolve filter buffer");
+            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_albedoBuffer, m_albedoFilterBuffer, true), "Failed to resolve filter buffer");
 			m_imageFilterPtr->Run();
 		}
 		else
@@ -1203,11 +1209,17 @@ private:
 		m_imageFilterPtr.reset( new ImageFilter(m_context, m_framebufferDesc.fb_width, m_framebufferDesc.fb_height));
 		m_imageFilterPtr->CreateFilter();
 
+        rpr_framebuffer_format fmt = { 4, RPR_COMPONENT_TYPE_FLOAT32 };
+        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_colorFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_normalFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_albedoFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_depthFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+
 		m_imageFilterPtr->Resize(m_framebufferDesc.fb_width, m_framebufferDesc.fb_height);
-		m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorBuffer, 1.0f);
-		m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_normalBuffer, 1.0f);
-		m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthBuffer, 1.0f);
-		m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_albedoBuffer, 1.0f);
+		m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorFilterBuffer, 1.0f);
+		m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_normalFilterBuffer, 1.0f);
+		m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthFilterBuffer, 1.0f);
+		m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_albedoFilterBuffer, 1.0f);
 
 		if (m_useGlInterop) {
 			m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
@@ -1219,7 +1231,11 @@ private:
 
 	void DeleteImageFilter()
 	{
-		m_imageFilterPtr.reset();
+        SAFE_DELETE_RPR_OBJECT(m_colorFilterBuffer);
+        SAFE_DELETE_RPR_OBJECT(m_normalFilterBuffer);
+        SAFE_DELETE_RPR_OBJECT(m_depthFilterBuffer);
+        SAFE_DELETE_RPR_OBJECT(m_albedoFilterBuffer);
+        m_imageFilterPtr.reset();
 	}
 #endif // USE_RIF
 
@@ -1438,6 +1454,11 @@ private:
     rpr_framebuffer m_uv = nullptr;
 	rpr_framebuffer m_resolvedBuffer = nullptr;
 	rpr_post_effect m_tonemap = nullptr;
+
+    rpr_framebuffer m_colorFilterBuffer = nullptr;
+    rpr_framebuffer m_depthFilterBuffer = nullptr;
+    rpr_framebuffer m_normalFilterBuffer = nullptr;
+    rpr_framebuffer m_albedoFilterBuffer = nullptr;
 
 	bool m_useGlInterop = EnableGLInterop();
 	GLuint m_framebufferGL = INVALID_FRAMEBUFFER;

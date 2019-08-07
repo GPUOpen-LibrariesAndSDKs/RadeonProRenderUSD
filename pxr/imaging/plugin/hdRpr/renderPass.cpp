@@ -88,8 +88,8 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 						  0, 0, fbSize[0], fbSize[1],
 						  GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 
-		glBindFramebuffer(GL_READ_FRAMEBUFFER_BINDING, usdReadFB);
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER_BINDING, usdWriteFB);
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, usdReadFB);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, usdWriteFB);
 	} else {
 		rprApi->Render();
 		glDrawPixels(fbSize[0], fbSize[1], GL_RGBA, GL_FLOAT, rprApi->GetFramebufferData());

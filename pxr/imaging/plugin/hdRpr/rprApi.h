@@ -20,7 +20,7 @@ class HdRprApiImpl;
 class RprMaterialObject;
 struct MaterialNode;
 
-class RprApiMaterial;
+struct RprApiMaterial;
 class MaterialAdapter;
 
 typedef void * RprApiObject;

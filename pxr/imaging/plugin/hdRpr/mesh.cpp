@@ -140,7 +140,7 @@ void HdRprMesh::Sync(
 		auto stToken = UsdUtilsGetPrimaryUVSetName();
 		VtVec2fArray st;
 		VtIntArray stIndexes;
-		sceneDelegate->SamplePrimvar(id, stToken, 1, timeSamples, &value);
+        value = sceneDelegate->Get(id, stToken);
 		if (value.IsHolding<VtVec2fArray>())
 		{
 			st = value.UncheckedGet<VtVec2fArray>();
@@ -151,7 +151,7 @@ void HdRprMesh::Sync(
 
 		VtVec3fArray normals;
 		VtIntArray normalIndexes;
-		sceneDelegate->SamplePrimvar(id, HdTokens->normals, 1, timeSamples, &value);
+        value = sceneDelegate->Get(id, HdTokens->normals);
 		if (value.IsHolding<VtVec3fArray>())
 		{
 			normals = value.UncheckedGet<VtVec3fArray>();

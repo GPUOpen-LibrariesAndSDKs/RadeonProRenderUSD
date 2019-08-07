@@ -156,6 +156,12 @@ void ImageFilter::Run() const
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to execute queue.");
+
+    rifStatus = rifSyncronizeQueue(mRifContext->Queue());
+    assert(RIF_SUCCESS == rifStatus);
+
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to synchronize queue.");
 }
 
 std::vector<float> ImageFilter::GetData() const
@@ -583,12 +589,28 @@ void RifFilterWrapper::ApplyParameters() const
 
 RifFilterAIDenoise::RifFilterAIDenoise(const RifContextWrapper* rifContext, bool isCPUMode)
 {
-	auto rifFilterType = isCPUMode ? RIF_IMAGE_FILTER_OPENIMAGE_DENOISE : RIF_IMAGE_FILTER_AI_DENOISE;
+    rif_image_filter_type rifFilterType = RIF_IMAGE_FILTER_OPENIMAGE_DENOISE;
+#ifndef __APPLE__
+    if (!isCPUMode) {
+        rifFilterType = RIF_IMAGE_FILTER_AI_DENOISE;
+    }
+#endif
 	rif_int rifStatus = rifContextCreateImageFilter(rifContext->Context(), rifFilterType, &mRifImageFilterHandle);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create AI denoise filter.");
+
+    if (rifFilterType == RIF_IMAGE_FILTER_AI_DENOISE) {
+        rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "useHDR", 1);
+        if (RIF_SUCCESS != rifStatus)
+            throw std::runtime_error("RPR denoiser failed to set filter \"usdHDR\" parameter.");
+    }
+
+    // TODO: set correct model path
+    rifStatus = rifImageFilterSetParameterString(mRifImageFilterHandle, "modelPath", "../models");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to set filter \"modelPath\" parameter.");
 
 	// auxillary filters
 	mAuxFilters.resize(AuxFilterMax, nullptr);
