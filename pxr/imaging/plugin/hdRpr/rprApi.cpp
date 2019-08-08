@@ -82,11 +82,7 @@ inline bool rprIsErrorCheck(const TfCallContext &context, const rpr_status statu
 		return "error code - " + std::to_string(s);
 	}(status);
 
-	const size_t maxBufferSize = 1024;
-	char buffer[maxBufferSize];
-
-	snprintf(buffer, maxBufferSize, "%s %s: %s", "[RPR ERROR] ", messageOnFail.c_str(), rprErrorString.c_str());
-	Tf_PostErrorHelper(context, TF_DIAGNOSTIC_CODING_ERROR_TYPE, buffer);
+	Tf_PostErrorHelper(context, TF_DIAGNOSTIC_CODING_ERROR_TYPE, "%s %s: %s", "[RPR ERROR] ", messageOnFail.c_str(), rprErrorString.c_str());
 
 	return true;
 }
@@ -195,7 +191,6 @@ const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevic
 {
 	rpr_creation_flags flags = 0x0;
 
-
 	if (HdRprRenderDevice::CPU == renderDevice)
 	{
 		flags = RPR_CREATION_FLAGS_ENABLE_CPU;
@@ -207,7 +202,7 @@ const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevic
 	else
 	{
 		TF_CODING_ERROR("Unknown HdRprRenderDevice");
-		return NULL;
+		return 0x0;
 	}
 	
 	return flags;
@@ -767,7 +762,7 @@ public:
 			, grigSize[0], grigSize[1], grigSize[2], &indexesDencity[0]
 			, indexesDencity.size(), RPR_GRID_INDICES_TOPOLOGY_I_U64
 			, &gridDencityData[0], gridDencityData.size() * sizeof(gridDencityData[0])
-			, NULL)
+			, 0)
 			, "Fail create dencity grid")) return nullptr;
 
 		rpr_grid rprGridAlbedo;
@@ -775,7 +770,7 @@ public:
 			, grigSize[0], grigSize[1], grigSize[2], &indexesAlbedo[0]
 			, indexesAlbedo.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
 			, &gridAlbedoData[0], gridAlbedoData.size() * sizeof(gridAlbedoData[0])
-			, NULL)
+			, 0)
 			, "Fail create albedo grid")) return nullptr;
 
 		
@@ -1089,6 +1084,8 @@ public:
 	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_positionBuffer, m_positionFilterBuffer, true), "Failed to resolve filter buffer");
 	                break;
 	            }
+                default:
+                    break;
             }
 			m_imageFilterPtr->Run();
 		}
@@ -1296,6 +1293,8 @@ private:
                 m_imageFilterPtr->SetInput(RifFilterInput::RifWorldCoordinate, m_positionFilterBuffer, 1.0f);
                 break;
             }
+            default:
+                break;
         }
         
         m_imageFilterPtr->Resize(m_framebufferDesc.fb_width, m_framebufferDesc.fb_height);
@@ -1373,7 +1372,6 @@ private:
 			}
 			else
 			{
-				constexpr int triangleVertexCount = 3;
 				for (int i = 0; i < vCount - 2; ++i)
 				{
 					out_newIndexes.push_back(*(idxIt + i + 0));
@@ -1564,9 +1562,6 @@ private:
 
 	bool m_isFramebufferDirty = true;
 
-    bool m_isRenderModeDirty = true;
-    HdRprAov m_currentAov = HdRprAov::COLOR;
-
     std::vector<RprApiMaterial*> m_materialsToRelease;
 
 	// simple spinlock for locking RPR calls
@@ -1596,6 +1591,11 @@ private:
 	{
 		HdRprPreferences::GetInstance().SetDenoising(enableDenoising);
 	}
+
+	bool HdRprApi::IsDenoisingEnabled()
+    {
+	    return HdRprPreferences::GetInstance().IsDenoisingEnabled();
+    }
 
 	void HdRprApi::SetAov(const HdRprAov & aov)
 	{

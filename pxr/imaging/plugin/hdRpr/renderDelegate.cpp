@@ -299,6 +299,11 @@ void SetRprGlobalDenoising(int enableDenoising)
 	PXR_INTERNAL_NS::HdRprApi::SetDenoising(static_cast<bool>(enableDenoising));
 }
 
+int IsRprDenoisingEnabled()
+{
+    return static_cast<int>(PXR_INTERNAL_NS::HdRprApi::IsDenoisingEnabled());
+}
+
 void SetRprGlobalRenderDevice(int renderDevice)
 {
 	switch (renderDevice)

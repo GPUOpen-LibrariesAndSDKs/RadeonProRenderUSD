@@ -95,7 +95,7 @@ public:
     ///
     virtual HdInstancer *CreateInstancer(HdSceneDelegate *delegate,
                                          SdfPath const& id,
-                                         SdfPath const& instancerId) ;
+                                         SdfPath const& instancerId) override;
 
     virtual void DestroyInstancer(HdInstancer *instancer) override;
 
@@ -191,7 +191,7 @@ public:
     /// For example, the render delegate might fill primvar buffers or texture
     /// memory.
     ///
-    virtual void CommitResources(HdChangeTracker *tracker)override;
+    virtual void CommitResources(HdChangeTracker *tracker) override;
 
 	virtual TfToken GetMaterialBindingPurpose() const override { return HdTokens->full; }
  
@@ -200,7 +200,7 @@ public:
 	/// material network implementations.  The default is empty.
 	///
 	HDRPR_API
-	virtual TfToken GetMaterialNetworkSelector() const;
+	virtual TfToken GetMaterialNetworkSelector() const override;
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
@@ -227,7 +227,10 @@ extern "C"
 	void SetRprGlobalAov(int aov);
 
 	HDRPR_API
-	void SetRprGlobalDenoising(int aov);
+	void SetRprGlobalDenoising(int enableDenoise);
+
+    HDRPR_API
+    int IsRprDenoisingEnabled();
 
 	HDRPR_API
 	void SetRprGlobalRenderDevice(int renderDevice);

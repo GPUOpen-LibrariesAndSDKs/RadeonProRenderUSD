@@ -105,7 +105,7 @@ void HdRprMesh::Sync(
 			auto interpolation = static_cast<HdInterpolation>(i);
 			primvarDescsPerInterpolation[i] = sceneDelegate->GetPrimvarDescriptors(id, interpolation);
 		}
-		auto getPrimvarIndices = [&primvarDescsPerInterpolation, &indexes, &sceneDelegate, &id](
+		auto getPrimvarIndices = [&primvarDescsPerInterpolation, &indexes](
 				TfToken const& primvarName, VtIntArray& outIndices) {
 			auto it = std::find_if(primvarDescsPerInterpolation, primvarDescsPerInterpolation + HdInterpolationCount,
 				[&primvarName](HdPrimvarDescriptorVector const& descriptors) {
@@ -134,8 +134,6 @@ void HdRprMesh::Sync(
 		VtValue value;
 		value = sceneDelegate->Get(id, HdTokens->points);
 		VtVec3fArray points = value.Get<VtVec3fArray>();
-
-		float timeSamples[1] = {0.0f};
 
 		auto stToken = UsdUtilsGetPrimaryUVSetName();
 		VtVec2fArray st;
@@ -211,7 +209,7 @@ void HdRprMesh::Sync(
 	if (m_rprMesh && *dirtyBits & HdChangeTracker::DirtyDisplayStyle)
 	{
 		int refineLevel = sceneDelegate->GetDisplayStyle(id).refineLevel;
-		TfToken boundaryInterpolation = sceneDelegate->GetSubdivTags(id).GetVertexInterpolationRule();
+		auto boundaryInterpolation = refineLevel > 0 ? sceneDelegate->GetSubdivTags(id).GetVertexInterpolationRule() : TfToken();
 		rprApi->SetMeshRefineLevel(m_rprMesh, refineLevel, boundaryInterpolation);
 	}
 

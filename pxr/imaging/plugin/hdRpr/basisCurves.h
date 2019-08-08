@@ -13,12 +13,12 @@ public:
 	HdRprBasisCurves(SdfPath const& id, HdRprApiSharedPtr rprApi,
 		SdfPath const& instancerId = SdfPath());
 
-    virtual ~HdRprBasisCurves();
+    virtual ~HdRprBasisCurves() override;
 
 	virtual void Sync(HdSceneDelegate      *delegate,
 		HdRenderParam        *renderParam,
 		HdDirtyBits          *dirtyBits,
-		TfToken const &reprSelector);
+		TfToken const &reprSelector) override;
 
 protected:
 

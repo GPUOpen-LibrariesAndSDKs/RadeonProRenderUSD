@@ -56,6 +56,7 @@ public:
 	static void SetRenderDevice(const HdRprRenderDevice & renderMode);
 
 	static void SetDenoising(bool enableDenoising);
+	static bool IsDenoisingEnabled();
 
 	static void SetAov(const HdRprAov & aov);
 	

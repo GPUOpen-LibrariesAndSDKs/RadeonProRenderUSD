@@ -218,7 +218,7 @@ std::vector<float> ImageFilter::GetData() const
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to unmap output data.");
 
-	return std::move(floatData);
+	return floatData;
 }
 
 RifContextWrapper::~RifContextWrapper()
@@ -261,7 +261,7 @@ std::vector<rpr_char> RifContextWrapper::GetRprCachePath(rpr_context rprContext)
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get cache path.");
 
-	return std::move(path);
+	return path;
 }
 
 

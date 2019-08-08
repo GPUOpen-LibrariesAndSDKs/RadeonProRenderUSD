@@ -2,7 +2,7 @@ from pxr import Tf
 from pxr.Plug import Registry
 from pxr.Usdviewq.plugin import PluginContainer
 
-from ctypes import cdll, c_char_p
+from ctypes import cdll, c_char_p, c_int
 from ctypes.util import find_library
 
 import os
@@ -36,12 +36,17 @@ def setAov(aov):
 	   lib.SetRprGlobalAov(aov)
 	   
 	   
-def setDenoising(enabled):
+def switchDenoising():
     rprPath = getRprPath()
     if rprPath is not None:
         lib = cdll.LoadLibrary(rprPath)
         createRprTmpDirIfNeeded(lib)
-        lib.SetRprGlobalDenoising(enabled)
+
+        lib.IsRprDenoisingEnabled.restype = c_int
+        isDenoisingEnabled = lib.IsRprDenoisingEnabled()
+        # TODO: change action isSelected when available
+
+        lib.SetRprGlobalDenoising(not isDenoisingEnabled)
 
 	   
 def setRenderDevice(usdviewApi, renderDeviceId):
@@ -68,11 +73,8 @@ def UVAov(usdviewApi):
 def PrimIdAov(usdviewApi):
     setAov(4)
 
-def NoFilter(usdviewApi):
-    setDenoising(0)
-
-def AIDenoiseFilter(usdviewApi):
-    setDenoising(1)
+def SwitchDenoising(usdviewApi):
+    switchDenoising()
 
 def renderDeviceCPU(usdviewApi):
     setRenderDevice(usdviewApi, 0)
@@ -110,15 +112,10 @@ class RprPluginContainer(PluginContainer):
             "PrimId",
             PrimIdAov)
 
-        self.noFilter = plugRegistry.registerCommandPlugin(
+        self.switchDenoising = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.NoFilter",
-            "Disable",
-            NoFilter)
-
-        self.aiDenoiseFilter = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.AIDenoiseFilter",
-            "Enable",
-            AIDenoiseFilter)
+            "Denoise",
+            SwitchDenoising)
 
         self.rDeviceCpu = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.renderDeviceCPU",
@@ -140,10 +137,8 @@ class RprPluginContainer(PluginContainer):
         renderModeSubMenu.addItem(self.aovDepth)
         renderModeSubMenu.addItem(self.aovUV)
         renderModeSubMenu.addItem(self.aovPrimId)
-		
-        filterSubMenu = rprMenu.findOrCreateSubmenu("Denoise")
-        filterSubMenu.addItem(self.noFilter)
-        filterSubMenu.addItem(self.aiDenoiseFilter)
+
+        rprMenu.addItem(self.switchDenoising)
 
         renderDeviceSubMenu = rprMenu.findOrCreateSubmenu("Render Device")
         renderDeviceSubMenu.addItem(self.rDeviceCpu)
