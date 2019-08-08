@@ -3,9 +3,9 @@ set(PXR_PACKAGE hdRpr)
 add_custom_target(shared_libs)
 
 set(OptLibs ${ARGN})
+set(OptBin ${ARGN})
 set(OptIncludeDir ${ARGN})
 set(OptClass${ARGN})
-
 
 if(PXR_ENABLE_OPENVDB_SUPPORT)
 
@@ -18,7 +18,8 @@ if(PXR_ENABLE_OPENVDB_SUPPORT)
 
 	add_definitions(-DUSE_VOLUME -DOPENVDB_3_ABI_COMPATIBLE -DOPENVDB_DLL)
 	
-	set(OptLibs ${OptLibs} {${OpenVDB_LIBRARIES})
+	set(OptLibs ${OptLibs} ${OpenVDB_LIBRARIES})
+    set(OptBin ${OptBin} ${OpenVDB_BINARIES})
 	set(OptIncludeDir ${OptIncludeDir} ${OpenVDB_INCLUDE_DIR})
 	set(OptClass ${OptClass} field volume)
 	
@@ -29,6 +30,7 @@ if(PXR_ENABLE_RIF_SUPPORT)
 	add_definitions(-DUSE_RIF )
 	
 	set(OptLibs  ${OptLibs} ${RIF_LIBRARY})
+    set(OptBin ${OptBin} ${RIF_BINARIES})
 	set(OptIncludeDir  ${OptIncludeDir} ${RIF_LOCATION_INCLUDE})
 	set(OptClass  ${OptClass} ImageFilter)
 	
@@ -40,6 +42,7 @@ if(${USD_LIBRARY_MONOLITHIC})
             usd_ms)
 else()
     set(USD_LIBRARIES
+        ar
         arch
         sdf
         trace
@@ -47,6 +50,7 @@ else()
         tf
         vt
         gf
+        glf
         work
         hf
         hd
@@ -153,7 +157,12 @@ install(
 }
     \")")
 
-install(
-    FILES ${RPR_LIBRARY} ${RPR_TAHOE_LIBRARY} ${OptLibs}
-    DESTINATION lib
-    )
+if(WIN32)
+    install(
+        FILES ${RPR_BINARIES} ${OptBin}
+        DESTINATION bin)
+else(WIN32)
+    install(
+        FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${OptLibs}
+        DESTINATION lib )
+endif(WIN32)

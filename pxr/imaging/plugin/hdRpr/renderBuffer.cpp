@@ -63,16 +63,16 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
 
 unsigned int HdRprRenderBuffer::GetWidth() const
 {
-    return NULL;
+    return 0u;
 }
 unsigned int HdRprRenderBuffer::GetHeight() const
 {
-    return NULL;
+    return 0u;
 }
 
 unsigned int HdRprRenderBuffer::GetDepth() const
 {
-    return NULL;
+    return 0u;
 }
 
 HdFormat HdRprRenderBuffer::GetFormat() const{

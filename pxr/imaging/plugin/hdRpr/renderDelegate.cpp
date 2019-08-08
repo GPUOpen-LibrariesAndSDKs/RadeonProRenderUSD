@@ -294,22 +294,14 @@ void SetRprGlobalAov(int aov)
 }
 
 
-void SetRprGlobalFilter(int filterType)
+void SetRprGlobalDenoising(int enableDenoising)
 {
-	switch (filterType)
-	{
-	case 0:
-		PXR_INTERNAL_NS::HdRprApi::SetFilter(PXR_INTERNAL_NS::FilterType::None);
-		return;
-	case 1:
-		PXR_INTERNAL_NS::HdRprApi::SetFilter(PXR_INTERNAL_NS::FilterType::BilateralDenoise);
-		return;
-	case 2:
-		PXR_INTERNAL_NS::HdRprApi::SetFilter(PXR_INTERNAL_NS::FilterType::EawDenoise);
-		return;
-	default:
-		break;
-	}
+	PXR_INTERNAL_NS::HdRprApi::SetDenoising(static_cast<bool>(enableDenoising));
+}
+
+int IsRprDenoisingEnabled()
+{
+    return static_cast<int>(PXR_INTERNAL_NS::HdRprApi::IsDenoisingEnabled());
 }
 
 void SetRprGlobalRenderDevice(int renderDevice)

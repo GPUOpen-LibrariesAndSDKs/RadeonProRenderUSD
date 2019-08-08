@@ -4,6 +4,7 @@
 #include "RadeonProRender_GL.h"
 #include "RadeonImageFilters_cl.h"
 #include "RadeonImageFilters_gl.h"
+#include "RadeonImageFilters_metal.h"
 
 #include <GL/glew.h>
 
@@ -14,6 +15,29 @@
 #include <exception>
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+class RifFilterEaw final : public RifFilterWrapper
+{
+    enum
+    {
+        ColorVar,
+        Mlaa,
+        AuxFilterMax
+    };
+
+    enum
+    {
+        ColorVarianceImage,
+        DenoisedOutputImage,
+        AuxImageMax
+    };
+
+public:
+    explicit RifFilterEaw(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height);
+    ~RifFilterEaw() override = default;
+
+    virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
 
 static bool HasGpuContext(rpr_creation_flags contextFlags)
 {
@@ -65,8 +89,7 @@ static rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags)
 
 ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height) :
 	mWidth(width),
-	mHeight(height),
-	mFilterType(FilterType::None)
+	mHeight(height)
 {
 	rpr_creation_flags contextFlags = 0;
 	rpr_int rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr);
@@ -75,11 +98,14 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get context parameters.");
 
+#ifdef __APPLE__
 	if (contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL)
 	{
 		mRifContext.reset( new RifContextGPUMetal(rprContext) );
 	}
-	else if (HasGpuContext(contextFlags))
+	else
+#endif // __APPLE__
+    if (HasGpuContext(contextFlags))
 	{
 		mRifContext.reset(new RifContextGPU(rprContext));
 	}
@@ -94,23 +120,19 @@ ImageFilter::~ImageFilter()
 	mRifFilter->DetachFilter( mRifContext.get() );
 }
 
-void ImageFilter::CreateFilter(FilterType rifFilteType)
+void ImageFilter::CreateFilter(FilterType filterType)
 {
-	mFilterType = rifFilteType;
-	switch (mFilterType)
-	{
-	case FilterType::BilateralDenoise:
-		mRifFilter.reset( new RifFilterBilateral( mRifContext.get() ) );
-		break;
-
-	case FilterType::LwrDenoise:
-		mRifFilter.reset( new RifFilterLwr( mRifContext.get(), mWidth, mHeight) );
-		break;
-
-	case FilterType::EawDenoise:
-		mRifFilter.reset( new RifFilterEaw( mRifContext.get(), mWidth, mHeight) );
-		break;
-	}
+    switch (filterType)
+    {
+        case FilterType::AIDenoise:
+            mRifFilter.reset(new RifFilterAIDenoise(mRifContext.get()));
+            break;
+        case FilterType::EawDenoise:
+            mRifFilter.reset(new RifFilterEaw(mRifContext.get(), mWidth, mHeight));
+            break;
+        default:
+            throw std::runtime_error("Incorrect filter type");
+    }
 }
 
 void ImageFilter::DeleteFilter()
@@ -169,6 +191,12 @@ void ImageFilter::Run() const
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to execute queue.");
+
+    rifStatus = rifSyncronizeQueue(mRifContext->Queue());
+    assert(RIF_SUCCESS == rifStatus);
+
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to synchronize queue.");
 }
 
 std::vector<float> ImageFilter::GetData() const
@@ -190,7 +218,7 @@ std::vector<float> ImageFilter::GetData() const
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to unmap output data.");
 
-	return std::move(floatData);
+	return floatData;
 }
 
 RifContextWrapper::~RifContextWrapper()
@@ -233,7 +261,7 @@ std::vector<rpr_char> RifContextWrapper::GetRprCachePath(rpr_context rprContext)
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get cache path.");
 
-	return std::move(path);
+	return path;
 }
 
 
@@ -425,7 +453,7 @@ void RifContextCPU::UpdateInputs(const RifFilterWrapper* rifFilter) const
 	}
 }
 
-
+#ifdef __APPLE__
 
 RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 {
@@ -463,22 +491,35 @@ RifContextGPUMetal::~RifContextGPUMetal()
 
 rif_image RifContextGPUMetal::CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const
 {
-	rif_image rifImage = nullptr;
-	rpr_cl_mem clMem = nullptr;
+    rif_image rifImage = nullptr;
+    rpr_cl_mem clMem = nullptr;
 
-	rpr_int rprStatus = rprFrameBufferGetInfo(rprFrameBuffer, RPR_CL_MEM_OBJECT, sizeof(rpr_cl_mem), &clMem, nullptr);
-	assert(RPR_SUCCESS == rprStatus);
+    rpr_int rprStatus = rprFrameBufferGetInfo(rprFrameBuffer, RPR_CL_MEM_OBJECT, sizeof(rpr_cl_mem), &clMem, nullptr);
+    assert(RPR_SUCCESS == rprStatus);
+    if (RPR_SUCCESS != rprStatus)
+        throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
 
-	if (RPR_SUCCESS != rprStatus)
-		throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
+    rpr_image_format framebufferFormat;
+    rprStatus = rprFrameBufferGetInfo(rprFrameBuffer, RPR_FRAMEBUFFER_FORMAT, sizeof(framebufferFormat), &framebufferFormat, nullptr);
+    assert(RPR_SUCCESS == rprStatus);
+    if (RPR_SUCCESS != rprStatus) {
+        throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
+    }
 
-	rif_int rifStatus = rifContextCreateImageFromOpenClMemory(mRifContextHandle , &desc, clMem, false, &rifImage);
-	assert(RIF_SUCCESS == rifStatus);
+    int bytesPerComponent = 1;
+    if (framebufferFormat.type == RPR_COMPONENT_TYPE_FLOAT32) {
+        bytesPerComponent = 4;
+    } else if (framebufferFormat.type == RPR_COMPONENT_TYPE_FLOAT16) {
+        bytesPerComponent = 2;
+    }
+    rif_longlong size = desc.image_width * desc.image_height * framebufferFormat.num_components * bytesPerComponent;
+    rif_int rifStatus = rifContextCreateImageFromMetalMemory(mRifContextHandle , &desc, clMem, size, &rifImage);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
 
-	return rifImage;
+    return rifImage;
 }
 
 void RifContextGPUMetal::UpdateInputs(const RifFilterWrapper* rifFilter) const
@@ -486,6 +527,7 @@ void RifContextGPUMetal::UpdateInputs(const RifFilterWrapper* rifFilter) const
 	// image filter processes buffers directly in GPU mode
 }
 
+#endif // __APPLE__
 
 
 RifFilterWrapper::~RifFilterWrapper()
@@ -534,11 +576,9 @@ void RifFilterWrapper::DetachFilter(const RifContextWrapper* rifContext) noexcep
 	for (const rif_image_filter& auxFilter : mAuxFilters)
 	{
 		rifStatus = rifCommandQueueDetachImageFilter(rifContext->Queue(), auxFilter);
-		assert(RIF_SUCCESS == rifStatus);
 	}
 
 	rifStatus = rifCommandQueueDetachImageFilter(rifContext->Queue(), mRifImageFilterHandle);
-	assert(RIF_SUCCESS == rifStatus);
 }
 
 void RifFilterWrapper::SetupVarianceImageFilter(const rif_image_filter inputFilter, const rif_image outVarianceImage) const
@@ -594,126 +634,44 @@ void RifFilterWrapper::ApplyParameters() const
 
 
 
-RifFilterBilateral::RifFilterBilateral(const RifContextWrapper* rifContext)
+RifFilterAIDenoise::RifFilterAIDenoise(const RifContextWrapper* rifContext)
 {
-	rif_int rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_BILATERAL_DENOISE, &mRifImageFilterHandle);
+	rif_int rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_AI_DENOISE, &mRifImageFilterHandle);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to create Bilateral filter.");
-}
+		throw std::runtime_error("RPR denoiser failed to create AI denoise filter.");
 
-RifFilterBilateral::~RifFilterBilateral()
-{
-}
+    rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "useHDR", 1);
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to set filter \"usdHDR\" parameter.");
 
-void RifFilterBilateral::AttachFilter(const RifContextWrapper* rifContext)
-{
-	for (const auto& input : mInputs)
-	{
-		inputImages.push_back(input.second.mRifImage);
-		sigmas.push_back(input.second.mSigma);
-	}
+    // TODO: set correct model path
+    rifStatus = rifImageFilterSetParameterString(mRifImageFilterHandle, "modelPath", "../models");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to set filter \"modelPath\" parameter.");
 
-	rif_int rifStatus = rifImageFilterSetParameterImageArray( mRifImageFilterHandle, "inputs", &inputImages[0],
-		static_cast<rif_int>( inputImages.size() ) );
-	assert(RIF_SUCCESS == rifStatus);
-
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameterFloatArray( mRifImageFilterHandle, "sigmas", &sigmas[0],
-			static_cast<rif_int>( sigmas.size() ) );
-		assert(RIF_SUCCESS == rifStatus);
-	}
-
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameter1u( mRifImageFilterHandle, "inputsNum",
-			static_cast<rif_int>( inputImages.size() ) );
-		assert(RIF_SUCCESS == rifStatus);
-	}
-
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to apply parameter.");
-
-	rifStatus = rifCommandQueueAttachImageFilter( rifContext->Queue(), mRifImageFilterHandle, 
-		mInputs.at(RifColor).mRifImage, rifContext->Output() );
-	assert(RIF_SUCCESS == rifStatus);
-
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
-}
-
-
-
-RifFilterLwr::RifFilterLwr(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height)
-{
-	// main LWR filter
-	rif_int rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_LWR_DENOISE, &mRifImageFilterHandle);
-	assert(RIF_SUCCESS == rifStatus);
-
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to create LWR filter.");
-
-	// auxillary LWR filters
+	// auxillary filters
 	mAuxFilters.resize(AuxFilterMax, nullptr);
 
-	for (rif_image_filter& auxFilter : mAuxFilters)
-	{
-		rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_TEMPORAL_ACCUMULATOR, &auxFilter);
-		assert(RIF_SUCCESS == rifStatus);
-
-		if (RIF_SUCCESS != rifStatus)
-			throw std::runtime_error("RPR denoiser failed to create auxillary filter.");
-	}
-
-	// auxillary LWR images
-	rif_image_desc desc = { width, height, 1, width, width * height, 4, RIF_COMPONENT_TYPE_FLOAT32 };
-
-	mAuxImages.resize(AuxImageMax, nullptr);
-
-	for (rif_image& auxImage : mAuxImages)
-	{
-		rifStatus = rifContextCreateImage(rifContext->Context(), &desc, nullptr, &auxImage);
-		assert(RIF_SUCCESS == rifStatus);
-
-		if (RIF_SUCCESS != rifStatus)
-			throw std::runtime_error("RPR denoiser failed to create auxillary image.");
-	}
-}
-
-RifFilterLwr::~RifFilterLwr()
-{
-}
-
-void RifFilterLwr::AttachFilter(const RifContextWrapper* rifContext)
-{
-	rif_int rifStatus = RIF_SUCCESS;
-
-	// make variance image filters
-	SetupVarianceImageFilter(mAuxFilters[ColorVar], mAuxImages[ColorVarianceImage]);
-
-	SetupVarianceImageFilter(mAuxFilters[NormalVar], mAuxImages[NormalVarianceImage]);
-
-	SetupVarianceImageFilter(mAuxFilters[DepthVar], mAuxImages[DepthVarianceImage]);
-
-	SetupVarianceImageFilter(mAuxFilters[TransVar], mAuxImages[TransVarianceImage]);
-
-	// Configure Filter
-	rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "vColorImg", mAuxImages[ColorVarianceImage]);
+	rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_REMAP_RANGE, &mAuxFilters[RemapNormalFilter]);
 	assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "normalsImg", mInputs.at(RifNormal).mRifImage);
-		assert(RIF_SUCCESS == rifStatus);
-	}
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to create auxillary filter.");
 
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "vNormalsImg", mAuxImages[NormalVarianceImage]);
-		assert(RIF_SUCCESS == rifStatus);
-	}
+	rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_REMAP_RANGE, &mAuxFilters[RemapDepthFilter]);
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to create auxillary filter.");
+}
+
+void RifFilterAIDenoise::AttachFilter(const RifContextWrapper* rifContext)
+{
+	// setup inputs
+	rif_int rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "normalsImg", mInputs.at(RifNormal).mRifImage);
+	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS == rifStatus)
 	{
@@ -723,56 +681,61 @@ void RifFilterLwr::AttachFilter(const RifContextWrapper* rifContext)
 
 	if (RIF_SUCCESS == rifStatus)
 	{
-		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "vDepthImg", mAuxImages[DepthVarianceImage]);
+		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "colorImg", mInputs.at(RifColor).mRifImage);
 		assert(RIF_SUCCESS == rifStatus);
 	}
 
 	if (RIF_SUCCESS == rifStatus)
 	{
-		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "transImg", mInputs.at(RifTrans).mRifImage);
+		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "albedoImg", mInputs.at(RifAlbedo).mRifImage);
 		assert(RIF_SUCCESS == rifStatus);
 	}
 	
+	// setup remapping filters
 	if (RIF_SUCCESS == rifStatus)
 	{
-		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "vTransImg", mAuxImages[TransVarianceImage]);
+		rifStatus = rifImageFilterSetParameter1f(mAuxFilters[RemapNormalFilter], "dstLo", -1.0f);
+		assert(RIF_SUCCESS == rifStatus);
+	}
+
+	if (RIF_SUCCESS == rifStatus)
+	{
+		rifStatus = rifImageFilterSetParameter1f(mAuxFilters[RemapNormalFilter], "dstHi", +1.0f);
+		assert(RIF_SUCCESS == rifStatus);
+	}
+
+	if (RIF_SUCCESS == rifStatus)
+	{
+		rifStatus = rifImageFilterSetParameter1f(mAuxFilters[RemapDepthFilter], "dstLo", 0.0f);
+		assert(RIF_SUCCESS == rifStatus);
+	}
+
+	if (RIF_SUCCESS == rifStatus)
+	{
+		rifStatus = rifImageFilterSetParameter1f(mAuxFilters[RemapDepthFilter], "dstHi", 1.0f);
 		assert(RIF_SUCCESS == rifStatus);
 	}
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to apply parameter.");
-
+	
 	// attach filters
-	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[TransVar],
-		mInputs.at(RifTrans).mRifImage, mAuxImages[TransVarianceImage]);
-	assert(RIF_SUCCESS == rifStatus);
-
 
 	if (RIF_SUCCESS == rifStatus)
 	{
-		rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[DepthVar],
-			mInputs.at(RifDepth).mRifImage, mAuxImages[DepthVarianceImage]);
+		rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[RemapNormalFilter], mInputs.at(RifNormal).mRifImage, mInputs.at(RifNormal).mRifImage);
 		assert(RIF_SUCCESS == rifStatus);
 	}
 
 	if (RIF_SUCCESS == rifStatus)
 	{
-		rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[NormalVar],
-			mInputs.at(RifNormal).mRifImage, mAuxImages[NormalVarianceImage]);
+		rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[RemapDepthFilter], mInputs.at(RifDepth).mRifImage, mInputs.at(RifDepth).mRifImage);
 		assert(RIF_SUCCESS == rifStatus);
 	}
 
 	if (RIF_SUCCESS == rifStatus)
 	{
-		rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[ColorVar],
-			mInputs.at(RifColor).mRifImage, mAuxImages[ColorVarianceImage]);
-		assert(RIF_SUCCESS == rifStatus);
-	}
-
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
-			mInputs.at(RifColor).mRifImage, rifContext->Output());
+		rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle, mInputs.at(RifColor).mRifImage, rifContext->Output());
 		assert(RIF_SUCCESS == rifStatus);
 	}
 
@@ -780,137 +743,131 @@ void RifFilterLwr::AttachFilter(const RifContextWrapper* rifContext)
 		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
 }
 
-
-
 RifFilterEaw::RifFilterEaw(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height)
 {
-	// main EAW filter
-	rif_int rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_EAW_DENOISE, &mRifImageFilterHandle);
-	assert(RIF_SUCCESS == rifStatus);
+    // main EAW filter
+    rif_int rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_EAW_DENOISE, &mRifImageFilterHandle);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to create EAW filter.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to create EAW filter.");
 
-	// auxillary EAW filters
-	mAuxFilters.resize(AuxFilterMax, nullptr);
+    // auxillary EAW filters
+    mAuxFilters.resize(AuxFilterMax, nullptr);
 
-	rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_TEMPORAL_ACCUMULATOR, &mAuxFilters[ColorVar]);
-	assert(RIF_SUCCESS == rifStatus);
+    rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_TEMPORAL_ACCUMULATOR, &mAuxFilters[ColorVar]);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to create auxillary filter.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to create auxillary filter.");
 
-	rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_MLAA, &mAuxFilters[Mlaa]);
-	assert(RIF_SUCCESS == rifStatus);
+    rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_MLAA, &mAuxFilters[Mlaa]);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to create auxillary filter.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to create auxillary filter.");
 
-	// auxillary rif images
-	rif_image_desc desc = { width, height, 1, width, width * height, 4, RIF_COMPONENT_TYPE_FLOAT32 };
+    // auxillary rif images
+    rif_image_desc desc = { width, height, 1, width, width * height, 4, RIF_COMPONENT_TYPE_FLOAT32 };
 
-	mAuxImages.resize(AuxImageMax, nullptr);
+    mAuxImages.resize(AuxImageMax, nullptr);
 
-	rifStatus = rifContextCreateImage(rifContext->Context(), &desc, nullptr, &mAuxImages[ColorVarianceImage]);
-	assert(RIF_SUCCESS == rifStatus);
+    rifStatus = rifContextCreateImage(rifContext->Context(), &desc, nullptr, &mAuxImages[ColorVarianceImage]);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to create auxillary image.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to create auxillary image.");
 
-	rifStatus = rifContextCreateImage(rifContext->Context(), &desc, nullptr, &mAuxImages[DenoisedOutputImage]);
-	assert(RIF_SUCCESS == rifStatus);
+    rifStatus = rifContextCreateImage(rifContext->Context(), &desc, nullptr, &mAuxImages[DenoisedOutputImage]);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to create auxillary image.");
-}
-
-RifFilterEaw::~RifFilterEaw()
-{
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to create auxillary image.");
 }
 
 void RifFilterEaw::AttachFilter(const RifContextWrapper* rifContext)
 {
-	// setup inputs
-	rif_int rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "normalsImg", mInputs.at(RifNormal).mRifImage);
-	assert(RIF_SUCCESS == rifStatus);
+    // setup inputs
+    rif_int rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "normalsImg", mInputs.at(RifNormal).mRifImage);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "transImg", mInputs.at(RifTrans).mRifImage);
-		assert(RIF_SUCCESS == rifStatus);
-	}
+    if (RIF_SUCCESS == rifStatus)
+    {
+        rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "transImg", mInputs.at(RifTrans).mRifImage);
+        assert(RIF_SUCCESS == rifStatus);
+    }
 
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "colorVar", mInputs.at(RifColor).mRifImage);
-		assert(RIF_SUCCESS == rifStatus);
-	}
+    if (RIF_SUCCESS == rifStatus)
+    {
+        rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "colorVar", mInputs.at(RifColor).mRifImage);
+        assert(RIF_SUCCESS == rifStatus);
+    }
 
-	// setup sigmas
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "colorSigma", mInputs.at(RifColor).mSigma);
-		assert(RIF_SUCCESS == rifStatus);
-	}
+    // setup sigmas
+    if (RIF_SUCCESS == rifStatus)
+    {
+        rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "colorSigma", mInputs.at(RifColor).mSigma);
+        assert(RIF_SUCCESS == rifStatus);
+    }
 
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "normalSigma", mInputs.at(RifNormal).mSigma);
-		assert(RIF_SUCCESS == rifStatus);
-	}
+    if (RIF_SUCCESS == rifStatus)
+    {
+        rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "normalSigma", mInputs.at(RifNormal).mSigma);
+        assert(RIF_SUCCESS == rifStatus);
+    }
 
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "depthSigma", mInputs.at(RifDepth).mSigma);
-		assert(RIF_SUCCESS == rifStatus);
-	}
+    if (RIF_SUCCESS == rifStatus)
+    {
+        rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "depthSigma", mInputs.at(RifDepth).mSigma);
+        assert(RIF_SUCCESS == rifStatus);
+    }
 
-	if (RIF_SUCCESS == rifStatus)
-	{
-		rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "transSigma", mInputs.at(RifTrans).mSigma);
-		assert(RIF_SUCCESS == rifStatus);
-	}
+    if (RIF_SUCCESS == rifStatus)
+    {
+        rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "transSigma", mInputs.at(RifTrans).mSigma);
+        assert(RIF_SUCCESS == rifStatus);
+    }
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to apply parameter.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to apply parameter.");
 
-	// setup color variance filter
-	SetupVarianceImageFilter(mAuxFilters[ColorVar], mAuxImages[ColorVarianceImage]);
+    // setup color variance filter
+    SetupVarianceImageFilter(mAuxFilters[ColorVar], mAuxImages[ColorVarianceImage]);
 
-	// setup MLAA filter
-	rifStatus = rifImageFilterSetParameterImage(mAuxFilters[Mlaa], "normalsImg", mInputs.at(RifNormal).mRifImage);
-	assert(RIF_SUCCESS == rifStatus);
+    // setup MLAA filter
+    rifStatus = rifImageFilterSetParameterImage(mAuxFilters[Mlaa], "normalsImg", mInputs.at(RifNormal).mRifImage);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to apply parameter.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to apply parameter.");
 
-	rifStatus = rifImageFilterSetParameterImage(mAuxFilters[Mlaa], "meshIDImg", mInputs.at(RifObjectId).mRifImage);
-	assert(RIF_SUCCESS == rifStatus);
+    rifStatus = rifImageFilterSetParameterImage(mAuxFilters[Mlaa], "meshIDImg", mInputs.at(RifObjectId).mRifImage);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to apply parameter.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to apply parameter.");
 
-	// attach filters
-	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[ColorVar],
-		mInputs.at(RifColor).mRifImage, rifContext->Output());
-	assert(RIF_SUCCESS == rifStatus);
+    // attach filters
+    rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[ColorVar],
+                                                 mInputs.at(RifColor).mRifImage, rifContext->Output());
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
 
-	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle, rifContext->Output(),
-		mAuxImages[DenoisedOutputImage]);
-	assert(RIF_SUCCESS == rifStatus);
+    rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle, rifContext->Output(),
+                                                 mAuxImages[DenoisedOutputImage]);
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
 
-	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[Mlaa], mAuxImages[DenoisedOutputImage],
-		rifContext->Output());
-	assert(RIF_SUCCESS == rifStatus);
+    rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mAuxFilters[Mlaa], mAuxImages[DenoisedOutputImage],
+                                                 rifContext->Output());
+    assert(RIF_SUCCESS == rifStatus);
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -13,7 +13,7 @@ public:
 
 protected:
 
-	virtual bool IsDirtyGeomParam(std::map<TfToken, float> & params);
+	virtual bool IsDirtyGeomParam(std::map<TfToken, float> & params) override;
 
 	// Ferch required params for geometry
 	virtual const TfTokenVector & FetchLightGeometryParamNames() const override;

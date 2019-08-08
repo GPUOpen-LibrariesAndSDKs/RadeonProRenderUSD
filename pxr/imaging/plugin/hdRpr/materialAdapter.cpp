@@ -7,7 +7,7 @@
 #include "pxr/usd/sdf/assetPath.h"
 #include <pxr/usd/ar/resolver.h>
 
-#include "RprSupport.h"
+#include "RadeonProRender.h"
 #include <cfloat>
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -262,6 +262,8 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const MaterialParams 
 	case EMaterialType::USD_PREVIEW_SURFACE:
 		PoulateUsdPreviewSurface(params, materualTextures);
 		break;
+    default:
+        break;
 	}
 }
 
@@ -286,7 +288,8 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const HdMaterialNetwo
 		PoulateUsdPreviewSurface(materialParameters, materialTextures);
 		break;
 	}
-
+    default:
+        break;
 	}
 }
 
@@ -459,7 +462,7 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 	}
 
 	if(useSpecular) {
-		m_uRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_MODE , RPRX_UBER_MATERIAL_REFLECTION_MODE_PBR});
+		m_uRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_MODE , RPR_UBER_MATERIAL_IOR_MODE_PBR });
 
 		if (isReflectionTexture)
 		{
@@ -471,7 +474,7 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 		}
 		
 	} else {
-		m_uRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_MODE , RPRX_UBER_MATERIAL_REFLECTION_MODE_METALNESS});
+		m_uRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_MODE , RPR_UBER_MATERIAL_IOR_MODE_METALNESS });
 
 		if (isAlbedoTexture)
 		{

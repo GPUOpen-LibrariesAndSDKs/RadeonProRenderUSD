@@ -45,7 +45,17 @@ find_library(RIF_LIBRARY
         "${RIF_LOCATION_LIB}"
     DOC
         "Radeon Image Filter library path"
+    NO_DEFAULT_PATH
+    NO_SYSTEM_ENVIRONMENT_PATH
 )
+
+if(WIN32)
+    set(RIF_BINARIES
+        ${RIF_LOCATION_LIB}/MIOpen.dll
+        ${RIF_LOCATION_LIB}/RadeonImageFilters64.dll
+        ${RIF_LOCATION_LIB}/RadeonML-MIOpen.dll
+        ${RIF_LOCATION_LIB}/RadeonML-DirectML.dll)
+endif(WIN32)
 
 include(FindPackageHandleStandardArgs)
 

@@ -20,7 +20,7 @@ class HdRprApiImpl;
 class RprMaterialObject;
 struct MaterialNode;
 
-class RprApiMaterial;
+struct RprApiMaterial;
 class MaterialAdapter;
 
 typedef void * RprApiObject;
@@ -36,24 +36,15 @@ enum class HdRprRenderDevice
 
 enum class HdRprAov
 {
-    NONE = -1,
-    COLOR = 0,
-    NORMAL,
-    DEPTH,
-    PRIM_ID,
-    UV,
+	NONE = -1,
+	COLOR = 0,
+	NORMAL,
+	ALBEDO,
+	DEPTH,
+	PRIM_ID,
+	UV,
 	FIRST = COLOR,
 	LAST = UV
-};
-
-enum class FilterType
-{
-	None = -1,
-	BilateralDenoise,
-	LwrDenoise,
-	EawDenoise,
-	FIRST = BilateralDenoise,
-	LAST = EawDenoise
 };
 
 class HdRprApi final
@@ -64,7 +55,8 @@ public:
 
 	static void SetRenderDevice(const HdRprRenderDevice & renderMode);
 
-	static void SetFilter(const FilterType & type);
+	static void SetDenoising(bool enableDenoising);
+	static bool IsDenoisingEnabled();
 
 	static void SetAov(const HdRprAov & aov);
 	
