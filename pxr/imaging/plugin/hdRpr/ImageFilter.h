@@ -44,6 +44,15 @@ struct RifParam
 	RifData      mData;
 };
 
+enum class FilterType
+{
+    None = -1,
+    AIDenoise,
+    EawDenoise,
+    FIRST = AIDenoise,
+    LAST = EawDenoise
+};
+
 class RifContextWrapper;
 class RifFilterWrapper;
 
@@ -55,14 +64,12 @@ class ImageFilter final
 
 	std::uint32_t mWidth;
 	std::uint32_t mHeight;
-	
-	bool mIsCPUMode;
 
 public:
 	explicit ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height);
 	~ImageFilter();
 
-	void CreateFilter();
+	void CreateFilter(FilterType filterType);
 	void DeleteFilter();
 
 	void Resize(std::uint32_t w, std::uint32_t h);
@@ -194,7 +201,7 @@ class RifFilterAIDenoise final : public RifFilterWrapper
 		AuxFilterMax
 	};
 public:
-	explicit RifFilterAIDenoise(const RifContextWrapper* rifContext, bool isCPUMode);
+	explicit RifFilterAIDenoise(const RifContextWrapper* rifContext);
 	~RifFilterAIDenoise() override = default;
 	
 	void AttachFilter(const RifContextWrapper* rifContext) override;

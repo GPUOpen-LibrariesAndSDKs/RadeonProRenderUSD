@@ -329,7 +329,7 @@ private:
 	bool IsValid()
 	{
 		return (m_prefData.mRenderDevice >= HdRprRenderDevice::FIRST && m_prefData.mRenderDevice <= HdRprRenderDevice::LAST)
-			&& (m_prefData.mAov >= HdRprAov::FIRST && m_prefData.mAov <= HdRprAov::LAST);
+			&& (m_prefData.mAov >= HdRprAov::NONE && m_prefData.mAov <= HdRprAov::LAST);
 	}
 
 	void SetDefault()
@@ -1002,15 +1002,23 @@ public:
 		return m_framebufferGL;
 	}
 
-	const float * GetFramebufferData()
-	{
-		size_t fb_data_size = 0;
+    const float * GetFramebufferData()
+    {
+        if (m_currentRenderDevice == HdRprRenderDevice::CPU &&
+            m_imageFilterPtr && HdRprPreferences::GetInstance().GetAov() == HdRprAov::COLOR)
+        {
+            m_framebufferData = m_imageFilterPtr->GetData();
+        }
+        else
+        {
+            size_t fb_data_size = 0;
 
-		if (RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fb_data_size), "Fail to get frafebuffer data size")) return nullptr;
+            if (RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fb_data_size), "Fail to get frafebuffer data size")) return nullptr;
 
-		RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, fb_data_size, m_framebufferData.data(), NULL), "Fail to get frafebuffer data");
-		return m_framebufferData.data();
-	}
+            RPR_ERROR_CHECK(rprFrameBufferGetInfo(m_resolvedBuffer, RPR_FRAMEBUFFER_DATA, fb_data_size, m_framebufferData.data(), NULL), "Fail to get frafebuffer data");
+        }
+        return m_framebufferData.data();
+    }
 
 	void GetFramebufferSize(rpr_int & width, rpr_int & height) const
 	{
@@ -1062,14 +1070,26 @@ public:
 
 		if (m_imageFilterPtr && HdRprPreferences::GetInstance().GetAov() == HdRprAov::COLOR)
 		{
-            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_colorBuffer, m_colorFilterBuffer, true), "Failed to resolve filter buffer");
-            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_depthBuffer, m_depthFilterBuffer, true), "Failed to resolve filter buffer");
-            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_normalBuffer, m_normalFilterBuffer, true), "Failed to resolve filter buffer");
-            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_albedoBuffer, m_albedoFilterBuffer, true), "Failed to resolve filter buffer");
-#ifdef __APPLE__
-            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_objId, m_transFilterBuffer, true), "Failed to resolve filter buffer");
-            RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_positionBuffer, m_positionFilterBuffer, true), "Failed to resolve filter buffer");
-#endif __APPLE__
+            switch (m_imageFilterType)
+            {
+	            case FilterType::AIDenoise:
+	            {
+	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_colorBuffer, m_colorFilterBuffer, true), "Failed to resolve filter buffer");
+	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_depthBuffer, m_depthFilterBuffer, true), "Failed to resolve filter buffer");
+	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_normalBuffer, m_normalFilterBuffer, true), "Failed to resolve filter buffer");
+	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_albedoBuffer, m_albedoFilterBuffer, true), "Failed to resolve filter buffer");
+	                break;
+	            }
+	            case FilterType::EawDenoise:
+	            {
+	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_colorBuffer, m_colorFilterBuffer, true), "Failed to resolve filter buffer");
+	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_depthBuffer, m_depthFilterBuffer, true), "Failed to resolve filter buffer");
+	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_normalBuffer, m_normalFilterBuffer, true), "Failed to resolve filter buffer");
+	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_objId, m_transFilterBuffer, true), "Failed to resolve filter buffer");
+	                RPR_ERROR_CHECK(rprContextResolveFrameBuffer(m_context, m_positionBuffer, m_positionFilterBuffer, true), "Failed to resolve filter buffer");
+	                break;
+	            }
+            }
 			m_imageFilterPtr->Run();
 		}
 		else
@@ -1160,8 +1180,14 @@ private:
 	{
 		//lock();
 
-		// TODO: Query info from HdRprPreferences
-		m_useGlInterop = HdRprApiImpl::EnableGLInterop();
+        // TODO: Query info from HdRprPreferences
+        m_useGlInterop = HdRprApiImpl::EnableGLInterop();
+        m_currentRenderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
+        if (m_useGlInterop && m_currentRenderDevice == HdRprRenderDevice::CPU) {
+            // GL interop is not supported in CPU mode
+            m_useGlInterop = false;
+        }
+
 		if (m_useGlInterop) {
 			GLenum err = glewInit();
 			if (err != GLEW_OK) {
@@ -1176,12 +1202,7 @@ private:
 		rpr_int tahoePluginID = rprRegisterPlugin(tahoePath.c_str());
 		rpr_int plugins[] = { tahoePluginID };
 
-		auto renderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
-		if (m_useGlInterop && renderDevice == HdRprRenderDevice::CPU) {
-			TF_CODING_WARNING("Do not support GL Interop with CPU device. Switched to GPU.");
-			renderDevice = HdRprRenderDevice::GPU;
-		}
-		rpr_creation_flags flags = getRprCreationFlags(renderDevice, tahoePluginID, rprTmpDir.c_str());
+		rpr_creation_flags flags = getRprCreationFlags(m_currentRenderDevice, tahoePluginID, rprTmpDir.c_str());
 		if (!flags)
 		{
 			TF_CODING_ERROR("Could not find compatible device");
@@ -1212,36 +1233,72 @@ private:
 
 
 #ifdef USE_RIF
-	void CreateImageFilter()
-	{
-		if (!HdRprPreferences::GetInstance().IsDenoisingEnabled())
-		{
-			m_imageFilterPtr.reset();
-			return;
-		}
+    void CreateImageFilter()
+    {
+        if (!HdRprPreferences::GetInstance().IsDenoisingEnabled())
+        {
+            m_imageFilterPtr.reset();
+            return;
+        }
 
-		m_imageFilterPtr.reset( new ImageFilter(m_context, m_framebufferDesc.fb_width, m_framebufferDesc.fb_height));
-		m_imageFilterPtr->CreateFilter();
+        m_imageFilterPtr.reset(new ImageFilter(m_context, m_framebufferDesc.fb_width, m_framebufferDesc.fb_height));
+#ifdef __APPLE__
+        m_imageFilterType = FilterType::EawDenoise;
+#else
+        if (m_currentRenderDevice == HdRprRenderDevice::CPU)
+        {
+            m_imageFilterType = FilterType::EawDenoise;
+        }
+        else
+        {
+            m_imageFilterType = FilterType::AIDenoise;
+        }
+#endif // __APPLE__
+        m_imageFilterPtr->CreateFilter(m_imageFilterType);
 
         rpr_framebuffer_format fmt = { 4, RPR_COMPONENT_TYPE_FLOAT32 };
-        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_colorFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
-        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_normalFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
-        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_albedoFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
-        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_depthFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+        switch (m_imageFilterType)
+        {
+            case FilterType::AIDenoise:
+            {
+                if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_colorFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+                if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_normalFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+                if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_albedoFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+                if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_depthFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+                
+                m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorFilterBuffer, 1.0f);
+                m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_normalFilterBuffer, 1.0f);
+                m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthFilterBuffer, 1.0f);
+                m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_albedoFilterBuffer, 1.0f);
+                break;
+            }
+            case FilterType::EawDenoise:
+            {
+                RifParam rifParam;
+                rifParam.mData.f = 1.f;
+                rifParam.mType = RifParamType::RifFloat;
+                m_imageFilterPtr->AddParam("colorSigma", rifParam);
+                m_imageFilterPtr->AddParam("normalSigma", rifParam);
+                m_imageFilterPtr->AddParam("depthSigma", rifParam);
+                m_imageFilterPtr->AddParam("transSigma", rifParam);
 
-		m_imageFilterPtr->Resize(m_framebufferDesc.fb_width, m_framebufferDesc.fb_height);
-		m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorFilterBuffer, 1.0f);
-		m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_normalFilterBuffer, 1.0f);
-		m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthFilterBuffer, 1.0f);
-		m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_albedoFilterBuffer, 1.0f);
+                if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_colorFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+                if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_normalFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+                if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_depthFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+                if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_transFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
+                if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_positionFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
 
-#ifdef __APPLE__
-        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_transFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
-        if (RPR_ERROR_CHECK(rprContextCreateFrameBuffer(m_context, fmt, &m_framebufferDesc, &m_positionFilterBuffer), "Fail create color framebuffer")) throw std::runtime_error("Fail create color framebuffer");
-        m_imageFilterPtr->SetInput(RifFilterInput::RifTrans, m_transFilterBuffer, 1.0f);
-        m_imageFilterPtr->SetInput(RifFilterInput::RifObjectId, m_transFilterBuffer, 1.0f);
-        m_imageFilterPtr->SetInput(RifFilterInput::RifWorldCoordinate, m_positionFilterBuffer, 1.0f);
-#endif // __APPLE__
+                m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_colorFilterBuffer, 1.0f);
+                m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_normalFilterBuffer, 1.0f);
+                m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_depthFilterBuffer, 1.0f);
+                m_imageFilterPtr->SetInput(RifFilterInput::RifTrans, m_transFilterBuffer, 1.0f);
+                m_imageFilterPtr->SetInput(RifFilterInput::RifObjectId, m_transFilterBuffer, 1.0f);
+                m_imageFilterPtr->SetInput(RifFilterInput::RifWorldCoordinate, m_positionFilterBuffer, 1.0f);
+                break;
+            }
+        }
+        
+        m_imageFilterPtr->Resize(m_framebufferDesc.fb_width, m_framebufferDesc.fb_height);
 
 		if (m_useGlInterop) {
 			m_imageFilterPtr->SetOutputGlTexture(m_textureFramebufferGL);
@@ -1487,6 +1544,7 @@ private:
     rpr_framebuffer m_positionFilterBuffer = nullptr;
 
 	bool m_useGlInterop = EnableGLInterop();
+    HdRprRenderDevice m_currentRenderDevice = HdRprRenderDevice::NONE;
 	GLuint m_framebufferGL = INVALID_FRAMEBUFFER;
 	GLuint m_depthrenderbufferGL;
 	rpr_GLuint m_textureFramebufferGL = INVALID_TEXTURE;
@@ -1516,6 +1574,7 @@ private:
 
 #ifdef USE_RIF
 	std::unique_ptr<ImageFilter> m_imageFilterPtr;
+    FilterType m_imageFilterType = FilterType::None;
 #endif // USE_RIF
 };
 

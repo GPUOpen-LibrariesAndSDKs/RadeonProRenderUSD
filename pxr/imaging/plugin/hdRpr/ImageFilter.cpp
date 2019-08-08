@@ -16,7 +16,6 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-#ifdef __APPLE__
 class RifFilterEaw final : public RifFilterWrapper
 {
     enum
@@ -39,7 +38,6 @@ public:
 
     virtual void AttachFilter(const RifContextWrapper* rifContext) override;
 };
-#endif // __APPLE__
 
 static bool HasGpuContext(rpr_creation_flags contextFlags)
 {
@@ -91,8 +89,7 @@ static rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags)
 
 ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height) :
 	mWidth(width),
-	mHeight(height),
-	mIsCPUMode(false)
+	mHeight(height)
 {
 	rpr_creation_flags contextFlags = 0;
 	rpr_int rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr);
@@ -115,7 +112,6 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 	else
 	{
 		mRifContext.reset(new RifContextCPU(rprContext));
-		mIsCPUMode = true;
 	}
 }
 
@@ -124,13 +120,19 @@ ImageFilter::~ImageFilter()
 	mRifFilter->DetachFilter( mRifContext.get() );
 }
 
-void ImageFilter::CreateFilter()
+void ImageFilter::CreateFilter(FilterType filterType)
 {
-#ifdef __APPLE__
-    mRifFilter.reset(new RifFilterEaw(mRifContext.get(), mWidth, mHeight));
-#else
-    mRifFilter.reset(new RifFilterAIDenoise(mRifContext.get(), mIsCPUMode));
-#endif // __APPLE__
+    switch (filterType)
+    {
+        case FilterType::AIDenoise:
+            mRifFilter.reset(new RifFilterAIDenoise(mRifContext.get()));
+            break;
+        case FilterType::EawDenoise:
+            mRifFilter.reset(new RifFilterEaw(mRifContext.get(), mWidth, mHeight));
+            break;
+        default:
+            throw std::runtime_error("Incorrect filter type");
+    }
 }
 
 void ImageFilter::DeleteFilter()
@@ -632,25 +634,17 @@ void RifFilterWrapper::ApplyParameters() const
 
 
 
-RifFilterAIDenoise::RifFilterAIDenoise(const RifContextWrapper* rifContext, bool isCPUMode)
+RifFilterAIDenoise::RifFilterAIDenoise(const RifContextWrapper* rifContext)
 {
-    rif_image_filter_type rifFilterType = RIF_IMAGE_FILTER_OPENIMAGE_DENOISE;
-#ifndef __APPLE__
-    if (!isCPUMode) {
-        rifFilterType = RIF_IMAGE_FILTER_AI_DENOISE;
-    }
-#endif
-	rif_int rifStatus = rifContextCreateImageFilter(rifContext->Context(), rifFilterType, &mRifImageFilterHandle);
+	rif_int rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_AI_DENOISE, &mRifImageFilterHandle);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create AI denoise filter.");
 
-    if (rifFilterType == RIF_IMAGE_FILTER_AI_DENOISE) {
-        rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "useHDR", 1);
-        if (RIF_SUCCESS != rifStatus)
-            throw std::runtime_error("RPR denoiser failed to set filter \"usdHDR\" parameter.");
-    }
+    rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "useHDR", 1);
+    if (RIF_SUCCESS != rifStatus)
+        throw std::runtime_error("RPR denoiser failed to set filter \"usdHDR\" parameter.");
 
     // TODO: set correct model path
     rifStatus = rifImageFilterSetParameterString(mRifImageFilterHandle, "modelPath", "../models");
@@ -749,7 +743,6 @@ void RifFilterAIDenoise::AttachFilter(const RifContextWrapper* rifContext)
 		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
 }
 
-#ifdef __APPLE__
 RifFilterEaw::RifFilterEaw(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height)
 {
     // main EAW filter
@@ -876,7 +869,5 @@ void RifFilterEaw::AttachFilter(const RifContextWrapper* rifContext)
     if (RIF_SUCCESS != rifStatus)
         throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
 }
-
-#endif // __APPLE__
 
 PXR_NAMESPACE_CLOSE_SCOPE
