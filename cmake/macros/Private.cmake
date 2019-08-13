@@ -221,6 +221,9 @@ function(_install_resource_files NAME pluginInstallPrefix pluginToLibraryPath)
     #                     resourceFileC
     #                 ...
     #
+    if(PXR_BUILD_AS_HOUDINI_PLUGIN)
+        set(pluginInstallPrefix ${pluginInstallPrefix}/usd_plugins)
+    endif(PXR_BUILD_AS_HOUDINI_PLUGIN)
     _get_resources_dir(${pluginInstallPrefix} ${NAME} resourcesPath)
 
     foreach(resourceFile ${ARGN})
@@ -1170,11 +1173,20 @@ function(_pxr_library NAME)
     _get_install_dir("include/${PXR_PREFIX}/${NAME}" headerInstallPrefix)
     _get_install_dir("lib" libInstallPrefix)
     if(isPlugin)
-        _get_install_dir("plugin" pluginInstallPrefix)
-        if(NOT PXR_INSTALL_SUBDIR)
-            # XXX -- Why this difference?
-            _get_install_dir("plugin/usd" pluginInstallPrefix)
-        endif()
+        if(PXR_BUILD_AS_HOUDINI_PLUGIN)
+            if(WIN32)
+                _get_install_dir("bin" pluginInstallPrefix)
+            else()
+                _get_install_dir("dsolib" pluginInstallPrefix)
+            endif()
+        else(PXR_BUILD_AS_HOUDINI_PLUGIN)
+            _get_install_dir("plugin" pluginInstallPrefix)
+            if(NOT PXR_INSTALL_SUBDIR)
+                # XXX -- Why this difference?
+                _get_install_dir("plugin/usd" pluginInstallPrefix)
+            endif()
+        endif(PXR_BUILD_AS_HOUDINI_PLUGIN)
+
         if(NOT isObject)
             # A plugin embedded in the monolithic library is found in
             # the usual library location, otherwise plugin libraries
@@ -1214,6 +1226,13 @@ function(_pxr_library NAME)
     # Final name.
     set(libraryFilename "${args_PREFIX}${NAME}${args_SUFFIX}")
     set(pluginToLibraryPath "")
+    if(PXR_BUILD_AS_HOUDINI_PLUGIN)
+        if(WIN32)
+            set(pluginToLibraryPath "${HOUDINI_ROOT}/bin/${NAME}${args_SUFFIX}")
+        else()
+            set(pluginToLibraryPath "${HOUDINI_LIB}/${NAME}${args_SUFFIX}")   
+        endif()
+    endif(PXR_BUILD_AS_HOUDINI_PLUGIN)
 
     # Figure out the relative path from this library's plugin location
     # (in the libplug sense, which applies even to non-plugins, and is

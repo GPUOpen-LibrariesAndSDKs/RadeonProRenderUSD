@@ -32,6 +32,8 @@ option(PXR_ENABLE_OPENVDB_SUPPORT "Enable OpenVDB" OFF)
 
 option(PXR_ENABLE_RIF_SUPPORT "Enable Radeon Image Filter" OFF)
 
+option(PXR_BUILD_AS_HOUDINI_PLUGIN "Build RadeonProRender plugin for Houdini" OFF)
+
 # Precompiled headers are a win on Windows, not on gcc.
 set(pxr_enable_pch "OFF")
 if(MSVC)

@@ -37,30 +37,47 @@ if(PXR_ENABLE_RIF_SUPPORT)
 
 endif(PXR_ENABLE_RIF_SUPPORT)
 
-if(${USD_LIBRARY_MONOLITHIC})
-    set(USD_LIBRARIES
-            usd_ms)
-else()
-    set(USD_LIBRARIES
-        ar
-        arch
-        sdf
-        trace
-        plug
-        tf
-        vt
-        gf
-        glf
-        work
-        hf
-        hd
-		hdSt
-        hdx
-        usdLux
-        usdUtils
-        pxOsd)
-endif()
-        
+set(USD_LIBRARIES
+    ar
+    arch
+    sdf
+    trace
+    plug
+    tf
+    vt
+    gf
+    glf
+    work
+    hf
+    hd
+    hdSt
+    hdx
+    usdLux
+    usdUtils
+    pxOsd)
+
+if(PXR_BUILD_AS_HOUDINI_PLUGIN)
+    set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
+        ${hBoost_INCLUDE_DIRS})
+
+    if(WIN32)
+        set(HOUDINI_USD_LIBRARIES "")
+        foreach(name ${USD_LIBRARIES})
+            list(APPEND HOUDINI_USD_LIBRARIES "libpxr_${name}")
+        endforeach()
+        set(USD_LIBRARIES "${HOUDINI_USD_LIBRARIES}")
+    else()
+        message(FATAL_ERROR "Implement me")
+    endif()
+else(PXR_BUILD_AS_HOUDINI_PLUGIN)
+    set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
+        ${Boost_INCLUDE_DIRS})
+
+    if(${USD_LIBRARY_MONOLITHIC})
+        set(USD_LIBRARIES usd_ms)
+    endif()
+endif(PXR_BUILD_AS_HOUDINI_PLUGIN)
+
 pxr_plugin(hdRpr
    LIBRARIES
         ${USD_LIBRARIES}
@@ -76,7 +93,7 @@ pxr_plugin(hdRpr
 
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
-        ${Boost_INCLUDE_DIRS}
+        ${BUILD_TYPE_SPECIFIC_INCLUDE_DIRS}
         ${TBB_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIR}
 		
@@ -135,19 +152,19 @@ if (APPLE)
         ${CMAKE_INSTALL_NAME_TOOL} -change @loader_path/libRadeonProRender64.dylib ${RPR_LIBRARY} $<TARGET_FILE:hdRpr> )
 endif(APPLE)
 
- _get_install_dir(lib/python/rpr installPrefix)
+if(NOT PXR_BUILD_AS_HOUDINI_PLUGIN)
+_get_install_dir(lib/python/rpr installPrefix)
 
- 
 install(
     FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/rpr.py
     DESTINATION ${installPrefix}
     RENAME "__init__.py"
-	)
-	
+    )
+    
 install(
     FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/plugInfo.json
     DESTINATION ${installPrefix}
-	)
+    )
 install(
     CODE
     "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/plugin/usd/plugInfo.json\"
@@ -156,6 +173,7 @@ install(
     \\\"Includes\\\": [ \\\"*/resources/\\\" ]
 }
     \")")
+endif(NOT PXR_BUILD_AS_HOUDINI_PLUGIN)
 
 if(WIN32)
     install(

@@ -12,6 +12,28 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
                       ${CMAKE_SOURCE_DIR}/cmake/macros)
 
 include(Options)
+
+if(PXR_BUILD_AS_HOUDINI_PLUGIN)
+    if(DEFINED ENV{HOUDINI_ROOT})
+        set(HOUDINI_ROOT $ENV{HOUDINI_ROOT})
+    endif()
+    if(NOT DEFINED HOUDINI_ROOT)
+        message(FATAL_ERROR "Specify HOUDINI_ROOT")
+    endif()
+
+    if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+        message(STATUS "Setting CMAKE_INSTALL_PREFIX to HOUDINI_ROOT - ${HOUDINI_ROOT}")
+        set(CMAKE_INSTALL_PREFIX "${HOUDINI_ROOT}" CACHE PATH "..." FORCE)
+    endif()
+
+    if(WIN32)
+       set(HOUDINI_LIB ${HOUDINI_ROOT}/custom/houdini/dsolib)
+    else()
+       set(HOUDINI_LIB ${HOUDINI_ROOT}/dsolib)
+    endif()
+    add_definitions(-DBUILD_AS_HOUDINI_PLUGIN)
+endif(PXR_BUILD_AS_HOUDINI_PLUGIN)
+
 include(ProjectDefaults)
 include(Packages)
 
