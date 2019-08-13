@@ -54,7 +54,7 @@ if(PXR_ENABLE_PYTHON_SUPPORT)
 
     find_package(Boost
         COMPONENTS
-            python
+            python27
         REQUIRED
     )
 else()

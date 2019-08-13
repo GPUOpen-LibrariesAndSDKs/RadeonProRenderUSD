@@ -262,6 +262,8 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const MaterialParams 
 	case EMaterialType::USD_PREVIEW_SURFACE:
 		PoulateUsdPreviewSurface(params, materualTextures);
 		break;
+    default:
+        break;
 	}
 }
 
@@ -286,7 +288,8 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const HdMaterialNetwo
 		PoulateUsdPreviewSurface(materialParameters, materialTextures);
 		break;
 	}
-
+    default:
+        break;
 	}
 }
 

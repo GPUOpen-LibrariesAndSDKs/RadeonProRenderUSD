@@ -159,13 +159,11 @@ install(
     \")")
 
 if(WIN32)
-install(
-    FILES ${RPR_BINARIES} ${OptBin}
-    DESTINATION bin
-    )
+    install(
+        FILES ${RPR_BINARIES} ${OptBin}
+        DESTINATION bin)
 else(WIN32)
-install(
-    FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${OptLibs}
-    DESTINATION lib
-    )
+    install(
+        FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${OptLibs}
+        DESTINATION lib )
 endif(WIN32)

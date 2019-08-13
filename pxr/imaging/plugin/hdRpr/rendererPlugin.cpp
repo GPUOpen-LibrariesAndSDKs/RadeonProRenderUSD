@@ -22,7 +22,7 @@
 // language governing permissions and limitations under the Apache License.
 //
 #include "pxr/imaging/hdx/rendererPluginRegistry.h"
-#include "pxr/imaging/hdRpr/renderDelegate.h"
+#include "renderDelegate.h"
 #include "rendererPlugin.h"
 
 PXR_NAMESPACE_OPEN_SCOPE

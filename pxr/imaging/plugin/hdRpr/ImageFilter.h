@@ -22,6 +22,7 @@ enum RifFilterInput
 	RifWorldCoordinate,
 	RifObjectId,
 	RifTrans,
+	RifAlbedo,
 	RifMaxInput
 };
 
@@ -43,6 +44,15 @@ struct RifParam
 	RifData      mData;
 };
 
+enum class FilterType
+{
+    None = -1,
+    AIDenoise,
+    EawDenoise,
+    FIRST = AIDenoise,
+    LAST = EawDenoise
+};
+
 class RifContextWrapper;
 class RifFilterWrapper;
 
@@ -55,16 +65,12 @@ class ImageFilter final
 	std::uint32_t mWidth;
 	std::uint32_t mHeight;
 
-	FilterType mFilterType;
-
 public:
 	explicit ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height);
 	~ImageFilter();
 
-	void CreateFilter(FilterType rifFilteType);
+	void CreateFilter(FilterType filterType);
 	void DeleteFilter();
-
-	FilterType GetType() const { return mFilterType; }
 
 	void Resize(std::uint32_t w, std::uint32_t h);
 
@@ -186,67 +192,19 @@ protected:
 	void SetupVarianceImageFilter(const rif_image_filter inputFilter, const rif_image outVarianceImage) const;
 };
 
-class RifFilterBilateral final : public RifFilterWrapper
-{
-	// vector representation of inputs is needed to feed library
-	std::vector<rif_image> inputImages;
-	std::vector<float> sigmas;
-
-public:
-	explicit RifFilterBilateral(const RifContextWrapper* rifContext);
-	virtual ~RifFilterBilateral();
-
-	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
-};
-
-class RifFilterLwr final : public RifFilterWrapper
+class RifFilterAIDenoise final : public RifFilterWrapper
 {
 	enum
 	{
-		ColorVar,
-		NormalVar,
-		DepthVar,
-		TransVar,
+		RemapNormalFilter,
+		RemapDepthFilter,
 		AuxFilterMax
 	};
-
-	enum
-	{
-		ColorVarianceImage,
-		NormalVarianceImage,
-		DepthVarianceImage,
-		TransVarianceImage,
-		AuxImageMax
-	};
-
 public:
-	explicit RifFilterLwr(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height);
-	virtual ~RifFilterLwr();
-
-	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
-};
-
-class RifFilterEaw final : public RifFilterWrapper
-{
-	enum
-	{
-		ColorVar,
-		Mlaa,
-		AuxFilterMax
-	};
-
-	enum
-	{
-		ColorVarianceImage,
-		DenoisedOutputImage,
-		AuxImageMax
-	};
-
-public:
-	explicit RifFilterEaw(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height);
-	virtual ~RifFilterEaw();
-
-	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+	explicit RifFilterAIDenoise(const RifContextWrapper* rifContext);
+	~RifFilterAIDenoise() override = default;
+	
+	void AttachFilter(const RifContextWrapper* rifContext) override;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

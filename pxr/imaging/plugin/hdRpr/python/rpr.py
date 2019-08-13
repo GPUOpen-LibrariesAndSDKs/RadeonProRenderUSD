@@ -43,13 +43,18 @@ def setAov(aov):
 	   lib.SetRprGlobalAov(aov)
 	   
 	   
-def setFilter(filter):
+def switchDenoising():
     rprPath = getRprPath()
     if rprPath is not None:
-	   lib = cdll.LoadLibrary(rprPath)
-	   createRprTmpDirIfNeeded(lib)
-	   lib.SetRprGlobalFilter(filter)
-	   
+        lib = cdll.LoadLibrary(rprPath)
+        createRprTmpDirIfNeeded(lib)
+
+        lib.IsRprDenoisingEnabled.restype = c_int
+        isDenoisingEnabled = lib.IsRprDenoisingEnabled()
+        # TODO: change action isSelected when available
+
+        lib.SetRprGlobalDenoising(not isDenoisingEnabled)
+
 	   
 def setRenderDevice(usdviewApi, renderDeviceId):
     rprPath = getRprPath()
@@ -92,16 +97,9 @@ def UVAov(usdviewApi):
 def PrimIdAov(usdviewApi):
     setAov(4)
 
-def NoFilter(usdviewApi):
-    setFilter(0)
+def SwitchDenoising(usdviewApi):
+    switchDenoising()
 
-def BilateralFilter(usdviewApi):
-    setFilter(1)
-	
-def EawFilter(usdviewApi):
-    setFilter(2)
-	
-	
 def renderDeviceCPU(usdviewApi):
     setRenderDevice(usdviewApi, 0)
 
@@ -148,23 +146,11 @@ class RprPluginContainer(PluginContainer):
             "PrimId",
             PrimIdAov)
 
-        self.noFilter = plugRegistry.registerCommandPlugin(
+        self.switchDenoising = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.NoFilter",
-            "No Filter",
-            NoFilter)
+            "Denoise",
+            SwitchDenoising)
 
-        self.bilateralFilter = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.BilateralFilter",
-            "Bilateral",
-            BilateralFilter)
-			
-        self.eawFilter = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.EawFilter",
-            "EAW",
-            EawFilter)
-				
-			
-			
         self.rDeviceCpu = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.renderDeviceCPU",
             "CPU",
@@ -203,11 +189,8 @@ class RprPluginContainer(PluginContainer):
         renderModeSubMenu.addItem(self.aovDepth)
         renderModeSubMenu.addItem(self.aovUV)
         renderModeSubMenu.addItem(self.aovPrimId)
-        
-        filterSubMenu = rprMenu.findOrCreateSubmenu("Filter")
-        filterSubMenu.addItem(self.noFilter)
-        filterSubMenu.addItem(self.bilateralFilter)
-        filterSubMenu.addItem(self.eawFilter)
+
+        rprMenu.addItem(self.switchDenoising)
 
         renderDeviceSubMenu = rprMenu.findOrCreateSubmenu("Render Device")
         renderDeviceSubMenu.addItem(self.rDeviceCpu)

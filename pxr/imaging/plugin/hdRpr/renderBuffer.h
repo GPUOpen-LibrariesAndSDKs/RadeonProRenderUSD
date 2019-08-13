@@ -24,30 +24,30 @@ public:
     
     virtual bool Allocate(GfVec3i const& dimensions,
                           HdFormat format,
-                          bool multiSampled);
+                          bool multiSampled) override;
     
-    virtual unsigned int GetWidth() const;
+    virtual unsigned int GetWidth() const override;
 
-    virtual unsigned int GetHeight() const;
+    virtual unsigned int GetHeight() const override;
 
-    virtual unsigned int GetDepth() const;
+    virtual unsigned int GetDepth() const override;
 
-    virtual HdFormat GetFormat() const;
+    virtual HdFormat GetFormat() const override;
 
-    virtual bool IsMultiSampled() const;
+    virtual bool IsMultiSampled() const override;
     
-    virtual uint8_t* Map();
+    virtual uint8_t* Map() override;
 
-    virtual void Unmap();
+    virtual void Unmap() override;
 
-    virtual bool IsMapped() const;
+    virtual bool IsMapped() const override;
     
-    virtual void Resolve();
+    virtual void Resolve() override;
     
-    virtual bool IsConverged() const;
+    virtual bool IsConverged() const override;
     
 protected:
-    virtual void _Deallocate();
+    virtual void _Deallocate() override;
     
 private:
     HdRprApiWeakPtr m_rprApiWeakPrt;

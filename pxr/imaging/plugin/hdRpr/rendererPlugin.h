@@ -22,7 +22,7 @@ public:
     virtual void DeleteRenderDelegate(
         HdRenderDelegate *renderDelegate) override;
 
-	virtual bool IsSupported() const
+	virtual bool IsSupported() const override
 	{
 		return true;
 	}
