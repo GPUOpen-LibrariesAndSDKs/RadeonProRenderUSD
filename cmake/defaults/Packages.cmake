@@ -69,7 +69,7 @@ endif()
 
 set(hBoost_INCLUDE_DIRS ${HOUDINI_ROOT}/toolkit/include)
 
-set(TBB_INCLUDE_DIR ${HOUDINI_ROOT}/toolkit/include)
+set(TBB_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
 set(TBB_LIBRARY ${HOUDINI_LIB})
 
 find_package(TBB REQUIRED COMPONENTS tbb)

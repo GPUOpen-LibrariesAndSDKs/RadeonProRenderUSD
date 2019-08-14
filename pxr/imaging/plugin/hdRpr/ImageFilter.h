@@ -10,6 +10,7 @@
 
 #include "pxr/pxr.h"
 #include "rprApi.h"
+#include "rprcpp/rprFramebufferGL.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -74,11 +75,9 @@ public:
 
 	void Resize(std::uint32_t w, std::uint32_t h);
 
-	void SetInput(RifFilterInput inputId, const rpr_framebuffer rprFrameBuffer, const float sigma) const;
+	void SetInput(RifFilterInput inputId, rpr::FrameBuffer* rprFrameBuffer, const float sigma) const;
 
-	void SetOutput(const rpr_framebuffer rprFrameBuffer) const;
-
-	void SetOutputGlTexture(const unsigned int glTexture) const;
+	void SetOutput(rpr::FrameBuffer* rprFrameBuffer) const;
 
 	void AddParam(std::string name, RifParam param) const;
 
@@ -86,7 +85,7 @@ public:
 
 	void Run() const;
 
-	std::vector<float> GetData() const;
+	std::shared_ptr<char> GetData() const;
 };
 
 
@@ -107,9 +106,7 @@ public:
 
 	void SetOutput(const rif_image& desc);
 
-	virtual rif_image CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const = 0;
-
-	virtual rif_image CreateRifImageGl(const unsigned int glTexture) const { return NULL; };
+	virtual rif_image CreateRifImage(rpr::FrameBuffer* rprFrameBuffer, rif_image_desc const& desc) const = 0;
 
 	virtual void UpdateInputs(const RifFilterWrapper* rifFilter) const = 0;
 
@@ -125,8 +122,7 @@ public:
 	explicit RifContextGPU(const rpr_context rprContext);
 	virtual ~RifContextGPU();
 
-	virtual rif_image CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const override;
-	virtual rif_image CreateRifImageGl(const unsigned int glTexture) const override;
+	virtual rif_image CreateRifImage(rpr::FrameBuffer* rprFrameBuffer, rif_image_desc const& desc) const override;
 	virtual void UpdateInputs(const RifFilterWrapper* rifFilter) const override;
 };
 
@@ -138,7 +134,7 @@ public:
 	explicit RifContextGPUMetal(const rpr_context rprContext);
 	virtual ~RifContextGPUMetal();
     
-	virtual rif_image CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const override;
+	virtual rif_image CreateRifImage(rpr::FrameBuffer* rprFrameBuffer, rif_image_desc const& desc) const override;
 	virtual void UpdateInputs(const RifFilterWrapper* rifFilter) const override;
 };
 
@@ -150,7 +146,7 @@ public:
 	explicit RifContextCPU(const rpr_context rprContext);
 	virtual ~RifContextCPU();
 
-	virtual rif_image CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const override;
+	virtual rif_image CreateRifImage(rpr::FrameBuffer* rprFrameBuffer, rif_image_desc const& desc) const override;
 	virtual void UpdateInputs(const RifFilterWrapper* rifFilter) const override;
 };
 
@@ -169,9 +165,9 @@ protected:
 
 	struct InputTraits
 	{
-		rif_image       mRifImage;
-		rpr_framebuffer mRprFrameBuffer;
-		float           mSigma;
+		rif_image               mRifImage;
+		rpr::FrameBuffer* mRprFrameBuffer;
+		float                   mSigma;
 	};
 
 	std::unordered_map<RifFilterInput, InputTraits, std::hash<std::underlying_type<RifFilterInput>::type>> mInputs;
@@ -180,7 +176,7 @@ protected:
 public:
 	virtual ~RifFilterWrapper();
 
-	void AddInput(RifFilterInput inputId, const rif_image rifImage, const rpr_framebuffer rprFrameBuffer, float sigma);
+	void AddInput(RifFilterInput inputId, const rif_image rifImage, rpr::FrameBuffer* rprFrameBuffer, float sigma);
 	void AddParam(std::string name, RifParam param);
 
 	virtual void AttachFilter(const RifContextWrapper* rifContext) = 0;

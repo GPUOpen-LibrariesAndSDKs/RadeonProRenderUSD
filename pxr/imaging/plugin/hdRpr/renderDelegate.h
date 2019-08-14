@@ -201,6 +201,13 @@ public:
 	///
 	HDRPR_API
 	virtual TfToken GetMaterialNetworkSelector() const override;
+
+    ///
+    /// Returns a default AOV descriptor for the given named AOV, specifying
+    /// things like preferred format.
+    ///
+    HD_API
+    virtual HdAovDescriptor GetDefaultAovDescriptor(TfToken const& name) const override;
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
@@ -223,9 +230,6 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
 extern "C"
 {
-	HDRPR_API
-	void SetRprGlobalAov(int aov);
-
 	HDRPR_API
 	void SetRprGlobalDenoising(int enableDenoise);
 

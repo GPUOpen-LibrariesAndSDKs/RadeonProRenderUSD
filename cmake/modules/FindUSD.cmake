@@ -1,9 +1,13 @@
 # Simple module to find USD.
 
 if(PXR_BUILD_AS_HOUDINI_PLUGIN)
-    set(USD_INCLUDE_DIR ${HOUDINI_ROOT}/toolkit/include)
+    set(USD_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
     set(USD_LIBRARY_DIR ${HOUDINI_LIB})
-    set(USD_LIBRARY_MONOLITHIC TRUE)
+    if(WIN32)
+        set(USD_LIBRARY_MONOLITHIC TRUE)
+    else()
+        set(USD_LIBRARY_MONOLITHIC FALSE)
+    endif()
 else(PXR_BUILD_AS_HOUDINI_PLUGIN)
     find_path(USD_INCLUDE_DIR pxr/pxr.h
               PATHS ${USD_ROOT}/include

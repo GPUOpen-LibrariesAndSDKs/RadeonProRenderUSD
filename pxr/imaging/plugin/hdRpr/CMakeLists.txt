@@ -16,9 +16,9 @@ if(PXR_ENABLE_OPENVDB_SUPPORT)
 		OpenVDB_LIBRARY_DIR
 	)
 
-	add_definitions(-DUSE_VOLUME -DOPENVDB_3_ABI_COMPATIBLE -DOPENVDB_DLL)
+	add_definitions(-DUSE_VOLUME -DOPENVDB_DLL)
 	
-	set(OptLibs ${OptLibs} ${OpenVDB_LIBRARIES})
+	set(OptLibs ${OptLibs} ${OpenVDB_LIBRARIES} half)
     set(OptBin ${OptBin} ${OpenVDB_BINARIES})
 	set(OptIncludeDir ${OptIncludeDir} ${OpenVDB_INCLUDE_DIR})
 	set(OptClass ${OptClass} field volume)
@@ -60,15 +60,16 @@ if(PXR_BUILD_AS_HOUDINI_PLUGIN)
     set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
         ${hBoost_INCLUDE_DIRS})
 
+    set(USD_LIB_PREFIX pxr_)
     if(WIN32)
-        set(HOUDINI_USD_LIBRARIES "")
-        foreach(name ${USD_LIBRARIES})
-            list(APPEND HOUDINI_USD_LIBRARIES "libpxr_${name}")
-        endforeach()
-        set(USD_LIBRARIES "${HOUDINI_USD_LIBRARIES}")
-    else()
-        message(FATAL_ERROR "Implement me")
+        set(USD_LIB_PREFIX libpxr_)
     endif()
+
+    set(HOUDINI_USD_LIBRARIES "")
+    foreach(name ${USD_LIBRARIES})
+        list(APPEND HOUDINI_USD_LIBRARIES "${USD_LIB_PREFIX}${name}")
+    endforeach()
+    set(USD_LIBRARIES "${HOUDINI_USD_LIBRARIES}")
 else(PXR_BUILD_AS_HOUDINI_PLUGIN)
     set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
         ${Boost_INCLUDE_DIRS})
@@ -128,6 +129,8 @@ pxr_plugin(hdRpr
     RESOURCE_FILES
         plugInfo.json
 )
+
+add_subdirectory(rprcpp)
 
 # LINUX is not listed in default system variables (https://cmake.org/cmake/help/3.15/manual/cmake-variables.7.html)
 if(NOT DEFINED LINUX)

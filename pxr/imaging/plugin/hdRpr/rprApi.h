@@ -1,6 +1,8 @@
 #ifndef HDRPR_RPR_API_H
 #define HDRPR_RPR_API_H
 
+#include "tokens.h"
+
 #include "pxr/pxr.h"
 #include "pxr/base/gf/vec2i.h"
 #include "pxr/base/gf/vec2f.h"
@@ -23,108 +25,108 @@ struct MaterialNode;
 struct RprApiMaterial;
 class MaterialAdapter;
 
-typedef void * RprApiObject;
+typedef void* RprApiObject;
 
 enum class HdRprRenderDevice
 {
-	NONE = -1,
-	CPU = 0,
-	GPU,
-	FIRST = CPU,
-	LAST = GPU
+    NONE = -1,
+    CPU = 0,
+    GPU,
+    FIRST = CPU,
+    LAST = GPU
 };
+
+#define HD_RPR_AOV_TOKENS \
+    (color)                                     \
+    (albedo)                                    \
+    (depth)                                     \
+    (primId)                                    \
+    (instanceId)                                \
+    (elementId)                                 \
+    (normal)                                    \
+    (worldCoordinate)                           \
+    ((primvarsSt, "primvars:st"))
+
+TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_API, HD_RPR_AOV_TOKENS);
 
 enum class HdRprAov
 {
-	NONE = -1,
-	COLOR = 0,
-	NORMAL,
-	ALBEDO,
-	DEPTH,
-	PRIM_ID,
-	UV,
-	FIRST = COLOR,
-	LAST = UV
+    NONE = -1,
+    COLOR = 0,
+    NORMAL,
+    ALBEDO,
+    DEPTH,
+    PRIM_ID,
+    UV,
+    FIRST = COLOR,
+    LAST = UV
 };
 
 class HdRprApi final
 {
 public:
-	HdRprApi();
-	~HdRprApi();
+    HdRprApi();
+    ~HdRprApi();
 
-	static void SetRenderDevice(const HdRprRenderDevice & renderMode);
+    void Init();
+    void Deinit();
 
-	static void SetDenoising(bool enableDenoising);
-	static bool IsDenoisingEnabled();
+    void CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
+    RprApiObject CreateRectLightMesh(const float& width, const float& height);
+    RprApiObject CreateSphereLightMesh(const float& radius);
+    RprApiObject CreateDiskLight(const float& width, const float& height, const GfVec3f& color);
 
-	static void SetAov(const HdRprAov & aov);
-	
-	static const char* GetTmpDir();
+    void CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume);
 
-	void Init();
+    RprApiObject CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf);
+    void SetMeshTransform(RprApiObject mesh, const GfMatrix4d& transform);
+    void SetMeshRefineLevel(RprApiObject mesh, int level, TfToken boundaryInterpolation);
+    void SetMeshMaterial(RprApiObject mesh, const RprApiMaterial* material);
 
-	void Deinit();
+    RprApiObject CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, const float& width);
+    void SetCurveMaterial(RprApiObject curve, const RprApiMaterial* material);
 
-	RprApiObject CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf);
+    void CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray& transforms, VtArray<RprApiObject>& out_instances);
 
-	RprApiObject CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width);
+    RprApiMaterial* CreateMaterial(MaterialAdapter& materialAdapter);
+    void DeleteMaterial(RprApiMaterial* rprApiMaterial);
 
-	void CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray & transforms, VtArray<RprApiObject> & out_instances);
+    const GfMatrix4d& GetCameraViewMatrix() const;
+    const GfMatrix4d& GetCameraProjectionMatrix() const;
 
-	void CreateEnvironmentLight(const std::string & prthTotexture, float intensity);
+    void SetCameraViewMatrix(const GfMatrix4d& m );
+    void SetCameraProjectionMatrix(const GfMatrix4d& m);
 
-	RprApiObject CreateRectLightMesh(const float & width, const float & height);
+    void EnableAov(TfToken const& aovName);
+    void DisableAov(TfToken const& aovName);
+    void DisableAovs();
+    bool IsAovEnabled(TfToken const& aovName);
+    TfToken GetActiveAov() const;
 
-	RprApiObject CreateSphereLightMesh(const float & radius);
+    void ResizeAovFramebuffers(int width, int height);
+    void GetFramebufferSize(GfVec2i* resolution) const;
+    std::shared_ptr<char> GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer = nullptr, size_t* bufferSize = nullptr);
+    GLuint GetFramebufferGL();
+    void ClearFramebuffers();
 
-	RprApiObject CreateDiskLight(const float & width, const float & height, const GfVec3f & color);
+    void Render();
 
-	void CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & grigSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume);
+    void DeleteRprApiObject(RprApiObject object);
+    void DeleteMesh(RprApiObject mesh);
 
-	RprApiMaterial * CreateMaterial(MaterialAdapter & materialAdapter);
-	void DeleteMaterial(RprApiMaterial* rprApiMaterial);
+    bool IsGlInteropUsed() const;
 
-	void SetMeshTransform(RprApiObject mesh, const GfMatrix4d & transform);
-
-	void SetMeshRefineLevel(RprApiObject mesh, int level, TfToken boundaryInterpolation);
-
-	void SetMeshMaterial(RprApiObject mesh, const RprApiMaterial * material);
-
-	void SetCurveMaterial(RprApiObject curve, const RprApiMaterial * material);
-
-	void ClearFramebuffer();
-
-	const GfMatrix4d & GetCameraViewMatrix() const;
-
-	const GfMatrix4d & GetCameraProjectionMatrix() const;
-
-	void SetCameraViewMatrix(const GfMatrix4d & m );
-
-	void SetCameraProjectionMatrix(const GfMatrix4d & m);
-
-	void Resize(const GfVec2i & resolution);
-
-	void Render();
+    static void SetRenderDevice(const HdRprRenderDevice& renderMode);
+    static void SetDenoising(bool enableDenoising);
     
-	void GetFramebufferSize(GfVec2i & resolution) const;
-
-	const GLuint GetFramebufferGL() const;
-
-	const float * GetFramebufferData() const;
-
-	void DeleteRprApiObject(RprApiObject object);
-
-	void DeleteMesh(RprApiObject mesh);
-
-	bool IsGlInteropUsed() const;
+    static const char* GetTmpDir();
+    static bool IsDenoisingEnabled();
 
 private:
-	HdRprApiImpl * m_impl = nullptr;
+    HdRprApiImpl* m_impl = nullptr;
 };
 
 typedef std::shared_ptr<HdRprApi> HdRprApiSharedPtr;
-
 typedef std::weak_ptr<HdRprApi> HdRprApiWeakPtr;
 
 PXR_NAMESPACE_CLOSE_SCOPE
