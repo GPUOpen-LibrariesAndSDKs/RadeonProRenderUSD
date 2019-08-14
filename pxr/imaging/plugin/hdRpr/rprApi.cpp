@@ -182,14 +182,6 @@ rpr_creation_flags getAllCompatibleGpuFlags(rpr_int pluginID, const char* cacheP
     TEST_GPU_COMPATIBILITY(5);
     TEST_GPU_COMPATIBILITY(6);
     TEST_GPU_COMPATIBILITY(7);
-    TEST_GPU_COMPATIBILITY(8);
-    TEST_GPU_COMPATIBILITY(9);
-    TEST_GPU_COMPATIBILITY(10);
-    TEST_GPU_COMPATIBILITY(11);
-    TEST_GPU_COMPATIBILITY(12);
-    TEST_GPU_COMPATIBILITY(13);
-    TEST_GPU_COMPATIBILITY(14);
-    TEST_GPU_COMPATIBILITY(15);
 
     return creationFlags;
 }
@@ -373,7 +365,7 @@ private:
 	{
 		m_prefData.mRenderDevice = HdRprRenderDevice::GPU;
 		m_prefData.mAov = HdRprAov::COLOR;
-		m_prefData.mPlugin = HdRprPluginType::HYBRID;
+		m_prefData.mPlugin = HdRprPluginType::TAHOE;
 		m_prefData.mHybridQuality = HdRprHybridQuality::LOW;
 		m_prefData.mEnableDenoising = true;
 	}
@@ -383,7 +375,7 @@ private:
 		HdRprRenderDevice mRenderDevice = HdRprRenderDevice::GPU;
 		HdRprAov mAov = HdRprAov::COLOR;
 		bool mEnableDenoising = true;
-		HdRprPluginType mPlugin = HdRprPluginType::HYBRID;
+		HdRprPluginType mPlugin = HdRprPluginType::TAHOE;
 		HdRprHybridQuality mHybridQuality = HdRprHybridQuality::LOW;
 	} m_prefData;
 	
@@ -1406,6 +1398,11 @@ private:
 #ifdef USE_RIF
     void CreateImageFilter()
     {
+        // XXX: RPR Hybrid context does not support filters. Discuss with Hybrid team possible workarounds
+        if (m_currentPlugin == HdRprPluginType::HYBRID) {
+            return;
+        }
+
         if (!HdRprPreferences::GetInstance().IsDenoisingEnabled())
         {
             m_imageFilterPtr.reset();
