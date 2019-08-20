@@ -30,6 +30,10 @@ HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath
 HdRprMesh::~HdRprMesh() {
     if (auto rprApi = m_rprApiWeakPtr.lock()) {
         rprApi->DeleteMaterial(m_fallbackMaterial);
+        for (auto rprMesh : m_rprMeshes)
+        {
+            rprApi->DeleteMesh(rprMesh);
+        }
     }
 }
 
@@ -96,9 +100,44 @@ void HdRprMesh::Sync(
 	if (*dirtyBits & HdChangeTracker::DirtyTopology)
 	{
 		HdMeshTopology meshTopology = GetMeshTopology(sceneDelegate);
+        const VtIntArray& indexes = meshTopology.GetFaceVertexIndices();
+        const VtIntArray& vertexPerFace = meshTopology.GetFaceVertexCounts();
+        int numFaces = meshTopology.GetNumFaces();
 
-		const VtIntArray & indexes = meshTopology.GetFaceVertexIndices();
-		const VtIntArray & vertexPerFace = meshTopology.GetFaceVertexCounts();
+        auto hdMaterialId = sceneDelegate->GetMaterialId(id);
+        
+        auto geomSubsets = meshTopology.GetGeomSubsets();
+        // If the geometry has been partitioned into subsets, add an
+        // additional subset representing anything left over.
+        if (!geomSubsets.empty()) {
+            std::vector<bool> faceIsUnused(numFaces, true);
+            size_t numUnusedFaces = faceIsUnused.size();
+            for (auto const& subset : geomSubsets) {
+                for (int index : subset.indices) {
+                    if (TF_VERIFY(index < numFaces) && faceIsUnused[index]) {
+                        faceIsUnused[index] = false;
+                        numUnusedFaces--;
+                    }
+                }
+            }
+            // If we found any unused faces, build a final subset with those faces.
+            // Use the material bound to the parent mesh.
+            if (numUnusedFaces) {
+                geomSubsets.push_back(HdGeomSubset());
+                HdGeomSubset& unusedSubset = geomSubsets.back();
+                unusedSubset.type = HdGeomSubset::TypeFaceSet;
+                unusedSubset.id = id;
+                unusedSubset.materialId = hdMaterialId;
+                unusedSubset.indices.resize(numUnusedFaces);
+                size_t count = 0;
+                for (size_t i = 0; i < faceIsUnused.size() && count < numUnusedFaces; ++i) {
+                    if (faceIsUnused[i]) {
+                        unusedSubset.indices[count] = i;
+                        count++;
+                    }
+                }
+            }
+        }
 
 		HdPrimvarDescriptorVector primvarDescsPerInterpolation[HdInterpolationCount];
 		for (int i = 0; i < HdInterpolationCount; ++i) {
@@ -138,7 +177,7 @@ void HdRprMesh::Sync(
 		auto stToken = UsdUtilsGetPrimaryUVSetName();
 		VtVec2fArray st;
 		VtIntArray stIndexes;
-        value = sceneDelegate->Get(id, stToken);
+		value = sceneDelegate->Get(id, stToken);
 		if (value.IsHolding<VtVec2fArray>())
 		{
 			st = value.UncheckedGet<VtVec2fArray>();
@@ -149,7 +188,7 @@ void HdRprMesh::Sync(
 
 		VtVec3fArray normals;
 		VtIntArray normalIndexes;
-        value = sceneDelegate->Get(id, HdTokens->normals);
+		value = sceneDelegate->Get(id, HdTokens->normals);
 		if (value.IsHolding<VtVec3fArray>())
 		{
 			normals = value.UncheckedGet<VtVec3fArray>();
@@ -165,59 +204,155 @@ void HdRprMesh::Sync(
 			normals = Hd_SmoothNormals::ComputeSmoothNormals(&adjacency, points.size(), points.cdata());
 		}
 
-		if (m_rprMesh)
-		{
-			rprApi->DeleteMesh(m_rprMesh);
-		}
-		m_rprMesh = rprApi->CreateMesh(points, indexes, normals, normalIndexes, st, stIndexes, vertexPerFace);
+        if (!m_fallbackMaterial)
+        {
+            // get Color
+            HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant);
 
-		const HdRprMaterial * material = static_cast<const HdRprMaterial *>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(GetId())));
+            TF_FOR_ALL(primvarIt, primvars) {
+                if (primvarIt->name == HdTokens->displayColor) {
+                    VtValue val = sceneDelegate->Get(id, HdTokens->displayColor);
 
-		if (material == NULL) {
-			// get Color
-			HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant);
+                    if (!val.IsEmpty()) {
+                        VtArray<GfVec3f> color = val.Get<VtArray<GfVec3f>>();
+                        MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::COLOR,
+                            MaterialParams{ {HdPrimvarRoleTokens->color, VtValue(color[0]) } });
+                        m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
+                    }
+                    break;
+                }
+            }
+        }
 
-			TF_FOR_ALL(primvarIt, primvars) {
-				if (primvarIt->name == HdTokens->displayColor) {
-					VtValue val = sceneDelegate->Get(id, HdTokens->displayColor);
+        for (auto& rprMesh : m_rprMeshes)
+        {
+            rprApi->DeleteMesh(rprMesh);
+        }
+        m_rprMeshes.clear();
 
-					if (!val.IsEmpty()) {
-						VtArray<GfVec3f> color = val.Get<VtArray<GfVec3f>>();
-						MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::COLOR,
-							MaterialParams{{HdPrimvarRoleTokens->color, VtValue(color[0]) }});
-						m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
+        auto setMeshMaterial = [&sceneDelegate, &rprApi](RprApiObject rprMesh, SdfPath const& materialId, RprApiMaterial* fallbackMaterial) {
+            auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
+            if (material && material->GetRprMaterialObject())
+            {
+                rprApi->SetMeshMaterial(rprMesh, material->GetRprMaterialObject());
+            }
+            else if (fallbackMaterial)
+            {
+                rprApi->SetMeshMaterial(rprMesh, fallbackMaterial);
+            }
+        };
+        if (geomSubsets.empty())
+        {
+            if (auto rprMesh = rprApi->CreateMesh(points, indexes, normals, normalIndexes, st, stIndexes, vertexPerFace))
+            {
+                m_rprMeshes.push_back(rprMesh);
+                setMeshMaterial(rprMesh, hdMaterialId, m_fallbackMaterial);
+            }
+        }
+        else
+        {
+            if (geomSubsets.size() == 1)
+            {
+                if (auto rprMesh = rprApi->CreateMesh(points, indexes, normals, normalIndexes, st, stIndexes, vertexPerFace))
+                {
+                    m_rprMeshes.push_back(rprMesh);
+                    setMeshMaterial(rprMesh, geomSubsets.back().materialId, m_fallbackMaterial);
+                }
+            }
+            else
+            {
+                // GeomSubset may reference face subset in any given order so we need to be able to
+                //   randomly lookup face indexes but each face may be of an arbitrary number of vertices
+                std::vector<int> indexesOffsetPrefixSum;
+                indexesOffsetPrefixSum.reserve(vertexPerFace.size());
+                int offset = 0;
+                for (auto numVerticesInFace : vertexPerFace)
+                {
+                    indexesOffsetPrefixSum.push_back(offset);
+                    offset += numVerticesInFace;
+                }
 
-						rprApi->SetMeshMaterial(m_rprMesh, m_fallbackMaterial);
-					}
-					break;
-				}
-			}
-		}
-		else if (material &&  material->GetRprMaterialObject())
-		{
-			rprApi->SetMeshMaterial(m_rprMesh, material->GetRprMaterialObject());
-		}
-	}
+                for (auto const& subset : geomSubsets)
+                {
+                    if (subset.type != HdGeomSubset::TypeFaceSet)
+                    {
+                        TF_WARN("Unknown HdGeomSubset Type");
+                        continue;
+                    }
 
-	if (m_rprMesh && *dirtyBits & HdChangeTracker::DirtyTransform)
-	{
-		GfMatrix4d transform = sceneDelegate->GetTransform(id);
-		rprApi->SetMeshTransform(m_rprMesh, transform);
-	}
+                    VtVec3fArray subsetPoints;
+                    VtVec3fArray subsetNormals;
+                    VtVec2fArray subsetSt;
+                    VtIntArray subsetIndexes;
+                    VtIntArray subsetVertexPerFace;
+                    subsetVertexPerFace.reserve(subset.indices.size());
 
+                    int count = 0;
+                    for (auto faceIndex : subset.indices)
+                    {
+                        int numVerticesInFace = vertexPerFace[faceIndex];
+                        subsetVertexPerFace.push_back(numVerticesInFace);
 
-	if (m_rprMesh && *dirtyBits & HdChangeTracker::DirtyDisplayStyle)
-	{
-		int refineLevel = sceneDelegate->GetDisplayStyle(id).refineLevel;
-		auto boundaryInterpolation = refineLevel > 0 ? sceneDelegate->GetSubdivTags(id).GetVertexInterpolationRule() : TfToken();
-		rprApi->SetMeshRefineLevel(m_rprMesh, refineLevel, boundaryInterpolation);
-	}
+                        int faceIndexesOffset = indexesOffsetPrefixSum[faceIndex];
 
-	if (HdRprInstancer *instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId())))
-	{
-		VtMatrix4dArray transforms = instancer->ComputeTransforms(_sharedData.rprimID);
-		rprApi->CreateInstances(m_rprMesh, transforms, m_rprMeshInstances);
-	}
+                        for (int i = 0; i < numVerticesInFace; ++i)
+                        {
+                            subsetIndexes.push_back(count++);
+                            
+                            int pointIndex = indexes[faceIndexesOffset + i];
+                            subsetPoints.push_back(points[pointIndex]);
+
+                            int normalIndex = normalIndexes.empty() ? pointIndex : normalIndexes[faceIndexesOffset + i];
+                            subsetNormals.push_back(normals[normalIndex]);
+
+                            int stIndex = stIndexes.empty() ? pointIndex : stIndexes[faceIndexesOffset + i];
+                            subsetSt.push_back(st[stIndex]);
+                        }
+                    }
+
+                    if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace))
+                    {
+                        m_rprMeshes.push_back(rprMesh);
+                        setMeshMaterial(rprMesh, subset.materialId, m_fallbackMaterial);
+                    }
+                }
+            }
+        }
+    }
+
+    if (!m_rprMeshes.empty())
+    {
+        if (*dirtyBits & HdChangeTracker::DirtyTransform)
+        {
+            GfMatrix4d transform = sceneDelegate->GetTransform(id);
+            for (auto rprMesh : m_rprMeshes)
+            {
+                rprApi->SetMeshTransform(rprMesh, transform);
+            }
+        }
+
+        if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)
+        {
+            int refineLevel = sceneDelegate->GetDisplayStyle(id).refineLevel;
+            auto boundaryInterpolation = refineLevel > 0 ? sceneDelegate->GetSubdivTags(id).GetVertexInterpolationRule() : TfToken();
+            for (auto rprMesh : m_rprMeshes)
+            {
+                rprApi->SetMeshRefineLevel(rprMesh, refineLevel, boundaryInterpolation);
+            }
+        }
+
+        if (*dirtyBits & HdChangeTracker::DirtyInstancer)
+        {
+            if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId())))
+            {
+                VtMatrix4dArray transforms = instancer->ComputeTransforms(_sharedData.rprimID);
+                for (auto rprMesh : m_rprMeshes)
+                {
+                    rprApi->CreateInstances(rprMesh, transforms, m_rprMeshInstances);
+                }
+            }
+        }
+    }
 
 	*dirtyBits = HdChangeTracker::Clean;
 }

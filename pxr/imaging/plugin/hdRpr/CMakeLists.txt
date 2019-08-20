@@ -7,6 +7,7 @@ set(OptBin ${ARGN})
 set(OptIncludeDir ${ARGN})
 set(OptClass${ARGN})
 
+
 if(PXR_ENABLE_OPENVDB_SUPPORT)
 
 	find_package_handle_standard_args(OpenVDB
