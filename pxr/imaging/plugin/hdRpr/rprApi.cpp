@@ -1440,10 +1440,11 @@ private:
             return;
         }
 
-        m_isGlFramebufferDirty = true;
-
-        if (!HdRprPreferences::GetInstance().IsDenoisingEnabled())
+        if (!HdRprPreferences::GetInstance().IsDenoisingEnabled() || !IsAovEnabled(HdRprAovTokens->color))
         {
+            // If image filter exists, GL framebuffer referencing m_imageFilterOutputFb so we have to invalidate it
+            m_isGlFramebufferDirty = m_imageFilterOutputFb || m_isGlFramebufferDirty;
+            m_imageFilterOutputFb.reset();
             m_imageFilterPtr.reset();
             return;
         }
@@ -1467,7 +1468,6 @@ private:
         {
             case FilterType::AIDenoise:
             {
-                EnableAov(HdRprAovTokens->color);
                 EnableAov(HdRprAovTokens->albedo);
                 EnableAov(HdRprAovTokens->depth);
                 EnableAov(HdRprAovTokens->normal);
@@ -1488,7 +1488,6 @@ private:
                 m_imageFilterPtr->AddParam("depthSigma", rifParam);
                 m_imageFilterPtr->AddParam("transSigma", rifParam);
 
-                EnableAov(HdRprAovTokens->color);
                 EnableAov(HdRprAovTokens->albedo);
                 EnableAov(HdRprAovTokens->depth);
                 EnableAov(HdRprAovTokens->normal);
@@ -1514,6 +1513,7 @@ private:
         }
         m_imageFilterPtr->SetOutput(m_imageFilterOutputFb.get());
         m_imageFilterPtr->AttachFilter();
+        m_isGlFramebufferDirty = true;
     }
 #endif // USE_RIF
 
