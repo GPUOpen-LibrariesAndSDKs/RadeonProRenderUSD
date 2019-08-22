@@ -62,6 +62,25 @@ enum class HdRprAov
     LAST = UV
 };
 
+enum class HdRprHybridQuality
+{
+	NONE = -1,
+	LOW = 0,
+	MEDIUM,
+	HIGH,
+	FIRST = LOW,
+	LAST = HIGH
+};
+
+enum class HdRprPluginType : int
+{
+	NONE = -1,
+	TAHOE = 0,
+	HYBRID,
+	FIRST = TAHOE,
+	LAST = HYBRID
+};
+
 class HdRprApi final
 {
 public:
@@ -118,7 +137,10 @@ public:
 
     static void SetRenderDevice(const HdRprRenderDevice& renderMode);
     static void SetDenoising(bool enableDenoising);
-    
+    static void SetHybridQuality(HdRprHybridQuality quality);
+    static void SetRendererPlugin(HdRprPluginType plugin);
+
+    static int GetPluginType();
     static const char* GetTmpDir();
     static bool IsDenoisingEnabled();
 

@@ -12,6 +12,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 struct RprApiMaterial {
     rpr_material_node rootMaterial;
     rpr_material_node displacementMaterial;
+	std::vector<rpr_image> materialImages;
+	std::vector<rpr_material_node> materialNodes;
 };
 
 class RprMaterialFactory

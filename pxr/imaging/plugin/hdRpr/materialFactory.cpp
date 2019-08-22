@@ -1,5 +1,6 @@
 ﻿#include "materialFactory.h"
 
+#include <pxr/usd/ar/resolver.h>
 #include <pxr/imaging/glf/uvTextureData.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -102,7 +103,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         rprMaterialNodeSetInputUByKey(material->rootMaterial, paramId, paramValue);
     }
 
-    auto getTextureMaterialNode = [](rpr_context rprContext, rpr_material_system matSys, MaterialTexture const& matTex) -> rpr_material_node {
+    auto getTextureMaterialNode = [&material](rpr_context rprContext, rpr_material_system matSys, MaterialTexture const& matTex) -> rpr_material_node {
         if (matTex.Path.empty()) {
             return nullptr;
         }
@@ -163,6 +164,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             TF_CODING_ERROR("Failed to create image %s  Error code %d", matTex.Path.c_str(), status);
             return nullptr;
         }
+        material->materialImages.push_back(img);
 
         if (getWrapType(matTex.WrapS, rprWrapSType) && getWrapType(matTex.WrapT, rprWrapTType))
         {
@@ -176,6 +178,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
         rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_IMAGE_TEXTURE, &materialNode);
         rprMaterialNodeSetInputImageData(materialNode, "data", img);
+		material->materialNodes.push_back(materialNode);
 
         // TODO: one minus src color
 
@@ -184,6 +187,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             rpr_material_node uv_node = nullptr;
             status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &uv_node);
             status = rprMaterialNodeSetInputU(uv_node, "value", RPR_MATERIAL_NODE_LOOKUP_UV);
+			material->materialNodes.push_back(uv_node);
 
             rpr_material_node uv_scaled_node;
             rpr_material_node uv_bias_node;
@@ -193,6 +197,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             {
                 const GfVec4f & scale = matTex.Scale;
                 status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_scaled_node);
+				material->materialNodes.push_back(uv_scaled_node);
 
                 status = rprMaterialNodeSetInputU(uv_scaled_node, "op", RPR_MATERIAL_NODE_OP_MUL);
                 status = rprMaterialNodeSetInputN(uv_scaled_node, "color0", uv_node);
@@ -205,6 +210,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
                 rpr_material_node & color0Input = (matTex.IsScaleEnabled) ? uv_scaled_node : uv_node;
 
                 status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_bias_node);
+				material->materialNodes.push_back(uv_bias_node);
 
                 status = rprMaterialNodeSetInputU(uv_bias_node, "op", RPR_MATERIAL_NODE_OP_ADD);
                 status = rprMaterialNodeSetInputN(uv_bias_node, "color0", color0Input);
@@ -228,6 +234,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
                 status = rprMaterialNodeSetInputN(arithmetic, "color0", materialNode);
                 status = rprMaterialNodeSetInputF(arithmetic, "color1", 0.0, 0.0, 0.0, 0.0);
                 status = rprMaterialNodeSetInputU(arithmetic, "op", selectedChanel);
+				material->materialNodes.push_back(arithmetic);
 
                 outTexture = arithmetic;
             }
@@ -254,6 +261,15 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             continue;
         }
 
+        // SIGGRAPH HACK: Fix for models from Apple AR quick look gallery.
+        //   Of all the available ways to load images, none of them gives the opportunity to
+        //   get the gamma of the image and does not convert the image to linear space
+        if ((paramId == RPR_UBER_MATERIAL_INPUT_DIFFUSE_COLOR ||
+            paramId == RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR) &&
+            ArGetResolver().GetExtension(matTex.Path) == "png") {
+            rprImageSetGamma(material->materialImages.back(), 2.2f);
+        }
+
         rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outTexture);
     }
 
@@ -270,6 +286,14 @@ void RprMaterialFactory::DeleteMaterial(RprApiMaterial* material)
 
     SAFE_DELETE_RPR_OBJECT(material->rootMaterial);
     SAFE_DELETE_RPR_OBJECT(material->displacementMaterial);
+    for (auto img : material->materialImages)
+    {
+        SAFE_DELETE_RPR_OBJECT(img);
+    }
+    for (auto node : material->materialNodes)
+    {
+        SAFE_DELETE_RPR_OBJECT(node);
+    }
     delete material;
 }
 

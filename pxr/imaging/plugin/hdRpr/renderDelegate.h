@@ -240,7 +240,16 @@ extern "C"
 	void SetRprGlobalRenderDevice(int renderDevice);
 
 	HDRPR_API
+	void SetRprRendererPlugin(int pluginIdx);
+
+	HDRPR_API
+	void SetRprHybridQuality(int quality);
+
+	HDRPR_API
 	const char* GetRprTmpDir();
+
+	HDRPR_API
+	int GetRprPluginType();
 }
 
 #endif // HDRPR_RENDER_DELEGATE_H

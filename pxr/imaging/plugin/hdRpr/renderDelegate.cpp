@@ -170,7 +170,7 @@ HdRprDelegate::CreateRprim(TfToken const& typeId,
 void
 HdRprDelegate::DestroyRprim(HdRprim *rPrim)
 {
-
+	delete rPrim;
 }
 
 HdSprim *
@@ -269,6 +269,7 @@ HdRprDelegate::CreateFallbackBprim(TfToken const& typeId)
 void
 HdRprDelegate::DestroyBprim(HdBprim *bPrim)
 {
+	delete bPrim;
 }
 
 HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) const {
@@ -329,7 +330,22 @@ void SetRprGlobalRenderDevice(int renderDevice)
 	PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::CPU);
 }
 
+void SetRprRendererPlugin(int pluginIdx)
+{
+	PXR_INTERNAL_NS::HdRprApi::SetRendererPlugin(PXR_INTERNAL_NS::HdRprPluginType(pluginIdx));
+}
+
+void SetRprHybridQuality(int quality)
+{
+	PXR_INTERNAL_NS::HdRprApi::SetHybridQuality(PXR_INTERNAL_NS::HdRprHybridQuality(quality));
+}
+
 const char* GetRprTmpDir()
 {
 	return PXR_INTERNAL_NS::HdRprApi::GetTmpDir();
+}
+
+int GetRprPluginType()
+{
+	return PXR_INTERNAL_NS::HdRprApi::GetPluginType();
 }
