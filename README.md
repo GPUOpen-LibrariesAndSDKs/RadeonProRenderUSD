@@ -1,4 +1,4 @@
-AMD Radeon ProRender USD Hydra delegate
+AMD Radeon ProRender rendering plugin for USD Hydra 
 ===========================
 
 This plugin allows fast GPU or CPU accelerated viewport rendering on all OpenCL 1.2 hardware for the open source USD and Hydra system
@@ -103,8 +103,21 @@ launch ```usdview``` with a sample asset.
 
 And select RPR as the render delegate.
 
-If you want the RPR menu added to USDView (allows selecting device, and view mode), set the environment variable:
-```
-PXR_PLUGINPATH_NAME=${USD_ROOT}/lib/python/rpr
-```  
-Where USD_ROOT is your USD install directory.
+#### Environment Variables
+
+*   `PXR_PLUGINPATH_NAME`
+
+    If you want the RPR menu added to USDView (allows selecting device, and render quality). Set it to ``` PXR_PLUGINPATH_NAME=${USD_ROOT}/lib/python/rpr ```, where USD_ROOT is your USD install directory.
+
+*   `RPR_ENABLE_TRACING`
+
+    Instruct Radeon ProRender to generate trace files for debugging purposes. The tracing will record all RPR commands with a memory dump of the data used. By default, RPR tracing is disabled. To enable it set `RPR_ENABLE_TRACING` to 1.
+
+    When tracing is enabled, the trace files are recorded by default in the following directory depending on the OS (In the case of multiple directories first existing will be used):
+
+    - `C:\ProgramData\hdRPR` for Windows
+    - `$TMPDIR/hdRPR`, `$P_tmpdir/hdRPR`, `/tmp/hdRPR` for Linux and macOS
+
+*   `RPR_TRACING_PATH`
+
+    To change the default directory, add the environment variable `RPR_TRACING_PATH` pointing to the location in which you wish the trace files to be recorded. For example, set `RPR_TRACING_PATH=C:\folder\` to activate the tracing in `C:\folder\`.

@@ -14,7 +14,8 @@
 
 #include <vector>
 
-#include "pxr/imaging/pxOsd/tokens.h"
+#include <pxr/imaging/pxOsd/tokens.h>
+#include <pxr/base/arch/env.h>
 
 #ifdef USE_RIF
 #include "ImageFilter.h"
@@ -1318,6 +1319,33 @@ public:
     }
 
 private:
+    void SetupRprTracing() {
+        auto enableTracingEnv = ArchGetEnv("RPR_ENABLE_TRACING");
+        if (enableTracingEnv == "1") {
+            RPR_ERROR_CHECK(rprContextSetParameter1u(nullptr, "tracing", 1), "Fail to set context tracing parameter");
+
+            auto tracingFolder = ArchGetEnv("RPR_TRACING_PATH");
+            if (tracingFolder.empty()) {
+#ifdef WIN32
+                tracingFolder = "C:\\ProgramData\\hdRPR";
+#elif defined __linux__ || defined(__APPLE__)
+                auto pathVariants = {ArchGetEnv("TMPDIR"), ArchGetEnv("P_tmpdir"), "/tmp"};
+                for (auto& pathVariant : pathVariants) {
+                    if (pathVariant.empty()) {
+                        continue;
+                    }
+
+                    tracingFolder = tmpdirEnv + "/hdRPR";
+                    break;
+                }
+#else
+                #error "Unsupported platform"
+#endif
+            }
+            RPR_ERROR_CHECK(rprContextSetParameterString(nullptr, "tracingfolder", tracingFolder.c_str()), "Fail to set tracing folder parameter");
+        }
+    }
+
     bool CreateContextWithPlugin(HdRprPluginType plugin) {
         m_currentPlugin = plugin;
 
@@ -1402,8 +1430,7 @@ private:
 
     void InitRpr()
     {
-        RPR_ERROR_CHECK(rprContextSetParameter1u(nullptr, "tracing", 1), "Fail to set context tracing parameter");
-        RPR_ERROR_CHECK(rprContextSetParameterString(nullptr, "tracingfolder", "C:\\ProgramData\\hdRPR"), "Fail to set tracing folder parameter");
+        SetupRprTracing();
 
         auto requestedPlugin = HdRprPreferences::GetInstance().GetPlugin();
         if (!CreateContextWithPlugin(requestedPlugin)) {

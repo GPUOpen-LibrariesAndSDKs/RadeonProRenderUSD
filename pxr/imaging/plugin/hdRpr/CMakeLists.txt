@@ -18,7 +18,7 @@ if(PXR_ENABLE_OPENVDB_SUPPORT)
 
 	add_definitions(-DUSE_VOLUME -DOPENVDB_DLL)
 	
-	set(OptLibs ${OptLibs} ${OpenVDB_LIBRARIES} half)
+	set(OptLibs ${OptLibs} ${OpenVDB_LIBRARIES})
     set(OptBin ${OptBin} ${OpenVDB_BINARIES})
 	set(OptIncludeDir ${OptIncludeDir} ${OpenVDB_INCLUDE_DIR})
 	set(OptClass ${OptClass} field volume)
@@ -90,7 +90,7 @@ pxr_plugin(hdRpr
 		${PYTHON_LIBRARIES}
 		
 		${OptLibs}
-	
+        half
 
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
