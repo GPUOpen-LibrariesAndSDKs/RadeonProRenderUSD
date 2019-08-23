@@ -24,28 +24,28 @@ HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprAp
 
     m_rprApiWeakPrt = rprApi;
 
-    auto& idName = id.GetName();
-    if (idName == "aov_color")
+    auto& idName = id.GetNameToken();
+    if (idName == _tokens->aov_color)
     {
         m_aovName = HdRprAovTokens->color;
         m_format = HdFormat::HdFormatUNorm8Vec4;
     }
-    else if (idName == "aov_normal")
+    else if (idName == _tokens->aov_normal)
     {
         m_aovName = HdRprAovTokens->normal;
         m_format = HdFormat::HdFormatFloat32Vec3;
     }
-    else if (idName == "aov_depth")
+    else if (idName == _tokens->aov_depth)
     {
         m_aovName = HdRprAovTokens->depth;
         m_format = HdFormat::HdFormatFloat32;
     }
-    else if (idName == "aov_primId")
+    else if (idName == _tokens->aov_primId)
     {
         m_aovName = HdRprAovTokens->primId;
         m_format = HdFormat::HdFormatInt32;
     }
-    else if (idName == "aov_primvars_st")
+    else if (idName == _tokens->aov_primvars_st)
     {
         m_aovName = HdRprAovTokens->primvarsSt;
         m_format = HdFormat::HdFormatFloat32Vec3;

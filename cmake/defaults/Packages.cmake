@@ -51,6 +51,9 @@ if(PXR_BUILD_AS_HOUDINI_PLUGIN)
 
     find_package(PythonLibs 2.7 REQUIRED)
     find_package(PythonInterp 2.7 REQUIRED)
+
+    set(TBB_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
+    set(TBB_LIBRARY ${HOUDINI_LIB})
 else(PXR_BUILD_AS_HOUDINI_PLUGIN)
     # --Python.  We are generally but not completely 2.6 compliant.
     # We don't need this flag if we are on 0.8.2.
@@ -68,9 +71,6 @@ else(PXR_BUILD_AS_HOUDINI_PLUGIN)
 endif()
 
 set(hBoost_INCLUDE_DIRS ${HOUDINI_ROOT}/toolkit/include)
-
-set(TBB_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
-set(TBB_LIBRARY ${HOUDINI_LIB})
 
 find_package(TBB REQUIRED COMPONENTS tbb)
 add_definitions(${TBB_DEFINITIONS})

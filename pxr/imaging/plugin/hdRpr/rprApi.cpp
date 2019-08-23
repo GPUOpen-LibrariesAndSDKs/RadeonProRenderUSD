@@ -62,9 +62,6 @@ namespace
 #endif
 	};
 
-	constexpr const rpr_uint k_defaultFbWidth = 800;
-	constexpr const rpr_uint k_defaultFbHeight = 600;
-
 	const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
 
 	const uint32_t k_diskVertexCount = 32;
@@ -116,7 +113,7 @@ const char* HdRprApi::GetTmpDir() {
 #elif defined __APPLE__
     if (auto homeEnv = getenv("HOME")) {
         static char path[PATH_MAX];
-        snprintf(path, sizeof(path), "%s/Library/Application Support/hdRPR", homeEnv);
+        snprintf(path, sizeof(path), "%s/Library/Application Support/hdRPR/", homeEnv);
         return path;
     }
 #else
@@ -1162,7 +1159,7 @@ public:
                 m_glFramebuffer = INVALID_GL_FRAMEBUFFER;
             }
 
-            auto getGlTexture = [this](rpr::FrameBuffer* fb) -> GLuint {
+            auto getGlTexture = [](rpr::FrameBuffer* fb) -> GLuint {
                 if (auto glFb = dynamic_cast<rpr::FrameBufferGL*>(fb)) {
                     return glFb->GetGL();
                 } else {
@@ -1329,19 +1326,20 @@ private:
 #ifdef WIN32
                 tracingFolder = "C:\\ProgramData\\hdRPR";
 #elif defined __linux__ || defined(__APPLE__)
-                auto pathVariants = {ArchGetEnv("TMPDIR"), ArchGetEnv("P_tmpdir"), "/tmp"};
+                std::vector<std::string> pathVariants = {ArchGetEnv("TMPDIR"), ArchGetEnv("P_tmpdir"), "/tmp"};
                 for (auto& pathVariant : pathVariants) {
                     if (pathVariant.empty()) {
                         continue;
                     }
 
-                    tracingFolder = tmpdirEnv + "/hdRPR";
+                    tracingFolder = pathVariant + "/hdRPR";
                     break;
                 }
 #else
                 #error "Unsupported platform"
 #endif
             }
+            printf("RPR tracing folder: %s\n", tracingFolder.c_str());
             RPR_ERROR_CHECK(rprContextSetParameterString(nullptr, "tracingfolder", tracingFolder.c_str()), "Fail to set tracing folder parameter");
         }
     }

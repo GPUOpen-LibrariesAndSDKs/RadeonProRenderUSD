@@ -137,11 +137,17 @@ if(NOT TBB_FOUND)
   ##################################
   # Find the TBB include dir
   ##################################
-  
+
   find_path(TBB_INCLUDE_DIRS tbb/tbb.h
       HINTS ${TBB_INCLUDE_DIR} ${TBB_SEARCH_DIR}
       PATHS ${TBB_DEFAULT_SEARCH_DIR}
-      PATH_SUFFIXES include)
+      PATH_SUFFIXES include
+      NO_DEFAULT_PATH)
+
+  if (NOT TBB_INCLUDE_DIRS)
+    find_path(TBB_INCLUDE_DIRS tbb/tbb.h
+        PATH_SUFFIXES include)
+  endif(NOT TBB_INCLUDE_DIRS)
   
   ##################################
   # Find TBB components
@@ -153,13 +159,24 @@ if(NOT TBB_FOUND)
     find_library(TBB_${_comp}_LIBRARY_RELEASE ${_comp}
         HINTS ${TBB_LIBRARY} ${TBB_SEARCH_DIR}
         PATHS ${TBB_DEFAULT_SEARCH_DIR}
-        PATH_SUFFIXES "${TBB_LIB_PATH_SUFFIX}")
+        PATH_SUFFIXES "${TBB_LIB_PATH_SUFFIX}"
+        NO_DEFAULT_PATH)
 
     find_library(TBB_${_comp}_LIBRARY_DEBUG ${_comp}_debug
         HINTS ${TBB_LIBRARY} ${TBB_SEARCH_DIR}
         PATHS ${TBB_DEFAULT_SEARCH_DIR} ENV LIBRARY_PATH
-        PATH_SUFFIXES "${TBB_LIB_PATH_SUFFIX}")
+        PATH_SUFFIXES "${TBB_LIB_PATH_SUFFIX}"
+        NO_DEFAULT_PATH)
 
+    if(NOT TBB_${_comp}_LIBRARY_RELEASE)
+      find_library(TBB_${_comp}_LIBRARY_RELEASE ${_comp}
+          PATH_SUFFIXES "${TBB_LIB_PATH_SUFFIX}")
+    endif(NOT TBB_${_comp}_LIBRARY_RELEASE)
+
+    if (NOT TBB_${_comp}_LIBRARY_DEBUG)
+      find_library(TBB_${_comp}_LIBRARY_DEBUG ${_comp}_debug
+          PATH_SUFFIXES "${TBB_LIB_PATH_SUFFIX}")
+    endif(NOT TBB_${_comp}_LIBRARY_DEBUG)
     
     # Set the library to be used for the component
     if(NOT TBB_${_comp}_LIBRARY)
