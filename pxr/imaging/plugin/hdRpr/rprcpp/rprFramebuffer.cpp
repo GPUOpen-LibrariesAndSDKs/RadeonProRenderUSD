@@ -7,6 +7,9 @@ FrameBuffer::FrameBuffer(rpr_context context, rpr_uint width, rpr_uint height)
     , m_width(width)
     , m_height(height)
     , m_aov(kAovNone) {
+    if (!m_context) {
+        throw rpr::Error("Failed to create framebuffer", RPR_ERROR_INVALID_CONTEXT, nullptr);
+    }
     Create();
 }
 
@@ -74,7 +77,7 @@ void FrameBuffer::Resize(rpr_uint width, rpr_uint height) {
 }
 
 std::shared_ptr<char> FrameBuffer::GetData(std::shared_ptr<char> buffer, size_t* bufferSize) {
-    if (m_width == 0 || m_height == 0) {
+    if (m_width == 0 || m_height == 0 || !m_rprObjectHandle) {
         return nullptr;
     }
 
@@ -107,7 +110,7 @@ rpr_framebuffer_desc FrameBuffer::GetDesc() const {
 }
 
 rpr_cl_mem FrameBuffer::GetCLMem() {
-    if (m_width == 0 || m_height == 0) {
+    if (m_width == 0 || m_height == 0 || !m_rprObjectHandle) {
         return nullptr;
     }
 

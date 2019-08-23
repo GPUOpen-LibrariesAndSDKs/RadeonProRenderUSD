@@ -27,6 +27,7 @@ inline std::string ConstructErrorMessage(const char* messageOnFail, rpr_status e
         case RPR_ERROR_INVALID_PARAMETER: return "invalid parameter";
         case RPR_ERROR_UNSUPPORTED: return "unsupported";
         case RPR_ERROR_INTERNAL_ERROR: return "internal error";
+        case RPR_ERROR_INVALID_CONTEXT: return "invalid context";
         default:
             break;
         }
