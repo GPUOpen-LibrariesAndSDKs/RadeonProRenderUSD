@@ -476,16 +476,15 @@ public:
 			unlock();
 			return nullptr;
 		}
-		unlock();
 
-		if (RPR_ERROR_CHECK(rprSceneAttachShape(m_scene, mesh), "Fail attach mesh to scene")) return nullptr;
+        if (RPR_ERROR_CHECK(rprSceneAttachShape(m_scene, mesh), "Fail attach mesh to scene")) return nullptr;
 
-		if (material)
-		{
-			lock();
-			rprShapeSetMaterial(mesh, material);
-			unlock();
-		}
+        if (material)
+        {
+            rprShapeSetMaterial(mesh, material);
+        }
+
+        unlock();
 
         m_isFrameBuffersDirty = true;
 		return mesh;
