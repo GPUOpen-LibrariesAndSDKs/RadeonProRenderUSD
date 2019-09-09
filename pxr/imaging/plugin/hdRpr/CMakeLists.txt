@@ -7,7 +7,7 @@ set(OptBin ${ARGN})
 set(OptIncludeDir ${ARGN})
 set(OptClass${ARGN})
 
-if(PXR_ENABLE_OPENVDB_SUPPORT)
+if(RPR_ENABLE_OPENVDB_SUPPORT)
 
 	find_package_handle_standard_args(OpenVDB
     REQUIRED_VARS
@@ -24,9 +24,9 @@ if(PXR_ENABLE_OPENVDB_SUPPORT)
 	set(OptClass ${OptClass} field volume)
 	
 
-endif(PXR_ENABLE_OPENVDB_SUPPORT)
+endif(RPR_ENABLE_OPENVDB_SUPPORT)
 
-if(PXR_ENABLE_RIF_SUPPORT)
+if(RPR_ENABLE_RIF_SUPPORT)
 	add_definitions(-DUSE_RIF )
 	
 	set(OptLibs  ${OptLibs} ${RIF_LIBRARY})
@@ -35,7 +35,7 @@ if(PXR_ENABLE_RIF_SUPPORT)
 	set(OptClass  ${OptClass} ImageFilter)
 	
 
-endif(PXR_ENABLE_RIF_SUPPORT)
+endif(RPR_ENABLE_RIF_SUPPORT)
 
 set(USD_LIBRARIES
     ar
@@ -56,7 +56,7 @@ set(USD_LIBRARIES
     usdUtils
     pxOsd)
 
-if(PXR_BUILD_AS_HOUDINI_PLUGIN)
+if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
         ${hBoost_INCLUDE_DIRS})
 
@@ -70,14 +70,14 @@ if(PXR_BUILD_AS_HOUDINI_PLUGIN)
         list(APPEND HOUDINI_USD_LIBRARIES "${USD_LIB_PREFIX}${name}")
     endforeach()
     set(USD_LIBRARIES "${HOUDINI_USD_LIBRARIES}")
-else(PXR_BUILD_AS_HOUDINI_PLUGIN)
+else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
         ${Boost_INCLUDE_DIRS})
 
     if(${USD_LIBRARY_MONOLITHIC})
         set(USD_LIBRARIES usd_ms)
     endif()
-endif(PXR_BUILD_AS_HOUDINI_PLUGIN)
+endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
 pxr_plugin(hdRpr
    LIBRARIES
@@ -155,7 +155,7 @@ if (APPLE)
         ${CMAKE_INSTALL_NAME_TOOL} -change @loader_path/libRadeonProRender64.dylib ${RPR_LIBRARY} $<TARGET_FILE:hdRpr> )
 endif(APPLE)
 
-if(NOT PXR_BUILD_AS_HOUDINI_PLUGIN)
+if(NOT RPR_BUILD_AS_HOUDINI_PLUGIN)
 _get_install_dir(lib/python/rpr installPrefix)
 
 install(
@@ -176,7 +176,7 @@ install(
     \\\"Includes\\\": [ \\\"*/resources/\\\" ]
 }
     \")")
-endif(NOT PXR_BUILD_AS_HOUDINI_PLUGIN)
+endif(NOT RPR_BUILD_AS_HOUDINI_PLUGIN)
 
 if(WIN32)
     install(

@@ -28,11 +28,11 @@ option(PXR_ENABLE_NAMESPACES "Enable C++ namespaces." ON)
 
 option(PXR_SYMLINK_HEADER_FILES "Symlink the header files from, ie, pxr/base/lib/tf to CMAKE_DIR/pxr/base/tf, instead of copying; ensures that you may edit the header file in either location, and improves experience in IDEs which find normally the \"copied\" header, ie, CLion; has no effect on windows" OFF)
 
-option(PXR_ENABLE_OPENVDB_SUPPORT "Enable OpenVDB" OFF)
+option(RPR_ENABLE_OPENVDB_SUPPORT "Enable OpenVDB" OFF)
 
-option(PXR_ENABLE_RIF_SUPPORT "Enable Radeon Image Filter" OFF)
+option(RPR_ENABLE_RIF_SUPPORT "Enable Radeon Image Filter" OFF)
 
-option(PXR_BUILD_AS_HOUDINI_PLUGIN "Build RadeonProRender plugin for Houdini" OFF)
+option(RPR_BUILD_AS_HOUDINI_PLUGIN "Build RadeonProRender Houdini plugin" OFF)
 
 # Precompiled headers are a win on Windows, not on gcc.
 set(pxr_enable_pch "OFF")

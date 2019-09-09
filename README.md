@@ -39,7 +39,7 @@ Build using cmake.
 
 ##### UsdView plugin Components
 
-UsdView plugin is build by default (```PXR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
+UsdView plugin is build by default (```RPR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
@@ -47,7 +47,7 @@ UsdView plugin is build by default (```PXR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
 
 ##### Houdini plugin Components
 
-To build houdini plugin set cmake flag ```PXR_BUILD_AS_HOUDINI_PLUGIN=TRUE```.
+To build houdini plugin set cmake flag ```RPR_BUILD_AS_HOUDINI_PLUGIN=TRUE```.
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
@@ -58,7 +58,7 @@ To build houdini plugin set cmake flag ```PXR_BUILD_AS_HOUDINI_PLUGIN=TRUE```.
 ##### Denoise
 
 Support for image filters is disabled by default, and can optionally be enabled by
-specifying the cmake flag ```PXR_ENABLE_RIF_SUPPORT=TRUE```.
+specifying the cmake flag ```RPR_ENABLE_RIF_SUPPORT=TRUE```.
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
@@ -67,7 +67,7 @@ specifying the cmake flag ```PXR_ENABLE_RIF_SUPPORT=TRUE```.
 ##### OpenVDB
 
 Support for OpenVDB is disabled by default, and can optionally be enabled by
-specifying the cmake flag ```PXR_ENABLE_OPENVDB_SUPPORT=TRUE```.
+specifying the cmake flag ```RPR_ENABLE_OPENVDB_SUPPORT=TRUE```.
 
 **Following dependency required only for usdview plugin, houdini is shipped with own build of openvdb**
 

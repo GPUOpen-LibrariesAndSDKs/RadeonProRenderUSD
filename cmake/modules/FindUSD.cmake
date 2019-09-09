@@ -1,6 +1,6 @@
 # Simple module to find USD.
 
-if(PXR_BUILD_AS_HOUDINI_PLUGIN)
+if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     set(USD_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
     set(USD_LIBRARY_DIR ${HOUDINI_LIB})
     if(WIN32)
@@ -8,7 +8,7 @@ if(PXR_BUILD_AS_HOUDINI_PLUGIN)
     else()
         set(USD_LIBRARY_MONOLITHIC FALSE)
     endif()
-else(PXR_BUILD_AS_HOUDINI_PLUGIN)
+else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     find_path(USD_INCLUDE_DIR pxr/pxr.h
               PATHS ${USD_ROOT}/include
                     $ENV{USD_ROOT}/include
@@ -35,7 +35,7 @@ else(PXR_BUILD_AS_HOUDINI_PLUGIN)
                   NO_SYSTEM_ENVIRONMENT_PATH)
         set(USD_LIBRARY_MONOLITHIC TRUE)
     endif()
-endif(PXR_BUILD_AS_HOUDINI_PLUGIN)
+endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
 if(USD_INCLUDE_DIR AND EXISTS "${USD_INCLUDE_DIR}/pxr/pxr.h")
     foreach(_usd_comp MAJOR MINOR PATCH)

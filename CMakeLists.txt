@@ -13,7 +13,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
 
 include(Options)
 
-if(PXR_BUILD_AS_HOUDINI_PLUGIN)
+if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     if(DEFINED ENV{HOUDINI_ROOT})
         set(HOUDINI_ROOT $ENV{HOUDINI_ROOT})
     endif()
@@ -34,7 +34,7 @@ if(PXR_BUILD_AS_HOUDINI_PLUGIN)
         set(HOUDINI_LIB ${HOUDINI_ROOT}/Libraries)
     endif()
     add_definitions(-DBUILD_AS_HOUDINI_PLUGIN)
-endif(PXR_BUILD_AS_HOUDINI_PLUGIN)
+endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
 include(ProjectDefaults)
 include(Packages)

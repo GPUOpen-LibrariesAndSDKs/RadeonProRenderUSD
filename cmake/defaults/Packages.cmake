@@ -43,7 +43,7 @@ set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
 set(PXR_THREAD_LIBS "${CMAKE_THREAD_LIBS_INIT}")
 
-if(PXR_BUILD_AS_HOUDINI_PLUGIN)
+if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     if(WIN32)
         set(PYTHON_INCLUDE_DIRS ${HOUDINI_ROOT}/python27/include)
         set(PYTHON_LIBRARY ${HOUDINI_ROOT}/python27/libs/python27.lib)
@@ -54,7 +54,7 @@ if(PXR_BUILD_AS_HOUDINI_PLUGIN)
 
     set(TBB_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
     set(TBB_LIBRARY ${HOUDINI_LIB})
-else(PXR_BUILD_AS_HOUDINI_PLUGIN)
+else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     # --Python.  We are generally but not completely 2.6 compliant.
     # We don't need this flag if we are on 0.8.2.
     if (${USD_VERSION} VERSION_LESS "0.8.2")
@@ -88,11 +88,11 @@ endif()
 # Third Party Plugin Package Requirements
 # ----------------------------------------------
 
-if(PXR_ENABLE_OPENVDB_SUPPORT)
+if(RPR_ENABLE_OPENVDB_SUPPORT)
 	find_package(OpenVDB REQUIRED)
 endif()
 
-if(PXR_ENABLE_RIF_SUPPORT)
+if(RPR_ENABLE_RIF_SUPPORT)
 	find_package(Rif REQUIRED)
 endif()
 
