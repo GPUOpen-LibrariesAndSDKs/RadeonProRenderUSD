@@ -28,21 +28,74 @@
 #include "pxr/pxr.h"
 #include "pxr/base/arch/defines.h"
 
+#define __STRINGIZE_PATHX(x) #x
+#define __STRINGIZE_PATH(x) __STRINGIZE_PATHX(x)
+
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+# define BOOST_INCLUDE_PATH(suffix) __STRINGIZE_PATH(hboost/suffix)
+#else
+# define BOOST_INCLUDE_PATH(suffix) __STRINGIZE_PATH(boost/suffix)
+#endif
+
 #if defined(ARCH_OS_WINDOWS)
 # ifndef WIN32_LEAN_AND_MEAN
 #  define WIN32_LEAN_AND_MEAN
 # endif
 
-# ifdef BUILD_AS_HOUDINI_PLUGIN
-#  include <hboost/preprocessor/variadic/size.hpp>
-#  include <hboost/vmd/is_empty.hpp>
-#  include <hboost/vmd/is_tuple.hpp>
-# else
-#  include <boost/preprocessor/variadic/size.hpp>
-#  include <boost/vmd/is_empty.hpp>
-#  include <boost/vmd/is_tuple.hpp>
-# endif
-#endif
+# include BOOST_INCLUDE_PATH(preprocessor/variadic/size.hpp)
+# include BOOST_INCLUDE_PATH(vmd/is_empty.hpp)
+# include BOOST_INCLUDE_PATH(vmd/is_tuple.hpp)
+
+#endif // defined(ARCH_OS_WINDOWS)
+
+#include BOOST_INCLUDE_PATH(any.hpp)
+#include BOOST_INCLUDE_PATH(call_traits.hpp)
+#include BOOST_INCLUDE_PATH(function.hpp)
+#include BOOST_INCLUDE_PATH(functional/hash_fwd.hpp)
+#include BOOST_INCLUDE_PATH(intrusive_ptr.hpp)
+#include BOOST_INCLUDE_PATH(mpl/empty.hpp)
+#include BOOST_INCLUDE_PATH(mpl/front.hpp)
+#include BOOST_INCLUDE_PATH(mpl/if.hpp)
+#include BOOST_INCLUDE_PATH(mpl/pop_front.hpp)
+#include BOOST_INCLUDE_PATH(mpl/remove.hpp)
+#include BOOST_INCLUDE_PATH(mpl/vector.hpp)
+#include BOOST_INCLUDE_PATH(noncopyable.hpp)
+#include BOOST_INCLUDE_PATH(operators.hpp)
+#include BOOST_INCLUDE_PATH(optional.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/arithmetic/add.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/arithmetic/inc.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/arithmetic/sub.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/cat.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/comparison/equal.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/control/expr_iif.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/control/iif.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/facilities/expand.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/logical/and.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/logical/not.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/punctuation/comma.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/punctuation/comma_if.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/punctuation/paren.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/repetition/repeat.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/seq/filter.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/seq/for_each.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/seq/for_each_i.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/seq/push_back.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/seq/size.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/stringize.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/tuple/eat.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/tuple/elem.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/tuple/to_list.hpp)
+#include BOOST_INCLUDE_PATH(preprocessor/tuple/to_seq.hpp)
+#include BOOST_INCLUDE_PATH(scoped_ptr.hpp)
+#include BOOST_INCLUDE_PATH(shared_ptr.hpp)
+#include BOOST_INCLUDE_PATH(type_traits/is_base_of.hpp)
+#include BOOST_INCLUDE_PATH(type_traits/is_const.hpp)
+#include BOOST_INCLUDE_PATH(type_traits/is_convertible.hpp)
+#include BOOST_INCLUDE_PATH(type_traits/is_enum.hpp)
+#include BOOST_INCLUDE_PATH(type_traits/is_same.hpp)
+#include BOOST_INCLUDE_PATH(unordered_map.hpp)
+#include BOOST_INCLUDE_PATH(utility/enable_if.hpp)
+#include BOOST_INCLUDE_PATH(weak_ptr.hpp)
 
 #include <algorithm>
 #include <atomic>
@@ -76,103 +129,3 @@
 #include <utility>
 #include <vector>
 #include <tbb/atomic.h>
-
-#ifdef BUILD_AS_HOUDINI_PLUGIN
-# include <hboost/any.hpp>
-# include <hboost/call_traits.hpp>
-# include <hboost/function.hpp>
-# include <hboost/functional/hash_fwd.hpp>
-# include <hboost/intrusive_ptr.hpp>
-# include <hboost/mpl/empty.hpp>
-# include <hboost/mpl/front.hpp>
-# include <hboost/mpl/if.hpp>
-# include <hboost/mpl/pop_front.hpp>
-# include <hboost/mpl/remove.hpp>
-# include <hboost/mpl/vector.hpp>
-# include <hboost/noncopyable.hpp>
-# include <hboost/operators.hpp>
-# include <hboost/optional.hpp>
-# include <hboost/preprocessor/arithmetic/add.hpp>
-# include <hboost/preprocessor/arithmetic/inc.hpp>
-# include <hboost/preprocessor/arithmetic/sub.hpp>
-# include <hboost/preprocessor/cat.hpp>
-# include <hboost/preprocessor/comparison/equal.hpp>
-# include <hboost/preprocessor/control/expr_iif.hpp>
-# include <hboost/preprocessor/control/iif.hpp>
-# include <hboost/preprocessor/facilities/expand.hpp>
-# include <hboost/preprocessor/logical/and.hpp>
-# include <hboost/preprocessor/logical/not.hpp>
-# include <hboost/preprocessor/punctuation/comma.hpp>
-# include <hboost/preprocessor/punctuation/comma_if.hpp>
-# include <hboost/preprocessor/punctuation/paren.hpp>
-# include <hboost/preprocessor/repetition/repeat.hpp>
-# include <hboost/preprocessor/seq/filter.hpp>
-# include <hboost/preprocessor/seq/for_each.hpp>
-# include <hboost/preprocessor/seq/for_each_i.hpp>
-# include <hboost/preprocessor/seq/push_back.hpp>
-# include <hboost/preprocessor/seq/size.hpp>
-# include <hboost/preprocessor/stringize.hpp>
-# include <hboost/preprocessor/tuple/eat.hpp>
-# include <hboost/preprocessor/tuple/elem.hpp>
-# include <hboost/preprocessor/tuple/to_list.hpp>
-# include <hboost/preprocessor/tuple/to_seq.hpp>
-# include <hboost/scoped_ptr.hpp>
-# include <hboost/shared_ptr.hpp>
-# include <hboost/type_traits/is_base_of.hpp>
-# include <hboost/type_traits/is_const.hpp>
-# include <hboost/type_traits/is_convertible.hpp>
-# include <hboost/type_traits/is_enum.hpp>
-# include <hboost/type_traits/is_same.hpp>
-# include <hboost/unordered_map.hpp>
-# include <hboost/utility/enable_if.hpp>
-# include <hboost/weak_ptr.hpp>
-#else
-# include <boost/any.hpp>
-# include <boost/call_traits.hpp>
-# include <boost/function.hpp>
-# include <boost/functional/hash_fwd.hpp>
-# include <boost/intrusive_ptr.hpp>
-# include <boost/mpl/empty.hpp>
-# include <boost/mpl/front.hpp>
-# include <boost/mpl/if.hpp>
-# include <boost/mpl/pop_front.hpp>
-# include <boost/mpl/remove.hpp>
-# include <boost/mpl/vector.hpp>
-# include <boost/noncopyable.hpp>
-# include <boost/operators.hpp>
-# include <boost/optional.hpp>
-# include <boost/preprocessor/arithmetic/add.hpp>
-# include <boost/preprocessor/arithmetic/inc.hpp>
-# include <boost/preprocessor/arithmetic/sub.hpp>
-# include <boost/preprocessor/cat.hpp>
-# include <boost/preprocessor/comparison/equal.hpp>
-# include <boost/preprocessor/control/expr_iif.hpp>
-# include <boost/preprocessor/control/iif.hpp>
-# include <boost/preprocessor/facilities/expand.hpp>
-# include <boost/preprocessor/logical/and.hpp>
-# include <boost/preprocessor/logical/not.hpp>
-# include <boost/preprocessor/punctuation/comma.hpp>
-# include <boost/preprocessor/punctuation/comma_if.hpp>
-# include <boost/preprocessor/punctuation/paren.hpp>
-# include <boost/preprocessor/repetition/repeat.hpp>
-# include <boost/preprocessor/seq/filter.hpp>
-# include <boost/preprocessor/seq/for_each.hpp>
-# include <boost/preprocessor/seq/for_each_i.hpp>
-# include <boost/preprocessor/seq/push_back.hpp>
-# include <boost/preprocessor/seq/size.hpp>
-# include <boost/preprocessor/stringize.hpp>
-# include <boost/preprocessor/tuple/eat.hpp>
-# include <boost/preprocessor/tuple/elem.hpp>
-# include <boost/preprocessor/tuple/to_list.hpp>
-# include <boost/preprocessor/tuple/to_seq.hpp>
-# include <boost/scoped_ptr.hpp>
-# include <boost/shared_ptr.hpp>
-# include <boost/type_traits/is_base_of.hpp>
-# include <boost/type_traits/is_const.hpp>
-# include <boost/type_traits/is_convertible.hpp>
-# include <boost/type_traits/is_enum.hpp>
-# include <boost/type_traits/is_same.hpp>
-# include <boost/unordered_map.hpp>
-# include <boost/utility/enable_if.hpp>
-# include <boost/weak_ptr.hpp>
-#endif
