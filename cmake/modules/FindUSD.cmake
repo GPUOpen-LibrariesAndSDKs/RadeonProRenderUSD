@@ -16,7 +16,7 @@ else(RPR_BUILD_AS_HOUDINI_PLUGIN)
               NO_DEFAULT_PATH
               NO_SYSTEM_ENVIRONMENT_PATH)
 
-    find_path(USD_LIBRARY_DIR 
+    find_path(USD_LIBRARY_DIR
               NAMES libusd.dylib libusd.dll libusd.so
               PATHS ${USD_ROOT}/lib
                     $ENV{USD_ROOT}/lib
@@ -26,7 +26,7 @@ else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     set(USD_LIBRARY_MONOLITHIC FALSE)
 
     if(NOT USD_LIBRARY_DIR)
-        find_path(USD_LIBRARY_DIR 
+        find_path(USD_LIBRARY_DIR
                   NAMES libusd_ms.dylib libusd_ms.dll libusd_ms.so
                   PATHS ${USD_ROOT}/lib
                         $ENV{USD_ROOT}/lib

@@ -10,6 +10,7 @@ TF_DEFINE_PRIVATE_TOKENS(
     (aov_color) \
     (aov_normal) \
     (aov_depth) \
+    (aov_linear_depth) \
     (aov_primId) \
     (aov_primvars_st)
 );
@@ -40,19 +41,21 @@ HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprAp
         m_aovName = HdRprAovTokens->depth;
         m_format = HdFormat::HdFormatFloat32;
     }
+    else if (idName == _tokens->aov_linear_depth)
+    {
+        m_aovName = HdRprAovTokens->linearDepth;
+        m_format = HdFormat::HdFormatFloat32;
+    }
     else if (idName == _tokens->aov_primId)
     {
         m_aovName = HdRprAovTokens->primId;
-        m_format = HdFormat::HdFormatInt32;
+        // TODO: change to HdFormatInt32 when RIF gain support for integer images
+        m_format = HdFormat::HdFormatFloat32;
     }
     else if (idName == _tokens->aov_primvars_st)
     {
         m_aovName = HdRprAovTokens->primvarsSt;
         m_format = HdFormat::HdFormatFloat32Vec3;
-    }
-
-    if (m_aovName.IsEmpty()) {
-        TF_WARN("Incomplete HdRprRenderBuffer");
     }
 }
 
@@ -64,12 +67,9 @@ HdDirtyBits HdRprRenderBuffer::GetInitialDirtyBitsMask() const
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
                       HdFormat format,
                       bool multiSampled) {
-    // XXX: Disable until usdview fix kludges in AOV system
-    return false;
-
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
         if (!m_aovName.IsEmpty()) {
-            rprApi->EnableAov(m_aovName);
+            rprApi->EnableAov(m_aovName, m_format);
             return true;
         } else {
             return false;
@@ -80,11 +80,15 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
     return false;
 }
 
-unsigned int HdRprRenderBuffer::GetWidth() const
-{
-    // XXX: Disable until usdview fix kludges in AOV system
-    return 0u;
+void HdRprRenderBuffer::_Deallocate() {
+    if (auto rprApi = m_rprApiWeakPrt.lock()) {
+        if (!m_aovName.IsEmpty()) {
+            rprApi->DisableAov(m_aovName);
+        }
+    }
+}
 
+unsigned int HdRprRenderBuffer::GetWidth() const {
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
         GfVec2i fbSize;
         rprApi->GetFramebufferSize(&fbSize);
@@ -93,10 +97,7 @@ unsigned int HdRprRenderBuffer::GetWidth() const
     return 0u;
 }
 
-unsigned int HdRprRenderBuffer::GetHeight() const
-{
-    // XXX: Disable until usdview fix kludges in AOV system
-    return 0u;
+unsigned int HdRprRenderBuffer::GetHeight() const {
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
         GfVec2i fbSize;
         rprApi->GetFramebufferSize(&fbSize);
@@ -105,12 +106,14 @@ unsigned int HdRprRenderBuffer::GetHeight() const
     return 0u;
 }
 
-unsigned int HdRprRenderBuffer::GetDepth() const
-{
+unsigned int HdRprRenderBuffer::GetDepth() const {
     return 1u;
 }
 
 HdFormat HdRprRenderBuffer::GetFormat() const {
+    if (m_aovName == HdRprAovTokens->primId) {
+        return HdFormatInt32;
+    }
     return m_format;
 }
 
@@ -118,10 +121,10 @@ bool HdRprRenderBuffer::IsMultiSampled() const {
     return false;
 }
 
-uint8_t* HdRprRenderBuffer::Map() {
+void* HdRprRenderBuffer::Map() {
     ++m_numMappers;
     // XXX: RPR does not support framebuffer mapping, so here is at least correct mapping for reading
-    return reinterpret_cast<uint8_t*>(m_dataCache.get());
+    return m_dataCache.get();
 }
 
 void HdRprRenderBuffer::Unmap() {
@@ -137,68 +140,21 @@ bool HdRprRenderBuffer::IsMapped() const {
 void HdRprRenderBuffer::Resolve() {
     // XXX: Houdini Solaris workaround to track AOV selection
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        rprApi->EnableAov(m_aovName);
+        rprApi->EnableAov(m_aovName, m_format);
     }
-
-    // XXX: Disable until usdview fix kludges in AOV system
-    return;
 
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
         m_dataCache = rprApi->GetFramebufferData(m_aovName, m_dataCache, &m_dataCacheSize);
-        if (!m_dataCache) {
-            return;
-        }
-
-        std::function<void(int pixelIdx)> convertPixel;
-        GfVec2i fbSize;
-        rprApi->GetFramebufferSize(&fbSize);
-        switch (m_format) {
-        case HdFormat::HdFormatUNorm8Vec4: {
-            convertPixel = [this](int pixelIdx) {
-                auto inPixel = &reinterpret_cast<float const*>(m_dataCache.get())[pixelIdx * 4];
-                auto outPixel = &reinterpret_cast<uint8_t*>(m_dataCache.get())[pixelIdx * 4];
-                outPixel[0] = static_cast<uint8_t>(255.0f * inPixel[0]);
-                outPixel[1] = static_cast<uint8_t>(255.0f * inPixel[1]);
-                outPixel[2] = static_cast<uint8_t>(255.0f * inPixel[2]);
-                outPixel[3] = static_cast<uint8_t>(255.0f * inPixel[3]);
-            };
-            break;
-        }
-        case HdFormat::HdFormatFloat32: {
-            convertPixel = [this](int pixelIdx) {
-                auto inPixel = &reinterpret_cast<float const*>(m_dataCache.get())[pixelIdx * 4];
-                auto outPixel = &reinterpret_cast<float*>(m_dataCache.get())[pixelIdx];
-                outPixel[0] = inPixel[0];
-            };
-            break;
-        }
-        case HdFormat::HdFormatFloat32Vec3: {
-            convertPixel = [this](int pixelIdx) {
-                auto inPixel = &reinterpret_cast<float const*>(m_dataCache.get())[pixelIdx * 4];
-                auto outPixel = &reinterpret_cast<float*>(m_dataCache.get())[pixelIdx * 3];
-                outPixel[0] = inPixel[0];
-                outPixel[1] = inPixel[1];
-                outPixel[2] = inPixel[2];
-            };
-            break;
-        }
-        case HdFormat::HdFormatInt32: {
-            convertPixel = [this](int pixelIdx) {
-                auto inPixel = &reinterpret_cast<float const*>(m_dataCache.get())[pixelIdx * 4];
-                auto outPixel = &reinterpret_cast<int32_t*>(m_dataCache.get())[pixelIdx];
-                outPixel[0] = static_cast<int32_t>(255.0f * inPixel[0]);
-            };
-            break;
-        }
-        default:
-            TF_WARN("Resolved unexpected renderBuffer format: %d", m_format);
-            break;
-        }
-
-        if (convertPixel) {
-            for (int y = 0; y < fbSize[1]; ++y) {
-                for (int x = 0; x < fbSize[0]; ++x) {
-                    convertPixel(x + y * fbSize[0]);
+        // TODO: Implement conversion using RIF when it's get integer images support
+        if (m_aovName == HdRprAovTokens->primId) {
+            auto primIdData = reinterpret_cast<float*>(m_dataCache.get());
+            auto output = reinterpret_cast<int*>(m_dataCache.get());
+            GfVec2i size;
+            rprApi->GetFramebufferSize(&size);
+            for (int y = 0; y < size[1]; ++y) {
+                int yOffset = y * size[0];
+                for (int x = 0; x < size[0]; ++x) {
+                    output[x + yOffset] = std::ceil(primIdData[x + yOffset] * 255.0f);
                 }
             }
         }
@@ -207,15 +163,6 @@ void HdRprRenderBuffer::Resolve() {
 
 bool HdRprRenderBuffer::IsConverged() const {
     return false;
-}
-
-void HdRprRenderBuffer::_Deallocate() {
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        if (!m_aovName.IsEmpty()) {
-            rprApi->DisableAov(m_aovName);
-        }
-    }
-
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

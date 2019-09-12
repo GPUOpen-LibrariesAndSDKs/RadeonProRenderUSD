@@ -32,7 +32,7 @@ public:
 
     virtual bool IsMultiSampled() const override;
 
-    virtual uint8_t* Map() override;
+    virtual void* Map() override;
 
     virtual void Unmap() override;
 

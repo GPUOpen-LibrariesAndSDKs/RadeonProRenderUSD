@@ -318,26 +318,17 @@ int IsRprDenoisingEnabled()
 
 void SetRprGlobalRenderDevice(int renderDevice)
 {
-	switch (renderDevice)
-	{
-	case 1:
-		PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::GPU);
-		return;
-	default:
-		break;
-	}
-
-	PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::CPU);
+    PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(renderDevice);
 }
 
 void SetRprRendererPlugin(int pluginIdx)
 {
-	PXR_INTERNAL_NS::HdRprApi::SetRendererPlugin(PXR_INTERNAL_NS::HdRprPluginType(pluginIdx));
+	PXR_INTERNAL_NS::HdRprApi::SetRendererPlugin(pluginIdx);
 }
 
 void SetRprHybridQuality(int quality)
 {
-	PXR_INTERNAL_NS::HdRprApi::SetHybridQuality(PXR_INTERNAL_NS::HdRprHybridQuality(quality));
+	PXR_INTERNAL_NS::HdRprApi::SetHybridQuality(quality);
 }
 
 const char* GetRprTmpDir()

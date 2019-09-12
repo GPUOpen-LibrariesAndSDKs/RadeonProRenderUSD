@@ -30,8 +30,6 @@ option(PXR_SYMLINK_HEADER_FILES "Symlink the header files from, ie, pxr/base/lib
 
 option(RPR_ENABLE_OPENVDB_SUPPORT "Enable OpenVDB" OFF)
 
-option(RPR_ENABLE_RIF_SUPPORT "Enable Radeon Image Filter" OFF)
-
 option(RPR_BUILD_AS_HOUDINI_PLUGIN "Build RadeonProRender Houdini plugin" OFF)
 
 # Precompiled headers are a win on Windows, not on gcc.

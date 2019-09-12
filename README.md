@@ -1,4 +1,4 @@
-AMD Radeon ProRender rendering plugin for USD Hydra 
+AMD Radeon ProRender rendering plugin for USD Hydra
 ===========================
 
 This plugin allows fast GPU or CPU accelerated viewport rendering on all OpenCL 1.2 hardware for the open source USD and Hydra system
@@ -11,17 +11,17 @@ Prerequisites
 -----------------------------
 
 #### Common
-* **AMD Radeon™ ProRender SDK** [link](https://www.amd.com/en/technologies/sdk-agreement)		
-* **AMD Radeon™ Image Filter Library** [link](https://www.amd.com/en/technologies/sdk-agreement)	  
+* **AMD Radeon™ ProRender SDK** [link](https://www.amd.com/en/technologies/sdk-agreement)
+* **AMD Radeon™ Image Filter Library** [link](https://www.amd.com/en/technologies/sdk-agreement)
 License allows non-commercial use for developers.  Contact through the website for commercial distribution.
 
-#### For UsdView plugin 
-* **USD build / tree**		  
+#### For UsdView plugin
+* **USD build / tree**
 As many USD users get the USD libraries from different places, or compile their own, we tried to keep this as flexible as possible.
 You can download USD to build yourself from [GitHub](https://www.github.com/PixarAnimationStudios/USD)
 
 #### For Houdini plugin
-* **Houdini 18**	  
+* **Houdini 18**
 You can download Houdini installer from [Daily Builds | SideFX](https://www.sidefx.com/download/daily-builds/#category-gold)
 
 Building
@@ -36,6 +36,12 @@ Build using cmake.
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
 | RPR_LOCATION               | Radeon Pro Render directory with include and lib dirs                   | 1.3.20 or higher |
+
+##### Radeon Image Filters
+
+| Dependency Name            | Description                                                             | Version          |
+| ------------------         |-----------------------------------------------------------------------  | -------          |
+| RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.2.0 or higher  |
 
 ##### UsdView plugin Components
 
@@ -55,15 +61,6 @@ To build houdini plugin set cmake flag ```RPR_BUILD_AS_HOUDINI_PLUGIN=TRUE```.
 
 #### Optional Components
 
-##### Denoise
-
-Support for image filters is disabled by default, and can optionally be enabled by
-specifying the cmake flag ```RPR_ENABLE_RIF_SUPPORT=TRUE```.
-
-| Dependency Name            | Description                                                             | Version          |
-| ------------------         |-----------------------------------------------------------------------  | -------          |
-| RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.2.0 or higher  |
-
 ##### OpenVDB
 
 Support for OpenVDB is disabled by default, and can optionally be enabled by
@@ -78,7 +75,7 @@ specifying the cmake flag ```RPR_ENABLE_OPENVDB_SUPPORT=TRUE```.
 #### Example
 
 ```
-mkdir build 
+mkdir build
 cd build
 cmake -DUSD_ROOT=/data/usd_build -DRPR_LOCATION=/data/RPR_SDK/RadeonProRender -DCMAKE_INSTALL_PREFIX=/data/usd_build ..
 make
@@ -94,7 +91,7 @@ Supported Platforms
 Try it out
 -----------------------------
 
-Set the environment variables specified by the script when it finishes and 
+Set the environment variables specified by the script when it finishes and
 launch ```usdview``` with a sample asset.
 
 ```

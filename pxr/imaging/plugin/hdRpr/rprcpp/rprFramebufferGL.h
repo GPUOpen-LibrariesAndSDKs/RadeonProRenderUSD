@@ -6,13 +6,15 @@
 #include <RadeonProRender_GL.h>
 #include <GL/glew.h>
 
+PXR_NAMESPACE_OPEN_SCOPE
+
 namespace rpr {
 
 class FrameBufferGL : public FrameBuffer {
 public:
     FrameBufferGL(rpr_context context, rpr_uint width, rpr_uint height);
     FrameBufferGL(FrameBufferGL&& fb) noexcept;
-    ~FrameBufferGL();
+    ~FrameBufferGL() override;
 
     FrameBufferGL const& operator=(FrameBufferGL&& fb) noexcept;
 
@@ -29,5 +31,7 @@ private:
 };
 
 } // namespace rpr
+
+PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // RPRCPP_FRAMEBUFFER_GL_H
