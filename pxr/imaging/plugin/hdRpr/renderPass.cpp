@@ -61,10 +61,10 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 		rprApi->SetCameraViewMatrix(wvm);
     }
 
-	const GfMatrix4d & cameraProjMatrix = rprApi->GetCameraProjectionMatrix();
-	const GfMatrix4d & proj = renderPassState->GetProjectionMatrix();
-	if (cameraProjMatrix != proj) {
-		rprApi->SetCameraProjectionMatrix(proj);
+    const GfMatrix4d& cameraProjMatrix = rprApi->GetCameraProjectionMatrix();
+    const GfMatrix4d& proj = renderPassState->GetProjectionMatrix();
+    if (cameraProjMatrix != proj) {
+        rprApi->SetCameraProjectionMatrix(proj);
     }
 
     // XXX: AOV system in usdview and houdini at this time is incomplete

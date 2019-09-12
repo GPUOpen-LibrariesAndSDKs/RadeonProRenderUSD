@@ -957,8 +957,7 @@ public:
         m_isFrameBuffersDirty = true;
     }
 
-    void SetCameraProjectionMatrix(const GfMatrix4d& proj)
-    {
+    void SetCameraProjectionMatrix(const GfMatrix4d& proj) {
         if (!m_camera) return;
 
         float sensorSize[2];
@@ -972,13 +971,11 @@ public:
         m_isFrameBuffersDirty = true;
     }
 
-    const GfMatrix4d& GetCameraViewMatrix() const
-    {
+    const GfMatrix4d& GetCameraViewMatrix() const {
         return m_cameraViewMatrix;
     }
 
-    const GfMatrix4d& GetCameraProjectionMatrix() const
-    {
+    const GfMatrix4d& GetCameraProjectionMatrix() const {
         return m_cameraProjectionMatrix;
     }
 
@@ -1038,18 +1035,15 @@ public:
         unlock();
     }
 
-    void DisableAov(TfToken const& aovName, bool force = false)
-    {
+    void DisableAov(TfToken const& aovName, bool force = false) {
         // XXX: RPR bug - rprContextRender requires RPR_AOV_COLOR to be set,
         // otherwise it fails with error RPR_ERROR_INVALID_OBJECT
-        if (aovName == HdRprAovTokens->color && !force)
-        {
+        if (aovName == HdRprAovTokens->color && !force) {
             return;
         }
 
         auto it = m_aovFrameBuffers.find(aovName);
-        if (it != m_aovFrameBuffers.end())
-        {
+        if (it != m_aovFrameBuffers.end()) {
             m_aovFrameBuffers.erase(it);
         }
 
@@ -1059,14 +1053,12 @@ public:
         HdRprPreferences::GetInstance().SetFilterDirty(true);
     }
 
-    void DisableAovs()
-    {
+    void DisableAovs() {
         m_aovFrameBuffers.clear();
         m_isGlFramebufferDirty = true;
     }
 
-    bool IsAovEnabled(TfToken const& aovName)
-    {
+    bool IsAovEnabled(TfToken const& aovName) {
         return m_aovFrameBuffers.count(aovName) != 0;
     }
 
@@ -1110,16 +1102,13 @@ public:
         }
     }
 
-    void GetFramebufferSize(GfVec2i* resolution) const
-    {
+    void GetFramebufferSize(GfVec2i* resolution) const {
         resolution->Set(m_fbWidth, m_fbHeight);
     }
 
-    std::shared_ptr<char> GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize)
-    {
+    std::shared_ptr<char> GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize) {
         auto it = m_aovFrameBuffers.find(aovName);
-        if (it == m_aovFrameBuffers.end())
-        {
+        if (it == m_aovFrameBuffers.end()) {
             return nullptr;
         }
 
@@ -1470,15 +1459,13 @@ private:
 
 
 #ifdef USE_RIF
-    void CreateImageFilter()
-    {
+    void CreateImageFilter() {
         // XXX: RPR Hybrid context does not support filters. Discuss with Hybrid team possible workarounds
         if (m_currentPlugin == HdRprPluginType::HYBRID) {
             return;
         }
 
-        if (!HdRprPreferences::GetInstance().IsDenoisingEnabled() || !IsAovEnabled(HdRprAovTokens->color))
-        {
+        if (!HdRprPreferences::GetInstance().IsDenoisingEnabled() || !IsAovEnabled(HdRprAovTokens->color)) {
             // If image filter exists, GL framebuffer referencing m_imageFilterOutputFb so we have to invalidate it
             m_isGlFramebufferDirty = m_imageFilterOutputFb || m_isGlFramebufferDirty;
             m_imageFilterOutputFb.reset();
@@ -1501,10 +1488,8 @@ private:
 #endif // __APPLE__
         m_imageFilterPtr->CreateFilter(m_imageFilterType);
 
-        switch (m_imageFilterType)
-        {
-            case FilterType::AIDenoise:
-            {
+        switch (m_imageFilterType) {
+            case FilterType::AIDenoise: {
                 EnableAov(HdRprAovTokens->albedo);
                 EnableAov(HdRprAovTokens->depth);
                 EnableAov(HdRprAovTokens->normal);
@@ -1515,8 +1500,7 @@ private:
                 m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
                 break;
             }
-            case FilterType::EawDenoise:
-            {
+            case FilterType::EawDenoise:{
                 RifParam rifParam;
                 rifParam.mData.f = 1.f;
                 rifParam.mType = RifParamType::RifFloat;
@@ -1554,170 +1538,161 @@ private:
     }
 #endif // USE_RIF
 
-	void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes, VtIntArray & out_newVpf)
-	{
-		out_newIndexes.clear();
-		out_newVpf.clear();
+    void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes, VtIntArray & out_newVpf) {
+        out_newIndexes.clear();
+        out_newVpf.clear();
 
-		out_newIndexes.reserve(indexes.size());
-		out_newVpf.reserve(vpf.size());
+        out_newIndexes.reserve(indexes.size());
+        out_newVpf.reserve(vpf.size());
 
-		VtIntArray::const_iterator idxIt = indexes.begin();
-		for (const int vCount : vpf)
-		{
-			if (vCount == 3 || vCount == 4)
-			{
-				for (int i = 0; i < vCount; ++i)
-				{
-					out_newIndexes.push_back(*idxIt);
-					++idxIt;
-				}
-				out_newVpf.push_back(vCount);
-			}
-			else
-			{
-				constexpr int triangleVertexCount = 3;
-				for (int i = 0; i < vCount - 2; ++i)
-				{
-					out_newIndexes.push_back(*(idxIt + i + 0));
-					out_newIndexes.push_back(*(idxIt + i + 1));
-					out_newIndexes.push_back(*(idxIt + i + 2));
-					out_newVpf.push_back(triangleVertexCount);
-				}
-				idxIt += vCount;
-			}
-		}
-	}
+        VtIntArray::const_iterator idxIt = indexes.begin();
+        for (const int vCount : vpf) {
+            idxIt += vCount;
+            if (vCount == 3 || vCount == 4) {
+                for (int i = 0; i < vCount; ++i) {
+                    out_newIndexes.push_back(*idxIt);
+                    ++idxIt;
+                }
+                out_newVpf.push_back(vCount);
+            } else {
+                constexpr int triangleVertexCount = 3;
+                for (int i = 0; i < vCount - 2; ++i) {
+                    out_newIndexes.push_back(*(idxIt + i + 0));
+                    out_newIndexes.push_back(*(idxIt + i + 1));
+                    out_newIndexes.push_back(*(idxIt + i + 2));
+                    out_newVpf.push_back(triangleVertexCount);
+                }
+            }
+        }
+    }
 
-	void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes)
-	{
-		out_newIndexes.clear();
-		out_newIndexes.reserve(indexes.size());
+    void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes)
+    {
+        out_newIndexes.clear();
+        out_newIndexes.reserve(indexes.size());
 
-		VtIntArray::const_iterator idxIt = indexes.begin();
-		for (const int vCount : vpf)
-		{
-			if (vCount == 3 || vCount == 4)
-			{
-				for (int i = 0; i < vCount; ++i)
-				{
-					out_newIndexes.push_back(*idxIt);
-					++idxIt;
-				}
-			}
-			else
-			{
-				for (int i = 0; i < vCount - 2; ++i)
-				{
-					out_newIndexes.push_back(*(idxIt + i + 0));
-					out_newIndexes.push_back(*(idxIt + i + 1));
-					out_newIndexes.push_back(*(idxIt + i + 2));
-				}
-				idxIt += vCount;
-			}
-		}
-	}
+        VtIntArray::const_iterator idxIt = indexes.begin();
+        for (const int vCount : vpf)
+        {
+            if (vCount == 3 || vCount == 4)
+            {
+                for (int i = 0; i < vCount; ++i)
+                {
+                    out_newIndexes.push_back(*idxIt);
+                    ++idxIt;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < vCount - 2; ++i)
+                {
+                    out_newIndexes.push_back(*(idxIt + i + 0));
+                    out_newIndexes.push_back(*(idxIt + i + 1));
+                    out_newIndexes.push_back(*(idxIt + i + 2));
+                }
+                idxIt += vCount;
+            }
+        }
+    }
 
-	void * CreateCubeMesh(const float & width, const float & height, const float & depth)
-	{
-		constexpr const size_t cubeVertexCount = 24;
-		constexpr const size_t cubeNormalCount = 24;
-		constexpr const size_t cubeIndexCount = 36;
-		constexpr const size_t cubeVpfCount = 12;
+    void* CreateCubeMesh(const float & width, const float & height, const float & depth) {
+        constexpr const size_t cubeVertexCount = 24;
+        constexpr const size_t cubeNormalCount = 24;
+        constexpr const size_t cubeIndexCount = 36;
+        constexpr const size_t cubeVpfCount = 12;
 
-		VtVec3fArray position(cubeVertexCount);
-		position[0] = GfVec3f(-width, height, -depth);
-		position[1] = GfVec3f(width, height, -depth);
-		position[2] = GfVec3f(width, height, depth);
-		position[3] = GfVec3f(-width, height, depth);
+        VtVec3fArray position(cubeVertexCount);
+        position[0] = GfVec3f(-width, height, -depth);
+        position[1] = GfVec3f(width, height, -depth);
+        position[2] = GfVec3f(width, height, depth);
+        position[3] = GfVec3f(-width, height, depth);
 
-		position[4] = GfVec3f(-width, -height, -depth);
-		position[5] = GfVec3f(width, -height, -depth);
-		position[6] = GfVec3f(width, -height, depth);
-		position[7] = GfVec3f(-width, -height, depth);
+        position[4] = GfVec3f(-width, -height, -depth);
+        position[5] = GfVec3f(width, -height, -depth);
+        position[6] = GfVec3f(width, -height, depth);
+        position[7] = GfVec3f(-width, -height, depth);
 
-		position[8] = GfVec3f(-width, -height, depth);
-		position[9] = GfVec3f(-width, -height, -depth);
-		position[10] = GfVec3f(-width, height, -depth);
-		position[11] = GfVec3f(-width, height, depth);
+        position[8] = GfVec3f(-width, -height, depth);
+        position[9] = GfVec3f(-width, -height, -depth);
+        position[10] = GfVec3f(-width, height, -depth);
+        position[11] = GfVec3f(-width, height, depth);
 
-		position[12] = GfVec3f(width, -height, depth);
-		position[13] = GfVec3f(width, -height, -depth);
-		position[14] = GfVec3f(width, height, -depth);
-		position[15] = GfVec3f(width, height, depth);
+        position[12] = GfVec3f(width, -height, depth);
+        position[13] = GfVec3f(width, -height, -depth);
+        position[14] = GfVec3f(width, height, -depth);
+        position[15] = GfVec3f(width, height, depth);
 
-		position[16] = GfVec3f(-width, -height, -depth);
-		position[17] = GfVec3f(width, -height, -depth);
-		position[18] = GfVec3f(width, height, -depth);
-		position[19] = GfVec3f(-width, height, -depth);
+        position[16] = GfVec3f(-width, -height, -depth);
+        position[17] = GfVec3f(width, -height, -depth);
+        position[18] = GfVec3f(width, height, -depth);
+        position[19] = GfVec3f(-width, height, -depth);
 
-		position[20] = GfVec3f(-width, -height, depth);
-		position[21] = GfVec3f(width, -height, depth);
-		position[22] = GfVec3f(width, height, depth);
-		position[23] = GfVec3f(-width, height, depth);
+        position[20] = GfVec3f(-width, -height, depth);
+        position[21] = GfVec3f(width, -height, depth);
+        position[22] = GfVec3f(width, height, depth);
+        position[23] = GfVec3f(-width, height, depth);
 
-		VtVec3fArray normals(cubeNormalCount);
-		normals[0] = GfVec3f(0.f, 1.f, 0.f);
-		normals[1] = GfVec3f(0.f, 1.f, 0.f);
-		normals[2] = GfVec3f(0.f, 1.f, 0.f);
-		normals[3] = GfVec3f(0.f, 1.f, 0.f);
+        VtVec3fArray normals(cubeNormalCount);
+        normals[0] = GfVec3f(0.f, 1.f, 0.f);
+        normals[1] = GfVec3f(0.f, 1.f, 0.f);
+        normals[2] = GfVec3f(0.f, 1.f, 0.f);
+        normals[3] = GfVec3f(0.f, 1.f, 0.f);
 
-		normals[4] = GfVec3f(0.f, -1.f, 0.f);
-		normals[5] = GfVec3f(0.f, -1.f, 0.f);
-		normals[6] = GfVec3f(0.f, -1.f, 0.f);
-		normals[7] = GfVec3f(0.f, -1.f, 0.f);
+        normals[4] = GfVec3f(0.f, -1.f, 0.f);
+        normals[5] = GfVec3f(0.f, -1.f, 0.f);
+        normals[6] = GfVec3f(0.f, -1.f, 0.f);
+        normals[7] = GfVec3f(0.f, -1.f, 0.f);
 
-		normals[8] = GfVec3f(-1.f, 0.f, 0.f);
-		normals[9] = GfVec3f(-1.f, 0.f, 0.f);
-		normals[10] = GfVec3f(-1.f, 0.f, 0.f);
-		normals[11] = GfVec3f(-1.f, 0.f, 0.f);
+        normals[8] = GfVec3f(-1.f, 0.f, 0.f);
+        normals[9] = GfVec3f(-1.f, 0.f, 0.f);
+        normals[10] = GfVec3f(-1.f, 0.f, 0.f);
+        normals[11] = GfVec3f(-1.f, 0.f, 0.f);
 
-		normals[12] = GfVec3f(1.f, 0.f, 0.f);
-		normals[13] = GfVec3f(1.f, 0.f, 0.f);
-		normals[14] = GfVec3f(1.f, 0.f, 0.f);
-		normals[15] = GfVec3f(1.f, 0.f, 0.f);
+        normals[12] = GfVec3f(1.f, 0.f, 0.f);
+        normals[13] = GfVec3f(1.f, 0.f, 0.f);
+        normals[14] = GfVec3f(1.f, 0.f, 0.f);
+        normals[15] = GfVec3f(1.f, 0.f, 0.f);
 
-		normals[16] = GfVec3f(0.f, 0.f, -1.f);
-		normals[17] = GfVec3f(0.f, 0.f, -1.f);
-		normals[18] = GfVec3f(0.f, 0.f, -1.f);
-		normals[19] = GfVec3f(0.f, 0.f, -1.f);
+        normals[16] = GfVec3f(0.f, 0.f, -1.f);
+        normals[17] = GfVec3f(0.f, 0.f, -1.f);
+        normals[18] = GfVec3f(0.f, 0.f, -1.f);
+        normals[19] = GfVec3f(0.f, 0.f, -1.f);
 
-		normals[20] = GfVec3f(0.f, 0.f, 1.f);
-		normals[21] = GfVec3f(0.f, 0.f, 1.f);
-		normals[22] = GfVec3f(0.f, 0.f, 1.f);
-		normals[23] = GfVec3f(0.f, 0.f, 1.f);
+        normals[20] = GfVec3f(0.f, 0.f, 1.f);
+        normals[21] = GfVec3f(0.f, 0.f, 1.f);
+        normals[22] = GfVec3f(0.f, 0.f, 1.f);
+        normals[23] = GfVec3f(0.f, 0.f, 1.f);
 
-		VtIntArray indexes(cubeIndexCount);
-		{
-			std::array<int, cubeIndexCount> indexArray =
-			{
-				3,1,0,
-				2,1,3,
+        VtIntArray indexes(cubeIndexCount);
+        {
+            std::array<int, cubeIndexCount> indexArray = {
+                3, 1, 0,
+                2, 1, 3,
 
-				6,4,5,
-				7,4,6,
+                6, 4, 5,
+                7, 4, 6,
 
-				11,9,8,
-				10,9,11,
+                11, 9, 8,
+                10, 9, 11,
 
-				14,12,13,
-				15,12,14,
+                14, 12, 13,
+                15, 12, 14,
 
-				19,17,16,
-				18,17,19,
+                19, 17, 16,
+                18, 17, 19,
 
-				22,20,21,
-				23,20,22
-			};
+                22, 20, 21,
+                23, 20, 22
+            };
 
-			memcpy(indexes.data(), indexArray.data(), sizeof(int) * cubeIndexCount);
-		}
+            memcpy(indexes.data(), indexArray.data(), sizeof(int) * cubeIndexCount);
+        }
 
-		VtIntArray vpf(cubeVpfCount, 3);
-		VtVec2fArray uv; // empty
+        VtIntArray vpf(cubeVpfCount, 3);
+        VtVec2fArray uv; // empty
 
-		return CreateMesh(position, indexes, normals, VtIntArray(), uv, VtIntArray(), vpf);
-	}
+        return CreateMesh(position, indexes, normals, VtIntArray(), uv, VtIntArray(), vpf);
+    }
 
 	void lock() {
 		while(m_lock.test_and_set(std::memory_order_acquire));
@@ -1781,195 +1756,157 @@ private:
 #endif // USE_RIF
 };
 
-	HdRprApi::HdRprApi() : m_impl(new HdRprApiImpl)
-	{
-	}
-
-	HdRprApi::~HdRprApi()
-	{
-		delete m_impl;
-	}
-
-	void HdRprApi::SetRenderDevice(const HdRprRenderDevice & renderDevice)
-	{
-		HdRprPreferences::GetInstance().SetRenderDevice(renderDevice);
-	}
-
-	void HdRprApi::SetRendererPlugin(HdRprPluginType plugin)
-	{
-		HdRprPreferences::GetInstance().SetPlugin(plugin);
-	}
-
-	void HdRprApi::SetHybridQuality(HdRprHybridQuality quality)
-	{
-		HdRprPreferences::GetInstance().SetHybridQuality(quality);
-	}
-
-	void HdRprApi::SetDenoising(bool enableDenoising)
-	{
-		HdRprPreferences::GetInstance().SetDenoising(enableDenoising);
-	}
-
-	bool HdRprApi::IsDenoisingEnabled()
-    {
-	    return HdRprPreferences::GetInstance().IsDenoisingEnabled();
+    HdRprApi::HdRprApi() : m_impl(new HdRprApiImpl) {
     }
 
-    TfToken HdRprApi::GetActiveAov() const
-    {
+    HdRprApi::~HdRprApi() {
+        delete m_impl;
+    }
+
+    void HdRprApi::SetRenderDevice(const HdRprRenderDevice& renderDevice) {
+        HdRprPreferences::GetInstance().SetRenderDevice(renderDevice);
+    }
+
+    void HdRprApi::SetRendererPlugin(HdRprPluginType plugin) {
+        HdRprPreferences::GetInstance().SetPlugin(plugin);
+    }
+
+    void HdRprApi::SetHybridQuality(HdRprHybridQuality quality) {
+        HdRprPreferences::GetInstance().SetHybridQuality(quality);
+    }
+
+    void HdRprApi::SetDenoising(bool enableDenoising) {
+        HdRprPreferences::GetInstance().SetDenoising(enableDenoising);
+    }
+
+    bool HdRprApi::IsDenoisingEnabled() {
+        return HdRprPreferences::GetInstance().IsDenoisingEnabled();
+    }
+
+    TfToken HdRprApi::GetActiveAov() const {
         return m_impl->GetActiveAov();
     }
 
-	void HdRprApi::Init()
-	{
-		m_impl->Init();
-	}
+    void HdRprApi::Init() {
+        m_impl->Init();
+    }
 
-	void HdRprApi::Deinit()
-	{
-		m_impl->Deinit();
-	}
+    void HdRprApi::Deinit() {
+        m_impl->Deinit();
+    }
 
-	RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf)
-	{
-		return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf);
-	}
+    RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf) {
+        return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf);
+    }
 
-	RprApiObject HdRprApi::CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width)
-	{
-		return m_impl->CreateCurve(points, indexes, width);
-	}
+    RprApiObject HdRprApi::CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width) {
+        return m_impl->CreateCurve(points, indexes, width);
+    }
 
-	void HdRprApi::CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray & transforms, VtArray<RprApiObject>& out_instances)
-	{
-		out_instances.clear();
-		out_instances.reserve(transforms.size());
-		for (const GfMatrix4d & transform : transforms)
-		{
-			if (void * meshInstamce = m_impl->CreateMeshInstance(prototypeMesh))
-			{
-				m_impl->SetMeshTransform(meshInstamce, GfMatrix4f(transform));
-				out_instances.push_back(meshInstamce);
-			}
-		}
+    void HdRprApi::CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray & transforms, VtArray<RprApiObject>& out_instances) {
+        out_instances.clear();
+        out_instances.reserve(transforms.size());
+        for (const GfMatrix4d & transform : transforms) {
+            if (void* meshInstance = m_impl->CreateMeshInstance(prototypeMesh)) {
+                m_impl->SetMeshTransform(meshInstance, GfMatrix4f(transform));
+                out_instances.push_back(meshInstance);
+            }
+        }
 
-		// Hide prototype
-		m_impl->SetMeshVisibility(prototypeMesh, false);
-	}
+        // Hide prototype
+        m_impl->SetMeshVisibility(prototypeMesh, false);
+    }
 
-	void HdRprApi::CreateEnvironmentLight(const std::string & prthTotexture, float intensity)
-	{
-		m_impl->CreateEnvironmentLight(prthTotexture, intensity);
-	}
+    void HdRprApi::CreateEnvironmentLight(const std::string & prthTotexture, float intensity) {
+        m_impl->CreateEnvironmentLight(prthTotexture, intensity);
+    }
 
-	RprApiObject HdRprApi::CreateRectLightMesh(const float & width, const float & height)
-	{
-		return m_impl->CreateRectLightGeometry(width, height);
-	}
+    RprApiObject HdRprApi::CreateRectLightMesh(const float & width, const float & height) {
+        return m_impl->CreateRectLightGeometry(width, height);
+    }
 
-	RprApiObject HdRprApi::CreateSphereLightMesh(const float & radius)
-	{
-		return m_impl->CreateSphereLightGeometry(radius);
-	}
+    RprApiObject HdRprApi::CreateSphereLightMesh(const float & radius) {
+        return m_impl->CreateSphereLightGeometry(radius);
+    }
 
-	RprApiObject HdRprApi::CreateDiskLight(const float & width, const float & height, const GfVec3f & emmisionColor)
-	{
-		return m_impl->CreateDiskLight(width, height, emmisionColor);
-	}
+    RprApiObject HdRprApi::CreateDiskLight(const float & width, const float & height, const GfVec3f & emmisionColor) {
+        return m_impl->CreateDiskLight(width, height, emmisionColor);
+    }
 
-	void HdRprApi::CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & gridSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume)
-	{
-		m_impl->CreateVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, gridSize, voxelSize, out_mesh, out_heteroVolume);
-	}
+    void HdRprApi::CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & gridSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume) {
+        m_impl->CreateVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, gridSize, voxelSize, out_mesh, out_heteroVolume);
+    }
 
-	RprApiMaterial * HdRprApi::CreateMaterial(MaterialAdapter & materialAdapter)
-	{
-		return m_impl->CreateMaterial(materialAdapter);
-	}
+    RprApiMaterial * HdRprApi::CreateMaterial(MaterialAdapter & materialAdapter) {
+        return m_impl->CreateMaterial(materialAdapter);
+    }
 
-	void HdRprApi::DeleteMaterial(RprApiMaterial *rprApiMaterial)
-	{
-	    m_impl->DeleteMaterial(rprApiMaterial);
-	}
+    void HdRprApi::DeleteMaterial(RprApiMaterial *rprApiMaterial) {
+        m_impl->DeleteMaterial(rprApiMaterial);
+    }
 
-	void HdRprApi::SetMeshTransform(RprApiObject mesh, const GfMatrix4d & transform)
-	{
-		GfMatrix4f transformF(transform);
-		m_impl->SetMeshTransform(mesh, transformF);
-	}
+    void HdRprApi::SetMeshTransform(RprApiObject mesh, const GfMatrix4d & transform) {
+        GfMatrix4f transformF(transform);
+        m_impl->SetMeshTransform(mesh, transformF);
+    }
 
-	void HdRprApi::SetMeshRefineLevel(RprApiObject mesh, int level, TfToken boundaryInterpolation)
-	{
-		m_impl->SetMeshRefineLevel(mesh, level, boundaryInterpolation);
-	}
+    void HdRprApi::SetMeshRefineLevel(RprApiObject mesh, int level, TfToken boundaryInterpolation) {
+        m_impl->SetMeshRefineLevel(mesh, level, boundaryInterpolation);
+    }
 
-	void HdRprApi::SetMeshMaterial(RprApiObject mesh, const RprApiMaterial * material)
-	{
-		m_impl->SetMeshMaterial(mesh, material);
-	}
+    void HdRprApi::SetMeshMaterial(RprApiObject mesh, const RprApiMaterial * material) {
+        m_impl->SetMeshMaterial(mesh, material);
+    }
 
-	void HdRprApi::SetCurveMaterial(RprApiObject curve, const RprApiMaterial * material)
-	{
-		m_impl->SetCurveMaterial(curve, material);
-	}
+    void HdRprApi::SetCurveMaterial(RprApiObject curve, const RprApiMaterial * material) {
+        m_impl->SetCurveMaterial(curve, material);
+    }
 
-	const GfMatrix4d & HdRprApi::GetCameraViewMatrix() const
-	{
-		return m_impl->GetCameraViewMatrix();
-	}
+    const GfMatrix4d & HdRprApi::GetCameraViewMatrix() const {
+        return m_impl->GetCameraViewMatrix();
+    }
 
-	const GfMatrix4d & HdRprApi::GetCameraProjectionMatrix() const
-	{
-		return m_impl->GetCameraProjectionMatrix();
-	}
+    const GfMatrix4d & HdRprApi::GetCameraProjectionMatrix() const {
+        return m_impl->GetCameraProjectionMatrix();
+    }
 
-	void HdRprApi::SetCameraViewMatrix(const GfMatrix4d & m)
-	{
-		m_impl->SetCameraViewMatrix(m);
-	}
+    void HdRprApi::SetCameraViewMatrix(const GfMatrix4d & m) {
+        m_impl->SetCameraViewMatrix(m);
+    }
 
-	void HdRprApi::SetCameraProjectionMatrix(const GfMatrix4d & m)
-	{
-		m_impl->SetCameraProjectionMatrix(m);
-	}
+    void HdRprApi::SetCameraProjectionMatrix(const GfMatrix4d & m) {
+        m_impl->SetCameraProjectionMatrix(m);
+    }
 
-    void HdRprApi::EnableAov(TfToken const& aovName)
-    {
+    void HdRprApi::EnableAov(TfToken const& aovName) {
         m_impl->EnableAov(aovName, true);
     }
 
-    void HdRprApi::DisableAov(TfToken const& aovName)
-    {
+    void HdRprApi::DisableAov(TfToken const& aovName) {
         m_impl->DisableAov(aovName);
     }
 
-    void HdRprApi::DisableAovs()
-    {
+    void HdRprApi::DisableAovs() {
         m_impl->DisableAovs();
     }
 
-    bool HdRprApi::IsAovEnabled(TfToken const& aovName)
-    {
+    bool HdRprApi::IsAovEnabled(TfToken const& aovName) {
         return m_impl->IsAovEnabled(aovName);
     }
 
-    void HdRprApi::ClearFramebuffers()
-    {
+    void HdRprApi::ClearFramebuffers() {
         m_impl->ClearFramebuffers();
     }
 
-    void HdRprApi::ResizeAovFramebuffers(int width, int height)
-    {
+    void HdRprApi::ResizeAovFramebuffers(int width, int height) {
         m_impl->ResizeAovFramebuffers(width, height);
     }
 
-    void HdRprApi::GetFramebufferSize(GfVec2i* resolution) const
-    {
+    void HdRprApi::GetFramebufferSize(GfVec2i* resolution) const {
         m_impl->GetFramebufferSize(resolution);
     }
 
-    std::shared_ptr<char> HdRprApi::GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize)
-    {
+    std::shared_ptr<char> HdRprApi::GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize) {
         return m_impl->GetFramebufferData(aovName, buffer, bufferSize);
     }
 
@@ -1987,20 +1924,17 @@ private:
 		m_impl->DeleteRprObject(object);
 	}
 
-	void HdRprApi::DeleteMesh(RprApiObject mesh)
-	{
-		m_impl->DeleteMesh(mesh);
-	}
+    void HdRprApi::DeleteMesh(RprApiObject mesh) {
+        m_impl->DeleteMesh(mesh);
+    }
 
-	bool HdRprApi::IsGlInteropUsed() const
-	{
-		return m_impl->IsGlInteropUsed();
-	}
+    bool HdRprApi::IsGlInteropUsed() const {
+        return m_impl->IsGlInteropUsed();
+    }
 
-	int HdRprApi::GetPluginType()
-	{
-		return int(HdRprPreferences::GetInstance().GetPlugin());
-	}
+    int HdRprApi::GetPluginType() {
+        return int(HdRprPreferences::GetInstance().GetPlugin());
+    }
 
 
 PXR_NAMESPACE_CLOSE_SCOPE

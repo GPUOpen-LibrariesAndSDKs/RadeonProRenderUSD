@@ -11,17 +11,17 @@ Prerequisites
 -----------------------------
 
 #### Common
-* **AMD Radeon™ ProRender SDK** [link](https://www.amd.com/en/technologies/sdk-agreement)		
-* **AMD Radeon™ Image Filter Library** [link](https://www.amd.com/en/technologies/sdk-agreement)	  
+* **AMD Radeon™ ProRender SDK** [link](https://www.amd.com/en/technologies/sdk-agreement)
+* **AMD Radeon™ Image Filter Library** [link](https://www.amd.com/en/technologies/sdk-agreement)
 License allows non-commercial use for developers.  Contact through the website for commercial distribution.
 
-#### For UsdView plugin 
-* **USD build / tree**		  
+#### For UsdView plugin
+* **USD build / tree**
 As many USD users get the USD libraries from different places, or compile their own, we tried to keep this as flexible as possible.
 You can download USD to build yourself from [GitHub](https://www.github.com/PixarAnimationStudios/USD)
 
 #### For Houdini plugin
-* **Houdini 18**	  
+* **Houdini 18**
 You can download Houdini installer from [Daily Builds | SideFX](https://www.sidefx.com/download/daily-builds/#category-gold)
 
 Building
@@ -78,7 +78,7 @@ specifying the cmake flag ```RPR_ENABLE_OPENVDB_SUPPORT=TRUE```.
 #### Example
 
 ```
-mkdir build 
+mkdir build
 cd build
 cmake -DUSD_ROOT=/data/usd_build -DRPR_LOCATION=/data/RPR_SDK/RadeonProRender -DCMAKE_INSTALL_PREFIX=/data/usd_build ..
 make
@@ -94,7 +94,7 @@ Supported Platforms
 Try it out
 -----------------------------
 
-Set the environment variables specified by the script when it finishes and 
+Set the environment variables specified by the script when it finishes and
 launch ```usdview``` with a sample asset.
 
 ```

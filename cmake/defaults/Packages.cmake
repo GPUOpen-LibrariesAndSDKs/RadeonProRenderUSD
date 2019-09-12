@@ -33,7 +33,7 @@ set(build_shared_libs "${BUILD_SHARED_LIBS}")
 find_package(USD REQUIRED)
 find_package(Rpr REQUIRED)
 
-# Core USD Package Requirements 
+# Core USD Package Requirements
 # ----------------------------------------------
 
 # Threads.  Save the libraries needed in PXR_THREAD_LIBS;  we may modify
