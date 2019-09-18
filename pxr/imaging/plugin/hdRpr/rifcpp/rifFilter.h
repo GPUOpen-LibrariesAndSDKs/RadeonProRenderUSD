@@ -26,14 +26,13 @@ enum FilterInputType
     MaxInput
 };
 
-using FilterParam = BOOST_NS::variant<int, float>;
+using FilterParam = BOOST_NS::variant<int, float, std::string>;
 
 enum class FilterType
 {
     None = -1,
     AIDenoise,
     Resample,
-    Remap,
     EawDenoise,
     FIRST = AIDenoise,
     LAST = EawDenoise
@@ -42,6 +41,7 @@ enum class FilterType
 class Filter {
 public:
     static std::unique_ptr<Filter> Create(FilterType type, Context* rifContext, std::uint32_t width, std::uint32_t height);
+    static std::unique_ptr<Filter> CreateCustom(rif_image_filter_type type, Context* rifContext);
 
     virtual ~Filter();
 

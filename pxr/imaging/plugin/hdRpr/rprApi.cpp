@@ -991,7 +991,7 @@ public:
                     }
 
                     // Stub
-                    auto clipSpaceDepthFilter = rif::Filter::Create(rif::FilterType::Remap, m_rifContext.get(), m_fbWidth, m_fbHeight);
+                    auto clipSpaceDepthFilter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), m_fbWidth, m_fbHeight);
                     auto& worldCoordinateAovFb = m_aovFrameBuffers[HdRprAovTokens->worldCoordinate];
                     auto inputRprFrameBuffer = (worldCoordinateAovFb.resolved ? worldCoordinateAovFb.resolved : worldCoordinateAovFb.aov).get();
                     clipSpaceDepthFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
@@ -1001,7 +1001,7 @@ public:
                 } else if (aovFrameBufferEntry.first == HdRprAovTokens->normal &&
                            aovFrameBuffer.format != HdFormatInvalid) {
                     // Remap normal to [-1;1] range
-                    auto remapFilter = rif::Filter::Create(rif::FilterType::Remap, m_rifContext.get(), m_fbWidth, m_fbHeight);
+                    auto remapFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, m_rifContext.get());
 
                     auto inputRprFrameBuffer = (aovFrameBuffer.resolved ? aovFrameBuffer.resolved : aovFrameBuffer.aov).get();
                     remapFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
@@ -1014,8 +1014,8 @@ public:
 
                     aovFrameBuffer.postprocessFilter = std::move(remapFilter);
                 } else if (aovFrameBuffer.format != HdFormatInvalid &&
-                    aovFrameBuffer.format != HdFormatFloat32Vec4 &&
-                    m_fbWidth != 0 && m_fbHeight != 0) {
+                           aovFrameBuffer.format != HdFormatFloat32Vec4 &&
+                           m_fbWidth != 0 && m_fbHeight != 0) {
                     // Convert from RPR native to Hydra format
                     auto inputRprFrameBuffer = (aovFrameBuffer.resolved ? aovFrameBuffer.resolved : aovFrameBuffer.aov).get();
                     if (inputRprFrameBuffer && imageDesc.type != 0 && imageDesc.num_components != 0) {

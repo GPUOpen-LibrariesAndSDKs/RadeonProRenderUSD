@@ -49,8 +49,7 @@ HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprAp
     else if (idName == _tokens->aov_primId)
     {
         m_aovName = HdRprAovTokens->primId;
-        // TODO: change to HdFormatInt32 when RIF gain support for integer images
-        m_format = HdFormat::HdFormatFloat32;
+        m_format = HdFormat::HdFormatUNorm8Vec4;
     }
     else if (idName == _tokens->aov_primvars_st)
     {
@@ -140,16 +139,20 @@ bool HdRprRenderBuffer::IsMapped() const {
 void HdRprRenderBuffer::Resolve() {
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
         m_dataCache = rprApi->GetFramebufferData(m_aovName, m_dataCache, &m_dataCacheSize);
-        // TODO: Implement conversion using RIF (uchar4 -> int)
         if (m_aovName == HdRprAovTokens->primId) {
-            auto primIdData = reinterpret_cast<float*>(m_dataCache.get());
-            auto output = reinterpret_cast<int*>(m_dataCache.get());
+            // RPR store integer ID values to RGB images using such formula:
+            // c[i].x = i;
+            // c[i].y = i/256;
+            // c[i].z = i/(256*256);
+            // i.e. saving little endian int24 to uchar3
+            // That's why we interpret the value as int and filling the alpha channel with zeros
+            auto primIdData = reinterpret_cast<int*>(m_dataCache.get());
             GfVec2i size;
             rprApi->GetFramebufferSize(&size);
             for (int y = 0; y < size[1]; ++y) {
                 int yOffset = y * size[0];
                 for (int x = 0; x < size[0]; ++x) {
-                    output[x + yOffset] = std::ceil(primIdData[x + yOffset] * 255.0f);
+                    primIdData[x + yOffset] &= 0xFFFFFF;
                 }
             }
         }

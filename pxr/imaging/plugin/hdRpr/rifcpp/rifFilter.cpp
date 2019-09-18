@@ -48,12 +48,12 @@ public:
     void AttachFilter() override;
 };
 
-class FilterRemap final : public Filter {
+class FilterCustom final : public Filter {
 public:
-    explicit FilterRemap(Context* rifContext) : Filter(rifContext) {
-        m_rifFilter = rifContext->CreateImageFilter(RIF_IMAGE_FILTER_REMAP_RANGE);
+    explicit FilterCustom(Context* rifContext, rif_image_filter_type type) : Filter(rifContext) {
+        m_rifFilter = rifContext->CreateImageFilter(type);
     }
-    ~FilterRemap() override = default;
+    ~FilterCustom() override = default;
 
     void AttachFilter() override {
         m_rifContext->AttachFilter(m_rifFilter, m_inputs.at(Color).rifImage, m_outputImage);
@@ -156,11 +156,16 @@ std::unique_ptr<Filter> Filter::Create(FilterType type, Context* rifContext, std
             return std::unique_ptr<FilterEaw>(new FilterEaw(rifContext, width, height));
         case FilterType::Resample:
             return std::unique_ptr<FilterResample>(new FilterResample(rifContext, width, height));
-        case FilterType::Remap:
-            return std::unique_ptr<FilterRemap>(new FilterRemap(rifContext));
     default:
         return nullptr;
     }
+}
+std::unique_ptr<Filter> Filter::CreateCustom(rif_image_filter_type type, Context* rifContext) {
+    if (!rifContext) {
+        return nullptr;
+    }
+
+    return std::unique_ptr<FilterCustom>(new FilterCustom(rifContext, type));
 }
 
 Filter::~Filter() {
@@ -254,6 +259,10 @@ struct ParameterSetter : public BOOST_NS::static_visitor<rif_int> {
 
     rif_int operator()(float value) {
         return rifImageFilterSetParameter1f(filter, paramName, value);
+    }
+
+    rif_int operator()(std::string const& value) {
+        return rifImageFilterSetParameterString(filter, paramName, value.c_str());
     }
 };
 
