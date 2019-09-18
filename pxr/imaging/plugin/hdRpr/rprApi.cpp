@@ -17,85 +17,60 @@
 
 #include <pxr/imaging/pxOsd/tokens.h>
 
-#define PRINTER(name) printer(#name, (name))
-
-#define SAFE_DELETE_RPR_OBJECT(x) if(x) {RecursiveLockGuard rprLock(m_rprAccessMutex); rprObjectDelete(x); x = nullptr;}
-#define INVALID_GL_TEXTURE 0
-#define INVALID_GL_FRAMEBUFFER 0
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PUBLIC_TOKENS(HdRprAovTokens, HD_RPR_AOV_TOKENS);
 
 namespace
 {
-    using RecursiveLockGuard = std::lock_guard<std::recursive_mutex>;
 
-    const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
+using RecursiveLockGuard = std::lock_guard<std::recursive_mutex>;
 
-    const uint32_t k_diskVertexCount = 32;
-
-    constexpr const char * k_pathToRprPreference = "hdRprPreferences.dat";
-
-    template <typename T, typename... Args>
-    std::unique_ptr<T> make_unique(Args&&... args) {
-        return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-    }
-
-    inline TfToken HdRprAovToToken(HdRprAov aov) {
-        switch (aov)
-        {
-        case HdRprAov::COLOR:
-            return HdRprAovTokens->color;
-        case HdRprAov::NORMAL:
-            return HdRprAovTokens->normal;
-        case HdRprAov::ALBEDO:
-            return HdRprAovTokens->albedo;
-        case HdRprAov::DEPTH:
-            return HdRprAovTokens->depth;
-        case HdRprAov::PRIM_ID:
-            return HdRprAovTokens->primId;
-        case HdRprAov::UV:
-            return HdRprAovTokens->primvarsSt;
-        default:
-            return TfToken();
-        }
-    }
+template <typename T, typename... Args>
+std::unique_ptr<T> make_unique(Args&& ... args) {
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
+
+} // namespace anonymous
 
 class HdRprPreferences
 {
 public:
+    enum ChangeTracker {
+        Clean = 0,
+        DirtyAll = ~0u,
+        DirtyRenderDevice = 1 << 0,
+        DirtyPlugin = 1 << 1,
+        DirtyHybridQuality = 1 << 2,
+        DirtyDenoising = 1 << 3
+    };
 
     static HdRprPreferences & GetInstance() {
         static HdRprPreferences instance;
         return instance;
     }
 
-    void SetRenderDevice(rpr::RenderDeviceType renderDevice)
-    {
-        m_prefData.mRenderDevice = renderDevice;
-        Save();
-        SetDitry(true);
-    }
-
-    rpr::RenderDeviceType GetRenderDevice() const
-    {
-        return m_prefData.mRenderDevice;
-    }
-
-    void SetHybridQuality(HdRprHybridQuality quality)
-    {
-        if (m_prefData.mHybridQuality != quality)
-        {
-            m_prefData.mHybridQuality = quality;
+    void SetRenderDevice(rpr::RenderDeviceType renderDevice) {
+        if (m_prefData.mRenderDevice != renderDevice) {
+            m_prefData.mRenderDevice = renderDevice;
+            m_dirtyFlags |= DirtyRenderDevice;
             Save();
-            SetDitry(true);
         }
     }
 
-    HdRprHybridQuality GetHybridQuality() const
-    {
+    rpr::RenderDeviceType GetRenderDevice() const {
+        return m_prefData.mRenderDevice;
+    }
+
+    void SetHybridQuality(HdRprHybridQuality quality) {
+        if (m_prefData.mHybridQuality != quality) {
+            m_prefData.mHybridQuality = quality;
+            m_dirtyFlags |= DirtyHybridQuality;
+            Save();
+        }
+    }
+
+    HdRprHybridQuality GetHybridQuality() const {
         if (m_prefData.mHybridQuality == HdRprHybridQuality::MEDIUM) {
             // temporarily disable until issues on hybrid side is not solved
             //   otherwise driver crashes guaranteed
@@ -104,77 +79,55 @@ public:
         return m_prefData.mHybridQuality;
     }
 
-    void SetPlugin(rpr::PluginType plugin)
-    {
-        if (m_prefData.mPlugin != plugin)
-        {
+    void SetPlugin(rpr::PluginType plugin) {
+        if (m_prefData.mPlugin != plugin) {
             m_prefData.mPlugin = plugin;
+            m_dirtyFlags |= DirtyPlugin;
             Save();
-            SetDitry(true);
         }
     }
 
-    rpr::PluginType GetPlugin()
-    {
+    rpr::PluginType GetPlugin() {
         return m_prefData.mPlugin;
     }
 
-    void SetDenoising(bool enableDenoising)
-    {
-        m_prefData.mEnableDenoising = enableDenoising;
-        SetFilterDirty(true);
+    void SetDenoising(bool enableDenoising) {
+        if (m_prefData.mEnableDenoising != enableDenoising) {
+            m_prefData.mEnableDenoising = enableDenoising;
+            m_dirtyFlags |= DirtyDenoising;
+            Save();
+        }
     }
 
-    bool IsDenoisingEnabled() const
-    {
+    bool IsDenoisingEnabled() const {
         return m_prefData.mEnableDenoising;
     }
 
-    bool IsDirty() const
-    {
-        return m_isDirty;
+    bool IsDirty(ChangeTracker dirtyFlag) const {
+        return m_dirtyFlags & dirtyFlag;
     }
 
-    bool IsFilterTypeDirty()
-    {
-        return m_isFilterDirty;
-    }
-
-    void SetDitry(bool isDirty)
-    {
-        m_isDirty = isDirty;
-    }
-
-    void SetFilterDirty(bool isDirty)
-    {
-        m_isFilterDirty = isDirty;
+    void ResetDirty() {
+        m_dirtyFlags = Clean;
     }
 
 private:
-    HdRprPreferences()
-    {
-        if (!Load())
-        {
-            SetDefault();
+    HdRprPreferences() {
+        if (!Load()) {
+            m_prefData.SetDefault();
         }
-
-        SetDitry(true);
     }
 
-    ~HdRprPreferences()
-    {
+    ~HdRprPreferences() {
         Save();
     }
 
-    bool Load()
-    {
+    bool Load() {
         std::string tmpDir = HdRprApi::GetTmpDir();
-        std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + k_pathToRprPreference;
+        std::string rprPreferencePath = (tmpDir.empty()) ? k_rprPreferenceFilename : tmpDir + k_rprPreferenceFilename;
 
-        if (FILE * f = fopen(rprPreferencePath.c_str(), "rb"))
-        {
-            if (!fread(&m_prefData, sizeof(PrefData), 1, f))
-            {
+        if (FILE* f = fopen(rprPreferencePath.c_str(), "rb")) {
+            if (!fread(&m_prefData, sizeof(PrefData), 1, f)) {
                 TF_CODING_ERROR("Fail to read rpr preferences dat file");
             }
             fclose(f);
@@ -184,46 +137,45 @@ private:
         return false;
     }
 
-    void Save()
-    {
+    void Save() {
         std::string tmpDir = HdRprApi::GetTmpDir();
-        std::string rprPreferencePath = (tmpDir.empty()) ? k_pathToRprPreference : tmpDir + k_pathToRprPreference;
+        std::string rprPreferencePath = (tmpDir.empty()) ? k_rprPreferenceFilename : tmpDir + k_rprPreferenceFilename;
 
-        if (FILE * f = fopen(rprPreferencePath.c_str(), "wb"))
-        {
-            if (!fwrite(&m_prefData, sizeof(PrefData), 1, f))
-            {
+        if (FILE* f = fopen(rprPreferencePath.c_str(), "wb")) {
+            if (!fwrite(&m_prefData, sizeof(PrefData), 1, f)) {
                 TF_CODING_ERROR("Fail to write rpr preferences dat file");
             }
             fclose(f);
         }
     }
 
-    bool IsValid()
-    {
+    bool IsValid() {
         return m_prefData.mRenderDevice >= rpr::RenderDeviceType::FIRST && m_prefData.mRenderDevice <= rpr::RenderDeviceType::LAST &&
                m_prefData.mPlugin >= rpr::PluginType::FIRST && m_prefData.mPlugin <= rpr::PluginType::LAST;
     }
 
-    void SetDefault()
-    {
-        m_prefData.mRenderDevice = rpr::RenderDeviceType::GPU;
-        m_prefData.mPlugin = rpr::PluginType::TAHOE;
-        m_prefData.mHybridQuality = HdRprHybridQuality::LOW;
-        m_prefData.mEnableDenoising = false;
-    }
+    struct PrefData {
+        rpr::RenderDeviceType mRenderDevice;
+        rpr::PluginType mPlugin;
+        HdRprHybridQuality mHybridQuality;
+        bool mEnableDenoising;
 
-    struct PrefData
-    {
-        rpr::RenderDeviceType mRenderDevice = rpr::RenderDeviceType::GPU;
-        rpr::PluginType mPlugin = rpr::PluginType::TAHOE;
-        HdRprHybridQuality mHybridQuality = HdRprHybridQuality::LOW;
-        bool mEnableDenoising = false;
-    } m_prefData;
+        PrefData() {
+            SetDefault();
+        }
 
+        void SetDefault() {
+            mRenderDevice = rpr::RenderDeviceType::GPU;
+            mPlugin = rpr::PluginType::TAHOE;
+            mHybridQuality = HdRprHybridQuality::LOW;
+            mEnableDenoising = false;
+        }
+    };
+    PrefData m_prefData;
 
-    bool m_isDirty = true;
-    bool m_isFilterDirty = true;
+    uint32_t m_dirtyFlags = DirtyAll;
+
+    constexpr static const char* k_rprPreferenceFilename = "hdRprPreferences.dat";
 };
 
 static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
@@ -237,11 +189,9 @@ static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
     {HdRprAovTokens->primvarsSt, RPR_AOV_UV},
 };
 
-class HdRprApiImpl
-{
+class HdRprApiImpl {
 public:
-    void Init()
-    {
+    void Init() {
         InitRpr();
         InitRif();
         InitMaterialSystem();
@@ -259,13 +209,14 @@ public:
         DisableAovs();
 
         for (auto rprObject : m_rprObjectsToRelease) {
-            SAFE_DELETE_RPR_OBJECT(rprObject);
+            if (rprObject) {
+                rprObjectDelete(rprObject);
+            }
         }
     }
 
     void CreateScene() {
-        if (!m_rprContext)
-        {
+        if (!m_rprContext) {
             return;
         }
 
@@ -275,8 +226,7 @@ public:
     }
 
     void CreateCamera() {
-        if (!m_rprContext)
-        {
+        if (!m_rprContext) {
             return;
         }
 
@@ -291,10 +241,8 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    void* CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
-    {
-        if (!m_rprContext)
-        {
+    void* CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf, rpr_material_node material = nullptr) {
+        if (!m_rprContext) {
             return nullptr;
         }
 
@@ -470,7 +418,7 @@ public:
     }
 
     void CreateEnvironmentLight(const std::string& path, float intensity) {
-        if (!m_rprContext) {
+        if (!m_rprContext || path.empty()) {
             return;
         }
 
@@ -559,6 +507,7 @@ public:
         VtIntArray idx;
         VtIntArray vpf;
 
+        const uint32_t k_diskVertexCount = 32;
         const float step = M_PI * 2 / k_diskVertexCount;
         for (int i = 0; i < k_diskVertexCount; ++i) {
             positions.push_back(GfVec3f(width * sin(step * i), height * cos(step * i), 0.f));
@@ -987,51 +936,15 @@ public:
 
     rif_image_desc GetRifImageDesc(uint32_t width, uint32_t height, HdFormat format) {
         rif_image_desc imageDesc = {};
-        switch (format) {
+        imageDesc.num_components = HdGetComponentCount(format);
+        switch (HdGetComponentFormat(format)) {
         case HdFormatUNorm8:
-        case HdFormatFloat16:
-        case HdFormatFloat32:
-        case HdFormatInt32:
-            imageDesc.num_components = 1;
-            break;
-        case HdFormatUNorm8Vec2:
-        case HdFormatFloat16Vec2:
-        case HdFormatFloat32Vec2:
-        case HdFormatInt32Vec2:
-            imageDesc.num_components = 2;
-            break;
-        case HdFormatUNorm8Vec3:
-        case HdFormatFloat16Vec3:
-        case HdFormatFloat32Vec3:
-        case HdFormatInt32Vec3:
-            imageDesc.num_components = 3;
-            break;
-        case HdFormatUNorm8Vec4:
-        case HdFormatFloat16Vec4:
-        case HdFormatInt32Vec4:
-            imageDesc.num_components = 4;
-            break;
-        default:
-            imageDesc.num_components = 0;
-            break;
-        }
-        switch (format) {
-        case HdFormatUNorm8:
-        case HdFormatUNorm8Vec2:
-        case HdFormatUNorm8Vec3:
-        case HdFormatUNorm8Vec4:
             imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
             break;
         case HdFormatFloat16:
-        case HdFormatFloat16Vec2:
-        case HdFormatFloat16Vec3:
-        case HdFormatFloat16Vec4:
             imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
             break;
         case HdFormatFloat32:
-        case HdFormatFloat32Vec2:
-        case HdFormatFloat32Vec3:
-        case HdFormatFloat32Vec4:
             imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
             break;
         default:
@@ -1049,15 +962,15 @@ public:
 
     void Update() {
         auto& preferences = HdRprPreferences::GetInstance();
-        if (preferences.IsDirty()) {
-            if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+            if (preferences.IsDirty(HdRprPreferences::DirtyHybridQuality)) {
                 rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(preferences.GetHybridQuality()));
             }
-            preferences.SetDitry(false);
         }
 
         // In case there is no Lights in scene - create default
         if (!m_isLightPresent) {
+            const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
             CreateEnvironmentLight(k_defaultLightColor, 1.f);
         }
 
@@ -1124,7 +1037,22 @@ public:
             }
         }
 
+        try {
+            if (m_denoiseFilterPtr) {
+                m_denoiseFilterPtr->Update();
+            }
+            for (auto& aovFrameBuffer : m_aovFrameBuffers) {
+                if (aovFrameBuffer.second.postprocessFilter) {
+                    aovFrameBuffer.second.postprocessFilter->Update();
+                }
+            }
+        }
+        catch (std::runtime_error& e) {
+            TF_RUNTIME_ERROR("%s", e.what());
+        }
+
         m_dirtyFlags = ChangeTracker::Clean;
+        preferences.ResetDirty();
     }
 
     void UpdateDenoiseFilter() {
@@ -1133,10 +1061,8 @@ public:
             return;
         }
 
-        bool updateRequired = HdRprPreferences::GetInstance().IsFilterTypeDirty() || (m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers);
-        HdRprPreferences::GetInstance().SetFilterDirty(false);
-
-        if (!updateRequired) {
+        if (!HdRprPreferences::GetInstance().IsDirty(HdRprPreferences::DirtyDenoising) &&
+            !(m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers)) {
             return;
         }
 
@@ -1205,14 +1131,6 @@ public:
         ResolveFramebuffers();
 
         try {
-            if (m_denoiseFilterPtr) {
-                m_denoiseFilterPtr->Update();
-            }
-            for (auto& aovFrameBuffer : m_aovFrameBuffers) {
-                if (aovFrameBuffer.second.postprocessFilter) {
-                    aovFrameBuffer.second.postprocessFilter->Update();
-                }
-            }
             m_rifContext->ExecuteCommandQueue();
         } catch (std::runtime_error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
@@ -1229,7 +1147,7 @@ public:
         RPR_ERROR_CHECK(rprShapeSetMaterial(mesh, nullptr), "Fail reset mesh material");
         RPR_ERROR_CHECK(rprSceneDetachShape(m_scene, mesh), "Fail detach mesh from scene");
 
-        SAFE_DELETE_RPR_OBJECT(mesh);
+        rprObjectDelete(mesh);
     }
 
     TfToken GetActiveAov() const {
@@ -1241,8 +1159,7 @@ public:
     }
 
 private:
-    void InitRpr()
-    {
+    void InitRpr() {
         auto plugin = HdRprPreferences::GetInstance().GetPlugin();
         auto renderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
         m_rprContext = rpr::Context::Create(plugin, renderDevice, false);
@@ -1264,20 +1181,17 @@ private:
         m_rifContext = rif::Context::Create(m_rprContext->GetHandle());
     }
 
-    void InitMaterialSystem()
-    {
-        if (!m_rprContext)
-        {
+    void InitMaterialSystem() {
+        if (!m_rprContext) {
             return;
         }
 
-        if(RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_rprContext->GetHandle(), 0, &m_matsys), "Fail create Material System resolve")) return;
+        if (RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_rprContext->GetHandle(), 0, &m_matsys), "Fail create Material System resolve")) return;
         m_rprObjectsToRelease.push_back(m_matsys);
         m_rprMaterialFactory.reset(new RprMaterialFactory(m_matsys, m_rprContext->GetHandle()));
     }
 
-    void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes, VtIntArray & out_newVpf)
-    {
+    void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes, VtIntArray & out_newVpf) {
         out_newIndexes.clear();
         out_newVpf.clear();
 
@@ -1285,22 +1199,16 @@ private:
         out_newVpf.reserve(vpf.size());
 
         VtIntArray::const_iterator idxIt = indexes.begin();
-        for (const int vCount : vpf)
-        {
-            if (vCount == 3 || vCount == 4)
-            {
-                for (int i = 0; i < vCount; ++i)
-                {
+        for (const int vCount : vpf) {
+            if (vCount == 3 || vCount == 4) {
+                for (int i = 0; i < vCount; ++i) {
                     out_newIndexes.push_back(*idxIt);
                     ++idxIt;
                 }
                 out_newVpf.push_back(vCount);
-            }
-            else
-            {
+            } else {
                 constexpr int triangleVertexCount = 3;
-                for (int i = 0; i < vCount - 2; ++i)
-                {
+                for (int i = 0; i < vCount - 2; ++i) {
                     out_newIndexes.push_back(*(idxIt + i + 0));
                     out_newIndexes.push_back(*(idxIt + i + 1));
                     out_newIndexes.push_back(*(idxIt + i + 2));
@@ -1311,26 +1219,19 @@ private:
         }
     }
 
-    void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes)
-    {
+    void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes) {
         out_newIndexes.clear();
         out_newIndexes.reserve(indexes.size());
 
         VtIntArray::const_iterator idxIt = indexes.begin();
-        for (const int vCount : vpf)
-        {
-            if (vCount == 3 || vCount == 4)
-            {
-                for (int i = 0; i < vCount; ++i)
-                {
+        for (const int vCount : vpf) {
+            if (vCount == 3 || vCount == 4) {
+                for (int i = 0; i < vCount; ++i) {
                     out_newIndexes.push_back(*idxIt);
                     ++idxIt;
                 }
-            }
-            else
-            {
-                for (int i = 0; i < vCount - 2; ++i)
-                {
+            } else {
+                for (int i = 0; i < vCount - 2; ++i) {
                     out_newIndexes.push_back(*(idxIt + i + 0));
                     out_newIndexes.push_back(*(idxIt + i + 1));
                     out_newIndexes.push_back(*(idxIt + i + 2));
@@ -1340,8 +1241,7 @@ private:
         }
     }
 
-    void* CreateCubeMesh(const float & width, const float & height, const float & depth)
-    {
+    void* CreateCubeMesh(const float & width, const float & height, const float & depth) {
         constexpr const size_t cubeVertexCount = 24;
         constexpr const size_t cubeNormalCount = 24;
         constexpr const size_t cubeIndexCount = 36;
@@ -1409,31 +1309,25 @@ private:
         normals[22] = GfVec3f(0.f, 0.f, 1.f);
         normals[23] = GfVec3f(0.f, 0.f, 1.f);
 
-        VtIntArray indexes(cubeIndexCount);
-        {
-            std::array<int, cubeIndexCount> indexArray =
-            {
-                3,1,0,
-                2,1,3,
+        VtIntArray indexes = {
+            3,1,0,
+            2,1,3,
 
-                6,4,5,
-                7,4,6,
+            6,4,5,
+            7,4,6,
 
-                11,9,8,
-                10,9,11,
+            11,9,8,
+            10,9,11,
 
-                14,12,13,
-                15,12,14,
+            14,12,13,
+            15,12,14,
 
-                19,17,16,
-                18,17,19,
+            19,17,16,
+            18,17,19,
 
-                22,20,21,
-                23,20,22
-            };
-
-            memcpy(indexes.data(), indexArray.data(), sizeof(int) * cubeIndexCount);
-        }
+            22,20,21,
+            23,20,22
+        };
 
         VtIntArray vpf(cubeVpfCount, 3);
         VtVec2fArray uv; // empty
@@ -1485,73 +1379,58 @@ private:
     std::unique_ptr<rif::Filter> m_denoiseFilterPtr;
 };
 
-    HdRprApi::HdRprApi() : m_impl(new HdRprApiImpl)
-    {
+    HdRprApi::HdRprApi() : m_impl(new HdRprApiImpl) {
     }
 
-    HdRprApi::~HdRprApi()
-    {
+    HdRprApi::~HdRprApi() {
         delete m_impl;
     }
 
-    void HdRprApi::SetRenderDevice(int renderDevice)
-    {
+    void HdRprApi::SetRenderDevice(int renderDevice) {
         HdRprPreferences::GetInstance().SetRenderDevice(static_cast<rpr::RenderDeviceType>(renderDevice));
     }
 
-    void HdRprApi::SetRendererPlugin(int plugin)
-    {
+    void HdRprApi::SetRendererPlugin(int plugin) {
         HdRprPreferences::GetInstance().SetPlugin(static_cast<rpr::PluginType>(plugin));
     }
 
-    void HdRprApi::SetHybridQuality(int quality)
-    {
+    void HdRprApi::SetHybridQuality(int quality) {
         HdRprPreferences::GetInstance().SetHybridQuality(static_cast<HdRprHybridQuality>(quality));
     }
 
-    void HdRprApi::SetDenoising(bool enableDenoising)
-    {
+    void HdRprApi::SetDenoising(bool enableDenoising) {
         HdRprPreferences::GetInstance().SetDenoising(enableDenoising);
     }
 
-    bool HdRprApi::IsDenoisingEnabled()
-    {
+    bool HdRprApi::IsDenoisingEnabled() {
         return HdRprPreferences::GetInstance().IsDenoisingEnabled();
     }
 
-    TfToken HdRprApi::GetActiveAov() const
-    {
+    TfToken HdRprApi::GetActiveAov() const {
         return m_impl->GetActiveAov();
     }
 
-    void HdRprApi::Init()
-    {
+    void HdRprApi::Init() {
         m_impl->Init();
     }
 
-    void HdRprApi::Deinit()
-    {
+    void HdRprApi::Deinit() {
         m_impl->Deinit();
     }
 
-    RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf)
-    {
+    RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf) {
         return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf);
     }
 
-    RprApiObject HdRprApi::CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width)
-    {
+    RprApiObject HdRprApi::CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width) {
         return m_impl->CreateCurve(points, indexes, width);
     }
 
-    void HdRprApi::CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray & transforms, VtArray<RprApiObject>& out_instances)
-    {
+    void HdRprApi::CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray & transforms, VtArray<RprApiObject>& out_instances) {
         out_instances.clear();
         out_instances.reserve(transforms.size());
-        for (const GfMatrix4d & transform : transforms)
-        {
-            if (void* meshInstamce = m_impl->CreateMeshInstance(prototypeMesh))
-            {
+        for (const GfMatrix4d & transform : transforms) {
+            if (void* meshInstamce = m_impl->CreateMeshInstance(prototypeMesh)) {
                 m_impl->SetMeshTransform(meshInstamce, GfMatrix4f(transform));
                 out_instances.push_back(meshInstamce);
             }
@@ -1561,119 +1440,96 @@ private:
         m_impl->SetMeshVisibility(prototypeMesh, false);
     }
 
-    void HdRprApi::CreateEnvironmentLight(const std::string & prthTotexture, float intensity)
-    {
+    void HdRprApi::CreateEnvironmentLight(const std::string & prthTotexture, float intensity) {
         m_impl->CreateEnvironmentLight(prthTotexture, intensity);
     }
 
-    RprApiObject HdRprApi::CreateRectLightMesh(const float & width, const float & height)
-    {
+    RprApiObject HdRprApi::CreateRectLightMesh(const float & width, const float & height) {
         return m_impl->CreateRectLightGeometry(width, height);
     }
 
-    RprApiObject HdRprApi::CreateSphereLightMesh(const float & radius)
-    {
+    RprApiObject HdRprApi::CreateSphereLightMesh(const float & radius) {
         return m_impl->CreateSphereLightGeometry(radius);
     }
 
-    RprApiObject HdRprApi::CreateDiskLight(const float & width, const float & height, const GfVec3f & emmisionColor)
-    {
+    RprApiObject HdRprApi::CreateDiskLight(const float & width, const float & height, const GfVec3f & emmisionColor) {
         return m_impl->CreateDiskLight(width, height, emmisionColor);
     }
 
-    void HdRprApi::CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & gridSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume)
-    {
+    void HdRprApi::CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & gridSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume) {
         m_impl->CreateVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, gridSize, voxelSize, out_mesh, out_heteroVolume);
     }
 
-    RprApiMaterial * HdRprApi::CreateMaterial(MaterialAdapter & materialAdapter)
-    {
+    RprApiMaterial * HdRprApi::CreateMaterial(MaterialAdapter & materialAdapter) {
         return m_impl->CreateMaterial(materialAdapter);
     }
 
-    void HdRprApi::DeleteMaterial(RprApiMaterial *rprApiMaterial)
-    {
+    void HdRprApi::DeleteMaterial(RprApiMaterial *rprApiMaterial) {
         m_impl->DeleteMaterial(rprApiMaterial);
     }
 
-    void HdRprApi::SetMeshTransform(RprApiObject mesh, const GfMatrix4d & transform)
-    {
+    void HdRprApi::SetMeshTransform(RprApiObject mesh, const GfMatrix4d & transform) {
         GfMatrix4f transformF(transform);
         m_impl->SetMeshTransform(mesh, transformF);
     }
 
-    void HdRprApi::SetMeshRefineLevel(RprApiObject mesh, int level, TfToken boundaryInterpolation)
-    {
+    void HdRprApi::SetMeshRefineLevel(RprApiObject mesh, int level, TfToken boundaryInterpolation) {
         m_impl->SetMeshRefineLevel(mesh, level, boundaryInterpolation);
     }
 
-    void HdRprApi::SetMeshMaterial(RprApiObject mesh, const RprApiMaterial * material)
-    {
+    void HdRprApi::SetMeshMaterial(RprApiObject mesh, const RprApiMaterial * material) {
         m_impl->SetMeshMaterial(mesh, material);
     }
 
-    void HdRprApi::SetCurveMaterial(RprApiObject curve, const RprApiMaterial * material)
-    {
+    void HdRprApi::SetCurveMaterial(RprApiObject curve, const RprApiMaterial * material) {
         m_impl->SetCurveMaterial(curve, material);
     }
 
-    const GfMatrix4d & HdRprApi::GetCameraViewMatrix() const
-    {
+    const GfMatrix4d & HdRprApi::GetCameraViewMatrix() const {
         return m_impl->GetCameraViewMatrix();
     }
 
-    const GfMatrix4d & HdRprApi::GetCameraProjectionMatrix() const
-    {
+    const GfMatrix4d & HdRprApi::GetCameraProjectionMatrix() const {
         return m_impl->GetCameraProjectionMatrix();
     }
 
-    void HdRprApi::SetCameraViewMatrix(const GfMatrix4d & m)
-    {
+    void HdRprApi::SetCameraViewMatrix(const GfMatrix4d & m) {
         m_impl->SetCameraViewMatrix(m);
     }
 
-    void HdRprApi::SetCameraProjectionMatrix(const GfMatrix4d & m)
-    {
+    void HdRprApi::SetCameraProjectionMatrix(const GfMatrix4d & m) {
         m_impl->SetCameraProjectionMatrix(m);
     }
 
-    void HdRprApi::EnableAov(TfToken const& aovName, HdFormat format)
-    {
+    void HdRprApi::EnableAov(TfToken const& aovName, HdFormat format) {
         m_impl->EnableAov(aovName, format, true);
     }
 
-    void HdRprApi::DisableAov(TfToken const& aovName)
-    {
+    void HdRprApi::DisableAov(TfToken const& aovName) {
         m_impl->DisableAov(aovName);
     }
 
-    void HdRprApi::DisableAovs()
-    {
+    void HdRprApi::DisableAovs() {
         m_impl->DisableAovs();
     }
 
-    bool HdRprApi::IsAovEnabled(TfToken const& aovName)
-    {
+    bool HdRprApi::IsAovEnabled(TfToken const& aovName) {
         return m_impl->IsAovEnabled(aovName);
     }
 
-    void HdRprApi::ClearFramebuffers()
-    {
+    void HdRprApi::ClearFramebuffers() {
         m_impl->ClearFramebuffers();
     }
 
-    void HdRprApi::ResizeAovFramebuffers(int width, int height)
-    {
+    void HdRprApi::ResizeAovFramebuffers(int width, int height) {
         m_impl->ResizeAovFramebuffers(width, height);
     }
 
-    void HdRprApi::GetFramebufferSize(GfVec2i* resolution) const
-    {
+    void HdRprApi::GetFramebufferSize(GfVec2i* resolution) const {
         m_impl->GetFramebufferSize(resolution);
     }
 
-    std::shared_ptr<char> HdRprApi::GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize)
-    {
+    std::shared_ptr<char> HdRprApi::GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize) {
         return m_impl->GetFramebufferData(aovName, buffer, bufferSize);
     }
 
@@ -1681,18 +1537,15 @@ private:
         m_impl->Render();
     }
 
-    void HdRprApi::DeleteMesh(RprApiObject mesh)
-    {
+    void HdRprApi::DeleteMesh(RprApiObject mesh) {
         m_impl->DeleteMesh(mesh);
     }
 
-    bool HdRprApi::IsGlInteropUsed() const
-    {
+    bool HdRprApi::IsGlInteropUsed() const {
         return m_impl->IsGlInteropUsed();
     }
 
-    int HdRprApi::GetPluginType()
-    {
+    int HdRprApi::GetPluginType() {
         return int(HdRprPreferences::GetInstance().GetPlugin());
     }
 
