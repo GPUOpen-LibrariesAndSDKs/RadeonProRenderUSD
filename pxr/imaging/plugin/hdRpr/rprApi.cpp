@@ -990,14 +990,18 @@ public:
                         return;
                     }
 
-                    // Stub
-                    auto clipSpaceDepthFilter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), m_fbWidth, m_fbHeight);
+                    auto ndcDepthFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, m_rifContext.get());
+
                     auto& worldCoordinateAovFb = m_aovFrameBuffers[HdRprAovTokens->worldCoordinate];
                     auto inputRprFrameBuffer = (worldCoordinateAovFb.resolved ? worldCoordinateAovFb.resolved : worldCoordinateAovFb.aov).get();
-                    clipSpaceDepthFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
-                    clipSpaceDepthFilter->SetOutput(imageDesc);
+                    ndcDepthFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
 
-                    aovFrameBuffer.postprocessFilter = std::move(clipSpaceDepthFilter);
+                    ndcDepthFilter->SetOutput(imageDesc);
+
+                    auto viewProjectionMatrix = m_cameraViewMatrix * m_cameraProjectionMatrix;
+                    ndcDepthFilter->AddParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix));
+
+                    aovFrameBuffer.postprocessFilter = std::move(ndcDepthFilter);
                 } else if (aovFrameBufferEntry.first == HdRprAovTokens->normal &&
                            aovFrameBuffer.format != HdFormatInvalid) {
                     // Remap normal to [-1;1] range

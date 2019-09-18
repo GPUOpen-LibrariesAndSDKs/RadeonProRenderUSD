@@ -7,6 +7,8 @@
 #include "boostIncludePath.h"
 #include BOOST_INCLUDE_PATH(variant.hpp)
 
+#include "pxr/base/gf/matrix4f.h"
+
 #include <unordered_map>
 #include <vector>
 
@@ -26,7 +28,7 @@ enum FilterInputType
     MaxInput
 };
 
-using FilterParam = BOOST_NS::variant<int, float, std::string>;
+using FilterParam = BOOST_NS::variant<int, float, std::string, GfMatrix4f>;
 
 enum class FilterType
 {
