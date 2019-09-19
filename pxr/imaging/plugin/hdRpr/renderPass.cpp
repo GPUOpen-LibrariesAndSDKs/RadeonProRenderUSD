@@ -48,7 +48,7 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
     }
 
     auto& cameraProjMatrix = rprApi->GetCameraProjectionMatrix();
-    auto& proj = renderPassState->GetProjectionMatrix();
+    auto proj = renderPassState->GetProjectionMatrix();
     if (cameraProjMatrix != proj) {
         rprApi->SetCameraProjectionMatrix(proj);
     }
