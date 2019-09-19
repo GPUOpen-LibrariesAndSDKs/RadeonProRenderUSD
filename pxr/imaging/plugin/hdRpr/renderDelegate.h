@@ -15,7 +15,19 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-class HdProRenderRenderParam;
+#define HDRPR_RENDER_SETTINGS_TOKENS \
+    (enableDenoising)                \
+    (renderQuality)
+
+TF_DECLARE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
+
+#define HDRPR_RENDER_QUALITY_TOKENS \
+    (low)                           \
+    (medium)                        \
+    (high)                          \
+    (full)                          \
+
+TF_DECLARE_PUBLIC_TOKENS(HdRprRenderQualityTokens, HDRPR_RENDER_QUALITY_TOKENS);
 
 ///
 /// \class HdRprDelegate
@@ -24,26 +36,26 @@ class HdRprDelegate final : public HdRenderDelegate {
 public:
 
     HdRprDelegate();
-    virtual ~HdRprDelegate();
+    ~HdRprDelegate() override;
 
     ///
     /// Returns a list of typeId's of all supported Rprims by this render
     /// delegate.
     ///
-    virtual const TfTokenVector &GetSupportedRprimTypes() const override;
+    const TfTokenVector &GetSupportedRprimTypes() const override;
 
     ///
     /// Returns a list of typeId's of all supported Sprims by this render
     /// delegate.
     ///
-    virtual const TfTokenVector &GetSupportedSprimTypes() const override;
+    const TfTokenVector &GetSupportedSprimTypes() const override;
 
 
     ///
     /// Returns a list of typeId's of all supported Bprims by this render
     /// delegate.
     ///
-    virtual const TfTokenVector &GetSupportedBprimTypes() const override;
+    const TfTokenVector &GetSupportedBprimTypes() const override;
 
     ///
     /// Returns an opaque handle to a render param, that in turn is
@@ -57,13 +69,13 @@ public:
     ///
     /// A render delegate may return null for the param.
     ///
-    virtual HdRenderParam *GetRenderParam() const override;
+    HdRenderParam *GetRenderParam() const override;
 
     ///
     /// Returns a shared ptr to the resource registry of the current render
     /// delegate.
     ///
-    virtual HdResourceRegistrySharedPtr GetResourceRegistry() const override;
+    HdResourceRegistrySharedPtr GetResourceRegistry() const override;
 
     ////////////////////////////////////////////////////////////////////////////
     ///
@@ -77,7 +89,7 @@ public:
     /// \param collection the rprim collection to bind to the new renderpass.
     /// \return A shared pointer to the new renderpass or empty on error.
     ///
-    virtual HdRenderPassSharedPtr CreateRenderPass(HdRenderIndex *index,
+    HdRenderPassSharedPtr CreateRenderPass(HdRenderIndex *index,
                                       HdRprimCollection const& collection) override;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -93,11 +105,11 @@ public:
     ///                    uses this instancer as a prototype (may be empty).
     /// \return A pointer to the new instancer or nullptr on error.
     ///
-    virtual HdInstancer *CreateInstancer(HdSceneDelegate *delegate,
+    HdInstancer *CreateInstancer(HdSceneDelegate *delegate,
                                          SdfPath const& id,
                                          SdfPath const& instancerId) override;
 
-    virtual void DestroyInstancer(HdInstancer *instancer) override;
+    void DestroyInstancer(HdInstancer *instancer) override;
 
     ////////////////////////////////////////////////////////////////////////////
     ///
@@ -114,14 +126,14 @@ public:
     ///                    the prim (optional: May be empty).
     /// \return A pointer to the new prim or nullptr on error.
     ///                     
-    virtual HdRprim *CreateRprim(TfToken const& typeId,
+    HdRprim *CreateRprim(TfToken const& typeId,
                                  SdfPath const& rprimId,
                                  SdfPath const& instancerId) override;
 
     ///
     /// Request to Destruct and deallocate the prim.
     /// 
-    virtual void DestroyRprim(HdRprim *rPrim) override;
+    void DestroyRprim(HdRprim *rPrim) override;
 
     ///
     /// Request to Allocate and Construct a new Sprim.
@@ -129,7 +141,7 @@ public:
     /// \param sprimId a unique identifier for the prim
     /// \return A pointer to the new prim or nullptr on error.
     ///
-    virtual HdSprim *CreateSprim(TfToken const& typeId,
+    HdSprim *CreateSprim(TfToken const& typeId,
                                  SdfPath const& sprimId) override;
 
     ///
@@ -141,12 +153,12 @@ public:
     /// \param typeId the type identifier of the prim to allocate
     /// \return A pointer to the new prim or nullptr on error.
     ///
-    virtual HdSprim *CreateFallbackSprim(TfToken const& typeId) override;
+    HdSprim *CreateFallbackSprim(TfToken const& typeId) override;
 
     ///
     /// Request to Destruct and deallocate the prim.
     ///
-    virtual void DestroySprim(HdSprim *sprim) override;
+    void DestroySprim(HdSprim *sprim) override;
 
     ///
     /// Request to Allocate and Construct a new Bprim.
@@ -154,7 +166,7 @@ public:
     /// \param sprimId a unique identifier for the prim
     /// \return A pointer to the new prim or nullptr on error.
     ///
-    virtual HdBprim *CreateBprim(TfToken const& typeId,
+    HdBprim *CreateBprim(TfToken const& typeId,
                                  SdfPath const& bprimId) override;
 
 
@@ -167,12 +179,12 @@ public:
     /// \param typeId the type identifier of the prim to allocate
     /// \return A pointer to the new prim or nullptr on error.
     ///
-    virtual HdBprim *CreateFallbackBprim(TfToken const& typeId) override;
+    HdBprim *CreateFallbackBprim(TfToken const& typeId) override;
 
     ///
     /// Request to Destruct and deallocate the prim.
     ///
-    virtual void DestroyBprim(HdBprim *bprim) override;
+    void DestroyBprim(HdBprim *bprim) override;
 
     ////////////////////////////////////////////////////////////////////////////
     ///
@@ -191,23 +203,27 @@ public:
     /// For example, the render delegate might fill primvar buffers or texture
     /// memory.
     ///
-    virtual void CommitResources(HdChangeTracker *tracker) override;
+    void CommitResources(HdChangeTracker *tracker) override;
 
-	virtual TfToken GetMaterialBindingPurpose() const override { return HdTokens->full; }
+	TfToken GetMaterialBindingPurpose() const override { return HdTokens->full; }
  
 	///
 	/// Returns a token that can be used to select among multiple
 	/// material network implementations.  The default is empty.
 	///
-	HDRPR_API
-	virtual TfToken GetMaterialNetworkSelector() const override;
+	TfToken GetMaterialNetworkSelector() const override;
 
     ///
     /// Returns a default AOV descriptor for the given named AOV, specifying
     /// things like preferred format.
     ///
-    HD_API
-    virtual HdAovDescriptor GetDefaultAovDescriptor(TfToken const& name) const override;
+    HdAovDescriptor GetDefaultAovDescriptor(TfToken const& name) const override;
+
+    /// Returns a list of user-configurable render settings.
+    /// This is a reflection API for the render settings dictionary; it need
+    /// not be exhaustive, but can be used for populating application settings
+    /// UI.
+    HdRenderSettingDescriptorList GetRenderSettingDescriptors() const override;
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
@@ -223,6 +239,8 @@ private:
         = delete;
 
 	HdRprApiSharedPtr m_rprApiSharedPtr;
+
+    HdRenderSettingDescriptorList m_settingDescriptors;
 };
 
 
@@ -230,26 +248,14 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
 extern "C"
 {
-	HDRPR_API
-	void SetRprGlobalDenoising(int enableDenoise);
+    HDRPR_API
+    void SetHdRprRenderDevice(int renderDevice);
 
     HDRPR_API
-    int IsRprDenoisingEnabled();
+    void SetHdRprRenderQuality(int quality);
 
-	HDRPR_API
-	void SetRprGlobalRenderDevice(int renderDevice);
-
-	HDRPR_API
-	void SetRprRendererPlugin(int pluginIdx);
-
-	HDRPR_API
-	void SetRprHybridQuality(int quality);
-
-	HDRPR_API
-	const char* GetRprTmpDir();
-
-	HDRPR_API
-	int GetRprPluginType();
+    HDRPR_API
+    const char* GetHdRprTmpDir();
 }
 
 #endif // HDRPR_RENDER_DELEGATE_H

@@ -1,0 +1,38 @@
+#include "$HFS/houdini/soho/parameters/CommonMacros.ds"
+
+{
+    name    "RPR"
+    label   "RPR"
+    parmtag { spare_opfilter    "!!SHOP/PROPERTIES!!" }
+    parmtag { spare_classtags   "render" }
+
+    parm {
+        name    "renderQuality"
+        label   "Render Quality"
+        type    ordinal
+        size    1
+        parmtag { "spare_category" "Rendering" }
+        parmtag { "uiscope" "viewport" }
+        parmtag { "usdvaluetype" "string" }
+        default { "full" }
+        menu {
+            "low" "Low"
+            "medium" "Medium"
+            "high" "High"
+            "full" "Full"
+        }
+        help    "At the current time, this has no effect"
+    }
+
+    parm {
+        name    "enableDenoising"
+        label   "Enable Denoising"
+        type    toggle
+        size    1
+        parmtag { "spare_category" "Rendering" }
+        parmtag { "uiscope" "viewport" }
+        parmtag { "usdvaluetype" "bool" }
+        default { 0 }
+        parmtag { "uiicon" VIEW_display_denoise }
+    }
+}

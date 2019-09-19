@@ -92,6 +92,7 @@ pxr_plugin(hdRpr
 		${OptIncludeDir}
 
     PUBLIC_CLASSES
+        config
 		rendererPlugin
         renderDelegate
 		resourceRegistry
@@ -150,28 +151,31 @@ if (APPLE)
         ${CMAKE_INSTALL_NAME_TOOL} -change @loader_path/libRadeonProRender64.dylib ${RPR_LIBRARY} $<TARGET_FILE:hdRpr> )
 endif(APPLE)
 
-if(NOT RPR_BUILD_AS_HOUDINI_PLUGIN)
-_get_install_dir(lib/python/rpr installPrefix)
+if(RPR_BUILD_AS_HOUDINI_PLUGIN)
+    _get_install_dir(houdini/soho/parameters installPrefix)
+    install(
+        FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/HdRprPlugin_Viewport.ds
+        DESTINATION ${installPrefix})
+else(RPR_BUILD_AS_HOUDINI_PLUGIN)
+    _get_install_dir(lib/python/rpr installPrefix)
 
-install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/rpr.py
-    DESTINATION ${installPrefix}
-    RENAME "__init__.py"
-    )
+    install(
+        FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/rpr.py
+        DESTINATION ${installPrefix}
+        RENAME "__init__.py")
 
-install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/plugInfo.json
-    DESTINATION ${installPrefix}
-    )
-install(
-    CODE
-    "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/plugin/usd/plugInfo.json\"
-    \"
-{
-    \\\"Includes\\\": [ \\\"*/resources/\\\" ]
-}
-    \")")
-endif(NOT RPR_BUILD_AS_HOUDINI_PLUGIN)
+    install(
+        FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/plugInfo.json
+        DESTINATION ${installPrefix})
+    install(
+        CODE
+        "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/plugin/usd/plugInfo.json\"
+        \"
+    {
+        \\\"Includes\\\": [ \\\"*/resources/\\\" ]
+    }
+        \")")
+endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
 if(WIN32)
     install(

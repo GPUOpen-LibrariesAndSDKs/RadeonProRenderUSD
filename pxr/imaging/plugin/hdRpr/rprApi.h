@@ -28,15 +28,6 @@ class MaterialAdapter;
 
 typedef void* RprApiObject;
 
-enum class HdRprRenderDevice
-{
-    NONE = -1,
-    CPU = 0,
-    GPU,
-    FIRST = CPU,
-    LAST = GPU
-};
-
 #define HD_RPR_AOV_TOKENS \
     (color)                                     \
     (albedo)                                    \
@@ -51,46 +42,11 @@ enum class HdRprRenderDevice
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_API, HD_RPR_AOV_TOKENS);
 
-enum class HdRprAov
-{
-    NONE = -1,
-    COLOR = 0,
-    NORMAL,
-    ALBEDO,
-    DEPTH,
-    PRIM_ID,
-    UV,
-    FIRST = COLOR,
-    LAST = UV
-};
-
-enum class HdRprHybridQuality
-{
-	NONE = -1,
-	LOW = 0,
-	MEDIUM,
-	HIGH,
-	FIRST = LOW,
-	LAST = HIGH
-};
-
-enum class HdRprPluginType : int
-{
-	NONE = -1,
-	TAHOE = 0,
-	HYBRID,
-	FIRST = TAHOE,
-	LAST = HYBRID
-};
-
 class HdRprApi final
 {
 public:
     HdRprApi();
     ~HdRprApi();
-
-    void Init();
-    void Deinit();
 
     void CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
     RprApiObject CreateRectLightMesh(const float& width, const float& height);
@@ -133,16 +89,9 @@ public:
 
     void DeleteMesh(RprApiObject mesh);
 
-    bool IsGlInteropUsed() const;
+    bool IsGlInteropEnabled() const;
 
-    static void SetRenderDevice(int renderDevice);
-    static void SetDenoising(bool enableDenoising);
-    static void SetHybridQuality(int quality);
-    static void SetRendererPlugin(int plugin);
-
-    static int GetPluginType();
     static const char* GetTmpDir();
-    static bool IsDenoisingEnabled();
 
 private:
     HdRprApiImpl* m_impl = nullptr;
