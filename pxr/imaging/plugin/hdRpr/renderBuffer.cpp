@@ -122,8 +122,21 @@ bool HdRprRenderBuffer::IsMultiSampled() const {
 
 void* HdRprRenderBuffer::Map() {
     ++m_numMappers;
-    // XXX: RPR does not support framebuffer mapping, so here is at least correct mapping for reading
-    return m_dataCache.get();
+
+    if (auto rprApi = m_rprApiWeakPrt.lock()) {
+        GfVec2i fbSize;
+        rprApi->GetFramebufferSize(&fbSize);
+        auto pixelSize = HdDataSizeOfFormat(GetFormat());
+        if (pixelSize * fbSize[0] * fbSize[1] > m_dataCacheSize) {
+            // It might happen when HdRprRenderer renders in one thread and HdRprRenderBuffer::Map
+            // called in another thread while user change viewport size. Next frame will be ok
+            TF_CODING_ERROR("Render buffer data cache size does not match required one");
+            return nullptr;
+        }
+        return m_dataCache.get();
+    }
+
+    return nullptr;
 }
 
 void HdRprRenderBuffer::Unmap() {

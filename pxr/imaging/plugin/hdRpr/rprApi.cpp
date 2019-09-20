@@ -837,7 +837,7 @@ public:
             if (aovFrameBuffer.isDirty) {
                 aovFrameBuffer.isDirty = false;
 
-                rif_image_desc imageDesc = GetRifImageDesc(m_fbWidth, m_fbHeight, aovFrameBuffer.format);                
+                rif_image_desc imageDesc = GetRifImageDesc(m_fbWidth, m_fbHeight, aovFrameBuffer.format);
     
                 if (aovFrameBufferEntry.first == HdRprAovTokens->depth) {
                     // Calculate clip space depth from world coordinate AOV
@@ -855,7 +855,7 @@ public:
                     ndcDepthFilter->SetOutput(imageDesc);
 
                     auto viewProjectionMatrix = m_cameraViewMatrix * m_cameraProjectionMatrix;
-                    ndcDepthFilter->AddParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix));
+                    ndcDepthFilter->AddParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
 
                     aovFrameBuffer.postprocessFilter = std::move(ndcDepthFilter);
                 } else if (aovFrameBufferEntry.first == HdRprAovTokens->normal &&
@@ -990,39 +990,11 @@ public:
 
         ResolveFramebuffers();
 
-        /*auto testFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, m_rifContext.get());
-
-        GfVec4f testPosition(0.0f, 0.0f, 0.0f, 1.0f);
-        //auto testMatrix = m_cameraViewMatrix * m_cameraProjectionMatrix;
-        GfMatrix4f testMatrix;
-        testMatrix.SetTranslate(GfVec3f(0.0f, 0.0f, 2.0f));
-
-        auto inputImage = m_rifContext->CreateImage(GetRifImageDesc(1, 1, HdFormatFloat32Vec4));
-        void* data;
-        rifImageMap(inputImage->GetHandle(), RIF_IMAGE_MAP_WRITE, &data);
-        std::memcpy(data, testPosition.data(), sizeof(GfVec4f));
-        rifImageUnmap(inputImage->GetHandle(), data);
-        testFilter->SetInput(rif::Color, inputImage->GetHandle(), 1.0f);
-        testFilter->SetOutput(GetRifImageDesc(1, 1, HdFormatFloat32));
-
-        testFilter->AddParam("viewProjMatrix", GfMatrix4f(testMatrix.GetTranspose()));
-        testFilter->Update();*/
-
         try {
             m_rifContext->ExecuteCommandQueue();
         } catch (std::runtime_error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
         }
-
-        /*rifImageMap(testFilter->GetOutput(), RIF_IMAGE_MAP_READ, &data);
-        float depthFromFilter;
-        std::memcpy(&depthFromFilter, data, sizeof(depthFromFilter));
-        rifImageUnmap(testFilter->GetOutput(), data);
-
-        float depthCpu = testMatrix.Transform(GfVec3f(testPosition.data()))[2];
-        float depthCpuTranspose = testMatrix.GetTranspose().Transform(GfVec3f(testPosition.data()))[2];
-
-        int a = 0;*/
     }
 
     void DeleteMesh(void* mesh) {
