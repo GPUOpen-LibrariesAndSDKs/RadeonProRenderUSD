@@ -59,11 +59,12 @@ public:
     void SetMeshTransform(RprApiObject mesh, const GfMatrix4d& transform);
     void SetMeshRefineLevel(RprApiObject mesh, int level, TfToken boundaryInterpolation);
     void SetMeshMaterial(RprApiObject mesh, const RprApiMaterial* material);
+    void SetMeshVisibility(RprApiObject mesh, bool isVisible);
 
     RprApiObject CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, const float& width);
     void SetCurveMaterial(RprApiObject curve, const RprApiMaterial* material);
 
-    void CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray& transforms, VtArray<RprApiObject>& out_instances);
+    RprApiObject CreateMeshInstance(RprApiObject prototypeMesh);
 
     RprApiMaterial* CreateMaterial(MaterialAdapter& materialAdapter);
     void DeleteMaterial(RprApiMaterial* rprApiMaterial);
@@ -88,6 +89,7 @@ public:
     void Render();
 
     void DeleteMesh(RprApiObject mesh);
+    void DeleteInstance(RprApiObject instance);
 
     bool IsGlInteropEnabled() const;
 

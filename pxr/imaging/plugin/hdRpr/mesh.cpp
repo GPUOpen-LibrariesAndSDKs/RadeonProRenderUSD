@@ -290,19 +290,15 @@ void HdRprMesh::Sync(
         }
     }
 
-    if (!m_rprMeshes.empty())
-    {
-        if (*dirtyBits & HdChangeTracker::DirtyTransform)
-        {
+    if (!m_rprMeshes.empty()) {
+        if (*dirtyBits & HdChangeTracker::DirtyTransform) {
             GfMatrix4d transform = sceneDelegate->GetTransform(id);
-            for (auto rprMesh : m_rprMeshes)
-            {
+            for (auto rprMesh : m_rprMeshes) {
                 rprApi->SetMeshTransform(rprMesh, transform);
             }
         }
 
-        if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)
-        {
+        if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) {
             int refineLevel = sceneDelegate->GetDisplayStyle(id).refineLevel;
             auto boundaryInterpolation = refineLevel > 0 ? sceneDelegate->GetSubdivTags(id).GetVertexInterpolationRule() : TfToken();
             for (auto rprMesh : m_rprMeshes)
@@ -311,20 +307,59 @@ void HdRprMesh::Sync(
             }
         }
 
-        if (*dirtyBits & HdChangeTracker::DirtyInstancer)
-        {
-            if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId())))
-            {
-                VtMatrix4dArray transforms = instancer->ComputeTransforms(_sharedData.rprimID);
-                for (auto rprMesh : m_rprMeshes)
-                {
-                    rprApi->CreateInstances(rprMesh, transforms, m_rprMeshInstances);
+        if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
+            _UpdateVisibility(sceneDelegate, dirtyBits);
+            for (auto mesh : m_rprMeshes) {
+                rprApi->SetMeshVisibility(mesh, _sharedData.visible);
+            }
+        }
+
+        if (*dirtyBits & HdChangeTracker::DirtyInstancer) {
+            if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()))) {
+                // XXX: if current number of meshes less than previous we have a memory leak
+                //      but instead of releasing it here we should refactor rprApi to return
+                //      complete object that obeys RAII idiom
+                m_rprMeshInstances.resize(m_rprMeshes.size());
+
+                auto transforms = instancer->ComputeTransforms(_sharedData.rprimID);
+                if (transforms.empty()) {
+                    for (int i = 0; i < m_rprMeshes.size(); ++i) {
+                        rprApi->SetMeshVisibility(m_rprMeshes[i], _sharedData.visible);
+                        for (auto instance : m_rprMeshInstances[i]) {
+                            rprApi->DeleteInstance(instance);
+                        }
+                        m_rprMeshInstances[i].clear();
+                    }
+                } else {
+                    for (int i = 0; i < m_rprMeshes.size(); ++i) {
+                        auto& meshInstances = m_rprMeshInstances[i];
+                        if (meshInstances.size() != transforms.size()) {
+                            if (meshInstances.size() > transforms.size()) {
+                                for (int j = transforms.size(); j < meshInstances.size(); ++j) {
+                                    rprApi->DeleteInstance(meshInstances[j]);
+                                }
+                                meshInstances.resize(transforms.size(), nullptr);
+                            }
+                            else {
+                                for (int j = meshInstances.size(); j < transforms.size(); ++j) {
+                                    meshInstances.push_back(rprApi->CreateMeshInstance(m_rprMeshes[i]));
+                                }
+                            }
+                        }
+
+                        for (int j = 0; j < transforms.size(); ++j) {
+                            rprApi->SetMeshTransform(meshInstances[j], transforms[j]);
+                        }
+
+                        // Hide prototype
+                        rprApi->SetMeshVisibility(m_rprMeshes[i], false);
+                    }
                 }
             }
         }
     }
 
-	*dirtyBits = HdChangeTracker::Clean;
+    *dirtyBits = HdChangeTracker::Clean;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -1010,6 +1010,15 @@ public:
         rprObjectDelete(mesh);
     }
 
+    void DeleteInstance(void* instance) {
+        if (!instance) {
+            return;
+        }
+
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+        rprObjectDelete(instance);
+    }
+
     TfToken GetActiveAov() const {
         return m_currentAov;
     }
@@ -1261,18 +1270,8 @@ private:
         return m_impl->CreateCurve(points, indexes, width);
     }
 
-    void HdRprApi::CreateInstances(RprApiObject prototypeMesh, const VtMatrix4dArray & transforms, VtArray<RprApiObject>& out_instances) {
-        out_instances.clear();
-        out_instances.reserve(transforms.size());
-        for (const GfMatrix4d & transform : transforms) {
-            if (void* meshInstamce = m_impl->CreateMeshInstance(prototypeMesh)) {
-                m_impl->SetMeshTransform(meshInstamce, GfMatrix4f(transform));
-                out_instances.push_back(meshInstamce);
-            }
-        }
-
-        // Hide prototype
-        m_impl->SetMeshVisibility(prototypeMesh, false);
+    RprApiObject HdRprApi::CreateMeshInstance(RprApiObject prototypeMesh) {
+        return m_impl->CreateMeshInstance(prototypeMesh);
     }
 
     void HdRprApi::CreateEnvironmentLight(const std::string & prthTotexture, float intensity) {
@@ -1314,6 +1313,10 @@ private:
 
     void HdRprApi::SetMeshMaterial(RprApiObject mesh, const RprApiMaterial * material) {
         m_impl->SetMeshMaterial(mesh, material);
+    }
+
+    void HdRprApi::SetMeshVisibility(RprApiObject mesh, bool isVisible) {
+        m_impl->SetMeshVisibility(mesh, isVisible);
     }
 
     void HdRprApi::SetCurveMaterial(RprApiObject curve, const RprApiMaterial * material) {
@@ -1374,6 +1377,10 @@ private:
 
     void HdRprApi::DeleteMesh(RprApiObject mesh) {
         m_impl->DeleteMesh(mesh);
+    }
+
+    void HdRprApi::DeleteInstance(RprApiObject instance) {
+        m_impl->DeleteInstance(instance);
     }
 
     bool HdRprApi::IsGlInteropEnabled() const {
