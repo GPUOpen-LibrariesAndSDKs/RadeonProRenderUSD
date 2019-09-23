@@ -1067,11 +1067,12 @@ private:
                 }
                 out_newVpf.push_back(vCount);
             } else {
+                const int commonVertex = *idxIt;
                 constexpr int triangleVertexCount = 3;
-                for (int i = 0; i < vCount - 2; ++i) {
+                for (int i = 1; i < vCount - 1; ++i) {
+                    out_newIndexes.push_back(commonVertex);
                     out_newIndexes.push_back(*(idxIt + i + 0));
                     out_newIndexes.push_back(*(idxIt + i + 1));
-                    out_newIndexes.push_back(*(idxIt + i + 2));
                     out_newVpf.push_back(triangleVertexCount);
                 }
                 idxIt += vCount;
@@ -1091,10 +1092,11 @@ private:
                     ++idxIt;
                 }
             } else {
-                for (int i = 0; i < vCount - 2; ++i) {
+                const int commonVertex = *idxIt;
+                for (int i = 1; i < vCount - 1; ++i) {
+                    out_newIndexes.push_back(commonVertex);
                     out_newIndexes.push_back(*(idxIt + i + 0));
                     out_newIndexes.push_back(*(idxIt + i + 1));
-                    out_newIndexes.push_back(*(idxIt + i + 2));
                 }
                 idxIt += vCount;
             }
