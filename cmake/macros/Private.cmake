@@ -221,9 +221,6 @@ function(_install_resource_files NAME pluginInstallPrefix pluginToLibraryPath)
     #                     resourceFileC
     #                 ...
     #
-    if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-        set(pluginInstallPrefix ${pluginInstallPrefix}/usd_plugins)
-    endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_resources_dir(${pluginInstallPrefix} ${NAME} resourcesPath)
 
     foreach(resourceFile ${ARGN})
@@ -1226,51 +1223,23 @@ function(_pxr_library NAME)
     # Final name.
     set(libraryFilename "${args_PREFIX}${NAME}${args_SUFFIX}")
     set(pluginToLibraryPath "")
-    if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-        if(WIN32)
-            set(pluginToLibraryPath "${HOUDINI_ROOT}/bin/${NAME}${args_SUFFIX}")
-        else()
-            set(pluginToLibraryPath "${HOUDINI_LIB}/${NAME}${args_SUFFIX}")   
-        endif()
-    endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
     # Figure out the relative path from this library's plugin location
     # (in the libplug sense, which applies even to non-plugins, and is
     # where we can find external resources for the library) to the
     # library's location.  This can be embedded into resource files.
     #
-    # If we're building a monolithic shared library or one was supplied
-    # to us then we need to use that if we're building a library that
-    # will be/is in the monolithic library.
-    if(";${PXR_CORE_LIBS};" MATCHES ";${NAME};")
-        if (PXR_MONOLITHIC_IMPORT)
-            if(TARGET usd_ms)
-                # The monolithic shared library was supplied.
-                get_property(location TARGET usd_ms PROPERTY IMPORTED_LOCATION)
-                if (IS_ABSOLUTE "${location}")
-                    set(pluginToLibraryPath ${location})
-                else()
-                    set(libraryFilename "${location}")
-                endif()
-            endif()
-        elseif(TARGET usd_ms)
-            # We're building usd_ms ourself.
-            get_property(prefix TARGET usd_ms PROPERTY PREFIX)
-            if(NOT prefix)
-                set(prefix ${CMAKE_SHARED_LIBRARY_PREFIX})
-            endif()
-            get_property(suffix TARGET usd_ms PROPERTY SUFFIX)
-            if(NOT suffix)
-                set(suffix ${CMAKE_SHARED_LIBRARY_SUFFIX})
-            endif()
-            set(libraryFilename "${prefix}usd_ms${suffix}")
+    # If we're building a monolithic library or individual static libraries,
+    # these libraries are not separately loadable at runtime. In these cases,
+    # we don't need to specify the library's location, so we leave
+    # pluginToLibraryPath empty.
+    if(NOT args_TYPE STREQUAL "STATIC")
+        if(NOT (";${PXR_CORE_LIBS};" MATCHES ";${NAME};" AND _building_monolithic))
+            file(RELATIVE_PATH
+                pluginToLibraryPath
+                ${CMAKE_INSTALL_PREFIX}/${pluginInstallPrefix}/${NAME}
+                ${CMAKE_INSTALL_PREFIX}/${libInstallPrefix}/${libraryFilename})
         endif()
-    endif()
-    if(NOT pluginToLibraryPath)
-        file(RELATIVE_PATH
-            pluginToLibraryPath
-            ${CMAKE_INSTALL_PREFIX}/${pluginInstallPrefix}/${NAME}
-            ${CMAKE_INSTALL_PREFIX}/${libInstallPrefix}/${libraryFilename})
     endif()
 
     #
