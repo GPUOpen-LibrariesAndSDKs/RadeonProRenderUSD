@@ -373,7 +373,7 @@ void HdRprVolume::Sync(
 			return;
 		}
 
-		rprApi->CreateVolume(gridDencity, idxDencity, gridAlbedo, idxAlbedo, GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], voxelSize[1], voxelSize[2]), nullptr, nullptr);
+		rprApi->CreateVolume(gridDencity, idxDencity, gridAlbedo, idxAlbedo, GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], voxelSize[1], voxelSize[2]));
 
 	}
 

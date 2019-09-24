@@ -1,7 +1,7 @@
 #ifndef HDRPR_CONFIG_H
 #define HDRPR_CONFIG_H
 
-#include <pxr/pxr.h>
+#include "pxr/pxr.h"
 
 #include "rprcpp/rprContext.h"
 

@@ -1,8 +1,9 @@
 #ifndef RIFCPP_OBJECT_H
 #define RIFCPP_OBJECT_H
 
+#include "pxr/pxr.h"
+
 #include <RadeonImageFilters.h>
-#include <pxr/pxr.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 

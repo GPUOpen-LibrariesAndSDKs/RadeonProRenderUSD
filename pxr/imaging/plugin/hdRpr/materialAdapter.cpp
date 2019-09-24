@@ -5,9 +5,9 @@
 
 #include "pxr/base/gf/vec3f.h"
 #include "pxr/usd/sdf/assetPath.h"
-#include <pxr/usd/ar/resolver.h>
+#include "pxr/usd/ar/resolver.h"
 
-#include "RadeonProRender.h"
+#include <RadeonProRender.h>
 #include <cfloat>
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -199,7 +199,7 @@ void getTextures(const  HdMaterialNetwork & materialNetwork, MaterialTextures & 
 				continue;
 			}
 
-			// Find texture connection 
+			// Find texture connection
 			// If there is no connection we do not need to add it to MaterialTextures
 			auto relationships = materialNetwork.relationships;
 			auto finded = std::find_if(relationships.begin(), relationships.end()
@@ -214,7 +214,7 @@ void getTextures(const  HdMaterialNetwork & materialNetwork, MaterialTextures & 
 			}
 
 			// Get chanel
-			// The input name descripe chanel(s) required 
+			// The input name descripe chanel(s) required
 			materialNode.Chanel = getChanel(finded->inputName);
 
 			// Get Wrap Modes
@@ -310,7 +310,7 @@ void MaterialAdapter::PoulateRprxColor(const MaterialParams & params)
 
 void MaterialAdapter::PoulateRprColor(const MaterialParams & params)
 {
-	
+
 	for (MaterialParams::const_iterator param = params.begin(); param != params.end(); ++param)
 	{
 		const TfToken & paramName = param->first;
@@ -322,7 +322,7 @@ void MaterialAdapter::PoulateRprColor(const MaterialParams & params)
 		}
 
 	}
-	
+
 }
 
 void MaterialAdapter::PoulateEmissive(const MaterialParams & params)
@@ -340,7 +340,7 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 	// initial params
 	m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_WEIGHT , GfVec4f(1.0f) });
 	m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_WEIGHT , GfVec4f(1.0f) });
-	
+
 	int useSpecular = 0;
 	GfVec4f albedoColor = GfVec4f(1.0f);
 	MaterialTexture albedoTex;
@@ -472,7 +472,7 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 		{
 			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR , reflectionColor });
 		}
-		
+
 	} else {
 		m_uRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_MODE , RPR_UBER_MATERIAL_IOR_MODE_METALNESS });
 

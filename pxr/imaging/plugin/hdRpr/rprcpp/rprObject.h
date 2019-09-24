@@ -1,8 +1,9 @@
 #ifndef RPRCPP_OBJECT_H
 #define RPRCPP_OBJECT_H
 
+#include "pxr/pxr.h"
+
 #include <RadeonProRender.h>
-#include <pxr/pxr.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 

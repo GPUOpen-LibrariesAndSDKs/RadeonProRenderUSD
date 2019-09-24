@@ -1,12 +1,13 @@
 #include "rprContext.h"
 #include "rprError.h"
 
+#include "pxr/base/arch/env.h"
+#include "pxr/base/tf/diagnostic.h"
+
 #include "../RprTools.h"
 #include "../RprTools.cpp"
 
 #include <GL/glew.h>
-#include <pxr/base/arch/env.h>
-#include <pxr/base/tf/diagnostic.h>
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
@@ -242,10 +243,6 @@ std::unique_ptr<Context> Context::Create(PluginType requestedPlugin, RenderDevic
                 break;
             }
         }
-    }
-
-    if (context) {
-        RPR_ERROR_CHECK(rprContextSetParameter1u(context->GetHandle(), "yflip", 0), "Fail to set context YFLIP parameter");
     }
 
     return context;

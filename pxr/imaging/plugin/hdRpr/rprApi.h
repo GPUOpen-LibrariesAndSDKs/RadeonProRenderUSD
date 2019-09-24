@@ -1,17 +1,15 @@
 #ifndef HDRPR_RPR_API_H
 #define HDRPR_RPR_API_H
 
-#include "tokens.h"
+#include "api.h"
 
-#include "pxr/pxr.h"
 #include "pxr/base/gf/vec2i.h"
-#include "pxr/base/gf/vec2f.h"
 #include "pxr/base/gf/vec3f.h"
-#include "pxr/base/gf/vec4f.h"
 #include "pxr/base/vt/array.h"
 #include "pxr/base/gf/matrix4d.h"
-#include "pxr/base/gf/matrix4f.h"
+#include "pxr/base/gf/quaternion.h"
 #include "pxr/imaging/hd/types.h"
+#include "pxr/base/tf/staticTokens.h"
 
 #include <memory>
 
@@ -20,13 +18,34 @@
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApiImpl;
-class RprMaterialObject;
-struct MaterialNode;
-
-struct RprApiMaterial;
 class MaterialAdapter;
+struct RprApiMaterial;
 
-typedef void* RprApiObject;
+class RprApiObject {
+public:
+    static std::unique_ptr<RprApiObject> Wrap(void* handle);
+
+    RprApiObject() : m_handle(nullptr) {}
+    RprApiObject(nullptr_t) : m_handle(nullptr) {}
+
+    explicit RprApiObject(void* handle);
+    RprApiObject(void* handle, std::function<void (void*)> deleter);
+    ~RprApiObject();
+
+    void AttachDependency(std::unique_ptr<RprApiObject>&& dependencyObject);
+
+    void AttachOnReleaseAction(TfToken const& actionName, std::function<void (void*)> action);
+    void DettachOnReleaseAction(TfToken const& actionName);
+
+    void* GetHandle() const;
+
+private:
+    void* m_handle;
+    std::function<void (void*)> m_deleter;
+    std::vector<std::unique_ptr<RprApiObject>> m_dependencyObjects;
+    std::map<TfToken, std::function<void (void*)>> m_onReleaseActions;
+};
+using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
 
 #define HD_RPR_AOV_TOKENS \
     (color)                                     \
@@ -48,26 +67,25 @@ public:
     HdRprApi();
     ~HdRprApi();
 
-    void CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
-    RprApiObject CreateRectLightMesh(const float& width, const float& height);
-    RprApiObject CreateSphereLightMesh(const float& radius);
-    RprApiObject CreateDiskLight(const float& width, const float& height, const GfVec3f& color);
+    RprApiObjectPtr CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
+    RprApiObjectPtr CreateEnvironmentLight(GfVec3f color, float intensity);
+    RprApiObjectPtr CreateRectLightMesh(const float& width, const float& height);
+    RprApiObjectPtr CreateSphereLightMesh(const float& radius);
+    RprApiObjectPtr CreateDiskLightMesh(const float& width, const float& height, const GfVec3f& color);
 
-    void CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume);
+    RprApiObjectPtr CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize);
 
-    RprApiObject CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf);
-    void SetMeshTransform(RprApiObject mesh, const GfMatrix4d& transform);
-    void SetMeshRefineLevel(RprApiObject mesh, int level, TfToken boundaryInterpolation);
-    void SetMeshMaterial(RprApiObject mesh, const RprApiMaterial* material);
-    void SetMeshVisibility(RprApiObject mesh, bool isVisible);
+    RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf);
+    RprApiObjectPtr CreateMeshInstance(RprApiObject* prototypeMesh);
+    void SetMeshTransform(RprApiObject* mesh, const GfMatrix4d& transform);
+    void SetMeshRefineLevel(RprApiObject* mesh, int level, TfToken boundaryInterpolation);
+    void SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material);
+    void SetMeshVisibility(RprApiObject* mesh, bool isVisible);
 
-    RprApiObject CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, const float& width);
-    void SetCurveMaterial(RprApiObject curve, const RprApiMaterial* material);
+    RprApiObjectPtr CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, const float& width);
+    void SetCurveMaterial(RprApiObject* curve, RprApiObject const* material);
 
-    RprApiObject CreateMeshInstance(RprApiObject prototypeMesh);
-
-    RprApiMaterial* CreateMaterial(MaterialAdapter& materialAdapter);
-    void DeleteMaterial(RprApiMaterial* rprApiMaterial);
+    RprApiObjectPtr CreateMaterial(MaterialAdapter& materialAdapter);
 
     const GfMatrix4d& GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;
@@ -87,9 +105,6 @@ public:
     void ClearFramebuffers();
 
     void Render();
-
-    void DeleteMesh(RprApiObject mesh);
-    void DeleteInstance(RprApiObject instance);
 
     bool IsGlInteropEnabled() const;
 

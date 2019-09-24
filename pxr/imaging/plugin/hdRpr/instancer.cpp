@@ -1,6 +1,6 @@
 #include "instancer.h"
 
-#include <pxr/imaging/hd/sceneDelegate.h>
+#include "pxr/imaging/hd/sceneDelegate.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -11,7 +11,6 @@ TF_DEFINE_PRIVATE_TOKENS(
     (scale)
     (translate)
 );
-
 
 void HdRprInstancer::Sync() {
     HD_TRACE_FUNCTION();
