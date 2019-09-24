@@ -21,7 +21,7 @@
 // KIND, either express or implied. See the Apache License for the specific
 // language governing permissions and limitations under the Apache License.
 //
-#include "pxr/imaging/hdx/rendererPluginRegistry.h"
+#include "pxr/imaging/hd/rendererPluginRegistry.h"
 #include "renderDelegate.h"
 #include "rendererPlugin.h"
 
@@ -30,7 +30,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_REGISTRY_FUNCTION(TfType)
 {
-    HdxRendererPluginRegistry::Define<HdRprPlugin>();
+    HdRendererPluginRegistry::Define<HdRprPlugin>();
 }
 
 HdRenderDelegate*
