@@ -1,14 +1,11 @@
 #ifndef HDRPR_VOLUME_H
 #define HDRPR_VOLUME_H
 
-#include "pxr/pxr.h"
+#include "rprApi.h"
 
 #include "pxr/imaging/hd/volume.h"
 
-#include "rprApi.h"
-
 PXR_NAMESPACE_OPEN_SCOPE
-
 
 class HdRprVolume : public HdVolume {
 public:
@@ -35,9 +32,7 @@ protected:
 		HdDirtyBits *dirtyBits) override;
 
 	HdRprApiWeakPtr m_rprApiWeakPtr;
-
-	RprApiObject m_rprCubeMesh = nullptr;
-	RprApiObject m_rprHeteroVolume = nullptr;
+	RprApiObjectPtr m_rprHeteroVolume;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

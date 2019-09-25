@@ -5,13 +5,8 @@
 #include "pxr/imaging/hd/renderDelegate.h"
 #include "pxr/imaging/hd/tokens.h"
 
-#include "renderParam.h"
-#include "resourceRegistry.h"
-
 #include "api.h"
 #include "rprApi.h"
-
-#include <vector>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -37,6 +32,9 @@ public:
 
     HdRprDelegate();
     ~HdRprDelegate() override;
+
+    HdRprDelegate(const HdRprDelegate &)= delete;
+    HdRprDelegate &operator =(const HdRprDelegate &)= delete;
 
     ///
     /// Returns a list of typeId's of all supported Rprims by this render
@@ -125,14 +123,14 @@ public:
     /// \param instancerId the unique identifier for the instancer that uses
     ///                    the prim (optional: May be empty).
     /// \return A pointer to the new prim or nullptr on error.
-    ///                     
+    ///
     HdRprim *CreateRprim(TfToken const& typeId,
                                  SdfPath const& rprimId,
                                  SdfPath const& instancerId) override;
 
     ///
     /// Request to Destruct and deallocate the prim.
-    /// 
+    ///
     void DestroyRprim(HdRprim *rPrim) override;
 
     ///
@@ -206,7 +204,7 @@ public:
     void CommitResources(HdChangeTracker *tracker) override;
 
 	TfToken GetMaterialBindingPurpose() const override { return HdTokens->full; }
- 
+
 	///
 	/// Returns a token that can be used to select among multiple
 	/// material network implementations.  The default is empty.
@@ -229,20 +227,9 @@ private:
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
     static const TfTokenVector SUPPORTED_BPRIM_TYPES;
 
-   //HdRprResourceRegistrySharedPtr _resourceRegistry;
-  // HdRprParamSharedPtr _renderParam;
-
-    // This class does not support copying.
-	HdRprDelegate(const HdRprDelegate &)
-        = delete;
-	HdRprDelegate &operator =(const HdRprDelegate &)
-        = delete;
-
-	HdRprApiSharedPtr m_rprApiSharedPtr;
-
+    HdRprApiSharedPtr m_rprApiSharedPtr;
     HdRenderSettingDescriptorList m_settingDescriptors;
 };
-
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
