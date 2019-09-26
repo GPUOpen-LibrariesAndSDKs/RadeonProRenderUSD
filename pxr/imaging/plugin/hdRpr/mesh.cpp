@@ -269,11 +269,10 @@ void HdRprMesh::Sync(
     if (!m_rprMeshes.empty()) {
         // TODO: Check materialId dirtiness here
 
+        bool updateTransform = false;
         if (*dirtyBits & HdChangeTracker::DirtyTransform) {
-            GfMatrix4d transform = sceneDelegate->GetTransform(id);
-            for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshTransform(rprMesh.get(), transform);
-            }
+            m_transform = sceneDelegate->GetTransform(id);
+            updateTransform = true;
         }
 
         if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) {
@@ -301,6 +300,11 @@ void HdRprMesh::Sync(
                         rprApi->SetMeshVisibility(m_rprMeshes[i].get(), _sharedData.visible);
                     }
                 } else {
+                    updateTransform = false;
+                    for (auto& instanceTransform : transforms) {
+                        instanceTransform = m_transform * instanceTransform;
+                    }
+
                     m_rprMeshInstances.resize(m_rprMeshes.size());
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
                         auto& meshInstances = m_rprMeshInstances[i];
@@ -322,6 +326,12 @@ void HdRprMesh::Sync(
                         rprApi->SetMeshVisibility(m_rprMeshes[i].get(), false);
                     }
                 }
+            }
+        }
+
+        if (updateTransform) {
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetMeshTransform(rprMesh.get(), m_transform);
             }
         }
     }

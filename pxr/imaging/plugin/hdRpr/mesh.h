@@ -66,6 +66,8 @@ private:
     std::vector<RprApiObjectPtr> m_rprMeshes;
     std::vector<std::vector<RprApiObjectPtr>> m_rprMeshInstances;
     RprApiObjectPtr m_fallbackMaterial;
+
+    GfMatrix4d m_transform;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
