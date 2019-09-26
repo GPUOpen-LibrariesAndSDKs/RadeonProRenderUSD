@@ -92,8 +92,6 @@ public:
 
         RPR_ERROR_CHECK(rprCameraLookAt(camera, 20.0f, 60.0f, 40.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f), "Fail to set camera Look At");
 
-        const rpr_float sensorSize[] = {1.f , 1.f};
-        RPR_ERROR_CHECK(rprCameraSetSensorSize(camera, sensorSize[0], sensorSize[1]), "Fail to to set camera sensor size");
         RPR_ERROR_CHECK(rprSceneSetCamera(m_scene->GetHandle(), camera), "Fail to to set camera to scene");
         m_camera->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* camera) {
             if (!RPR_ERROR_CHECK(rprSceneSetCamera(m_scene->GetHandle(), nullptr), "Failed to unset camera")) {
@@ -576,19 +574,10 @@ public:
     void SetCameraViewMatrix(const GfMatrix4d& m) {
         if (!m_camera) return;
 
-        const GfMatrix4d& iwvm = m.GetInverse();
-        const GfMatrix4d& wvm = m;
-
-        GfVec3f eye(iwvm[3][0], iwvm[3][1], iwvm[3][2]);
-        GfVec3f up(wvm[0][1], wvm[1][1], wvm[2][1]);
-        GfVec3f n(wvm[0][2], wvm[1][2], wvm[2][2]);
-        GfVec3f at(eye - n);
-
         RecursiveLockGuard rprLock(g_rprAccessMutex);
-        RPR_ERROR_CHECK(rprCameraLookAt(m_camera->GetHandle(), eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]), "Fail to set camera Look At");
 
         m_cameraViewMatrix = m;
-        m_dirtyFlags |= ChangeTracker::DirtyScene;
+        m_dirtyFlags |= ChangeTracker::DirtyCamera;
     }
 
     void SetCameraProjectionMatrix(const GfMatrix4d& proj) {
@@ -596,15 +585,8 @@ public:
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        float sensorSize[2];
-
-        if (RPR_ERROR_CHECK(rprCameraGetInfo(m_camera->GetHandle(), RPR_CAMERA_SENSOR_SIZE, sizeof(sensorSize), &sensorSize, nullptr), "Fail to get camera swnsor size parameter")) return;
-
-        const float focalLength = sensorSize[1] * proj[1][1] / 2;
-        if (RPR_ERROR_CHECK(rprCameraSetFocalLength(m_camera->GetHandle(), focalLength), "Fail to set focal length parameter")) return;
-
         m_cameraProjectionMatrix = proj;
-        m_dirtyFlags |= ChangeTracker::DirtyScene;
+        m_dirtyFlags |= ChangeTracker::DirtyCamera;
     }
 
     const GfMatrix4d& GetCameraViewMatrix() const {
@@ -733,7 +715,6 @@ public:
 
         m_fbWidth = width;
         m_fbHeight = height;
-        RPR_ERROR_CHECK(rprCameraSetSensorSize(m_camera->GetHandle(), 1.0f, (float)height / (float)width), "Fail to set camera sensor size");
 
         for (auto& aovFb : m_aovFrameBuffers) {
             if (!aovFb.second.aov) {
@@ -749,7 +730,7 @@ public:
             }
         }
 
-        m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
+        m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers | ChangeTracker::DirtyCamera;
     }
 
     void GetFramebufferSize(GfVec2i* resolution) const {
@@ -863,6 +844,7 @@ public:
             m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
         }
 
+        UpdateCamera();
         UpdateDenoiseFilter();
 
         for (auto& aovFrameBufferEntry : m_aovFrameBuffers) {
@@ -946,6 +928,49 @@ public:
 
         m_dirtyFlags = ChangeTracker::Clean;
         preferences.ResetDirty();
+    }
+
+    void UpdateCamera() {
+        if ((m_dirtyFlags & ChangeTracker::DirtyCamera) == 0 ||
+            m_fbWidth == 0 || m_fbHeight == 0) {
+            return;
+        }
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+
+        auto iwvm = m_cameraViewMatrix.GetInverse();
+        auto& wvm = m_cameraViewMatrix;
+
+        GfVec3f eye(iwvm[3][0], iwvm[3][1], iwvm[3][2]);
+        GfVec3f up(wvm[0][1], wvm[1][1], wvm[2][1]);
+        GfVec3f n(wvm[0][2], wvm[1][2], wvm[2][2]);
+        GfVec3f at(eye - n);
+        RPR_ERROR_CHECK(rprCameraLookAt(m_camera->GetHandle(), eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]), "Fail to set camera Look At");
+
+        bool isOrthographic = round(m_cameraProjectionMatrix[3][3]) == 1.0;
+        if (isOrthographic) {
+            GfVec3f ndcTopLeft(-1.0f, 1.0f, 0.0f);
+            GfVec3f nearPlaneTrace = m_cameraProjectionMatrix.GetInverse().Transform(ndcTopLeft);
+
+            auto orthoWidth = std::abs(nearPlaneTrace[0]) * 2.0;
+            auto orthoHeight = std::abs(nearPlaneTrace[1]) * 2.0;
+
+            RPR_ERROR_CHECK(rprCameraSetMode(m_camera->GetHandle(), RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
+            RPR_ERROR_CHECK(rprCameraSetOrthoWidth(m_camera->GetHandle(), orthoWidth), "Failed to set camera ortho width");
+            RPR_ERROR_CHECK(rprCameraSetOrthoHeight(m_camera->GetHandle(), orthoHeight), "Failed to set camera ortho height");
+        } else {
+            auto ratio = (double)m_fbWidth / m_fbHeight;
+            auto focalLength = m_cameraProjectionMatrix[1][1] / (2.0 * ratio);
+            auto sensorWidth = 1.0f;
+            auto sensorHeight = 1.0f / ratio;
+            if (ratio < 1.0f) {
+                sensorWidth = ratio;
+                sensorHeight = 1.0f;
+            }
+
+            RPR_ERROR_CHECK(rprCameraSetMode(m_camera->GetHandle(), RPR_CAMERA_MODE_PERSPECTIVE), "Failed to set camera mode");
+            RPR_ERROR_CHECK(rprCameraSetFocalLength(m_camera->GetHandle(), focalLength), "Fail to set camera focal length");
+            RPR_ERROR_CHECK(rprCameraSetSensorSize(m_camera->GetHandle(), sensorWidth, sensorHeight), "Failed to set camera sensor size");
+        }
     }
 
     void UpdateDenoiseFilter() {
@@ -1244,7 +1269,8 @@ private:
         AllDirty = ~0u,
         DirtyScene = 1 << 0,
         DirtyActiveAOV = 1 << 1,
-        DirtyAOVFramebuffers = 1 << 2
+        DirtyAOVFramebuffers = 1 << 2,
+        DirtyCamera = 1 << 3
     };
     uint32_t m_dirtyFlags = ChangeTracker::AllDirty;
 
