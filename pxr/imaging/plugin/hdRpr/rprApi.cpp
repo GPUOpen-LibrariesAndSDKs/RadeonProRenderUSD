@@ -860,7 +860,7 @@ public:
         // In case there is no Lights in scene - create default
         if (!m_isLightPresent) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
-            CreateEnvironmentLight(k_defaultLightColor, 1.f);
+            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
         }
 
         UpdateDenoiseFilter();
@@ -1273,6 +1273,7 @@ private:
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
 
     bool m_isLightPresent = false;
+    RprApiObjectPtr m_defaultLightObject;
 
     std::unique_ptr<rif::Filter> m_denoiseFilterPtr;
 };
