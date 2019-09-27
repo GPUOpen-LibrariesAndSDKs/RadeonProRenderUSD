@@ -91,7 +91,7 @@ pxr_plugin(hdRpr
 
 		${OptIncludeDir}
 
-    PUBLIC_CLASSES
+    PRIVATE_CLASSES
         config
 		rendererPlugin
         renderDelegate
@@ -112,12 +112,10 @@ pxr_plugin(hdRpr
 
 		${OptClass}
 
-    PUBLIC_HEADERS
-		api.h
-        renderParam.h
-		materialFactory.h
-
     PRIVATE_HEADERS
+        api.h
+        renderParam.h
+        materialFactory.h
         boostIncludePath.h
 
     RESOURCE_FILES
