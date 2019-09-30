@@ -938,6 +938,8 @@ public:
 
     void SetCameraViewMatrix(const GfMatrix4d& m)
     {
+        if (!m_camera) return;
+
         const GfMatrix4d& iwvm = m.GetInverse();
         const GfMatrix4d& wvm = m;
 
@@ -956,6 +958,8 @@ public:
 
     void SetCameraProjectionMatrix(const GfMatrix4d& proj)
     {
+        if (!m_camera) return;
+
         float sensorSize[2];
 
         if (RPR_ERROR_CHECK(rprCameraGetInfo(m_camera, RPR_CAMERA_SENSOR_SIZE, sizeof(sensorSize), &sensorSize, NULL), "Fail to get camera swnsor size parameter")) return;
@@ -979,6 +983,8 @@ public:
 
     void EnableAov(TfToken const& aovName, bool setAsActive = false)
     {
+        if (!m_context) return;
+
         if (IsAovEnabled(aovName))
         {
             // While usdview does not have correct AOV system
@@ -1076,6 +1082,8 @@ public:
 
     void ResizeAovFramebuffers(int width, int height)
     {
+        if (!m_context) return;
+
         if (width <= 0 || height <= 0 ||
             (width == m_fbWidth && height == m_fbHeight)) {
             return;
@@ -1310,113 +1318,115 @@ public:
     }
 
 private:
-	void InitRpr()
-	{
-		RPR_ERROR_CHECK(rprContextSetParameter1u(nullptr, "tracing", 1), "Fail to set context tracing parameter");
-		RPR_ERROR_CHECK(rprContextSetParameterString(nullptr, "tracingfolder", "C:\\ProgramData\\hdRPR"), "Fail to set tracing folder parameter");
-		//lock();
+    bool CreateContextWithPlugin(HdRprPluginType plugin) {
+        m_currentPlugin = plugin;
 
-		const std::string rprSdkPath = GetRprSdkPath();
-		auto registerPlugin = [this, &rprSdkPath](HdRprPluginType plugin) -> rpr_int {
-			m_currentPlugin = plugin;
-			int pluginIdx = static_cast<int>(m_currentPlugin);
-			int numPlugins = sizeof(k_PluginLibNames) / sizeof(k_PluginLibNames[0]);
-			if (pluginIdx < 0 || pluginIdx >= numPlugins) {
-				TF_RUNTIME_ERROR("Invalid plugin requested: index out of bounds - %d", pluginIdx);
-				return -1;
-			}
+        int pluginIdx = static_cast<int>(m_currentPlugin);
+        int numPlugins = sizeof(k_PluginLibNames) / sizeof(k_PluginLibNames[0]);
+        if (pluginIdx < 0 || pluginIdx >= numPlugins) {
+            TF_CODING_ERROR("Invalid plugin requested: index out of bounds - %d", pluginIdx);
+            return false;
+        }
+        auto pluginName = k_PluginLibNames[pluginIdx];
 
-			const char* pluginName = k_PluginLibNames[pluginIdx];
-			const std::string pluginPath = (rprSdkPath.empty()) ? pluginName : rprSdkPath + "/" + pluginName;
-			return rprRegisterPlugin(pluginPath.c_str());
-		};
+        const std::string rprSdkPath = GetRprSdkPath();
+        const std::string pluginPath = (rprSdkPath.empty()) ? pluginName : rprSdkPath + "/" + pluginName;
+        rpr_int pluginID = rprRegisterPlugin(pluginPath.c_str());
+        if (pluginID == -1) {
+            TF_RUNTIME_ERROR("Failed to register %s plugin", pluginName);
+            return false;
+        }
 
-		auto requestedPlugin = HdRprPreferences::GetInstance().GetPlugin();
-		rpr_int pluginID = registerPlugin(requestedPlugin);
-		if (pluginID == -1)
-		{
-			TF_WARN("Failed to register the requested one renderer plugin. Trying to register first working one");
-			for (auto plugin = HdRprPluginType::FIRST; plugin != HdRprPluginType::LAST; plugin = HdRprPluginType(int(plugin) + 1))
-			{
-				if (plugin == requestedPlugin)
-					continue;
-				pluginID = registerPlugin(plugin);
-				if (pluginID != -1)
-				{
-					HdRprPreferences::GetInstance().SetPlugin(plugin);
-					break;
-				}
-			}
-		}
-		if (pluginID == -1)
-		{
-			TF_CODING_ERROR("Could not register any of known renderer plugins");
-			return;
-		}
-
-		// TODO: Query info from HdRprPreferences
-		m_useGlInterop = HdRprApiImpl::EnableGLInterop();
-		m_currentRenderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
+        // TODO: Query info from HdRprPreferences
+        m_useGlInterop = HdRprApiImpl::EnableGLInterop();
+        m_currentRenderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
         if (m_useGlInterop && (m_currentRenderDevice == HdRprRenderDevice::CPU ||
-                               m_currentPlugin == HdRprPluginType::HYBRID))
-		{
-			m_useGlInterop = false;
-		}
-		if (m_useGlInterop)
-		{
-			GLenum err = glewInit();
-			if (err != GLEW_OK)
-			{
-				TF_WARN("Failed to init GLEW. Error code: %s. Disabling GL interop", glewGetErrorString(err));
-				m_useGlInterop = false;
-			}
-		}
+            m_currentPlugin == HdRprPluginType::HYBRID)) {
+            m_useGlInterop = false;
+        }
+        if (m_useGlInterop) {
+            if (GLenum err = glewInit()) {
+                TF_WARN("Failed to init GLEW. Error code: %s. Disabling GL interop", glewGetErrorString(err));
+                m_useGlInterop = false;
+            }
+        }
 
-		auto cachePath = HdRprApi::GetTmpDir();
-		rpr_creation_flags flags;
-        if (m_currentPlugin == HdRprPluginType::HYBRID)
-		{
+        auto cachePath = HdRprApi::GetTmpDir();
+        rpr_creation_flags flags;
+        if (m_currentPlugin == HdRprPluginType::HYBRID) {
             // Call to getRprCreationFlags is broken in case of hybrid:
             //   1) getRprCreationFlags uses 'rprContextGetInfo' to query device compatibility,
             //        but hybrid plugin does not support such call
             //   2) Hybrid is working only on GPU
             //   3) MultiGPU can be enabled only through vulkan interop
             flags = RPR_CREATION_FLAGS_ENABLE_GPU0;
-		}
-		else
-		{
-			flags = getRprCreationFlags(m_currentRenderDevice, pluginID, cachePath);
-			if (!flags)
-			{
-				bool isGpuUncompatible = m_currentRenderDevice == HdRprRenderDevice::GPU;
+        } else {
+            flags = getRprCreationFlags(m_currentRenderDevice, pluginID, cachePath);
+            if (!flags) {
+                bool isGpuUncompatible = m_currentRenderDevice == HdRprRenderDevice::GPU;
                 TF_WARN("%s is not compatible", isGpuUncompatible ? "GPU" : "CPU");
                 m_currentRenderDevice = isGpuUncompatible ? HdRprRenderDevice::CPU : HdRprRenderDevice::GPU;
                 flags = getRprCreationFlags(m_currentRenderDevice, pluginID, cachePath);
                 if (!flags) {
-                    TF_CODING_ERROR("Could not find compatible device");
-                    return;
+                    TF_RUNTIME_ERROR("Could not find compatible device");
+                    return false;
                 } else {
                     TF_WARN("Using %s for render computations", isGpuUncompatible ? "CPU" : "GPU");
                     if (m_currentRenderDevice == HdRprRenderDevice::CPU) {
                         m_useGlInterop = false;
                     }
                 }
-			}
-		}
-		if (m_useGlInterop)
-		{
-			flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
-		}
-		if (RPR_ERROR_CHECK(rprCreateContext(RPR_API_VERSION, &pluginID, 1, flags, nullptr, cachePath, &m_context), std::string("Fail to create context with plugin ") + k_PluginLibNames[int(m_currentPlugin)])) return;
+            }
+        }
 
-		if(RPR_ERROR_CHECK(rprContextSetActivePlugin(m_context, pluginID), "fail to set active plugin")) return;
+        if (m_useGlInterop) {
+            flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
+        }
 
-		RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "yflip", 0), "Fail to set context YFLIP parameter");
-		if (m_currentPlugin == HdRprPluginType::HYBRID)
-		{
-			RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "render_quality", int(HdRprPreferences::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
-		}
-	}
+        auto status = rprCreateContext(RPR_API_VERSION, &pluginID, 1, flags, nullptr, cachePath, &m_context);
+        if (status != RPR_SUCCESS) {
+            TF_RUNTIME_ERROR("Fail to create context with %s plugin. Error code: %d", pluginName, status);
+            return false;
+        }
+
+        status = rprContextSetActivePlugin(m_context, pluginID);
+        if (status != RPR_SUCCESS) {
+            rprObjectDelete(m_context);
+            m_context = nullptr;
+            TF_RUNTIME_ERROR("Fail to set active %s plugin. Error code: %d", pluginName, status);
+            return false;
+        }
+
+        return true;
+    }
+
+    void InitRpr()
+    {
+        RPR_ERROR_CHECK(rprContextSetParameter1u(nullptr, "tracing", 1), "Fail to set context tracing parameter");
+        RPR_ERROR_CHECK(rprContextSetParameterString(nullptr, "tracingfolder", "C:\\ProgramData\\hdRPR"), "Fail to set tracing folder parameter");
+
+        auto requestedPlugin = HdRprPreferences::GetInstance().GetPlugin();
+        if (!CreateContextWithPlugin(requestedPlugin)) {
+            TF_WARN("Failed to create context with requested plugin. Trying to create with first working variant");
+            for (auto plugin = HdRprPluginType::FIRST; plugin != HdRprPluginType::LAST; plugin = HdRprPluginType(int(plugin) + 1)) {
+                if (plugin == requestedPlugin)
+                    continue;
+                if (CreateContextWithPlugin(plugin)) {
+                    HdRprPreferences::GetInstance().SetPlugin(plugin);
+                    break;
+                }
+            }
+        }
+
+        if (!m_context) {
+            return;
+        }
+
+        RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "yflip", 0), "Fail to set context YFLIP parameter");
+        if (m_currentPlugin == HdRprPluginType::HYBRID) {
+            RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "render_quality", int(HdRprPreferences::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
+        }
+    }
 
 	void InitMaterialSystem()
 	{

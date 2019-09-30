@@ -14,7 +14,6 @@ public:
     static constexpr rpr_aov kAovNone = RPR_AOV_MAX;
     static constexpr rpr_uint kNumChannels = 4;
 
-    FrameBuffer() = default;
     FrameBuffer(rpr_context context, rpr_uint width, rpr_uint height);
     FrameBuffer(FrameBuffer&& fb) noexcept;
     ~FrameBuffer();
@@ -34,6 +33,7 @@ public:
     rpr_framebuffer GetHandle();
 
 protected:
+    FrameBuffer() = default;
     void Delete();
 
 protected:
