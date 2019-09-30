@@ -130,6 +130,8 @@ pxr_plugin(hdRpr
         plugInfo.json
 )
 
+add_subdirectory(rprcpp)
+
 # LINUX is not listed in default system variables (https://cmake.org/cmake/help/3.15/manual/cmake-variables.7.html)
 if(NOT DEFINED LINUX)
 	if(UNIX AND NOT APPLE AND NOT CYGWIN)

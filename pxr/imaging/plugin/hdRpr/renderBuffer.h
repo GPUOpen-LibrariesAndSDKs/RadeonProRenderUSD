@@ -51,7 +51,12 @@ protected:
 
 private:
     HdRprApiWeakPtr m_rprApiWeakPrt;
+    TfToken m_aovName;
+    HdFormat m_format = HdFormat::HdFormatInvalid;
 
+    std::shared_ptr<char> m_dataCache;
+    size_t m_dataCacheSize = 0;
+    std::atomic<int> m_numMappers;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -50,15 +50,8 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 	const GfVec4f & vp = renderPassState->GetViewport();
 	GfVec2i fbSize(vp[2], vp[3]);
 
-
 	// Change viewport if it is modified
-	GfVec2i currentFbSize;
-	rprApi->GetFramebufferSize(currentFbSize);
-	if (fbSize != currentFbSize)
-	{
-		rprApi->Resize(fbSize);
-	}
-
+    rprApi->ResizeAovFramebuffers(fbSize[0], fbSize[1]);
 
 	// Change view-projection matrix if it is modified
 	const GfMatrix4d & cameraViewMatrix = rprApi->GetCameraViewMatrix();
@@ -66,35 +59,48 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const & renderPassStat
 	if (cameraViewMatrix != wvm)
 	{
 		rprApi->SetCameraViewMatrix(wvm);
-	}
+    }
 
 	const GfMatrix4d & cameraProjMatrix = rprApi->GetCameraProjectionMatrix();
 	const GfMatrix4d & proj = renderPassState->GetProjectionMatrix();
 	if (cameraProjMatrix != proj) {
 		rprApi->SetCameraProjectionMatrix(proj);
-	}
+    }
 
-	if (rprApi->IsGlInteropUsed()) {
-		GLuint rprFb = rprApi->GetFramebufferGL();
-		GLint usdReadFB, usdWriteFB;
-		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &usdReadFB);
-		glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &usdWriteFB);
+    // XXX: AOV system in usdview and houdini at this time is incomplete
+    // that's why we ignore aovBindings and blit selected aov
+    // (HdRprApi::SetAov or last enabled AOV HdRprApi::EnableAov) to GL framebuffer
 
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, rprFb);
-		rprApi->Render();
+    //auto& aovBindings = renderPassState->GetAovBindings();
+    HdRenderPassAovBindingVector aovBindings; // force blit to GL framebuffer
 
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, usdWriteFB);
-		glBlitFramebuffer(0, 0, fbSize[0], fbSize[1],
-						  0, 0, fbSize[0], fbSize[1],
-						  GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    if (aovBindings.empty()) {
+        if (rprApi->IsGlInteropUsed()) {
+            // Depth AOV should be enabled for complete GL framebuffer
+            rprApi->EnableAov(HdRprAovTokens->depth);
+            rprApi->Render();
 
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, usdReadFB);
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, usdWriteFB);
-	} else {
-		rprApi->Render();
-		glDrawPixels(fbSize[0], fbSize[1], GL_RGBA, GL_FLOAT, rprApi->GetFramebufferData());
-	}
+            GLuint rprFb = rprApi->GetFramebufferGL();
+            if (!rprFb) {
+                return;
+            }
 
+            GLint usdReadFB;
+            glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &usdReadFB);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, rprFb);
+            glBlitFramebuffer(0, 0, fbSize[0], fbSize[1],
+                0, 0, fbSize[0], fbSize[1],
+                GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, usdReadFB);
+        } else {
+            rprApi->Render();
+            if (auto colorBuffer = rprApi->GetFramebufferData(rprApi->GetActiveAov())) {
+                glDrawPixels(fbSize[0], fbSize[1], GL_RGBA, GL_FLOAT, colorBuffer.get());
+            }
+        }
+    } else {
+        rprApi->Render();
+    }
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

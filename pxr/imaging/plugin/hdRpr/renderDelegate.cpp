@@ -22,6 +22,10 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_PRIVATE_TOKENS(
+    _tokens,
+    (openvdbAsset));
+
 namespace
 {
 	HdRprDelegate * g_HdRprDelegate = nullptr;
@@ -49,7 +53,9 @@ const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES =
 
 const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES =
 { 
-	TfToken("openvdbAsset"),
+#ifdef USE_VOLUME
+    _tokens->openvdbAsset,
+#endif
     HdPrimTypeTokens->renderBuffer
 };
 
@@ -242,16 +248,15 @@ HdRprDelegate::CreateBprim(TfToken const& typeId,
     {
         return new HdRprRenderBuffer(bprimId, m_rprApiSharedPtr);
     }
-    TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
 
 #ifdef USE_VOLUME
-	if (typeId == TfToken("openvdbAsset"))
+	if (typeId == _tokens->openvdbAsset)
 	{
 		return new HdRprField(bprimId, m_rprApiSharedPtr);
 	}
 #endif
 
-	TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
+	TF_CODING_ERROR("Unknown Bprim Type %s", typeId.GetText());
     return nullptr;
 }
 
@@ -267,33 +272,39 @@ HdRprDelegate::DestroyBprim(HdBprim *bPrim)
 	delete bPrim;
 }
 
-PXR_NAMESPACE_CLOSE_SCOPE
+HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) const {
+    // XXX: Disable depth AOV until usdview fix kludges in AOV system
+    if (name == HdAovTokens->depth) {
+        return HdAovDescriptor();
+    }
 
-HDRPR_API
-void SetRprGlobalAov(int aov)
-{
-	switch (aov)
-	{
-	case 0:
-		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::COLOR);
-		break;
-	case 1:
-		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::NORMAL);
-		break;
-	case 2:
-		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::DEPTH);
-		break;
-	case 3:
-		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::UV);
-		break;
-	case 4:
-		PXR_INTERNAL_NS::HdRprApi::SetAov(PXR_INTERNAL_NS::HdRprAov::PRIM_ID);
-		break;
-	default:
-		return;
-	}
+    HdParsedAovToken aovId(name);
+    if (name != HdAovTokens->color &&
+        name != HdAovTokens->normal &&
+        name != HdAovTokens->primId &&
+        !(aovId.isPrimvar && aovId.name == "st")) {
+        // TODO: implement support for instanceId and elementId aov
+        return HdAovDescriptor();
+    }
+
+    HdFormat format = HdFormatInvalid;
+
+    float clearColorValue = 0.0f;
+    if (name == HdAovTokens->depth) {
+        clearColorValue = 1.0f;
+        format = HdFormatFloat32;
+    } else if (name == HdAovTokens->color) {
+        format = HdFormatUNorm8Vec4;
+    } else if (name == HdAovTokens->primId) {
+        format = HdFormatInt32;
+    } else {
+        format = HdFormatFloat32Vec3;
+    }
+
+    return HdAovDescriptor(format, false, VtValue(GfVec4f(clearColorValue)));
 }
 
+PXR_NAMESPACE_CLOSE_SCOPE
 
 void SetRprGlobalDenoising(int enableDenoising)
 {
