@@ -2,6 +2,9 @@
 #define RPRCPP_OBJECT_H
 
 #include <RadeonProRender.h>
+#include <pxr/pxr.h>
+
+PXR_NAMESPACE_OPEN_SCOPE
 
 namespace rpr {
 
@@ -27,5 +30,7 @@ protected:
 };
 
 } // namespace rpr
+
+PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // RPRCPP_OBJECT_H

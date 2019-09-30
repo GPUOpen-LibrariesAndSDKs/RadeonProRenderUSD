@@ -1,5 +1,7 @@
 #include "rprFramebufferGL.h"
 
+PXR_NAMESPACE_OPEN_SCOPE
+
 namespace rpr {
 
 FrameBufferGL::FrameBufferGL(rpr_context context, rpr_uint width, rpr_uint height) {
@@ -79,3 +81,5 @@ void FrameBufferGL::DeleteGL() {
 }
 
 } // namespace rpr
+
+PXR_NAMESPACE_CLOSE_SCOPE
