@@ -33,15 +33,6 @@ def createRprTmpDirIfNeeded(rprLib):
 def reemitStage(usdviewApi):
     usdviewApi._UsdviewApi__appController._reopenStage()
     usdviewApi._UsdviewApi__appController._rendererPluginChanged('HdRprPlugin')
-
-
-def setAov(aov):
-    rprPath = getRprPath()
-    if rprPath is not None:
-	   lib = cdll.LoadLibrary(rprPath)
-	   createRprTmpDirIfNeeded(lib)
-	   lib.SetRprGlobalAov(aov)
-	   
 	   
 def switchDenoising():
     rprPath = getRprPath()
@@ -55,7 +46,6 @@ def switchDenoising():
 
         lib.SetRprGlobalDenoising(not isDenoisingEnabled)
 
-	   
 def setRenderDevice(usdviewApi, renderDeviceId):
     rprPath = getRprPath()
     if rprPath is not None:
@@ -81,21 +71,7 @@ def setHybridQuality(usdviewApi, quality):
         if currentPluginType(lib) != HybridPluginType:
             lib.SetRprRendererPlugin(HybridPluginType)
             reemitStage(usdviewApi)
-	
-def ColorAov(usdviewApi):
-    setAov(0)
 
-def NormalAov(usdviewApi):
-    setAov(1)
-
-def DepthAov(usdviewApi):
-    setAov(2)
-
-def UVAov(usdviewApi):
-    setAov(3)
-
-def PrimIdAov(usdviewApi):
-    setAov(4)
 
 def SwitchDenoising(usdviewApi):
     switchDenoising()
@@ -120,31 +96,6 @@ def SetHybridHighQuality(usdviewApi):
 class RprPluginContainer(PluginContainer):
 
     def registerPlugins(self, plugRegistry, usdviewApi):
-
-        self.aovColor = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.ColorAov",
-            "Color",
-            ColorAov)
-
-        self.aovNormal = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.NormalAov",
-            "Normal",
-            NormalAov)
-
-        self.aovDepth = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.DepthAov",
-            "Depth",
-            DepthAov)
-
-        self.aovUV = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.UVAov",
-            "primvars:st",
-            UVAov)
-
-        self.aovPrimId = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.PrimIdAov",
-            "PrimId",
-            PrimIdAov)
 
         self.switchDenoising = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.NoFilter",
@@ -183,13 +134,6 @@ class RprPluginContainer(PluginContainer):
     def configureView(self, plugRegistry, plugUIBuilder):
 
         rprMenu = plugUIBuilder.findOrCreateMenu("RPR")
-        renderModeSubMenu = rprMenu.findOrCreateSubmenu("AOV")
-        renderModeSubMenu.addItem(self.aovColor)
-        renderModeSubMenu.addItem(self.aovNormal)
-        renderModeSubMenu.addItem(self.aovDepth)
-        renderModeSubMenu.addItem(self.aovUV)
-        renderModeSubMenu.addItem(self.aovPrimId)
-
         rprMenu.addItem(self.switchDenoising)
 
         renderDeviceSubMenu = rprMenu.findOrCreateSubmenu("Render Device")
@@ -201,6 +145,5 @@ class RprPluginContainer(PluginContainer):
         renderQualityMenu.addItem(self.setHybridMediumQuality)
         renderQualityMenu.addItem(self.setHybridHighQuality)
         renderQualityMenu.addItem(self.setTahoe)
-		
 		
 Tf.Type.Define(RprPluginContainer)

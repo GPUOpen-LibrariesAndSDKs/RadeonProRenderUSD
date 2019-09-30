@@ -1,25 +1,41 @@
 # Simple module to find USD.
 
-find_path(USD_INCLUDE_DIR pxr/pxr.h
-          PATHS ${USD_ROOT}/include
-                $ENV{USD_ROOT}/include
-          DOC "USD Include directory")
+if(RPR_BUILD_AS_HOUDINI_PLUGIN)
+    set(USD_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
+    set(USD_LIBRARY_DIR ${HOUDINI_LIB})
+    if(WIN32)
+        set(USD_LIBRARY_MONOLITHIC TRUE)
+    else()
+        set(USD_LIBRARY_MONOLITHIC FALSE)
+    endif()
+else(RPR_BUILD_AS_HOUDINI_PLUGIN)
+    find_path(USD_INCLUDE_DIR pxr/pxr.h
+              PATHS ${USD_ROOT}/include
+                    $ENV{USD_ROOT}/include
+              DOC "USD Include directory"
+              NO_DEFAULT_PATH
+              NO_SYSTEM_ENVIRONMENT_PATH)
 
-find_path(USD_LIBRARY_DIR 
-          NAMES libusd.dylib libusd.dll libusd.so
-          PATHS ${USD_ROOT}/lib
-                $ENV{USD_ROOT}/lib
-          DOC "USD Libraries directory")
-set(USD_LIBRARY_MONOLITHIC FALSE)
-
-if(NOT USD_LIBRARY_DIR)
-    find_path(USD_LIBRARY_DIR 
-              NAMES libusd_ms.dylib libusd_ms.dll libusd_ms.so
+    find_path(USD_LIBRARY_DIR
+              NAMES libusd.dylib libusd.dll libusd.so
               PATHS ${USD_ROOT}/lib
                     $ENV{USD_ROOT}/lib
-              DOC "USD Libraries directory")
-    set(USD_LIBRARY_MONOLITHIC TRUE)
-endif()
+              DOC "USD Libraries directory"
+              NO_DEFAULT_PATH
+              NO_SYSTEM_ENVIRONMENT_PATH)
+    set(USD_LIBRARY_MONOLITHIC FALSE)
+
+    if(NOT USD_LIBRARY_DIR)
+        find_path(USD_LIBRARY_DIR
+                  NAMES libusd_ms.dylib libusd_ms.dll libusd_ms.so
+                  PATHS ${USD_ROOT}/lib
+                        $ENV{USD_ROOT}/lib
+                  DOC "USD Libraries directory"
+                  NO_DEFAULT_PATH
+                  NO_SYSTEM_ENVIRONMENT_PATH)
+        set(USD_LIBRARY_MONOLITHIC TRUE)
+    endif()
+endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
 if(USD_INCLUDE_DIR AND EXISTS "${USD_INCLUDE_DIR}/pxr/pxr.h")
     foreach(_usd_comp MAJOR MINOR PATCH)

@@ -12,13 +12,37 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
                       ${CMAKE_SOURCE_DIR}/cmake/macros)
 
 include(Options)
+
+if(RPR_BUILD_AS_HOUDINI_PLUGIN)
+    if(DEFINED ENV{HOUDINI_ROOT})
+        set(HOUDINI_ROOT $ENV{HOUDINI_ROOT})
+    endif()
+    if(NOT DEFINED HOUDINI_ROOT)
+        message(FATAL_ERROR "Specify HOUDINI_ROOT")
+    endif()
+
+    if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+        message(STATUS "Setting CMAKE_INSTALL_PREFIX to HOUDINI_ROOT - ${HOUDINI_ROOT}")
+        set(CMAKE_INSTALL_PREFIX "${HOUDINI_ROOT}" CACHE PATH "..." FORCE)
+    endif()
+
+    if(WIN32)
+        set(HOUDINI_LIB ${HOUDINI_ROOT}/custom/houdini/dsolib)
+        set(HOUDINI_INCLUDE_DIR ${HOUDINI_ROOT}/toolkit/include)
+    else()
+        set(HOUDINI_INCLUDE_DIR ${HOUDINI_ROOT}/Resources/toolkit/include)
+        set(HOUDINI_LIB ${HOUDINI_ROOT}/Libraries)
+    endif()
+    add_definitions(-DBUILD_AS_HOUDINI_PLUGIN)
+endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
+
 include(ProjectDefaults)
 include(Packages)
 
 # This has to be defined after Packages is included, because it relies on the
 # discovered path to the python executable.
-set(PXR_PYTHON_SHEBANG "${PYTHON_EXECUTABLE}" 
-    CACHE 
+set(PXR_PYTHON_SHEBANG "${PYTHON_EXECUTABLE}"
+    CACHE
     STRING
     "Replacement path for Python #! line."
 )

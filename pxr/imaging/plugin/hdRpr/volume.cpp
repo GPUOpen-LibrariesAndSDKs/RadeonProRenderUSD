@@ -22,6 +22,7 @@ namespace
 {
 	const float defaultDencity = 1.f;
 	const float defaultAlbedo = 1.f;
+	GfVec4f defaultColor = GfVec4f(35.0f, 35.0f, 35.f, 1.0f);
 }
 
 /*
@@ -69,7 +70,7 @@ GfVec3f temteratureToColor(const float & temperature)
 	{
 		tempColors.rbegin()->second;
 	}
-	
+
 	auto tIt = tempColors.begin();
 	float tLess = tIt->first;
 	GfVec3f colorLess = tIt->second;
@@ -195,7 +196,7 @@ void HdRprVolume::Sync(
 		openvdb::initialize();
 
 		openvdb::io::File file(openVdbPath);
-		
+
 		try {
 			file.open();
 		}
@@ -205,7 +206,7 @@ void HdRprVolume::Sync(
 			*dirtyBits = HdChangeTracker::Clean;
 			return;
 		}
-		
+
 
 		openvdb::GridPtrVecPtr grids = file.getGrids();
 
@@ -321,7 +322,7 @@ void HdRprVolume::Sync(
 				else
 				{
 					gridAlbedo.push_back(defaultAlbedo);
-					
+
 					const unsigned int nextIdx = (idxAlbedo.empty()) ? 0 : idxAlbedo.back() + 1;
 
 					idxAlbedo.push_back(nextIdx);

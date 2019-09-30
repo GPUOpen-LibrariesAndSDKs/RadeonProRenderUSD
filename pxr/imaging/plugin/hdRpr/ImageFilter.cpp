@@ -75,15 +75,15 @@ static rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags)
 	gpu_ids.push_back(GPU(13));
 	gpu_ids.push_back(GPU(14));
 	gpu_ids.push_back(GPU(15));
-	
+
 #undef GPU
 
 	for (rpr_int i = 0; i < gpu_ids.size(); i++ )
-	{	
+	{
 		if ((contextFlags & gpu_ids[i]) != 0)
 			return i;
 	}
-	
+
 	return -1;
 }
 
@@ -94,7 +94,7 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 	rpr_creation_flags contextFlags = 0;
 	rpr_int rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr);
 	assert(RPR_SUCCESS == rprStatus);
-	
+
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get context parameters.");
 
@@ -146,29 +146,20 @@ void ImageFilter::Resize(std::uint32_t w, std::uint32_t h)
 	mHeight = h;
 }
 
-void ImageFilter::SetInput(RifFilterInput inputId, const rpr_framebuffer rprFrameBuffer, const float sigma) const
+void ImageFilter::SetInput(RifFilterInput inputId, rpr::FrameBuffer* rprFrameBuffer, const float sigma) const
 {
-	rif_image_desc desc = { mWidth, mHeight, 1, mWidth, mWidth * mHeight, 4, RIF_COMPONENT_TYPE_FLOAT32 };
+    rif_image_desc desc = { mWidth, mHeight, 1, mWidth, mWidth * mHeight, 4, RIF_COMPONENT_TYPE_FLOAT32 };
+    rif_image rifImage = mRifContext->CreateRifImage(rprFrameBuffer, desc);
 
-	rif_image rifImage = mRifContext->CreateRifImage(rprFrameBuffer, desc);
-
-	mRifFilter->AddInput(inputId, rifImage, rprFrameBuffer, sigma);
+    mRifFilter->AddInput(inputId, rifImage, rprFrameBuffer, sigma);
 }
 
-void ImageFilter::SetOutput(const rpr_framebuffer rprFrameBuffer) const
+void ImageFilter::SetOutput(rpr::FrameBuffer* rprFrameBuffer) const
 {
-	rif_image_desc desc = { mWidth, mHeight, 1, mWidth, mWidth * mHeight, 4, RIF_COMPONENT_TYPE_FLOAT32 };
+    rif_image_desc desc = { mWidth, mHeight, 1, mWidth, mWidth * mHeight, 4, RIF_COMPONENT_TYPE_FLOAT32 };
+    rif_image rifImage = mRifContext->CreateRifImage(rprFrameBuffer, desc);
 
-	rif_image rifImage = mRifContext->CreateRifImage(rprFrameBuffer, desc);
-
-	mRifContext->SetOutput(rifImage);
-}
-
-void ImageFilter::SetOutputGlTexture(const unsigned int glTexture) const
-{
-	rif_image rifImage = mRifContext->CreateRifImageGl(glTexture);
-
-	mRifContext->SetOutput(rifImage);
+    mRifContext->SetOutput(rifImage);
 }
 
 void ImageFilter::AddParam(std::string name, RifParam param) const
@@ -199,7 +190,7 @@ void ImageFilter::Run() const
         throw std::runtime_error("RPR denoiser failed to synchronize queue.");
 }
 
-std::vector<float> ImageFilter::GetData() const
+std::shared_ptr<char> ImageFilter::GetData() const
 {
 	void* output = nullptr;
 
@@ -210,7 +201,9 @@ std::vector<float> ImageFilter::GetData() const
 	if (RIF_SUCCESS != rifStatus || nullptr == output)
 		throw std::runtime_error("RPR denoiser failed to map output data.");
 
-	std::vector<float> floatData( (float*) output, ( (float*) output ) + mWidth * mHeight * 4 );
+    size_t dataSize = mWidth * mHeight * 4 * sizeof(float);
+    auto data = std::shared_ptr<char>(new char[dataSize]);
+    std::memcpy(data.get(), output, dataSize);
 
 	rifStatus = rifImageUnmap(mRifContext->Output(), output);
 	assert(RIF_SUCCESS == rifStatus);
@@ -218,11 +211,11 @@ std::vector<float> ImageFilter::GetData() const
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to unmap output data.");
 
-	return floatData;
+	return data;
 }
 
 RifContextWrapper::~RifContextWrapper()
-{	
+{
 }
 
 const rif_context RifContextWrapper::Context() const
@@ -317,35 +310,29 @@ RifContextGPU::~RifContextGPU()
 {
 }
 
-rif_image RifContextGPU::CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const
+rif_image RifContextGPU::CreateRifImage(rpr::FrameBuffer* rprFrameBuffer, rif_image_desc const& desc) const
 {
-	rif_image rifImage = nullptr;
-	rpr_cl_mem clMem = nullptr;
+    rif_image rifImage = nullptr;
 
-	rpr_int rprStatus = rprFrameBufferGetInfo(rprFrameBuffer, RPR_CL_MEM_OBJECT, sizeof(rpr_cl_mem), &clMem, nullptr);
-	assert(RPR_SUCCESS == rprStatus);
+    if (auto rprFrameBufferGL = dynamic_cast<rpr::FrameBufferGL*>(rprFrameBuffer)) {
+        rif_int rifStatus = rifContextCreateImageFromOpenGlTexture(mRifContextHandle, GL_TEXTURE_2D, 0, rprFrameBufferGL->GetGL(), &rifImage);
+        assert(RIF_SUCCESS == rifStatus);
 
-	if (RPR_SUCCESS != rprStatus)
-		throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
+        if (RIF_SUCCESS != rifStatus)
+            throw std::runtime_error("RPR denoiser failed to create rif image from OpenGL memory.");
+    } else {
+        rpr_cl_mem clMem = rprFrameBuffer->GetCLMem();
+        assert(clMem);
 
-	rif_int rifStatus = rifContextCreateImageFromOpenClMemory(mRifContextHandle , &desc, clMem, false, &rifImage);
-	assert(RIF_SUCCESS == rifStatus);
+        if (!clMem)
+            throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
 
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
+        rif_int rifStatus = rifContextCreateImageFromOpenClMemory(mRifContextHandle, &desc, clMem, false, &rifImage);
+        assert(RIF_SUCCESS == rifStatus);
 
-	return rifImage;
-}
-
-rif_image RifContextGPU::CreateRifImageGl(const unsigned int glTexture) const
-{
-	rif_image rifImage = nullptr;
-	rif_int rifStatus = rifContextCreateImageFromOpenGlTexture(mRifContextHandle, GL_TEXTURE_2D, 0, glTexture, &rifImage);
-	if (RIF_SUCCESS != rifStatus)
-	{
-		TF_CODING_ERROR("Fail to create rif image from OpenGL texture. Error code: %d", rifStatus);
-		return NULL;
-	}
+        if (RIF_SUCCESS != rifStatus)
+            throw std::runtime_error("RPR denoiser failed to create rif image from OpenCL memory.");
+    }
 
 	return rifImage;
 }
@@ -386,7 +373,7 @@ RifContextCPU::~RifContextCPU()
 {
 }
 
-rif_image RifContextCPU::CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const
+rif_image RifContextCPU::CreateRifImage(rpr::FrameBuffer* rprFrameBuffer, const rif_image_desc& desc) const
 {
 	rif_image rifImage = nullptr;
 
@@ -419,14 +406,14 @@ void RifContextCPU::UpdateInputs(const RifFilterWrapper* rifFilter) const
 			throw std::runtime_error("RPR denoiser failed to get RIF image info.");
 
 		size_t fbSize;
-		rpr_int rprStatus = rprFrameBufferGetInfo(inputData.mRprFrameBuffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fbSize);
+		rpr_int rprStatus = rprFrameBufferGetInfo(inputData.mRprFrameBuffer->GetHandle(), RPR_FRAMEBUFFER_DATA, 0, NULL, &fbSize);
 		assert(RPR_SUCCESS == rprStatus);
 
 		if (RPR_SUCCESS != rprStatus)
 			throw std::runtime_error("RPR denoiser failed to acquire frame buffer info.");
 
 		assert(sizeInBytes == fbSize);
-	
+
 		if (sizeInBytes != fbSize)
 			throw std::runtime_error("RPR denoiser failed to match RIF image and frame buffer sizes.");
 
@@ -437,7 +424,7 @@ void RifContextCPU::UpdateInputs(const RifFilterWrapper* rifFilter) const
 		if (RIF_SUCCESS != rifStatus)
 			throw std::runtime_error("RPR denoiser failed to acquire RIF image.");
 
-		rprStatus = rprFrameBufferGetInfo(inputData.mRprFrameBuffer, RPR_FRAMEBUFFER_DATA, fbSize, imageData, NULL);
+		rprStatus = rprFrameBufferGetInfo(inputData.mRprFrameBuffer->GetHandle(), RPR_FRAMEBUFFER_DATA, fbSize, imageData, NULL);
 		assert(RPR_SUCCESS == rprStatus);
 
 		// try to unmap at first, then raise a possible error
@@ -464,7 +451,7 @@ RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 
 	if (RIF_SUCCESS != rifStatus || 0 == deviceCount)
 		throw std::runtime_error("RPR denoiser hasn't found compatible devices.");
-	
+
 	rpr_creation_flags contextFlags = 0;
 	rpr_int rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr);
 	assert(RPR_SUCCESS == rprStatus);
@@ -477,7 +464,7 @@ RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create RIF context.");
-    
+
 	rifStatus = rifContextCreateCommandQueue(mRifContextHandle, &mRifCommandQueueHandle);
 	assert(RIF_SUCCESS == rifStatus);
 
@@ -489,18 +476,16 @@ RifContextGPUMetal::~RifContextGPUMetal()
 {
 }
 
-rif_image RifContextGPUMetal::CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const
+rif_image RifContextGPUMetal::CreateRifImage(rpr::FrameBuffer* rprFrameBuffer, const rif_image_desc& desc) const
 {
     rif_image rifImage = nullptr;
-    rpr_cl_mem clMem = nullptr;
-
-    rpr_int rprStatus = rprFrameBufferGetInfo(rprFrameBuffer, RPR_CL_MEM_OBJECT, sizeof(rpr_cl_mem), &clMem, nullptr);
-    assert(RPR_SUCCESS == rprStatus);
-    if (RPR_SUCCESS != rprStatus)
+    rpr_cl_mem clMem = rprFrameBuffer->GetCLMem();
+    assert(clMem);
+    if (!clMem)
         throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
 
     rpr_image_format framebufferFormat;
-    rprStatus = rprFrameBufferGetInfo(rprFrameBuffer, RPR_FRAMEBUFFER_FORMAT, sizeof(framebufferFormat), &framebufferFormat, nullptr);
+    auto rprStatus = rprFrameBufferGetInfo(rprFrameBuffer->GetHandle(), RPR_FRAMEBUFFER_FORMAT, sizeof(framebufferFormat), &framebufferFormat, nullptr);
     assert(RPR_SUCCESS == rprStatus);
     if (RPR_SUCCESS != rprStatus) {
         throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
@@ -559,7 +544,7 @@ RifFilterWrapper::~RifFilterWrapper()
 	}
 }
 
-void RifFilterWrapper::AddInput(RifFilterInput inputId, rif_image rifImage, const rpr_framebuffer rprFrameBuffer, float sigma)
+void RifFilterWrapper::AddInput(RifFilterInput inputId, rif_image rifImage, rpr::FrameBuffer* rprFrameBuffer, float sigma)
 {
 	mInputs[inputId] = { rifImage, rprFrameBuffer, sigma };
 }
@@ -690,7 +675,7 @@ void RifFilterAIDenoise::AttachFilter(const RifContextWrapper* rifContext)
 		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "albedoImg", mInputs.at(RifAlbedo).mRifImage);
 		assert(RIF_SUCCESS == rifStatus);
 	}
-	
+
 	// setup remapping filters
 	if (RIF_SUCCESS == rifStatus)
 	{
@@ -718,7 +703,7 @@ void RifFilterAIDenoise::AttachFilter(const RifContextWrapper* rifContext)
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to apply parameter.");
-	
+
 	// attach filters
 
 	if (RIF_SUCCESS == rifStatus)
@@ -793,7 +778,7 @@ void RifFilterEaw::AttachFilter(const RifContextWrapper* rifContext)
 
     if (RIF_SUCCESS == rifStatus)
     {
-        rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "transImg", mInputs.at(RifTrans).mRifImage);
+        rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "transImg", mInputs.at(RifObjectId).mRifImage);
         assert(RIF_SUCCESS == rifStatus);
     }
 
@@ -824,7 +809,7 @@ void RifFilterEaw::AttachFilter(const RifContextWrapper* rifContext)
 
     if (RIF_SUCCESS == rifStatus)
     {
-        rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "transSigma", mInputs.at(RifTrans).mSigma);
+        rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "transSigma", mInputs.at(RifObjectId).mSigma);
         assert(RIF_SUCCESS == rifStatus);
     }
 
