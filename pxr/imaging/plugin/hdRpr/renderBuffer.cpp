@@ -18,11 +18,11 @@ HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprAp
         TF_CODING_ERROR("RprApi is expired");
         return;
     }
-    
+
     m_rprApiWeakPrt = rprApi;
-    
+
     const std::string aovName = id.GetName();
-    
+
     if(aovName == "aov_normal")
     {
         rprApi->SetAov(HdRprAov::NORMAL);
@@ -81,7 +81,7 @@ HdFormat HdRprRenderBuffer::GetFormat() const{
 
 bool HdRprRenderBuffer::IsMultiSampled() const {return false;}
 
-uint8_t* HdRprRenderBuffer::Map(){return nullptr;}
+void* HdRprRenderBuffer::Map(){return nullptr;}
 
 void HdRprRenderBuffer::Unmap(){}
 

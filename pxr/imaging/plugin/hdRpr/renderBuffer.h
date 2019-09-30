@@ -21,11 +21,11 @@ public:
     virtual void Sync(HdSceneDelegate *sceneDelegate,
                       HdRenderParam *renderParam,
                       HdDirtyBits *dirtyBits) override;
-    
+
     virtual bool Allocate(GfVec3i const& dimensions,
                           HdFormat format,
                           bool multiSampled) override;
-    
+
     virtual unsigned int GetWidth() const override;
 
     virtual unsigned int GetHeight() const override;
@@ -35,23 +35,23 @@ public:
     virtual HdFormat GetFormat() const override;
 
     virtual bool IsMultiSampled() const override;
-    
-    virtual uint8_t* Map() override;
+
+    virtual void* Map() override;
 
     virtual void Unmap() override;
 
     virtual bool IsMapped() const override;
-    
+
     virtual void Resolve() override;
-    
+
     virtual bool IsConverged() const override;
-    
+
 protected:
     virtual void _Deallocate() override;
-    
+
 private:
     HdRprApiWeakPtr m_rprApiWeakPrt;
-    
+
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
