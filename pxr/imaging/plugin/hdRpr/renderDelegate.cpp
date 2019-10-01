@@ -3,6 +3,7 @@
 #include "pxr/imaging/glf/glew.h"
 #include "pxr/imaging/hd/camera.h"
 
+#include "config.h"
 #include "renderPass.h"
 #include "mesh.h"
 #include "instancer.h"
@@ -22,14 +23,12 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
+TF_DEFINE_PUBLIC_TOKENS(HdRprRenderQualityTokens, HDRPR_RENDER_QUALITY_TOKENS);
+
 TF_DEFINE_PRIVATE_TOKENS(
     _tokens,
     (openvdbAsset));
-
-namespace
-{
-	HdRprDelegate * g_HdRprDelegate = nullptr;
-}
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES =
 {
@@ -59,22 +58,41 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES =
     HdPrimTypeTokens->renderBuffer
 };
 
-//std::atomic_int HdRprDelegate::_counterResourceRegistry;
-//HdResourceRegistrySharedPtr HdRprDelegate::_resourceRegistry;
 
+HdRprDelegate::HdRprDelegate() {
+    m_rprApiSharedPtr = std::shared_ptr<HdRprApi>(new HdRprApi);
 
-HdRprDelegate::HdRprDelegate()
-{	
-	m_rprApiSharedPtr = std::shared_ptr<HdRprApi>(new HdRprApi);
-	m_rprApiSharedPtr->Init();
-	g_HdRprDelegate = this;
+    auto& config = HdRprConfig::GetInstance();
+    m_settingDescriptors.resize(2);
+    m_settingDescriptors[0] = { "Enable Denoising",
+        HdRprRenderSettingsTokens->enableDenoising,
+        VtValue(config.IsDenoisingEnabled()) };
+    auto renderQuality = HdRprRenderQualityTokens->full;
+    if (config.GetPlugin() == rpr::PluginType::HYBRID) {
+        switch (config.GetHybridQuality()) {
+        case HdRprHybridQuality::LOW:
+            renderQuality = HdRprRenderQualityTokens->low;
+            break;
+        case HdRprHybridQuality::MEDIUM:
+            renderQuality = HdRprRenderQualityTokens->medium;
+            break;
+        case HdRprHybridQuality::HIGH:
+            renderQuality = HdRprRenderQualityTokens->high;
+            break;
+        default:
+            break;
+        }
+    }
+    m_settingDescriptors[1] = { "Render Quality",
+        HdRprRenderSettingsTokens->renderQuality,
+        VtValue(renderQuality) };
+    _PopulateDefaultSettings(m_settingDescriptors);
 }
 
-HdRprDelegate::~HdRprDelegate()
-{
-	m_rprApiSharedPtr->Deinit();
-	m_rprApiSharedPtr.reset();
-	g_HdRprDelegate = nullptr;
+HdRprDelegate::~HdRprDelegate() {
+    if (m_rprApiSharedPtr.use_count() > 1) {
+        TF_CODING_ERROR("Leaked rprApi reference");
+    }
 }
 
 HdRenderParam*
@@ -302,39 +320,37 @@ HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) cons
     return HdAovDescriptor(format, false, VtValue(GfVec4f(clearColorValue)));
 }
 
+HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const {
+    return m_settingDescriptors;
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE
 
-void SetRprGlobalDenoising(int enableDenoising)
-{
-	PXR_INTERNAL_NS::HdRprApi::SetDenoising(static_cast<bool>(enableDenoising));
+void SetHdRprRenderDevice(int renderDevice) {
+    using namespace PXR_INTERNAL_NS;
+
+    if (renderDevice == 0) {
+        HdRprConfig::GetInstance().SetRenderDevice(rpr::RenderDeviceType::CPU);
+    } else if (renderDevice == 1) {
+        HdRprConfig::GetInstance().SetRenderDevice(rpr::RenderDeviceType::GPU);
+    } else {
+        TF_WARN("Invalid parameter: renderDevice = %d", renderDevice);
+    }
 }
 
-int IsRprDenoisingEnabled()
-{
-    return static_cast<int>(PXR_INTERNAL_NS::HdRprApi::IsDenoisingEnabled());
+void SetHdRprRenderQuality(int quality) {
+    using namespace PXR_INTERNAL_NS;
+
+    if (quality >= 0 && quality <= 2) {
+        HdRprConfig::GetInstance().SetPlugin(rpr::PluginType::HYBRID);
+        HdRprConfig::GetInstance().SetHybridQuality(static_cast<HdRprHybridQuality>(quality));
+    } else if (quality == 3) {
+        HdRprConfig::GetInstance().SetPlugin(rpr::PluginType::TAHOE);
+    } else {
+        TF_WARN("Invalid parameter: quality = %d", quality);
+    }
 }
 
-void SetRprGlobalRenderDevice(int renderDevice)
-{
-    PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(renderDevice);
-}
-
-void SetRprRendererPlugin(int pluginIdx)
-{
-	PXR_INTERNAL_NS::HdRprApi::SetRendererPlugin(pluginIdx);
-}
-
-void SetRprHybridQuality(int quality)
-{
-	PXR_INTERNAL_NS::HdRprApi::SetHybridQuality(quality);
-}
-
-const char* GetRprTmpDir()
-{
-	return PXR_INTERNAL_NS::HdRprApi::GetTmpDir();
-}
-
-int GetRprPluginType()
-{
-	return PXR_INTERNAL_NS::HdRprApi::GetPluginType();
+const char* GetHdRprTmpDir() {
+    return PXR_INTERNAL_NS::HdRprApi::GetTmpDir();
 }

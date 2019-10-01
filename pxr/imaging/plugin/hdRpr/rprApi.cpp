@@ -8,6 +8,7 @@
 #include "RadeonProRender_CL.h"
 #include "RadeonProRender_GL.h"
 
+#include "config.h"
 #include "material.h"
 #include "materialFactory.h"
 #include "materialAdapter.h"
@@ -37,150 +38,6 @@ std::unique_ptr<T> make_unique(Args&&... args) {
 
 } // namespace anonymous
 
-class HdRprPreferences {
-public:
-    enum ChangeTracker {
-        Clean = 0,
-        DirtyAll = ~0u,
-        DirtyRenderDevice = 1 << 0,
-        DirtyPlugin = 1 << 1,
-        DirtyHybridQuality = 1 << 2,
-        DirtyDenoising = 1 << 3
-    };
-
-    static HdRprPreferences & GetInstance() {
-        static HdRprPreferences instance;
-        return instance;
-    }
-
-    void SetRenderDevice(rpr::RenderDeviceType renderDevice) {
-        if (m_prefData.mRenderDevice != renderDevice) {
-            m_prefData.mRenderDevice = renderDevice;
-            m_dirtyFlags |= DirtyRenderDevice;
-            Save();
-        }
-    }
-
-    rpr::RenderDeviceType GetRenderDevice() const {
-        return m_prefData.mRenderDevice;
-    }
-
-    void SetHybridQuality(HdRprHybridQuality quality) {
-        if (m_prefData.mHybridQuality != quality) {
-            m_prefData.mHybridQuality = quality;
-            m_dirtyFlags |= DirtyHybridQuality;
-            Save();
-        }
-    }
-
-    HdRprHybridQuality GetHybridQuality() const {
-        if (m_prefData.mHybridQuality == HdRprHybridQuality::MEDIUM) {
-            // temporarily disable until issues on hybrid side is not solved
-            //   otherwise driver crashes guaranteed
-            return HdRprHybridQuality::HIGH;
-        }
-        return m_prefData.mHybridQuality;
-    }
-
-    void SetPlugin(rpr::PluginType plugin) {
-        if (m_prefData.mPlugin != plugin) {
-            m_prefData.mPlugin = plugin;
-            m_dirtyFlags |= DirtyPlugin;
-            Save();
-        }
-    }
-
-    rpr::PluginType GetPlugin() {
-        return m_prefData.mPlugin;
-    }
-
-    void SetDenoising(bool enableDenoising) {
-        if (m_prefData.mEnableDenoising != enableDenoising) {
-            m_prefData.mEnableDenoising = enableDenoising;
-            m_dirtyFlags |= DirtyDenoising;
-            Save();
-        }
-    }
-
-    bool IsDenoisingEnabled() const {
-        return m_prefData.mEnableDenoising;
-    }
-
-    bool IsDirty(ChangeTracker dirtyFlag) const {
-        return m_dirtyFlags & dirtyFlag;
-    }
-
-    void ResetDirty() {
-        m_dirtyFlags = Clean;
-    }
-
-private:
-    HdRprPreferences() {
-        if (!Load()) {
-            m_prefData.SetDefault();
-        }
-    }
-
-    ~HdRprPreferences() {
-        Save();
-    }
-
-    bool Load() {
-        std::string tmpDir = HdRprApi::GetTmpDir();
-        std::string rprPreferencePath = (tmpDir.empty()) ? k_rprPreferenceFilename : tmpDir + k_rprPreferenceFilename;
-
-        if (FILE* f = fopen(rprPreferencePath.c_str(), "rb")) {
-            if (!fread(&m_prefData, sizeof(PrefData), 1, f)) {
-                TF_CODING_ERROR("Fail to read rpr preferences dat file");
-            }
-            fclose(f);
-            return IsValid();
-        }
-
-        return false;
-    }
-
-    void Save() {
-        std::string tmpDir = HdRprApi::GetTmpDir();
-        std::string rprPreferencePath = (tmpDir.empty()) ? k_rprPreferenceFilename : tmpDir + k_rprPreferenceFilename;
-
-        if (FILE* f = fopen(rprPreferencePath.c_str(), "wb")) {
-            if (!fwrite(&m_prefData, sizeof(PrefData), 1, f)) {
-                TF_CODING_ERROR("Fail to write rpr preferences dat file");
-            }
-            fclose(f);
-        }
-    }
-
-    bool IsValid() {
-        return m_prefData.mRenderDevice >= rpr::RenderDeviceType::FIRST && m_prefData.mRenderDevice <= rpr::RenderDeviceType::LAST &&
-               m_prefData.mPlugin >= rpr::PluginType::FIRST && m_prefData.mPlugin <= rpr::PluginType::LAST;
-    }
-
-    struct PrefData {
-        rpr::RenderDeviceType mRenderDevice;
-        rpr::PluginType mPlugin;
-        HdRprHybridQuality mHybridQuality;
-        bool mEnableDenoising;
-
-        PrefData() {
-            SetDefault();
-        }
-
-        void SetDefault() {
-            mRenderDevice = rpr::RenderDeviceType::GPU;
-            mPlugin = rpr::PluginType::TAHOE;
-            mHybridQuality = HdRprHybridQuality::LOW;
-            mEnableDenoising = false;
-        }
-    };
-    PrefData m_prefData;
-
-    uint32_t m_dirtyFlags = DirtyAll;
-
-    constexpr static const char* k_rprPreferenceFilename = "hdRprPreferences.dat";
-};
-
 static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
     {HdRprAovTokens->color, RPR_AOV_COLOR},
     {HdRprAovTokens->albedo, RPR_AOV_DIFFUSE_ALBEDO},
@@ -194,7 +51,7 @@ static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
 
 class HdRprApiImpl {
 public:
-    void Init() {
+    HdRprApiImpl() {
         InitRpr();
         InitRif();
         InitMaterialSystem();
@@ -203,7 +60,7 @@ public:
         CreateCamera();
     }
 
-    void Deinit() {
+    ~HdRprApiImpl() {
         for (auto material : m_materialsToRelease) {
             DeleteMaterial(material);
         }
@@ -967,9 +824,9 @@ public:
     }
 
     void Update() {
-        auto& preferences = HdRprPreferences::GetInstance();
+        auto& preferences = HdRprConfig::GetInstance();
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-            if (preferences.IsDirty(HdRprPreferences::DirtyHybridQuality)) {
+            if (preferences.IsDirty(HdRprConfig::DirtyHybridQuality)) {
                 rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(preferences.GetHybridQuality()));
             }
         }
@@ -1071,12 +928,12 @@ public:
             return;
         }
 
-        if (!HdRprPreferences::GetInstance().IsDirty(HdRprPreferences::DirtyDenoising) &&
+        if (!HdRprConfig::GetInstance().IsDirty(HdRprConfig::DirtyDenoising) &&
             !(m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers)) {
             return;
         }
 
-        if (!HdRprPreferences::GetInstance().IsDenoisingEnabled() || !IsAovEnabled(HdRprAovTokens->color)) {
+        if (!HdRprConfig::GetInstance().IsDenoisingEnabled() || !IsAovEnabled(HdRprAovTokens->color)) {
             m_denoiseFilterPtr.reset();
             return;
         }
@@ -1164,14 +1021,14 @@ public:
         return m_currentAov;
     }
 
-    bool IsGlInteropUsed() const {
+    bool IsGlInteropEnabled() const {
         return m_rprContext && m_rprContext->IsGlInteropEnabled();
     }
 
 private:
     void InitRpr() {
-        auto plugin = HdRprPreferences::GetInstance().GetPlugin();
-        auto renderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
+        auto plugin = HdRprConfig::GetInstance().GetPlugin();
+        auto renderDevice = HdRprConfig::GetInstance().GetRenderDevice();
         m_rprContext = rpr::Context::Create(plugin, renderDevice, false);
         if (!m_rprContext) {
             return;
@@ -1179,7 +1036,7 @@ private:
 
         RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "yflip", 0), "Fail to set context YFLIP parameter");
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-            RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(HdRprPreferences::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
+            RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(HdRprConfig::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
         }
     }
 
@@ -1392,42 +1249,15 @@ private:
 };
 
     HdRprApi::HdRprApi() : m_impl(new HdRprApiImpl) {
+
     }
 
     HdRprApi::~HdRprApi() {
         delete m_impl;
     }
 
-    void HdRprApi::SetRenderDevice(int renderDevice) {
-        HdRprPreferences::GetInstance().SetRenderDevice(static_cast<rpr::RenderDeviceType>(renderDevice));
-    }
-
-    void HdRprApi::SetRendererPlugin(int plugin) {
-        HdRprPreferences::GetInstance().SetPlugin(static_cast<rpr::PluginType>(plugin));
-    }
-
-    void HdRprApi::SetHybridQuality(int quality) {
-        HdRprPreferences::GetInstance().SetHybridQuality(static_cast<HdRprHybridQuality>(quality));
-    }
-
-    void HdRprApi::SetDenoising(bool enableDenoising) {
-        HdRprPreferences::GetInstance().SetDenoising(enableDenoising);
-    }
-
-    bool HdRprApi::IsDenoisingEnabled() {
-        return HdRprPreferences::GetInstance().IsDenoisingEnabled();
-    }
-
     TfToken HdRprApi::GetActiveAov() const {
         return m_impl->GetActiveAov();
-    }
-
-    void HdRprApi::Init() {
-        m_impl->Init();
-    }
-
-    void HdRprApi::Deinit() {
-        m_impl->Deinit();
     }
 
     RprApiObject HdRprApi::CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf) {
@@ -1553,12 +1383,8 @@ private:
         m_impl->DeleteMesh(mesh);
     }
 
-    bool HdRprApi::IsGlInteropUsed() const {
-        return m_impl->IsGlInteropUsed();
-    }
-
-    int HdRprApi::GetPluginType() {
-        return int(HdRprPreferences::GetInstance().GetPlugin());
+    bool HdRprApi::IsGlInteropEnabled() const {
+        return m_impl->IsGlInteropEnabled();
     }
 
     const char* HdRprApi::GetTmpDir() {

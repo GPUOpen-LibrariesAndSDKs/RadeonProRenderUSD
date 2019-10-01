@@ -1,23 +1,18 @@
-
 #include "renderPass.h"
+#include "renderDelegate.h"
+#include "config.h"
+#include "rprApi.h"
 
 #include <GL/glew.h>
-
-#include "pxr/imaging/hd/perfLog.h"
-#include "pxr/imaging/hd/renderPassState.h"
-
-#include "pxr/imaging/hd/primGather.h"
-
-#include "pxr/imaging/hdx/simpleLightTask.h"
-
-#include "rprApi.h"
+#include <pxr/imaging/hd/renderPassState.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprRenderPass::HdRprRenderPass(HdRenderIndex* index
     , HdRprimCollection const& collection
     , HdRprApiSharedPtr rprApi)
-    : HdRenderPass(index, collection) {
+    : HdRenderPass(index, collection)
+    , m_lastSettingsVersion(0) {
     m_rprApiWeakPtr = rprApi;
 }
 
@@ -26,6 +21,20 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
     if (!rprApi) {
         TF_CODING_ERROR("RprApi is expired");
         return;
+    }
+
+    // Synchronize HdRprConfig with Hydra render settings
+    auto renderDelegate = GetRenderIndex()->GetRenderDelegate();
+    int currentSettingsVersion = renderDelegate->GetRenderSettingsVersion();
+    if (m_lastSettingsVersion != currentSettingsVersion) {
+        m_lastSettingsVersion = currentSettingsVersion;
+
+        auto enableDenoisingValue = renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->enableDenoising);
+        if (enableDenoisingValue.IsHolding<int64_t>()) {
+            HdRprConfig::GetInstance().SetDenoising(enableDenoisingValue.UncheckedGet<int64_t>());
+        } else if (enableDenoisingValue.IsHolding<bool>()) {
+            HdRprConfig::GetInstance().SetDenoising(enableDenoisingValue.UncheckedGet<bool>());
+        }
     }
 
     auto& vp = renderPassState->GetViewport();
