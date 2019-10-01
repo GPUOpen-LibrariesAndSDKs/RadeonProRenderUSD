@@ -27,15 +27,7 @@
 #define TF_MAX_ARITY 7
 #include "pxr/pxr.h"
 #include "pxr/base/arch/defines.h"
-
-#define __STRINGIZE_PATHX(x) #x
-#define __STRINGIZE_PATH(x) __STRINGIZE_PATHX(x)
-
-#ifdef BUILD_AS_HOUDINI_PLUGIN
-# define BOOST_INCLUDE_PATH(suffix) __STRINGIZE_PATH(hboost/suffix)
-#else
-# define BOOST_INCLUDE_PATH(suffix) __STRINGIZE_PATH(boost/suffix)
-#endif
+#include "boostIncludePath.h"
 
 #if defined(ARCH_OS_WINDOWS)
 # ifndef WIN32_LEAN_AND_MEAN

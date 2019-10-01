@@ -22,20 +22,9 @@ if(RPR_ENABLE_OPENVDB_SUPPORT)
     set(OptBin ${OptBin} ${OpenVDB_BINARIES})
 	set(OptIncludeDir ${OptIncludeDir} ${OpenVDB_INCLUDE_DIR})
 	set(OptClass ${OptClass} field volume)
-	
+
 
 endif(RPR_ENABLE_OPENVDB_SUPPORT)
-
-if(RPR_ENABLE_RIF_SUPPORT)
-	add_definitions(-DUSE_RIF )
-	
-	set(OptLibs  ${OptLibs} ${RIF_LIBRARY})
-    set(OptBin ${OptBin} ${RIF_BINARIES})
-	set(OptIncludeDir  ${OptIncludeDir} ${RIF_LOCATION_INCLUDE})
-	set(OptClass  ${OptClass} ImageFilter)
-	
-
-endif(RPR_ENABLE_RIF_SUPPORT)
 
 set(USD_LIBRARIES
     ar
@@ -83,6 +72,7 @@ pxr_plugin(hdRpr
    LIBRARIES
         ${USD_LIBRARIES}
         ${RPR_LIBRARY}
+        ${RIF_LIBRARY}
         ${Boost_LIBRARIES}
         ${TBB_LIBRARIES}
         ${GLEW_LIBRARY}
@@ -94,6 +84,7 @@ pxr_plugin(hdRpr
 
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
+	    ${RIF_LOCATION_INCLUDE}
         ${BUILD_TYPE_SPECIFIC_INCLUDE_DIRS}
         ${TBB_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIR}
@@ -126,11 +117,15 @@ pxr_plugin(hdRpr
         renderParam.h
 		materialFactory.h
 
+    PRIVATE_HEADERS
+        boostIncludePath.h
+
     RESOURCE_FILES
         plugInfo.json
 )
 
 add_subdirectory(rprcpp)
+add_subdirectory(rifcpp)
 
 # LINUX is not listed in default system variables (https://cmake.org/cmake/help/3.15/manual/cmake-variables.7.html)
 if(NOT DEFINED LINUX)
@@ -180,10 +175,10 @@ endif(NOT RPR_BUILD_AS_HOUDINI_PLUGIN)
 
 if(WIN32)
     install(
-        FILES ${RPR_BINARIES} ${OptBin}
+        FILES ${RPR_BINARIES} ${RIF_BINARIES} ${OptBin}
         DESTINATION bin)
 else(WIN32)
     install(
-        FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${OptLibs}
+        FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY} ${OptLibs}
         DESTINATION lib )
 endif(WIN32)

@@ -2,10 +2,12 @@
 #define RPRCPP_FRAMEBUFFER_H
 
 #include "rprObject.h"
-#include "rprException.h"
+#include "rprError.h"
 
 #include <RadeonProRender_CL.h>
 #include <memory>
+
+PXR_NAMESPACE_OPEN_SCOPE
 
 namespace rpr {
 
@@ -16,7 +18,7 @@ public:
 
     FrameBuffer(rpr_context context, rpr_uint width, rpr_uint height);
     FrameBuffer(FrameBuffer&& fb) noexcept;
-    ~FrameBuffer();
+    virtual ~FrameBuffer();
 
     FrameBuffer const& operator=(FrameBuffer&& fb) noexcept;
 
@@ -47,5 +49,7 @@ private:
 };
 
 } // namespace rpr
+
+PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // RPRCPP_FRAMEBUFFER_H

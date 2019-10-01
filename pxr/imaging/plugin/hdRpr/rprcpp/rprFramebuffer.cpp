@@ -1,5 +1,7 @@
 #include "rprFramebuffer.h"
 
+PXR_NAMESPACE_OPEN_SCOPE
+
 namespace rpr {
 
 FrameBuffer::FrameBuffer(rpr_context context, rpr_uint width, rpr_uint height)
@@ -94,7 +96,10 @@ std::shared_ptr<char> FrameBuffer::GetData(std::shared_ptr<char> buffer, size_t*
         }
     }
 
-    RPR_ERROR_CHECK_THROW(rprFrameBufferGetInfo(GetHandle(), RPR_FRAMEBUFFER_DATA, size, buffer.get(), nullptr), "Failed to get framebuffer data", m_context);
+    if (RPR_ERROR_CHECK(rprFrameBufferGetInfo(GetHandle(), RPR_FRAMEBUFFER_DATA, size, buffer.get(), nullptr), "Failed to get framebuffer data", m_context)) {
+        return nullptr;
+    }
+
     return buffer;
 }
 
@@ -149,3 +154,5 @@ void FrameBuffer::Delete() {
 }
 
 } // namespace rpr
+
+PXR_NAMESPACE_CLOSE_SCOPE

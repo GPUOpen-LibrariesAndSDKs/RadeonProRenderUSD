@@ -1,12 +1,12 @@
-#ifndef RPRCPP_OBJECT_H
-#define RPRCPP_OBJECT_H
+#ifndef RIFCPP_OBJECT_H
+#define RIFCPP_OBJECT_H
 
-#include <RadeonProRender.h>
+#include <RadeonImageFilters.h>
 #include <pxr/pxr.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-namespace rpr {
+namespace rif {
 
 class Object {
 public:
@@ -15,10 +15,10 @@ public:
     Object& operator=(Object const&) = delete;
 
     void Delete() {
-        if (m_rprObjectHandle) {
-            rprObjectDelete(m_rprObjectHandle);
+        if (m_rifObjectHandle) {
+            rifObjectDelete(m_rifObjectHandle);
         }
-        m_rprObjectHandle = nullptr;
+        m_rifObjectHandle = nullptr;
     }
 
     ~Object() {
@@ -26,11 +26,11 @@ public:
     }
 
 protected:
-    void* m_rprObjectHandle = nullptr;
+    void* m_rifObjectHandle = nullptr;
 };
 
-} // namespace rpr
+} // namespace rif
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-#endif // RPRCPP_OBJECT_H
+#endif // RIFCPP_OBJECT_H

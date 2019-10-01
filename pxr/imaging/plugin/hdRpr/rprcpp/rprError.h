@@ -3,23 +3,32 @@
 
 #include <RadeonProRender.h>
 #include <pxr/base/arch/functionLite.h>
+#include <pxr/pxr.h>
 #include <stdexcept>
+#include <cassert>
 #include <string>
 
-#define RPR_ERROR_CHECK_THROW(status, msg, context) \
+#define RPR_ERROR_CHECK_THROW(status, msg, ...) \
     do { \
         auto st = status; \
         if (st != RPR_SUCCESS) { \
-            throw rpr::Error(msg, st, context); \
+            assert(false); \
+            throw rpr::Error(msg, st, ##__VA_ARGS__); \
         } \
     } while(0);
 
 #define RPR_ERROR_CHECK(status, msg, ...) \
     rpr::IsErrorCheck(__ARCH_FILE__, __ARCH_PRETTY_FUNCTION__, __LINE__, status, msg, ##__VA_ARGS__)
 
+PXR_NAMESPACE_OPEN_SCOPE
+
 namespace rpr {
 
 inline std::string ConstructErrorMessage(const char* messageOnFail, rpr_status errorStatus, rpr_context context) {
+    if (errorStatus == RPR_SUCCESS) {
+        return messageOnFail;
+    }
+
     auto rprErrorString = [](const rpr_status s) -> std::string {
         switch (s)
         {
@@ -69,12 +78,14 @@ inline bool IsErrorCheck(char const* file, char const* function, size_t line, co
 
 class Error : public std::runtime_error {
 public:
-    Error(const char* messageOnFail, rpr_status errorStatus, rpr_context context)
+    Error(const char* messageOnFail, rpr_status errorStatus, rpr_context context = nullptr)
         : std::runtime_error(ConstructErrorMessage(messageOnFail, errorStatus, context)) {
 
     }
 };
 
 } // namespace rpr
+
+PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // RPRCPP_EXCEPTION_H

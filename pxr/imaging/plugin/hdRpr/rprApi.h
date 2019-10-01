@@ -11,6 +11,7 @@
 #include "pxr/base/vt/array.h"
 #include "pxr/base/gf/matrix4d.h"
 #include "pxr/base/gf/matrix4f.h"
+#include "pxr/imaging/hd/types.h"
 
 #include <memory>
 
@@ -40,6 +41,7 @@ enum class HdRprRenderDevice
     (color)                                     \
     (albedo)                                    \
     (depth)                                     \
+    (linearDepth)                               \
     (primId)                                    \
     (instanceId)                                \
     (elementId)                                 \
@@ -116,7 +118,7 @@ public:
     void SetCameraViewMatrix(const GfMatrix4d& m );
     void SetCameraProjectionMatrix(const GfMatrix4d& m);
 
-    void EnableAov(TfToken const& aovName);
+    void EnableAov(TfToken const& aovName, HdFormat format = HdFormatCount);
     void DisableAov(TfToken const& aovName);
     void DisableAovs();
     bool IsAovEnabled(TfToken const& aovName);
@@ -125,20 +127,18 @@ public:
     void ResizeAovFramebuffers(int width, int height);
     void GetFramebufferSize(GfVec2i* resolution) const;
     std::shared_ptr<char> GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer = nullptr, size_t* bufferSize = nullptr);
-    GLuint GetFramebufferGL();
     void ClearFramebuffers();
 
     void Render();
 
-    void DeleteRprApiObject(RprApiObject object);
     void DeleteMesh(RprApiObject mesh);
 
     bool IsGlInteropUsed() const;
 
-    static void SetRenderDevice(const HdRprRenderDevice& renderMode);
+    static void SetRenderDevice(int renderDevice);
     static void SetDenoising(bool enableDenoising);
-    static void SetHybridQuality(HdRprHybridQuality quality);
-    static void SetRendererPlugin(HdRprPluginType plugin);
+    static void SetHybridQuality(int quality);
+    static void SetRendererPlugin(int plugin);
 
     static int GetPluginType();
     static const char* GetTmpDir();
