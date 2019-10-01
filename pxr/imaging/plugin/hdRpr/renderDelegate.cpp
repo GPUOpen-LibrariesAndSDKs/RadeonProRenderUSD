@@ -273,15 +273,12 @@ HdRprDelegate::DestroyBprim(HdBprim *bPrim)
 }
 
 HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) const {
-    // XXX: Disable depth AOV until usdview fix kludges in AOV system
-    if (name == HdAovTokens->depth) {
-        return HdAovDescriptor();
-    }
-
     HdParsedAovToken aovId(name);
     if (name != HdAovTokens->color &&
         name != HdAovTokens->normal &&
         name != HdAovTokens->primId &&
+        name != HdAovTokens->depth &&
+        name != HdAovTokens->linearDepth &&
         !(aovId.isPrimvar && aovId.name == "st")) {
         // TODO: implement support for instanceId and elementId aov
         return HdAovDescriptor();
@@ -290,8 +287,9 @@ HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) cons
     HdFormat format = HdFormatInvalid;
 
     float clearColorValue = 0.0f;
-    if (name == HdAovTokens->depth) {
-        clearColorValue = 1.0f;
+    if (name == HdAovTokens->depth ||
+        name == HdAovTokens->linearDepth) {
+        clearColorValue = name == HdAovTokens->linearDepth ? 0.0f : 1.0f;
         format = HdFormatFloat32;
     } else if (name == HdAovTokens->color) {
         format = HdFormatUNorm8Vec4;
@@ -318,26 +316,17 @@ int IsRprDenoisingEnabled()
 
 void SetRprGlobalRenderDevice(int renderDevice)
 {
-	switch (renderDevice)
-	{
-	case 1:
-		PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::GPU);
-		return;
-	default:
-		break;
-	}
-
-	PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(PXR_INTERNAL_NS::HdRprRenderDevice::CPU);
+    PXR_INTERNAL_NS::HdRprApi::SetRenderDevice(renderDevice);
 }
 
 void SetRprRendererPlugin(int pluginIdx)
 {
-	PXR_INTERNAL_NS::HdRprApi::SetRendererPlugin(PXR_INTERNAL_NS::HdRprPluginType(pluginIdx));
+	PXR_INTERNAL_NS::HdRprApi::SetRendererPlugin(pluginIdx);
 }
 
 void SetRprHybridQuality(int quality)
 {
-	PXR_INTERNAL_NS::HdRprApi::SetHybridQuality(PXR_INTERNAL_NS::HdRprHybridQuality(quality));
+	PXR_INTERNAL_NS::HdRprApi::SetHybridQuality(quality);
 }
 
 const char* GetRprTmpDir()

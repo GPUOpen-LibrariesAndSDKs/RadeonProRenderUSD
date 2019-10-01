@@ -1,41 +1,25 @@
 #include "rprApi.h"
 #include "rprcpp/rprFramebufferGL.h"
+#include "rprcpp/rprContext.h"
+#include "rifcpp/rifFilter.h"
+#include "rifcpp/rifImage.h"
 
 #include "RadeonProRender.h"
 #include "RadeonProRender_CL.h"
 #include "RadeonProRender_GL.h"
-
-#include "../RprTools.h"
-#include "../RprTools.cpp"
 
 #include "material.h"
 #include "materialFactory.h"
 #include "materialAdapter.h"
 
 #include <vector>
+#include <mutex>
 
 #include <pxr/imaging/pxOsd/tokens.h>
-#include <pxr/base/arch/env.h>
-
-#ifdef USE_RIF
-#include "ImageFilter.h"
-#endif // USE_RIF
-
-#ifdef WIN32
-#include <shlobj_core.h>
-#pragma comment(lib,"Shell32.lib")
-#elif __APPLE__
-#include <mach-o/dyld.h>
-#include <mach-o/getsect.h>
-#include <dlfcn.h>
-#else
-
-#endif // WIN32
 
 #define PRINTER(name) printer(#name, (name))
 
-// we lock()/unlock() around rpr calls that might be called multithreaded.
-#define SAFE_DELETE_RPR_OBJECT(x) if(x) {lock(); rprObjectDelete( x ); x = nullptr; unlock();}
+#define SAFE_DELETE_RPR_OBJECT(x) if(x) {RecursiveLockGuard rprLock(m_rprAccessMutex); rprObjectDelete(x); x = nullptr;}
 #define INVALID_GL_TEXTURE 0
 #define INVALID_GL_FRAMEBUFFER 0
 
@@ -45,166 +29,18 @@ TF_DEFINE_PUBLIC_TOKENS(HdRprAovTokens, HD_RPR_AOV_TOKENS);
 
 namespace
 {
-#if defined __APPLE__
-	const char* k_RadeonProRenderLibName = "libRadeonProRender64.dylib";
-#endif
+    using RecursiveLockGuard = std::lock_guard<std::recursive_mutex>;
 
-	const char* k_PluginLibNames[] = {
-#ifdef WIN32
-		"Tahoe64.dll",
-		"Hybrid.dll",
-#elif defined __linux__
-		"libTahoe64.so",
-		"libHybrid.so",
-#elif defined __APPLE__
-		"libTahoe64.dylib",
-		"libHybrid.dylib",
-#endif
-	};
+    const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
 
-	constexpr const rpr_uint k_defaultFbWidth = 800;
-	constexpr const rpr_uint k_defaultFbHeight = 600;
+    const uint32_t k_diskVertexCount = 32;
 
-	const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
+    constexpr const char * k_pathToRprPreference = "hdRprPreferences.dat";
 
-	const uint32_t k_diskVertexCount = 32;
-
-	constexpr const char * k_pathToRprPreference = "hdRprPreferences.dat";
-
-	template <typename T, typename... Args>
-	std::unique_ptr<T> make_unique(Args&&... args) {
-		return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-	}
-}
-
-inline TfToken HdRprAovToToken(HdRprAov aov) {
-    switch (aov)
-    {
-    case HdRprAov::COLOR:
-        return HdRprAovTokens->color;
-    case HdRprAov::NORMAL:
-        return HdRprAovTokens->normal;
-    case HdRprAov::ALBEDO:
-        return HdRprAovTokens->albedo;
-    case HdRprAov::DEPTH:
-        return HdRprAovTokens->depth;
-    case HdRprAov::PRIM_ID:
-        return HdRprAovTokens->primId;
-    case HdRprAov::UV:
-        return HdRprAovTokens->primvarsSt;
-    default:
-        return TfToken();
+    template <typename T, typename... Args>
+    std::unique_ptr<T> make_unique(Args&&... args) {
+        return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
     }
-}
-
-const char* HdRprApi::GetTmpDir() {
-#ifdef WIN32
-	char appDataPath[MAX_PATH];
-	// Get path for each computer, non-user specific and non-roaming data.
-	if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath)))
-	{
-		static char path[MAX_PATH];
-		snprintf(path, sizeof(path), "%s\\hdRPR\\", appDataPath);
-		return path;
-	}
-#elif defined __linux__
-	if (auto homeEnv = getenv("HOME")) {
-		static char path[PATH_MAX];
-		snprintf(path, sizeof(path), "%s/.config/hdRPR/", homeEnv);
-		return path;
-	}
-#elif defined __APPLE__
-    if (auto homeEnv = getenv("HOME")) {
-        static char path[PATH_MAX];
-        snprintf(path, sizeof(path), "%s/Library/Application Support/hdRPR/", homeEnv);
-        return path;
-    }
-#else
-#warning "Unknown platform"
-#endif
-	return "";
-}
-
-std::string GetRprSdkPath()
-{
-#ifdef __APPLE__
-    uint32_t count = _dyld_image_count();
-            std::string pathToRpr;
-            for (uint32_t i = 0; i < count; ++i) {
-                    const mach_header *header = _dyld_get_image_header(i);
-                    if (!header) { break; }
-                    char *code_ptr = NULL;
-                    uint64_t size;
-                    code_ptr = getsectdatafromheader_64((const mach_header_64 *)header, SEG_TEXT, SECT_TEXT, &size);
-                    if (!code_ptr) { continue; }
-                    const uintptr_t slide = _dyld_get_image_vmaddr_slide(i);
-                    const uintptr_t start = (const uintptr_t)code_ptr + slide;
-                    Dl_info info;
-                    if (dladdr((const void *)start, &info)) {
-                            std::string dlpath(info.dli_fname);
-                            std::size_t found = dlpath.find(k_RadeonProRenderLibName);
-                            if(found != std::string::npos)
-                            {
-                                return dlpath.substr(0, found);
-                            }
-                    }
-            }
-
-    TF_CODING_ERROR("Path to RPR SDK with %s not found", k_RadeonProRenderLibName);
-#endif // __APPLE__
-
-    return std::string();
-}
-
-rpr_creation_flags getAllCompatibleGpuFlags(rpr_int pluginID, const char* cachePath)
-{
-    rpr_creation_flags additionalFlags = 0x0;
-#ifdef WIN32
-    RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_WINDOWS;
-#elif defined(__APPLE__)
-    RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_MACOS;
-    additionalFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
-#else
-    RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_LINUX;
-#endif // WIN32
-
-    rpr_creation_flags creationFlags = 0x0;
-#define TEST_GPU_COMPATIBILITY(index) \
-    if (rprIsDeviceCompatible(pluginID, RPRTD_GPU ## index, cachePath, false, rprToolOs, additionalFlags) == RPRTC_COMPATIBLE) { \
-        creationFlags |= RPR_CREATION_FLAGS_ENABLE_GPU ## index; \
-    }
-
-    TEST_GPU_COMPATIBILITY(0);
-    TEST_GPU_COMPATIBILITY(1);
-    TEST_GPU_COMPATIBILITY(2);
-    TEST_GPU_COMPATIBILITY(3);
-    TEST_GPU_COMPATIBILITY(4);
-    TEST_GPU_COMPATIBILITY(5);
-    TEST_GPU_COMPATIBILITY(6);
-    TEST_GPU_COMPATIBILITY(7);
-
-    return creationFlags;
-}
-
-const rpr_creation_flags getRprCreationFlags(const HdRprRenderDevice renderDevice, rpr_int pluginID, const char* cachePath)
-{
-	rpr_creation_flags flags = 0x0;
-
-	if (HdRprRenderDevice::CPU == renderDevice)
-	{
-		flags = RPR_CREATION_FLAGS_ENABLE_CPU;
-	}
-	else if (HdRprRenderDevice::GPU == renderDevice)
-	{
-		flags = getAllCompatibleGpuFlags(pluginID, cachePath);
-	}
-	else
-	{
-		TF_CODING_ERROR("Unknown HdRprRenderDevice");
-		return 0x0;
-	}
-
-	return flags;
 }
 
 class HdRprPreferences
@@ -216,17 +52,15 @@ public:
 		return instance;
 	}
 
-	void SetRenderDevice(const HdRprRenderDevice & renderDevice)
-	{
-		m_prefData.mRenderDevice = renderDevice;
-		Save();
-		SetDitry(true);
-	}
+    void SetRenderDevice(rpr::RenderDeviceType renderDevice) {
+        m_prefData.mRenderDevice = renderDevice;
+        Save();
+        SetDitry(true);
+    }
 
-	HdRprRenderDevice GetRenderDevice() const
-	{
-		return m_prefData.mRenderDevice;
-	}
+    rpr::RenderDeviceType GetRenderDevice() const {
+        return m_prefData.mRenderDevice;
+    }
 
 	void SetHybridQuality(HdRprHybridQuality quality)
 	{
@@ -248,20 +82,17 @@ public:
 		return m_prefData.mHybridQuality;
 	}
 
-	void SetPlugin(HdRprPluginType plugin)
-	{
-		if (m_prefData.mPlugin != plugin)
-		{
-			m_prefData.mPlugin = plugin;
-			Save();
-			SetDitry(true);
-		}
-	}
+    void SetPlugin(rpr::PluginType plugin) {
+        if (m_prefData.mPlugin != plugin) {
+            m_prefData.mPlugin = plugin;
+            Save();
+            SetDitry(true);
+        }
+    }
 
-	HdRprPluginType GetPlugin()
-	{
-		return m_prefData.mPlugin;
-	}
+    rpr::PluginType GetPlugin() {
+        return m_prefData.mPlugin;
+    }
 
 	void SetDenoising(bool enableDenoising)
 	{
@@ -343,26 +174,24 @@ private:
 		}
 	}
 
-	bool IsValid()
-	{
-		return (m_prefData.mRenderDevice >= HdRprRenderDevice::FIRST && m_prefData.mRenderDevice <= HdRprRenderDevice::LAST);
-	}
+    bool IsValid() {
+        return m_prefData.mRenderDevice >= rpr::RenderDeviceType::FIRST && m_prefData.mRenderDevice <= rpr::RenderDeviceType::LAST &&
+               m_prefData.mPlugin >= rpr::PluginType::FIRST && m_prefData.mPlugin <= rpr::PluginType::LAST;
+    }
 
-	void SetDefault()
-	{
-		m_prefData.mRenderDevice = HdRprRenderDevice::GPU;
-		m_prefData.mPlugin = HdRprPluginType::TAHOE;
-		m_prefData.mHybridQuality = HdRprHybridQuality::LOW;
-		m_prefData.mEnableDenoising = false;
-	}
+    void SetDefault() {
+        m_prefData.mRenderDevice = rpr::RenderDeviceType::GPU;
+        m_prefData.mPlugin = rpr::PluginType::TAHOE;
+        m_prefData.mHybridQuality = HdRprHybridQuality::LOW;
+        m_prefData.mEnableDenoising = false;
+    }
 
-	struct PrefData
-	{
-		HdRprRenderDevice mRenderDevice = HdRprRenderDevice::GPU;
-		HdRprPluginType mPlugin = HdRprPluginType::TAHOE;
-		HdRprHybridQuality mHybridQuality = HdRprHybridQuality::LOW;
-		bool mEnableDenoising = false;
-	} m_prefData;
+    struct PrefData {
+        rpr::RenderDeviceType mRenderDevice = rpr::RenderDeviceType::GPU;
+        rpr::PluginType mPlugin = rpr::PluginType::TAHOE;
+        HdRprHybridQuality mHybridQuality = HdRprHybridQuality::LOW;
+        bool mEnableDenoising = false;
+    } m_prefData;
 
 
 	bool m_isDirty = true;
@@ -373,6 +202,7 @@ static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
     {HdRprAovTokens->color, RPR_AOV_COLOR},
     {HdRprAovTokens->albedo, RPR_AOV_DIFFUSE_ALBEDO},
     {HdRprAovTokens->depth, RPR_AOV_DEPTH},
+    {HdRprAovTokens->linearDepth, RPR_AOV_DEPTH},
     {HdRprAovTokens->primId, RPR_AOV_OBJECT_ID},
     {HdRprAovTokens->normal, RPR_AOV_SHADING_NORMAL},
     {HdRprAovTokens->worldCoordinate, RPR_AOV_WORLD_COORDINATE},
@@ -385,6 +215,7 @@ public:
 	void Init()
 	{
 		InitRpr();
+		InitRif();
 		InitMaterialSystem();
 		CreateScene();
 		CreatePosteffects();
@@ -400,38 +231,32 @@ public:
 
         DisableAovs();
 
-        if (m_glFramebuffer != INVALID_GL_FRAMEBUFFER)
-        {
-            glDeleteFramebuffers(1, &m_glFramebuffer);
-            m_glFramebuffer = INVALID_GL_FRAMEBUFFER;
-        }
 
         for (auto rprObject : m_rprObjectsToRelease)
         {
             SAFE_DELETE_RPR_OBJECT(rprObject);
         }
-		SAFE_DELETE_RPR_OBJECT(m_context);
 	}
 
 	void CreateScene() {
 
-		if (!m_context)
+		if (!m_rprContext)
 		{
 			return;
 		}
 
-		if (RPR_ERROR_CHECK(rprContextCreateScene(m_context, &m_scene), "Fail to create scene")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateScene(m_rprContext->GetHandle(), &m_scene), "Fail to create scene")) return;
         m_rprObjectsToRelease.push_back(m_scene);
-		if (RPR_ERROR_CHECK(rprContextSetScene(m_context, m_scene), "Fail to set scene")) return;
+		if (RPR_ERROR_CHECK(rprContextSetScene(m_rprContext->GetHandle(), m_scene), "Fail to set scene")) return;
 	}
 
 	void CreateCamera() {
-		if (!m_context)
+		if (!m_rprContext)
 		{
 			return;
 		}
 
-		RPR_ERROR_CHECK(rprContextCreateCamera(m_context, &m_camera), "Fail to create camera");
+        RPR_ERROR_CHECK(rprContextCreateCamera(m_rprContext->GetHandle(), &m_camera), "Fail to create camera");
         m_rprObjectsToRelease.push_back(m_camera);
 		RPR_ERROR_CHECK(rprCameraLookAt(m_camera, 20.0f, 60.0f, 40.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f), "Fail to set camera Look At");
 
@@ -439,12 +264,12 @@ public:
 		RPR_ERROR_CHECK(rprCameraSetSensorSize(m_camera, sensorSize[0], sensorSize[1]), "Fail to to set camera sensor size");
 		RPR_ERROR_CHECK(rprSceneSetCamera(m_scene, m_camera), "Fail to to set camera to scene");
 
-        m_isFrameBuffersDirty = true;
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
 	}
 
 	void * CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf, rpr_material_node material = nullptr)
 	{
-		if (!m_context)
+		if (!m_rprContext)
 		{
 			return nullptr;
 		}
@@ -464,8 +289,9 @@ public:
 			SplitPolygons(normalIndexes, vpf, newNormalIndexes);
 		}
 
-		lock();
-		if (RPR_ERROR_CHECK(rprContextCreateMesh(m_context,
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+
+		if (RPR_ERROR_CHECK(rprContextCreateMesh(m_rprContext->GetHandle(),
 			(rpr_float const*)points.data(), points.size(), sizeof(GfVec3f),
 			(rpr_float const*)((normals.size() == 0) ? 0 : normals.data()), normals.size(), sizeof(GfVec3f),
 			(rpr_float const*)((uv.size() == 0) ? 0 : uv.data()), uv.size(), sizeof(GfVec2f),
@@ -474,116 +300,112 @@ public:
 			(rpr_int const*)(!newUvIndexes.empty() ? newUvIndexes.data() : newIndexes.data()), sizeof(rpr_int),
 			newVpf.data(), newVpf.size(), &mesh)
 			, "Fail create mesh")) {
-			unlock();
 			return nullptr;
 		}
 
-        if (RPR_ERROR_CHECK(rprSceneAttachShape(m_scene, mesh), "Fail attach mesh to scene")) return nullptr;
+		if (RPR_ERROR_CHECK(rprSceneAttachShape(m_scene, mesh), "Fail attach mesh to scene")) {
+			rprObjectDelete(mesh);
+			return nullptr;
+		}
 
-        if (material)
-        {
-            rprShapeSetMaterial(mesh, material);
-        }
+		if (material) {
+			rprShapeSetMaterial(mesh, material);
+		}
 
-        unlock();
-
-        m_isFrameBuffersDirty = true;
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
 		return mesh;
 	}
 
-	void SetMeshTransform(rpr_shape mesh, const GfMatrix4f & transform)
-	{
-		lock();
-		RPR_ERROR_CHECK(rprShapeSetTransform(mesh, false, transform.GetArray()), "Fail set mesh transformation");
-        m_isFrameBuffersDirty = true;
-        unlock();
-	}
+    void SetMeshTransform(rpr_shape mesh, const GfMatrix4f& transform) {
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+        if (!RPR_ERROR_CHECK(rprShapeSetTransform(mesh, false, transform.GetArray()), "Fail set mesh transformation")) {
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+    }
 
-	void SetMeshRefineLevel(rpr_shape mesh, const int level, const TfToken boundaryInterpolation)
-	{
-		if (m_currentPlugin == HdRprPluginType::HYBRID)
-		{
-			// Not supported
-			return;
-		}
+    void SetMeshRefineLevel(rpr_shape mesh, const int level, const TfToken boundaryInterpolation) {
+        if (!m_rprContext) {
+            return;
+        }
 
-		rpr_int status;
-		lock();
-		status = RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, level), "Fail set mesh subdividion");
-		unlock();
+        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+            // Not supported
+            return;
+        }
 
-		if (status != RPR_SUCCESS) {
-			return;
-		}
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
 
-		if (level > 0) {
-			rpr_subdiv_boundary_interfop_type interfopType = boundaryInterpolation == PxOsdOpenSubdivTokens->edgeAndCorner ?
+        if (RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, level), "Fail set mesh subdividion")) return;
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+
+        if (level > 0) {
+            rpr_subdiv_boundary_interfop_type interfopType = boundaryInterpolation == PxOsdOpenSubdivTokens->edgeAndCorner ?
                 RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_AND_CORNER :
                 RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
-			RPR_ERROR_CHECK(rprShapeSetSubdivisionBoundaryInterop(mesh, interfopType),"Fail set mesh subdividion boundary");
-		}
+            if (RPR_ERROR_CHECK(rprShapeSetSubdivisionBoundaryInterop(mesh, interfopType), "Fail set mesh subdividion boundary")) return;
+        }
+    }
 
-        m_isFrameBuffersDirty = true;
-	}
 
 	void SetMeshMaterial(rpr_shape mesh, const RprApiMaterial * material)
 	{
-		lock();
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
 		m_rprMaterialFactory->AttachMaterialToShape(mesh, material);
-        m_isFrameBuffersDirty = true;
-		unlock();
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
 	}
+
 	void SetMeshHeteroVolume(rpr_shape mesh, const RprApiObject heteroVolume)
 	{
-		RPR_ERROR_CHECK(rprShapeSetHeteroVolume(mesh, heteroVolume), "Fail set mesh hetero volume");
-        m_isFrameBuffersDirty = true;
+		RecursiveLockGuard rprLock(m_rprAccessMutex);
+		if (!RPR_ERROR_CHECK(rprShapeSetHeteroVolume(mesh, heteroVolume), "Fail set mesh hetero volume"))
+		{
+			m_dirtyFlags |= ChangeTracker::DirtyScene;
+		}
 	}
 
 	void SetCurveMaterial(rpr_shape curve, const RprApiMaterial * material)
 	{
-		lock();
+		RecursiveLockGuard rprLock(m_rprAccessMutex);
 		m_rprMaterialFactory->AttachCurveToShape(curve, material);
-        m_isFrameBuffersDirty = true;
-		unlock();
+		m_dirtyFlags |= ChangeTracker::DirtyScene;
 	}
 
 	void * CreateMeshInstance(rpr_shape mesh)
 	{
-		if (!m_context)
+		if (!m_rprContext)
 		{
 			return nullptr;
 		}
 
-		rpr_int status;
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+
 		rpr_shape meshInstance;
-		lock();
-		status = RPR_ERROR_CHECK(rprContextCreateInstance(m_context, mesh, &meshInstance), "Fail to create mesh instance");
-		if (status != RPR_SUCCESS) {
-			unlock();
+		if (RPR_ERROR_CHECK(rprContextCreateInstance(m_rprContext->GetHandle(), mesh, &meshInstance), "Fail to create mesh instance")) {
 			return nullptr;
 		}
 
-		status = RPR_ERROR_CHECK(rprSceneAttachShape(m_scene, meshInstance), "Fail to attach mesh instance");
-		if (status != RPR_SUCCESS) {
-			unlock();
+		if (RPR_ERROR_CHECK(rprSceneAttachShape(m_scene, meshInstance), "Fail to attach mesh instance")) {
+			rprObjectDelete(meshInstance);
 			return nullptr;
 		}
 
-        m_isFrameBuffersDirty = true;
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
 
-		unlock();
 		return meshInstance;
 	}
 
 	void SetMeshVisibility(rpr_shape mesh, bool isVisible)
 	{
-		RPR_ERROR_CHECK(rprShapeSetVisibility(mesh, isVisible), "Fail to set mesh visibility");
-        m_isFrameBuffersDirty = true;
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+
+		if (!RPR_ERROR_CHECK(rprShapeSetVisibility(mesh, isVisible), "Fail to set mesh visibility")) {
+			m_dirtyFlags |= ChangeTracker::DirtyScene;
+		}
 	}
 
 	void * CreateCurve(const VtVec3fArray & points, const VtIntArray & indexes, const float & width)
 	{
-		if (!m_context || points.empty() || indexes.empty())
+		if (!m_rprContext || points.empty() || indexes.empty())
 		{
 			return nullptr;
 		}
@@ -612,8 +434,9 @@ public:
 		std::vector<float> curveWidths(points.size(), width);
 		std::vector<int> segmentsPerCurve(points.size(), segmentPerCurve);
 
-		lock();
-		if (RPR_ERROR_CHECK(rprContextCreateCurve(m_context,
+		RecursiveLockGuard rprLock(m_rprAccessMutex);
+
+		if (RPR_ERROR_CHECK(rprContextCreateCurve(m_rprContext->GetHandle(),
 			&curve
 			, newPoints.size()
 			, (float*)newPoints.data()
@@ -624,21 +447,21 @@ public:
 			, &width, NULL
 			, segmentsPerCurve.data()), "Fail to create curve"))
 		{
-			unlock();
 			return nullptr;
-		};
-		unlock();
+		}
 
+		if (RPR_ERROR_CHECK(rprSceneAttachCurve(m_scene, curve), "Fail to attach curve")) {
+			rprObjectDelete(curve);
+			return nullptr;
+		}
 
-		if (RPR_ERROR_CHECK(rprSceneAttachCurve(m_scene, curve), "Fail to attach curve")) return nullptr;
-
-        m_isFrameBuffersDirty = true;
+		m_dirtyFlags |= ChangeTracker::DirtyScene;
 		return curve;
 	}
 
 	void CreateEnvironmentLight(const std::string & path, float intensity)
 	{
-		if (!m_context)
+		if (!m_rprContext)
 		{
 			return;
 		}
@@ -646,13 +469,14 @@ public:
 		rpr_light light;
 		rpr_image image = nullptr;
 
-		if (RPR_ERROR_CHECK(rprContextCreateImageFromFile(m_context, path.c_str(), &image), std::string("Fail to load image ") + path)) return;
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+		if (RPR_ERROR_CHECK(rprContextCreateImageFromFile(m_rprContext->GetHandle(), path.c_str(), &image), std::string("Fail to load image ") + path)) return;
         m_rprObjectsToRelease.push_back(image);
-		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_context, &light), "Fail to create environment light")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_rprContext->GetHandle(), &light), "Fail to create environment light")) return;
         m_rprObjectsToRelease.push_back(light);
-		if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image),"Fail to set image to environment light")) return;
+		if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image), "Fail to set image to environment light")) return;
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetIntensityScale(light, intensity), "Fail to set environment light intencity")) return;
-		if (m_currentPlugin == HdRprPluginType::HYBRID)
+		if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID)
 		{
 			if (RPR_ERROR_CHECK(rprSceneSetEnvironmentLight(m_scene, light), "Fail to set environment light")) return;
 		}
@@ -662,12 +486,12 @@ public:
 		}
 
 		m_isLightPresent = true;
-        m_isFrameBuffersDirty = true;
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
 	}
 
 	void CreateEnvironmentLight(GfVec3f color, float intensity)
 	{
-		if (!m_context)
+		if (!m_rprContext)
 		{
 			return;
 		}
@@ -680,18 +504,17 @@ public:
 		// Set the background image to a solid color.
 		std::array<float, 3> backgroundColor = { color[0],  color[1],  color[2] };
 		rpr_image_format format = { 3, RPR_COMPONENT_TYPE_FLOAT32 };
-		rpr_uint imageSize = m_currentPlugin == HdRprPluginType::HYBRID ? 64 : 1;
+		rpr_uint imageSize = m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID ? 64 : 1;
 		rpr_image_desc desc = { imageSize, imageSize, 0, static_cast<rpr_uint>(imageSize * imageSize * 3 * sizeof(float)), 0 };
 		std::vector<std::array<float, 3>> imageData(imageSize * imageSize, backgroundColor);
-		//lock();
 
-		if (RPR_ERROR_CHECK(rprContextCreateImage(m_context, format, &desc, imageData.data(), &image),"Fail to create image from color")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateImage(m_rprContext->GetHandle(), format, &desc, imageData.data(), &image), "Fail to create image from color")) return;
         m_rprObjectsToRelease.push_back(image);
-		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_context, &light), "Fail to create environment light")) return;
+		if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_rprContext->GetHandle(), &light), "Fail to create environment light")) return;
         m_rprObjectsToRelease.push_back(light);
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image), "Fail to set image to environment light")) return;
 		if (RPR_ERROR_CHECK(rprEnvironmentLightSetIntensityScale(light, intensity), "Fail to set environment light intensity")) return;
-		if (m_currentPlugin == HdRprPluginType::HYBRID)
+		if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID)
 		{
 			if (RPR_ERROR_CHECK(rprSceneSetEnvironmentLight(m_scene, light), "Fail to set environment light")) return;
 		}
@@ -700,6 +523,7 @@ public:
 			if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene, light), "Fail to attach environment light to scene")) return;
 		}
 		m_isLightPresent = true;
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
 	}
 
 	void * CreateRectLightGeometry(const float & width, const float & height)
@@ -812,31 +636,29 @@ public:
 
 	RprApiMaterial* CreateMaterial(const MaterialAdapter & materialAdapter)
 	{
-		if (!m_context)
+		if (!m_rprContext)
 		{
 			return nullptr;
 		}
 
-		lock();
 		RprApiMaterial* material = nullptr;
 		if (m_rprMaterialFactory) {
-            material = m_rprMaterialFactory->CreateMaterial(materialAdapter.GetType(), materialAdapter);
+			RecursiveLockGuard rprLock(m_rprAccessMutex);
+			material = m_rprMaterialFactory->CreateMaterial(materialAdapter.GetType(), materialAdapter);
 		}
-		unlock();
 
 		return material;
 	}
 
     void DeleteMaterial(RprApiMaterial* material)
     {
-        lock();
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
         m_rprMaterialFactory->DeleteMaterial(material);
-        unlock();
     }
 
 	void * CreateHeterVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & grigSize)
 	{
-		if (!m_context)
+		if (!m_rprContext)
 		{
 			return nullptr;
 		}
@@ -844,7 +666,7 @@ public:
 		rpr_hetero_volume heteroVolume = nullptr;
 
 		rpr_grid rprGridDencity;
-		if (RPR_ERROR_CHECK(rprContextCreateGrid(m_context, &rprGridDencity
+		if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridDencity
 			, grigSize[0], grigSize[1], grigSize[2], &indexesDencity[0]
 			, indexesDencity.size(), RPR_GRID_INDICES_TOPOLOGY_I_U64
 			, &gridDencityData[0], gridDencityData.size() * sizeof(gridDencityData[0])
@@ -853,7 +675,7 @@ public:
         m_rprObjectsToRelease.push_back(rprGridDencity);
 
 		rpr_grid rprGridAlbedo;
-		if (RPR_ERROR_CHECK(rprContextCreateGrid(m_context, &rprGridAlbedo
+		if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridAlbedo
 			, grigSize[0], grigSize[1], grigSize[2], &indexesAlbedo[0]
 			, indexesAlbedo.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
 			, &gridAlbedoData[0], gridAlbedoData.size() * sizeof(gridAlbedoData[0])
@@ -861,7 +683,7 @@ public:
 			, "Fail create albedo grid")) return nullptr;
         m_rprObjectsToRelease.push_back(rprGridAlbedo);
 
-		if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume( m_context, &heteroVolume), "Fail create hetero dencity volume")) return nullptr;
+		if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume(m_rprContext->GetHandle(), &heteroVolume), "Fail create hetero dencity volume")) return nullptr;
 		if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityGrid(heteroVolume, rprGridDencity), "Fail to set density hetero volume")) return nullptr;
 		if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoGrid(heteroVolume, rprGridAlbedo),"Fail to set albedo hetero volume")) return nullptr;
 		if (RPR_ERROR_CHECK(rprSceneAttachHeteroVolume(m_scene, heteroVolume), "Fail attach hetero volume to scene")) return nullptr;
@@ -876,10 +698,10 @@ public:
 
 	void * CreateVolume(const VtArray<float> & gridDencityData, const VtArray<size_t> & indexesDencity, const VtArray<float> & gridAlbedoData, const VtArray<unsigned int> & indexesAlbedo, const GfVec3i & grigSize, const GfVec3f & voxelSize, RprApiObject out_mesh, RprApiObject out_heteroVolume)
 	{
-		RprApiObject heteroVolume = CreateHeterVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, grigSize);
+		RecursiveLockGuard rprLock(m_rprAccessMutex);
 
-		if (!heteroVolume)
-		{
+		RprApiObject heteroVolume = CreateHeterVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, grigSize);
+		if (!heteroVolume) {
 			return nullptr;
 		}
 
@@ -888,6 +710,7 @@ public:
 
 		if (!cubeMesh)
 		{
+			// TODO: properly release created volume
 			return nullptr;
 		}
 
@@ -900,6 +723,7 @@ public:
 
 		if (!transperantMaterial)
 		{
+			// TODO: properly release created volume and mesh
 			return nullptr;
 		}
         m_materialsToRelease.push_back(transperantMaterial);
@@ -921,17 +745,17 @@ public:
 
 	void CreatePosteffects()
 	{
-		if (!m_context)
+		if (!m_rprContext)
 		{
 			return;
 		}
 
-		if (m_currentPlugin == HdRprPluginType::TAHOE)
+		if (m_rprContext->GetActivePluginType() == rpr::PluginType::TAHOE)
 		{
-			if (!RPR_ERROR_CHECK(rprContextCreatePostEffect(m_context, RPR_POST_EFFECT_TONE_MAP, &m_tonemap), "Fail to create post effect"))
+			if (!RPR_ERROR_CHECK(rprContextCreatePostEffect(m_rprContext->GetHandle(), RPR_POST_EFFECT_TONE_MAP, &m_tonemap), "Fail to create post effect"))
 			{
                 m_rprObjectsToRelease.push_back(m_tonemap);
-				RPR_ERROR_CHECK(rprContextAttachPostEffect(m_context, m_tonemap), "Fail to attach posteffect");
+				RPR_ERROR_CHECK(rprContextAttachPostEffect(m_rprContext->GetHandle(), m_tonemap), "Fail to attach posteffect");
 			}
 		}
 	}
@@ -949,16 +773,17 @@ public:
         GfVec3f n(wvm[0][2], wvm[1][2], wvm[2][2]);
         GfVec3f at(eye - n);
 
-        //lock();
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
         RPR_ERROR_CHECK(rprCameraLookAt(m_camera, eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]), "Fail to set camera Look At");
-        //unlock();
 
         m_cameraViewMatrix = m;
-        m_isFrameBuffersDirty = true;
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
     void SetCameraProjectionMatrix(const GfMatrix4d& proj) {
         if (!m_camera) return;
+
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
 
         float sensorSize[2];
 
@@ -968,7 +793,7 @@ public:
         if (RPR_ERROR_CHECK(rprCameraSetFocalLength(m_camera, focalLength), "Fail to set focal length parameter")) return;
 
         m_cameraProjectionMatrix = proj;
-        m_isFrameBuffersDirty = true;
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
     const GfMatrix4d& GetCameraViewMatrix() const {
@@ -979,12 +804,18 @@ public:
         return m_cameraProjectionMatrix;
     }
 
-    void EnableAov(TfToken const& aovName, bool setAsActive = false)
-    {
-        if (!m_context) return;
+    void EnableAov(TfToken const& aovName, HdFormat format = HdFormatInvalid, bool setAsActive = false) {
+        if (!m_rprContext) return;
 
-        if (IsAovEnabled(aovName))
-        {
+        auto rprAovIt = kAovTokenToRprAov.find(aovName);
+        if (rprAovIt == kAovTokenToRprAov.end()) {
+            TF_WARN("Unsupported aov type: %s", aovName.GetText());
+            return;
+        }
+
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+
+        if (IsAovEnabled(aovName)) {
             // While usdview does not have correct AOV system
             // we have ambiguity in currently selected AOV that we can't distinguish
             if (aovName == HdRprAovTokens->depth) {
@@ -993,46 +824,44 @@ public:
 
             if (setAsActive) {
                 if (m_currentAov != aovName) {
-                    m_isGlFramebufferDirty = true;
+                    m_dirtyFlags |= ChangeTracker::DirtyActiveAOV;
                 }
                 m_currentAov = aovName;
             }
             return;
         }
 
-        auto rprAovIt = kAovTokenToRprAov.find(aovName);
-        if (rprAovIt == kAovTokenToRprAov.end())
-        {
-            TF_WARN("Unsupported aov type: %s", aovName.GetText());
-            return;
-        }
-        lock();
         try {
             AovFrameBuffer aovFrameBuffer;
-            aovFrameBuffer.aov = make_unique<rpr::FrameBuffer>(m_context, m_fbWidth, m_fbHeight);
-            if (m_currentPlugin == HdRprPluginType::HYBRID && aovName == HdRprAovTokens->normal) {
-                // TODO: remove me when Hybrid gain RPR_AOV_GEOMETRIC_NORMAL support
-                aovFrameBuffer.aov->AttachAs(RPR_AOV_SHADING_NORMAL);
+            aovFrameBuffer.format = format;
+
+            // We compute depth from worldCoordinate in the postprocess step
+            if (aovName == HdRprAovTokens->depth) {
+                EnableAov(HdRprAovTokens->worldCoordinate);
             } else {
-                aovFrameBuffer.aov->AttachAs(rprAovIt->second);
+                aovFrameBuffer.aov = make_unique<rpr::FrameBuffer>(m_rprContext->GetHandle(), m_fbWidth, m_fbHeight);
+                if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID && aovName == HdRprAovTokens->normal) {
+                    // TODO: remove me when Hybrid gain RPR_AOV_GEOMETRIC_NORMAL support
+                    aovFrameBuffer.aov->AttachAs(RPR_AOV_SHADING_NORMAL);
+                } else {
+                    aovFrameBuffer.aov->AttachAs(rprAovIt->second);
+                }
+
+                // XXX: Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
+                if (m_rprContext->GetActivePluginType() != rpr::PluginType::HYBRID) {
+                    aovFrameBuffer.resolved = make_unique<rpr::FrameBuffer>(m_rprContext->GetHandle(), m_fbWidth, m_fbHeight);
+                }
             }
 
-            if (IsGlInteropUsed()) {
-                aovFrameBuffer.resolved = make_unique<rpr::FrameBufferGL>(m_context, m_fbWidth, m_fbHeight);
-                m_isGlFramebufferDirty = true;
-            } else {
-                aovFrameBuffer.resolved = make_unique<rpr::FrameBuffer>(m_context, m_fbWidth, m_fbHeight);
-            }
             m_aovFrameBuffers.emplace(aovName, std::move(aovFrameBuffer));
+            m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
 
-            m_isFrameBuffersDirty = true;
             if (setAsActive) {
                 m_currentAov = aovName;
             }
         } catch (rpr::Error const& e) {
             TF_CODING_ERROR("Failed to enable %s AOV: %s", aovName.GetText(), e.what());
         }
-        unlock();
     }
 
     void DisableAov(TfToken const& aovName, bool force = false) {
@@ -1042,40 +871,49 @@ public:
             return;
         }
 
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+
         auto it = m_aovFrameBuffers.find(aovName);
         if (it != m_aovFrameBuffers.end()) {
+            // We compute depth from worldCoordinate in the postprocess step
+            if (aovName == HdRprAovTokens->worldCoordinate &&
+                m_aovFrameBuffers.count(HdRprAovTokens->depth)) {
+                return;
+            }
+
             m_aovFrameBuffers.erase(it);
         }
 
-        if (IsGlInteropUsed()) {
-            m_isGlFramebufferDirty = true;
-        }
-        HdRprPreferences::GetInstance().SetFilterDirty(true);
+        m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
     }
 
     void DisableAovs() {
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+
         m_aovFrameBuffers.clear();
-        m_isGlFramebufferDirty = true;
+        m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
     }
 
     bool IsAovEnabled(TfToken const& aovName) {
         return m_aovFrameBuffers.count(aovName) != 0;
     }
 
-    void ResolveFramebuffers()
-    {
-        try {
-            for (auto& aovFb : m_aovFrameBuffers) {
-                aovFb.second.aov->Resolve(aovFb.second.resolved.get());
+    void ResolveFramebuffers() {
+        for (auto& aovFb : m_aovFrameBuffers) {
+            if (!aovFb.second.aov) {
+                continue;
             }
-        } catch (rpr::Error const& e) {
-            TF_CODING_ERROR("Failed to resolve framebuffers: %s", e.what());
+
+            try {
+                aovFb.second.aov->Resolve(aovFb.second.resolved.get());
+            } catch (rpr::Error const& e) {
+                TF_CODING_ERROR("Failed to resolve framebuffer: %s", e.what());
+            }
         }
     }
 
-    void ResizeAovFramebuffers(int width, int height)
-    {
-        if (!m_context) return;
+    void ResizeAovFramebuffers(int width, int height) {
+        if (!m_rprContext) return;
 
         if (width <= 0 || height <= 0 ||
             (width == m_fbWidth && height == m_fbHeight)) {
@@ -1087,19 +925,20 @@ public:
         RPR_ERROR_CHECK(rprCameraSetSensorSize(m_camera, 1.0f, (float)height / (float)width), "Fail to set camera sensor size");
 
         for (auto& aovFb : m_aovFrameBuffers) {
+            if (!aovFb.second.aov) {
+                continue;
+            }
+
             try {
                 aovFb.second.aov->Resize(width, height);
                 aovFb.second.resolved->Resize(width, height);
+                aovFb.second.isDirty = true;
             } catch (rpr::Error const& e) {
                 TF_CODING_ERROR("Failed to resize AOV framebuffer: %s", e.what());
             }
         }
 
-        HdRprPreferences::GetInstance().SetFilterDirty(true);
-        m_isFrameBuffersDirty = true;
-        if (IsGlInteropUsed()) {
-            m_isGlFramebufferDirty = true;
-        }
+        m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
     }
 
     void GetFramebufferSize(GfVec2i* resolution) const {
@@ -1112,431 +951,323 @@ public:
             return nullptr;
         }
 
-        lock();
-        auto resolvedFb = it->second.resolved.get();
-        if (m_currentPlugin == HdRprPluginType::HYBRID) {
-            // XXX: Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
-            resolvedFb = it->second.aov.get();
+        if (!m_fbWidth || !m_fbHeight) {
+            return nullptr;
         }
-        if (aovName == HdRprAovTokens->color && m_imageFilterPtr) {
-            if (m_currentRenderDevice == HdRprRenderDevice::CPU) {
-                buffer = m_imageFilterPtr->GetData();
-                if (bufferSize) {
-                    *bufferSize = resolvedFb->GetSize();
-                }
-            } else {
-                buffer = m_imageFilterOutputFb->GetData(buffer, bufferSize);
+
+        auto readRifImage = [](rif_image image, size_t* bufferSize) -> std::shared_ptr<char> {
+            size_t size;
+            size_t dummy;
+            auto rifStatus = rifImageGetInfo(image, RIF_IMAGE_DATA_SIZEBYTE, sizeof(size), &size, &dummy);
+            if (rifStatus != RIF_SUCCESS) {
+                return nullptr;
             }
+
+            void* data = nullptr;
+            rifStatus = rifImageMap(image, RIF_IMAGE_MAP_READ, &data);
+            if (rifStatus != RIF_SUCCESS) {
+                return nullptr;
+            }
+
+            auto buffer = std::shared_ptr<char>(new char[size]);
+            std::memcpy(buffer.get(), data, size);
+
+            rifStatus = rifImageUnmap(image, data);
+            if (rifStatus != RIF_SUCCESS) {
+                TF_WARN("Failed to unmap rif image");
+            }
+
+            if (bufferSize) {
+                *bufferSize = size;
+            }
+            return buffer;
+        };
+
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+
+        if (aovName == HdRprAovTokens->color && m_denoiseFilterPtr) {
+            buffer = readRifImage(m_denoiseFilterPtr->GetOutput(), bufferSize);
         } else {
-            buffer = resolvedFb->GetData(buffer, bufferSize);
+            auto& aovFrameBuffer = it->second;
+            if (aovFrameBuffer.postprocessFilter) {
+                buffer = readRifImage(aovFrameBuffer.postprocessFilter->GetOutput(), bufferSize);
+            } else {
+                auto resolvedFb = aovFrameBuffer.resolved.get();
+                if (!resolvedFb) {
+                    resolvedFb = aovFrameBuffer.aov.get();
+                }
+                if (!resolvedFb) {
+                    assert(false);
+                    return nullptr;
+                }
+
+                buffer = resolvedFb->GetData(buffer, bufferSize);
+            }
         }
-        unlock();
 
         return buffer;
     }
 
-    GLuint GetFramebufferGL()
-    {
-        if (!IsGlInteropUsed()) {
-            TF_WARN("Attempt to get GL framebuffer while GL interop disabled");
-            return INVALID_GL_TEXTURE;
-        }
-
-        if (m_isGlFramebufferDirty) {
-            m_isGlFramebufferDirty = false;
-
-            if (m_glFramebuffer != INVALID_GL_FRAMEBUFFER)
-            {
-                glDeleteFramebuffers(1, &m_glFramebuffer);
-                m_glFramebuffer = INVALID_GL_FRAMEBUFFER;
-            }
-
-            auto getGlTexture = [](rpr::FrameBuffer* fb) -> GLuint {
-                if (auto glFb = dynamic_cast<rpr::FrameBufferGL*>(fb)) {
-                    return glFb->GetGL();
-                } else {
-                    assert(false);
-                    return INVALID_GL_TEXTURE;
-                }
-            };
-            auto getAovGlTexture = [this, &getGlTexture](TfToken const& aovName) -> GLuint {
-                auto it = m_aovFrameBuffers.find(aovName);
-                if (it == m_aovFrameBuffers.end())
-                {
-                    TF_WARN("Attempt to get GL texture id for disabled %s AOV", aovName.GetText());
-                    return INVALID_GL_TEXTURE;
-                }
-
-                return getGlTexture(it->second.resolved.get());
-            };
-
-            GLuint colorTexture = INVALID_GL_TEXTURE;
-            if (m_currentAov == HdRprAovTokens->color && m_imageFilterPtr) {
-                colorTexture = getGlTexture(m_imageFilterOutputFb.get());
-            } else {
-                colorTexture = getAovGlTexture(m_currentAov);
-            }
-
-            if (colorTexture == INVALID_GL_TEXTURE) {
-                TF_WARN("Could not create GL framebuffer without active AOV");
-                return INVALID_GL_FRAMEBUFFER;
-            }
-
-            auto depthTexture = getAovGlTexture(HdAovTokens->depth);
-
-            glGenFramebuffers(1, &m_glFramebuffer);
-            glBindFramebuffer(GL_FRAMEBUFFER, m_glFramebuffer);
-
-            glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, colorTexture, 0);
-            if (depthTexture != INVALID_GL_TEXTURE) {
-                glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTexture, 0);
-            }
-
-            GLenum glFbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-            if (glFbStatus != GL_FRAMEBUFFER_COMPLETE) {
-                TF_CODING_ERROR("Fail create GL framebuffer. Error code %#x", glFbStatus);
-
-                glDeleteFramebuffers(1, &m_glFramebuffer);
-                m_glFramebuffer = INVALID_GL_FRAMEBUFFER;
-            }
-
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        }
-
-        return m_glFramebuffer;
+    void ClearFramebuffers() {
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    void ClearFramebuffers()
-    {
-        m_isFrameBuffersDirty = true;
+    rif_image_desc GetRifImageDesc(uint32_t width, uint32_t height, HdFormat format) {
+        rif_image_desc imageDesc = {};
+        imageDesc.num_components = HdGetComponentCount(format);
+        switch (HdGetComponentFormat(format)) {
+        case HdFormatUNorm8:
+            imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
+            break;
+        case HdFormatFloat16:
+            imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
+            break;
+        case HdFormatFloat32:
+            imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
+            break;
+        default:
+            imageDesc.type = 0;
+            break;
+        }
+        imageDesc.image_width = width;
+        imageDesc.image_height = height;
+        imageDesc.image_depth = 1;
+        imageDesc.image_row_pitch = width;
+        imageDesc.image_slice_pitch = width * height;
+
+        return imageDesc;
     }
 
-    void Render()
-    {
-        if (!m_context || m_aovFrameBuffers.empty())
-        {
-            return;
-        }
-
+    void Update() {
         auto& preferences = HdRprPreferences::GetInstance();
-        if (preferences.IsDirty())
-        {
-            if (m_currentPlugin == HdRprPluginType::HYBRID)
-            {
-                rprContextSetParameter1u(m_context, "render_quality", int(preferences.GetHybridQuality()));
+        if (preferences.IsDirty()) {
+            if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+                rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(preferences.GetHybridQuality()));
             }
             preferences.SetDitry(false);
         }
 
-        // In case there is no Lights in scene - create dafault
-        if (!m_isLightPresent)
-        {
+        // In case there is no Lights in scene - create default
+        if (!m_isLightPresent) {
             CreateEnvironmentLight(k_defaultLightColor, 1.f);
         }
 
-#ifdef USE_RIF
-        if (preferences.IsFilterTypeDirty())
-        {
-            CreateImageFilter();
-            preferences.SetFilterDirty(false);
-        }
-#endif // USE_RIF
+        UpdateDenoiseFilter();
 
-        if (m_isFrameBuffersDirty)
-        {
-            m_isFrameBuffersDirty = false;
-            for (auto& aovFb : m_aovFrameBuffers)
-            {
-                aovFb.second.aov->Clear();
-            }
-        }
+        for (auto& aovFrameBufferEntry : m_aovFrameBuffers) {
+            auto& aovFrameBuffer = aovFrameBufferEntry.second;
+            if (aovFrameBuffer.isDirty) {
+                aovFrameBuffer.isDirty = false;
 
-        if (RPR_ERROR_CHECK(rprContextRender(m_context),"Fail contex render framebuffer")) return;
-        if (m_currentPlugin != HdRprPluginType::HYBRID) {
-            // XXX: Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
-            ResolveFramebuffers();
-        }
+                rif_image_desc imageDesc = GetRifImageDesc(m_fbWidth, m_fbHeight, aovFrameBuffer.format);
 
-#ifdef USE_RIF
-        if (m_imageFilterPtr && IsAovEnabled(HdRprAovTokens->color))
-        {
-            m_imageFilterPtr->Run();
-        }
-#endif // USE_RIF
-    }
-
-	void DeleteRprObject(void * object)
-	{
-		SAFE_DELETE_RPR_OBJECT(object);
-	}
-
-	void DeleteMesh(void * mesh)
-	{
-	    if (!mesh) {
-	        return;
-	    }
-
-	    rpr_int status;
-
-		lock();
-
-		status = RPR_ERROR_CHECK(rprShapeSetMaterial(mesh, NULL),"Fail reset mesh material") ;
-
-		if (status != RPR_SUCCESS)
-		{
-			unlock();
-			return;
-		}
-		status = RPR_ERROR_CHECK(rprSceneDetachShape(m_scene, mesh), "Fail detach mesh from scene");
-		unlock();
-
-		if (status != RPR_SUCCESS)
-		{
-			return;
-		}
-
-		SAFE_DELETE_RPR_OBJECT(mesh);
-	}
-
-	bool IsGlInteropUsed() const {
-		return m_useGlInterop;
-	}
-
-    TfToken GetActiveAov() const
-    {
-        return m_currentAov;
-    }
-
-private:
-    void SetupRprTracing() {
-        auto enableTracingEnv = ArchGetEnv("RPR_ENABLE_TRACING");
-        if (enableTracingEnv == "1") {
-            RPR_ERROR_CHECK(rprContextSetParameter1u(nullptr, "tracing", 1), "Fail to set context tracing parameter");
-
-            auto tracingFolder = ArchGetEnv("RPR_TRACING_PATH");
-            if (tracingFolder.empty()) {
-#ifdef WIN32
-                tracingFolder = "C:\\ProgramData\\hdRPR";
-#elif defined __linux__ || defined(__APPLE__)
-                std::vector<std::string> pathVariants = {ArchGetEnv("TMPDIR"), ArchGetEnv("P_tmpdir"), "/tmp"};
-                for (auto& pathVariant : pathVariants) {
-                    if (pathVariant.empty()) {
-                        continue;
+                if (aovFrameBufferEntry.first == HdRprAovTokens->depth) {
+                    // Calculate clip space depth from world coordinate AOV
+                    if (m_aovFrameBuffers.count(HdRprAovTokens->worldCoordinate) == 0) {
+                        assert(!"World coordinate AOV should be enabled");
+                        return;
                     }
 
-                    tracingFolder = pathVariant + "/hdRPR";
-                    break;
-                }
-#else
-                #error "Unsupported platform"
-#endif
-            }
-            printf("RPR tracing folder: %s\n", tracingFolder.c_str());
-            RPR_ERROR_CHECK(rprContextSetParameterString(nullptr, "tracingfolder", tracingFolder.c_str()), "Fail to set tracing folder parameter");
-        }
-    }
+                    auto ndcDepthFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, m_rifContext.get());
 
-    bool CreateContextWithPlugin(HdRprPluginType plugin) {
-        m_currentPlugin = plugin;
+                    auto& worldCoordinateAovFb = m_aovFrameBuffers[HdRprAovTokens->worldCoordinate];
+                    auto inputRprFrameBuffer = (worldCoordinateAovFb.resolved ? worldCoordinateAovFb.resolved : worldCoordinateAovFb.aov).get();
+                    ndcDepthFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
 
-        int pluginIdx = static_cast<int>(m_currentPlugin);
-        int numPlugins = sizeof(k_PluginLibNames) / sizeof(k_PluginLibNames[0]);
-        if (pluginIdx < 0 || pluginIdx >= numPlugins) {
-            TF_CODING_ERROR("Invalid plugin requested: index out of bounds - %d", pluginIdx);
-            return false;
-        }
-        auto pluginName = k_PluginLibNames[pluginIdx];
+                    ndcDepthFilter->SetOutput(imageDesc);
 
-        const std::string rprSdkPath = GetRprSdkPath();
-        const std::string pluginPath = (rprSdkPath.empty()) ? pluginName : rprSdkPath + "/" + pluginName;
-        rpr_int pluginID = rprRegisterPlugin(pluginPath.c_str());
-        if (pluginID == -1) {
-            TF_RUNTIME_ERROR("Failed to register %s plugin", pluginName);
-            return false;
-        }
+                    auto viewProjectionMatrix = m_cameraViewMatrix * m_cameraProjectionMatrix;
+                    ndcDepthFilter->AddParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
 
-        // TODO: Query info from HdRprPreferences
-        m_useGlInterop = HdRprApiImpl::EnableGLInterop();
-        m_currentRenderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
-        if (m_useGlInterop && (m_currentRenderDevice == HdRprRenderDevice::CPU ||
-            m_currentPlugin == HdRprPluginType::HYBRID)) {
-            m_useGlInterop = false;
-        }
-        if (m_useGlInterop) {
-            if (GLenum err = glewInit()) {
-                TF_WARN("Failed to init GLEW. Error code: %s. Disabling GL interop", glewGetErrorString(err));
-                m_useGlInterop = false;
-            }
-        }
+                    aovFrameBuffer.postprocessFilter = std::move(ndcDepthFilter);
+                } else if (aovFrameBufferEntry.first == HdRprAovTokens->normal &&
+                           aovFrameBuffer.format != HdFormatInvalid) {
+                    // Remap normal to [-1;1] range
+                    auto remapFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, m_rifContext.get());
 
-        auto cachePath = HdRprApi::GetTmpDir();
-        rpr_creation_flags flags;
-        if (m_currentPlugin == HdRprPluginType::HYBRID) {
-            // Call to getRprCreationFlags is broken in case of hybrid:
-            //   1) getRprCreationFlags uses 'rprContextGetInfo' to query device compatibility,
-            //        but hybrid plugin does not support such call
-            //   2) Hybrid is working only on GPU
-            //   3) MultiGPU can be enabled only through vulkan interop
-            flags = RPR_CREATION_FLAGS_ENABLE_GPU0;
-        } else {
-            flags = getRprCreationFlags(m_currentRenderDevice, pluginID, cachePath);
-            if (!flags) {
-                bool isGpuUncompatible = m_currentRenderDevice == HdRprRenderDevice::GPU;
-                TF_WARN("%s is not compatible", isGpuUncompatible ? "GPU" : "CPU");
-                m_currentRenderDevice = isGpuUncompatible ? HdRprRenderDevice::CPU : HdRprRenderDevice::GPU;
-                flags = getRprCreationFlags(m_currentRenderDevice, pluginID, cachePath);
-                if (!flags) {
-                    TF_RUNTIME_ERROR("Could not find compatible device");
-                    return false;
-                } else {
-                    TF_WARN("Using %s for render computations", isGpuUncompatible ? "CPU" : "GPU");
-                    if (m_currentRenderDevice == HdRprRenderDevice::CPU) {
-                        m_useGlInterop = false;
+                    auto inputRprFrameBuffer = (aovFrameBuffer.resolved ? aovFrameBuffer.resolved : aovFrameBuffer.aov).get();
+                    remapFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
+
+                    remapFilter->SetOutput(imageDesc);
+
+                    remapFilter->AddParam("srcRangeAuto", 0);
+                    remapFilter->AddParam("dstLo", -1.0f);
+                    remapFilter->AddParam("dstHi", 1.0f);
+
+                    aovFrameBuffer.postprocessFilter = std::move(remapFilter);
+                } else if (aovFrameBuffer.format != HdFormatInvalid &&
+                           aovFrameBuffer.format != HdFormatFloat32Vec4 &&
+                           m_fbWidth != 0 && m_fbHeight != 0) {
+                    // Convert from RPR native to Hydra format
+                    auto inputRprFrameBuffer = (aovFrameBuffer.resolved ? aovFrameBuffer.resolved : aovFrameBuffer.aov).get();
+                    if (inputRprFrameBuffer && imageDesc.type != 0 && imageDesc.num_components != 0) {
+                        auto converter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), m_fbWidth, m_fbHeight);
+                        converter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
+                        converter->SetOutput(imageDesc);
+
+                        aovFrameBuffer.postprocessFilter = std::move(converter);
                     }
                 }
             }
         }
 
-        if (m_useGlInterop) {
-            flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
-        }
-
-        auto status = rprCreateContext(RPR_API_VERSION, &pluginID, 1, flags, nullptr, cachePath, &m_context);
-        if (status != RPR_SUCCESS) {
-            TF_RUNTIME_ERROR("Fail to create context with %s plugin. Error code: %d", pluginName, status);
-            return false;
-        }
-
-        status = rprContextSetActivePlugin(m_context, pluginID);
-        if (status != RPR_SUCCESS) {
-            rprObjectDelete(m_context);
-            m_context = nullptr;
-            TF_RUNTIME_ERROR("Fail to set active %s plugin. Error code: %d", pluginName, status);
-            return false;
-        }
-
-        return true;
-    }
-
-    void InitRpr()
-    {
-        SetupRprTracing();
-
-        auto requestedPlugin = HdRprPreferences::GetInstance().GetPlugin();
-        if (!CreateContextWithPlugin(requestedPlugin)) {
-            TF_WARN("Failed to create context with requested plugin. Trying to create with first working variant");
-            for (auto plugin = HdRprPluginType::FIRST; plugin != HdRprPluginType::LAST; plugin = HdRprPluginType(int(plugin) + 1)) {
-                if (plugin == requestedPlugin)
-                    continue;
-                if (CreateContextWithPlugin(plugin)) {
-                    HdRprPreferences::GetInstance().SetPlugin(plugin);
-                    break;
+        if (m_dirtyFlags & ChangeTracker::DirtyScene) {
+            for (auto& aovFb : m_aovFrameBuffers) {
+                if (aovFb.second.aov) {
+                    aovFb.second.aov->Clear();
                 }
             }
         }
 
-        if (!m_context) {
+        m_dirtyFlags = ChangeTracker::Clean;
+    }
+
+    void UpdateDenoiseFilter() {
+        // XXX: RPR Hybrid context does not support filters. Discuss with Hybrid team possible workarounds
+        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
             return;
         }
 
-        RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "yflip", 0), "Fail to set context YFLIP parameter");
-        if (m_currentPlugin == HdRprPluginType::HYBRID) {
-            RPR_ERROR_CHECK(rprContextSetParameter1u(m_context, "render_quality", int(HdRprPreferences::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
-        }
-    }
+        bool updateRequired = HdRprPreferences::GetInstance().IsFilterTypeDirty() || (m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers);
+        HdRprPreferences::GetInstance().SetFilterDirty(false);
 
-	void InitMaterialSystem()
-	{
-		if (!m_context)
-		{
-			return;
-		}
-
-		if(RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_context, 0, &m_matsys), "Fail create Material System resolve")) return;
-        m_rprObjectsToRelease.push_back(m_matsys);
-		m_rprMaterialFactory.reset(new RprMaterialFactory(m_matsys, m_context));
-	}
-
-
-#ifdef USE_RIF
-    void CreateImageFilter() {
-        // XXX: RPR Hybrid context does not support filters. Discuss with Hybrid team possible workarounds
-        if (m_currentPlugin == HdRprPluginType::HYBRID) {
+        if (!updateRequired) {
             return;
         }
 
         if (!HdRprPreferences::GetInstance().IsDenoisingEnabled() || !IsAovEnabled(HdRprAovTokens->color)) {
-            // If image filter exists, GL framebuffer referencing m_imageFilterOutputFb so we have to invalidate it
-            m_isGlFramebufferDirty = m_imageFilterOutputFb || m_isGlFramebufferDirty;
-            m_imageFilterOutputFb.reset();
-            m_imageFilterPtr.reset();
+            m_denoiseFilterPtr.reset();
             return;
         }
 
-        m_imageFilterPtr.reset(new ImageFilter(m_context, m_fbWidth, m_fbHeight));
-#ifdef __APPLE__
-        m_imageFilterType = FilterType::EawDenoise;
-#else
-        if (m_currentRenderDevice == HdRprRenderDevice::CPU)
-        {
-            m_imageFilterType = FilterType::EawDenoise;
-        }
-        else
-        {
-            m_imageFilterType = FilterType::AIDenoise;
+        rif::FilterType filterType = rif::FilterType::EawDenoise;
+#ifndef __APPLE__
+        if (m_rprContext->GetActiveRenderDeviceType() == rpr::RenderDeviceType::GPU) {
+            filterType = rif::FilterType::AIDenoise;
         }
 #endif // __APPLE__
-        m_imageFilterPtr->CreateFilter(m_imageFilterType);
+        m_denoiseFilterPtr = rif::Filter::Create(filterType, m_rifContext.get(), m_fbWidth, m_fbHeight);
 
-        switch (m_imageFilterType) {
-            case FilterType::AIDenoise: {
-                EnableAov(HdRprAovTokens->albedo);
-                EnableAov(HdRprAovTokens->depth);
-                EnableAov(HdRprAovTokens->normal);
+        switch (filterType) {
+        case rif::FilterType::AIDenoise: {
+            EnableAov(HdRprAovTokens->albedo);
+            EnableAov(HdRprAovTokens->linearDepth);
+            EnableAov(HdRprAovTokens->normal);
 
-                m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_aovFrameBuffers[HdRprAovTokens->color].resolved.get(), 1.0f);
-                m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
-                m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_aovFrameBuffers[HdRprAovTokens->depth].resolved.get(), 1.0f);
-                m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
-                break;
-            }
-            case FilterType::EawDenoise:{
-                RifParam rifParam;
-                rifParam.mData.f = 1.f;
-                rifParam.mType = RifParamType::RifFloat;
-                m_imageFilterPtr->AddParam("colorSigma", rifParam);
-                m_imageFilterPtr->AddParam("normalSigma", rifParam);
-                m_imageFilterPtr->AddParam("depthSigma", rifParam);
-                m_imageFilterPtr->AddParam("transSigma", rifParam);
+            m_denoiseFilterPtr->SetInput(rif::Color, m_aovFrameBuffers[HdRprAovTokens->color].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
+            break;
+        }
+        case rif::FilterType::EawDenoise: {
+            m_denoiseFilterPtr->AddParam("colorSigma", 1.0f);
+            m_denoiseFilterPtr->AddParam("normalSigma", 1.0f);
+            m_denoiseFilterPtr->AddParam("depthSigma", 1.0f);
+            m_denoiseFilterPtr->AddParam("transSigma", 1.0f);
 
-                EnableAov(HdRprAovTokens->albedo);
-                EnableAov(HdRprAovTokens->depth);
-                EnableAov(HdRprAovTokens->normal);
-                EnableAov(HdRprAovTokens->primId);
-                EnableAov(HdRprAovTokens->worldCoordinate);
+            EnableAov(HdRprAovTokens->albedo);
+            EnableAov(HdRprAovTokens->linearDepth);
+            EnableAov(HdRprAovTokens->normal);
+            EnableAov(HdRprAovTokens->primId);
+            EnableAov(HdRprAovTokens->worldCoordinate);
 
-                m_imageFilterPtr->SetInput(RifFilterInput::RifColor, m_aovFrameBuffers[HdRprAovTokens->color].resolved.get(), 1.0f);
-                m_imageFilterPtr->SetInput(RifFilterInput::RifNormal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
-                m_imageFilterPtr->SetInput(RifFilterInput::RifDepth, m_aovFrameBuffers[HdRprAovTokens->depth].resolved.get(), 1.0f);
-                m_imageFilterPtr->SetInput(RifFilterInput::RifObjectId, m_aovFrameBuffers[HdRprAovTokens->primId].resolved.get(), 1.0f);
-                m_imageFilterPtr->SetInput(RifFilterInput::RifAlbedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
-                m_imageFilterPtr->SetInput(RifFilterInput::RifWorldCoordinate, m_aovFrameBuffers[HdRprAovTokens->worldCoordinate].resolved.get(), 1.0f);
-                break;
-            }
-            default:
-                break;
+            m_denoiseFilterPtr->SetInput(rif::Color, m_aovFrameBuffers[HdRprAovTokens->color].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::ObjectId, m_aovFrameBuffers[HdRprAovTokens->primId].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::WorldCoordinate, m_aovFrameBuffers[HdRprAovTokens->worldCoordinate].resolved.get(), 1.0f);
+            break;
+        }
+        default:
+            break;
         }
 
-        if (IsGlInteropUsed()) {
-            m_imageFilterOutputFb = make_unique<rpr::FrameBufferGL>(m_context, m_fbWidth, m_fbHeight);
-        } else {
-            m_imageFilterOutputFb = make_unique<rpr::FrameBuffer>(m_context, m_fbWidth, m_fbHeight);
-        }
-        m_imageFilterPtr->SetOutput(m_imageFilterOutputFb.get());
-        m_imageFilterPtr->AttachFilter();
-        m_isGlFramebufferDirty = true;
+        m_denoiseFilterPtr->SetOutput(GetRifImageDesc(m_fbWidth, m_fbHeight, m_aovFrameBuffers[HdRprAovTokens->color].format));
     }
-#endif // USE_RIF
+
+    void Render() {
+        if (!m_rprContext || m_aovFrameBuffers.empty()) {
+            return;
+        }
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+
+        Update();
+
+        if (RPR_ERROR_CHECK(rprContextRender(m_rprContext->GetHandle()), "Fail contex render framebuffer")) return;
+
+        ResolveFramebuffers();
+
+        try {
+            if (m_denoiseFilterPtr) {
+                m_denoiseFilterPtr->Update();
+            }
+            for (auto& aovFrameBuffer : m_aovFrameBuffers) {
+                if (aovFrameBuffer.second.postprocessFilter) {
+                    aovFrameBuffer.second.postprocessFilter->Update();
+                }
+            }
+            m_rifContext->ExecuteCommandQueue();
+        } catch (std::runtime_error& e) {
+            TF_RUNTIME_ERROR("%s", e.what());
+        }
+    }
+
+    void DeleteMesh(void* mesh) {
+        if (!mesh) {
+            return;
+        }
+
+        RecursiveLockGuard rprLock(m_rprAccessMutex);
+
+        RPR_ERROR_CHECK(rprShapeSetMaterial(mesh, nullptr), "Fail reset mesh material");
+        RPR_ERROR_CHECK(rprSceneDetachShape(m_scene, mesh), "Fail detach mesh from scene");
+
+        SAFE_DELETE_RPR_OBJECT(mesh);
+    }
+
+    TfToken GetActiveAov() const {
+        return m_currentAov;
+    }
+
+    bool IsGlInteropUsed() const {
+        return m_rprContext && m_rprContext->IsGlInteropEnabled();
+    }
+
+private:
+    void InitRpr()
+    {
+        auto plugin = HdRprPreferences::GetInstance().GetPlugin();
+        auto renderDevice = HdRprPreferences::GetInstance().GetRenderDevice();
+        m_rprContext = rpr::Context::Create(plugin, renderDevice, false);
+        if (!m_rprContext) {
+            return;
+        }
+
+        RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "yflip", 0), "Fail to set context YFLIP parameter");
+        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+            RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(HdRprPreferences::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
+        }
+    }
+
+    void InitRif() {
+        if (!m_rprContext) {
+            return;
+        }
+
+        m_rifContext = rif::Context::Create(m_rprContext->GetHandle());
+    }
+
+    void InitMaterialSystem() {
+        if (!m_rprContext) {
+            return;
+        }
+
+        if(RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_rprContext->GetHandle(), 0, &m_matsys), "Fail create Material System resolve")) return;
+        m_rprObjectsToRelease.push_back(m_matsys);
+        m_rprMaterialFactory.reset(new RprMaterialFactory(m_matsys, m_rprContext->GetHandle()));
+    }
 
     void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes, VtIntArray & out_newVpf) {
         out_newIndexes.clear();
@@ -1694,66 +1425,48 @@ private:
         return CreateMesh(position, indexes, normals, VtIntArray(), uv, VtIntArray(), vpf);
     }
 
-	void lock() {
-		while(m_lock.test_and_set(std::memory_order_acquire));
-	}
-
-	void unlock() {
-		m_lock.clear(std::memory_order_release);
-	}
-
-	static bool EnableGLInterop() {
-		// TODO: consider putting a selection on GUI settings
-#ifdef USE_GL_INTEROP
-		return true;
-#else
-		return false;
-#endif
-	}
+    enum ChangeTracker : uint32_t {
+        Clean = 0,
+        AllDirty = ~0u,
+        DirtyScene = 1 << 0,
+        DirtyActiveAOV = 1 << 1,
+        DirtyAOVFramebuffers = 1 << 2
+    };
+    uint32_t m_dirtyFlags = ChangeTracker::AllDirty;
 
     rpr_uint m_fbWidth = 0;
     rpr_uint m_fbHeight = 0;
 
-	rpr_context m_context = nullptr;
-	rpr_scene m_scene = nullptr;
-	rpr_camera m_camera = nullptr;
-	rpr_post_effect m_tonemap = nullptr;
-
-    struct AovFrameBuffer {
-        std::unique_ptr<rpr::FrameBuffer> aov;
-        std::unique_ptr<rpr::FrameBuffer> resolved;
-    };
-    std::map<TfToken, AovFrameBuffer> m_aovFrameBuffers;
-    TfToken m_currentAov;
-    bool m_isFrameBuffersDirty = true;
-
-    bool m_isGlFramebufferDirty = true;
-    GLuint m_glFramebuffer = INVALID_GL_FRAMEBUFFER;
-
-	bool m_useGlInterop = EnableGLInterop();
-    HdRprRenderDevice m_currentRenderDevice = HdRprRenderDevice::NONE;
-
-	GfMatrix4d m_cameraViewMatrix = GfMatrix4d(1.f);
-	GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
+    std::unique_ptr<rpr::Context> m_rprContext;
+    std::unique_ptr<rif::Context> m_rifContext;
+    rpr_scene m_scene = nullptr;
+    rpr_camera m_camera = nullptr;
+    rpr_post_effect m_tonemap = nullptr;
 
     rpr_material_system m_matsys = nullptr;
     std::unique_ptr<RprMaterialFactory> m_rprMaterialFactory;
     std::vector<RprApiMaterial*> m_materialsToRelease;
 
-	bool m_isLightPresent = false;
-
-	HdRprPluginType m_currentPlugin = HdRprPluginType::NONE;
-
     std::vector<void*> m_rprObjectsToRelease;
 
-	// simple spinlock for locking RPR calls
-	std::atomic_flag m_lock = ATOMIC_FLAG_INIT;
+    struct AovFrameBuffer {
+        std::unique_ptr<rpr::FrameBuffer> aov;
+        std::unique_ptr<rpr::FrameBuffer> resolved;
+        std::unique_ptr<rif::Filter> postprocessFilter;
+        HdFormat format = HdFormatInvalid;
+        bool isDirty = true;
+    };
+    std::map<TfToken, AovFrameBuffer> m_aovFrameBuffers;
+    TfToken m_currentAov;
 
-#ifdef USE_RIF
-	std::unique_ptr<ImageFilter> m_imageFilterPtr;
-    std::unique_ptr<rpr::FrameBuffer> m_imageFilterOutputFb;
-    FilterType m_imageFilterType = FilterType::None;
-#endif // USE_RIF
+    GfMatrix4d m_cameraViewMatrix = GfMatrix4d(1.f);
+    GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
+
+    bool m_isLightPresent = false;
+
+    std::recursive_mutex m_rprAccessMutex;
+
+    std::unique_ptr<rif::Filter> m_denoiseFilterPtr;
 };
 
     HdRprApi::HdRprApi() : m_impl(new HdRprApiImpl) {
@@ -1763,16 +1476,16 @@ private:
         delete m_impl;
     }
 
-    void HdRprApi::SetRenderDevice(const HdRprRenderDevice& renderDevice) {
-        HdRprPreferences::GetInstance().SetRenderDevice(renderDevice);
+    void HdRprApi::SetRenderDevice(int renderDevice) {
+        HdRprPreferences::GetInstance().SetRenderDevice(static_cast<rpr::RenderDeviceType>(renderDevice));
     }
 
-    void HdRprApi::SetRendererPlugin(HdRprPluginType plugin) {
-        HdRprPreferences::GetInstance().SetPlugin(plugin);
+    void HdRprApi::SetRendererPlugin(int plugin) {
+        HdRprPreferences::GetInstance().SetPlugin(static_cast<rpr::PluginType>(plugin));
     }
 
-    void HdRprApi::SetHybridQuality(HdRprHybridQuality quality) {
-        HdRprPreferences::GetInstance().SetHybridQuality(quality);
+    void HdRprApi::SetHybridQuality(int quality) {
+        HdRprPreferences::GetInstance().SetHybridQuality(static_cast<HdRprHybridQuality>(quality));
     }
 
     void HdRprApi::SetDenoising(bool enableDenoising) {
@@ -1878,8 +1591,8 @@ private:
         m_impl->SetCameraProjectionMatrix(m);
     }
 
-    void HdRprApi::EnableAov(TfToken const& aovName) {
-        m_impl->EnableAov(aovName, true);
+    void HdRprApi::EnableAov(TfToken const& aovName, HdFormat format) {
+        m_impl->EnableAov(aovName, format, true);
     }
 
     void HdRprApi::DisableAov(TfToken const& aovName) {
@@ -1910,19 +1623,9 @@ private:
         return m_impl->GetFramebufferData(aovName, buffer, bufferSize);
     }
 
-    GLuint HdRprApi::GetFramebufferGL()
-    {
-        return m_impl->GetFramebufferGL();
+    void HdRprApi::Render() {
+        m_impl->Render();
     }
-
-	void HdRprApi::Render() {
-		m_impl->Render();
-	}
-
-	void HdRprApi::DeleteRprApiObject(RprApiObject object)
-	{
-		m_impl->DeleteRprObject(object);
-	}
 
     void HdRprApi::DeleteMesh(RprApiObject mesh) {
         m_impl->DeleteMesh(mesh);
@@ -1936,5 +1639,8 @@ private:
         return int(HdRprPreferences::GetInstance().GetPlugin());
     }
 
+    const char* HdRprApi::GetTmpDir() {
+        return rpr::Context::GetCachePath();
+    }
 
 PXR_NAMESPACE_CLOSE_SCOPE

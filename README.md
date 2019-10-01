@@ -37,6 +37,12 @@ Build using cmake.
 | ------------------         |-----------------------------------------------------------------------  | -------          |
 | RPR_LOCATION               | Radeon Pro Render directory with include and lib dirs                   | 1.3.20 or higher |
 
+##### Radeon Image Filters
+
+| Dependency Name            | Description                                                             | Version          |
+| ------------------         |-----------------------------------------------------------------------  | -------          |
+| RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.2.0 or higher  |
+
 ##### UsdView plugin Components
 
 UsdView plugin is build by default (```RPR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
@@ -54,15 +60,6 @@ To build houdini plugin set cmake flag ```RPR_BUILD_AS_HOUDINI_PLUGIN=TRUE```.
 | HOUDINI_ROOT               | Houdini installation directory                                          | 18               |
 
 #### Optional Components
-
-##### Denoise
-
-Support for image filters is disabled by default, and can optionally be enabled by
-specifying the cmake flag ```RPR_ENABLE_RIF_SUPPORT=TRUE```.
-
-| Dependency Name            | Description                                                             | Version          |
-| ------------------         |-----------------------------------------------------------------------  | -------          |
-| RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.2.0 or higher  |
 
 ##### OpenVDB
 

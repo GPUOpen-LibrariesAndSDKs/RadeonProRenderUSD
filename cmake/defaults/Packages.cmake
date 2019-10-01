@@ -32,6 +32,7 @@ set(build_shared_libs "${BUILD_SHARED_LIBS}")
 
 find_package(USD REQUIRED)
 find_package(Rpr REQUIRED)
+find_package(Rif REQUIRED)
 
 # Core USD Package Requirements
 # ----------------------------------------------
@@ -88,10 +89,6 @@ endif()
 
 if(RPR_ENABLE_OPENVDB_SUPPORT)
 	find_package(OpenVDB REQUIRED)
-endif()
-
-if(RPR_ENABLE_RIF_SUPPORT)
-	find_package(Rif REQUIRED)
 endif()
 
 # ----------------------------------------------

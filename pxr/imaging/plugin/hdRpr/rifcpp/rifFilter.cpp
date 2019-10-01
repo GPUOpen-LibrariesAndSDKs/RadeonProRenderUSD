@@ -264,6 +264,10 @@ struct ParameterSetter : public BOOST_NS::static_visitor<rif_int> {
     rif_int operator()(std::string const& value) {
         return rifImageFilterSetParameterString(filter, paramName, value.c_str());
     }
+
+    rif_int operator()(GfMatrix4f const& value) {
+        return rifImageFilterSetParameter16f(filter, paramName, const_cast<float*>(value.data()));
+    }
 };
 
 void Filter::ApplyParameters() {
