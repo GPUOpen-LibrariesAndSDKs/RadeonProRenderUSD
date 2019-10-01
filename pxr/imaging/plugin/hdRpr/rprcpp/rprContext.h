@@ -33,6 +33,8 @@ public:
 
     static std::unique_ptr<Context> Create(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop);
 
+    ~Context() override = default;
+
     rpr_context GetHandle() const;
     bool IsGlInteropEnabled() const;
     PluginType GetActivePluginType() const;

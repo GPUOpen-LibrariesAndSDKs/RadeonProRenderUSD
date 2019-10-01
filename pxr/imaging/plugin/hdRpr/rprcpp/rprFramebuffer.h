@@ -18,9 +18,9 @@ public:
 
     FrameBuffer(rpr_context context, rpr_uint width, rpr_uint height);
     FrameBuffer(FrameBuffer&& fb) noexcept;
-    virtual ~FrameBuffer();
+    ~FrameBuffer() override;
 
-    FrameBuffer const& operator=(FrameBuffer&& fb) noexcept;
+    FrameBuffer& operator=(FrameBuffer&& fb) noexcept;
 
     void AttachAs(rpr_aov aov);
     void Clear();

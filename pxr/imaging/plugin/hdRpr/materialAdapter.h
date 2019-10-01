@@ -1,15 +1,13 @@
 ﻿#ifndef HDRPR_MATERIAL_ADAPTER_H
 #define HDRPR_MATERIAL_ADAPTER_H
 
-#include "pxr/pxr.h"
-
 #include "pxr/base/tf/token.h"
 #include "pxr/base/vt/value.h"
 #include "pxr/base/gf/vec4f.h"
+#include "pxr/imaging/hd/material.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-struct HdMaterialNetwork;
 
 
 enum class EWrapMode

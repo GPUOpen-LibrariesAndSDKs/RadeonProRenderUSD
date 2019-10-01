@@ -1,32 +1,24 @@
 #include "rectLight.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-      
+	  
 
-TF_DEFINE_PRIVATE_TOKENS(
-	HdRprRectLightTokens,
-	(width)										\
-	(height)	
-	(normalize)								
-);
-
-
-const TfTokenVector k_requiredGeometryParam =
-{
-	HdRprRectLightTokens->width,
-	HdRprRectLightTokens->height,
+const TfTokenVector k_requiredGeometryParam = {
+	HdLightTokens->width,
+	HdLightTokens->height,
 };
 
+const TfTokenVector& HdRprRectLight::FetchLightGeometryParamNames() const {
+	return k_requiredGeometryParam;
+}
 
-bool HdRprRectLight::IsDirtyGeomParam(std::map<TfToken, float> & params)
-{
-	if (params.find(HdRprRectLightTokens->width) == params.end() || params.find(HdRprRectLightTokens->height) == params.end())
-	{
+bool HdRprRectLight::IsDirtyGeomParam(std::map<TfToken, float>& params) {
+	if (params.find(HdLightTokens->width) == params.end() || params.find(HdLightTokens->height) == params.end()) {
 		return false;
 	}
 
-	float width = params[HdRprRectLightTokens->width];
-	float height = params[HdRprRectLightTokens->height];
+	float width = params[HdLightTokens->width];
+	float height = params[HdLightTokens->height];
 
 	bool isDirty = (width != m_width || m_height != height);
 
@@ -36,28 +28,18 @@ bool HdRprRectLight::IsDirtyGeomParam(std::map<TfToken, float> & params)
 	return isDirty;
 }
 
-const TfTokenVector & HdRprRectLight::FetchLightGeometryParamNames() const
-{
-	return k_requiredGeometryParam;
-}
-
-RprApiObject HdRprRectLight::CreateLightMesh(std::map<TfToken, float> & params)
-{
-	
+RprApiObjectPtr HdRprRectLight::CreateLightMesh(std::map<TfToken, float>& params) {
 	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
-	if (!rprApi)
-	{
+	if (!rprApi) {
 		TF_CODING_ERROR("RprApi is expired");
 		return nullptr;
 	}
-	return rprApi->CreateRectLightMesh(params[HdRprRectLightTokens->width], params[HdRprRectLightTokens->height]);
+	return rprApi->CreateRectLightMesh(params[HdLightTokens->width], params[HdLightTokens->height]);
 }
 
-GfVec3f HdRprRectLight::NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & inColor)
-{
-
-	const double width = static_cast<double>(params[HdRprRectLightTokens->width]);
-	const double height = static_cast<double>(params[HdRprRectLightTokens->height]);
+GfVec3f HdRprRectLight::NormalizeLightColor(const GfMatrix4d& transform, std::map<TfToken, float>& params, const GfVec3f& inColor) {
+	const double width = static_cast<double>(params[HdLightTokens->width]);
+	const double height = static_cast<double>(params[HdLightTokens->height]);
 
 	const GfVec4d ox(width, 0., 0., 0.);
 	const GfVec4d oy(0., height, 0., 0.);

@@ -13,7 +13,7 @@ public:
 	HdRprBasisCurves(SdfPath const& id, HdRprApiSharedPtr rprApi,
 		SdfPath const& instancerId = SdfPath());
 
-    virtual ~HdRprBasisCurves() override;
+    ~HdRprBasisCurves() override = default;
 
 	virtual void Sync(HdSceneDelegate      *delegate,
 		HdRenderParam        *renderParam,
@@ -30,9 +30,9 @@ protected:
 		HdDirtyBits *dirtyBits) override;
 
 private:
-	HdRprApiWeakPtr m_rprApiWeakPtr;
-	RprApiObject m_rprCurve = nullptr;
-	std::vector<RprApiMaterial*> m_rprMaterials;
+    HdRprApiWeakPtr m_rprApiWeakPtr;
+    RprApiObjectPtr m_rprCurve;
+    RprApiObjectPtr m_fallbackMaterial;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

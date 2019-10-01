@@ -5,13 +5,8 @@
 #include "pxr/imaging/hd/renderDelegate.h"
 #include "pxr/imaging/hd/tokens.h"
 
-#include "renderParam.h"
-#include "resourceRegistry.h"
-
 #include "api.h"
 #include "rprApi.h"
-
-#include <vector>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -37,6 +32,9 @@ public:
 
     HdRprDelegate();
     ~HdRprDelegate() override;
+
+    HdRprDelegate(const HdRprDelegate &)= delete;
+    HdRprDelegate &operator =(const HdRprDelegate &)= delete;
 
     ///
     /// Returns a list of typeId's of all supported Rprims by this render
@@ -229,20 +227,9 @@ private:
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
     static const TfTokenVector SUPPORTED_BPRIM_TYPES;
 
-   //HdRprResourceRegistrySharedPtr _resourceRegistry;
-  // HdRprParamSharedPtr _renderParam;
-
-    // This class does not support copying.
-	HdRprDelegate(const HdRprDelegate &)
-        = delete;
-	HdRprDelegate &operator =(const HdRprDelegate &)
-        = delete;
-
-	HdRprApiSharedPtr m_rprApiSharedPtr;
-
+    HdRprApiSharedPtr m_rprApiSharedPtr;
     HdRenderSettingDescriptorList m_settingDescriptors;
 };
-
 
 PXR_NAMESPACE_CLOSE_SCOPE
 

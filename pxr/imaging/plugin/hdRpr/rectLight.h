@@ -18,8 +18,8 @@ protected:
 	// Ferch required params for geometry
 	virtual const TfTokenVector & FetchLightGeometryParamNames() const override;
 
-	// Create light mesh which is required to be set emmisive material 
-	virtual RprApiObject CreateLightMesh(std::map<TfToken, float> & params) override;
+    // Create light mesh which is required to be set emmisive material 
+    RprApiObjectPtr CreateLightMesh(std::map<TfToken, float>& params) override;
 
 	// Normalize Light Color with surface area
 	virtual GfVec3f NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & emmisionColor) override;

@@ -19,7 +19,7 @@ protected:
 	virtual const TfTokenVector & FetchLightGeometryParamNames() const override;
 
 	// Create mesh with emmisive material
-	virtual RprApiObject CreateLightMesh(std::map<TfToken, float> & params) override;
+	virtual RprApiObjectPtr CreateLightMesh(std::map<TfToken, float> & params) override;
 
 	// Normalize Light Color with surface area
 	virtual GfVec3f NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & emmisionColor) override;

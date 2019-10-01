@@ -18,15 +18,6 @@ public:
 		: HdSprim(id)
 		, m_rprApiWeakPtr(rprApi) {}
 
-	// change tracking for HdStLight
-	enum DirtyBits : HdDirtyBits {
-		Clean = 0,
-		DirtyTransform = 1 << 0,
-		DirtyParams = 1 << 1,
-		AllDirty = (DirtyTransform
-		| DirtyParams)
-	};
-
 	/// Synchronizes state from the delegate to this object.
 	/// @param[in, out]  dirtyBits: On input specifies which state is
 	///                             is dirty and can be pulled from the scene
@@ -45,6 +36,7 @@ public:
 
 protected:
 	HdRprApiWeakPtr m_rprApiWeakPtr;
+	RprApiObjectPtr m_rprLight;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

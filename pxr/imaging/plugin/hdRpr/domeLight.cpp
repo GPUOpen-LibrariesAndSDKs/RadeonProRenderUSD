@@ -3,22 +3,13 @@
 #include "rprApi.h"
 #include "renderParam.h"
 
-#include "pxr/base/gf/vec3f.h"
-#include "pxr/base/gf/matrix4f.h"
-#include "pxr/base/gf/matrix4d.h"
-
+#include "pxr/usd/ar/resolver.h"
+#include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
+#include "pxr/usd/sdf/assetPath.h"
+#include "pxr/usd/usdLux/blackbody.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-      
-
-TF_DEFINE_PRIVATE_TOKENS(
-	HdRprDomeLightTokens,
-	(exposure)                                  \
-	(intensity)                                 \
-	(params)                                    \
-	(texturePath)
-);
 
 static void removeFirstSlash(std::string & string)
 {
@@ -51,36 +42,50 @@ void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
 
 	HdDirtyBits bits = *dirtyBits;
 
-	if (bits & DirtyParams)
-	{
-		// Get the color of the light
-		// GfVec3f color = sceneDelegate->GetLightParamValue(id,HdPrimvarRoleTokens->color).Get<GfVec3f>();
+    if (bits & HdLight::DirtyParams) {
+        m_rprLight = nullptr;
 
-		// Extract intensity
-		float intensity = sceneDelegate->GetLightParamValue(id, HdRprDomeLightTokens->intensity).Get<float>();
+        float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
+        float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
+        float computedIntensity = computeLightIntensity(intensity, exposure);
 
-		// Extract the exposure of the light
-		float exposure = sceneDelegate->GetLightParamValue(id, HdRprDomeLightTokens->exposure).Get<float>();
-		
-		VtValue texturePathValue = sceneDelegate->GetLightParamValue(id, HdRprDomeLightTokens->texturePath);
+        std::string texturePath;
+        VtValue texturePathValue = sceneDelegate->GetLightParamValue(id, HdLightTokens->textureFile);
+        if (texturePathValue.IsHolding<SdfAssetPath>()) {
+            auto& assetPath = texturePathValue.UncheckedGet<SdfAssetPath>();
+            if (assetPath.GetResolvedPath().empty()) {
+                texturePath = ArGetResolver().Resolve(assetPath.GetAssetPath());
+            } else {
+                texturePath = assetPath.GetResolvedPath();
+            }
+            // XXX: Why?
+            removeFirstSlash(texturePath);
+        } else if (texturePathValue.IsHolding<std::string>()) {
+            // XXX: Is it even possible?
+            texturePath = texturePathValue.UncheckedGet<std::string>();
+        }
 
-		std::string path;
-		if (!texturePathValue.IsEmpty())
-		{
-			path = sceneDelegate->GetLightParamValue(id, HdRprDomeLightTokens->texturePath).Get<std::string>();
-			removeFirstSlash(path);
-		}
-		
-		float computed_intensity = computeLightIntensity(intensity, exposure);
-		rprApi->CreateEnvironmentLight(path, computed_intensity);
-	}
+        if (texturePath.empty()) {
+            GfVec3f color = sceneDelegate->GetLightParamValue(id, HdPrimvarRoleTokens->color).Get<GfVec3f>();
+            if (sceneDelegate->GetLightParamValue(id, HdLightTokens->enableColorTemperature).Get<bool>()) {
+                GfVec3f temperatureColor = UsdLuxBlackbodyTemperatureAsRgb(sceneDelegate->GetLightParamValue(id, HdLightTokens->colorTemperature).Get<float>());
+                color[0] *= temperatureColor[0];
+                color[1] *= temperatureColor[1];
+                color[2] *= temperatureColor[2];
+            }
 
-	*dirtyBits = DirtyBits::Clean;
+            m_rprLight = rprApi->CreateEnvironmentLight(color, computedIntensity);
+        } else {
+            m_rprLight = rprApi->CreateEnvironmentLight(texturePath, computedIntensity);
+        }
+    }
+
+	*dirtyBits = HdLight::Clean;
 }
 
 
 HdDirtyBits HdRprDomeLight::GetInitialDirtyBitsMask() const {
-		return DirtyBits::AllDirty;
+		return HdLight::AllDirty;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

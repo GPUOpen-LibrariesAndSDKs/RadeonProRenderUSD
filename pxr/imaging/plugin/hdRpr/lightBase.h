@@ -18,16 +18,7 @@ public:
 		: HdLight(id)
 		, m_rprApiWeakPtr(rprApi) {}
 
-	~HdRprLightBase();
-
-	// change tracking for HdStLight
-	enum DirtyBits : HdDirtyBits {
-		Clean = 0,
-		DirtyTransform = 1 << 0,
-		DirtyParams = 1 << 1,
-		AllDirty = (DirtyTransform
-		| DirtyParams)
-	};
+	~HdRprLightBase() override = default;
 
 	/// Synchronizes state from the delegate to this object.
 	/// @param[in, out]  dirtyBits: On input specifies which state is
@@ -55,9 +46,9 @@ protected:
 	virtual const TfTokenVector & FetchLightGeometryParamNames() const = 0;
 
 	//virtual RprApiObject CreateGeometryLight(std::map<TfToken, float> & params, const GfVec3f & emmisionColor) = 0;
-	virtual RprApiObject CreateLightMesh(std::map<TfToken, float> & params) = 0;
+	virtual RprApiObjectPtr CreateLightMesh(std::map<TfToken, float>& params) = 0;
 
-	virtual RprApiMaterial * CreateLightMaterial(const GfVec3f & illumColor);
+	virtual RprApiObjectPtr CreateLightMaterial(const GfVec3f& illumColor);
 
 	// Normalize Light Color with surface area
 	virtual GfVec3f NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & emmisionColor) = 0;
@@ -65,11 +56,12 @@ protected:
 	HdRprApiWeakPtr m_rprApiWeakPtr;
 
 	// Mesh with emmisive material
-	RprApiObject m_lightMesh = nullptr;
-
-	RprApiMaterial * m_lightMaterial = nullptr;
+	RprApiObjectPtr m_lightMesh;
+	RprApiObjectPtr m_lightMaterial;
 
 	GfVec3f m_emmisionColor = GfVec3f(0.f, 0.f, 0.f);
+
+	GfMatrix4d m_transform;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

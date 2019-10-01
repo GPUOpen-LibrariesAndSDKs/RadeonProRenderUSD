@@ -5,9 +5,9 @@
 
 #include "pxr/base/gf/vec3f.h"
 #include "pxr/usd/sdf/assetPath.h"
-#include <pxr/usd/ar/resolver.h>
+#include "pxr/usd/ar/resolver.h"
 
-#include "RadeonProRender.h"
+#include <RadeonProRender.h>
 #include <cfloat>
 
 PXR_NAMESPACE_OPEN_SCOPE

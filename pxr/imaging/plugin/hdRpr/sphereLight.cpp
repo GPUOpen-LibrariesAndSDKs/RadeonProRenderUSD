@@ -2,29 +2,21 @@
 #include <cmath>
 
 PXR_NAMESPACE_OPEN_SCOPE
-      
-
-TF_DEFINE_PRIVATE_TOKENS(
-	HdRprSphereLightTokens,
-	(radius)
-	(normalize)									
-);
-
 
 const TfTokenVector k_requiredGeometryParam =
 {
-	HdRprSphereLightTokens->radius,
+	HdLightTokens->radius,
 };
 
 
 bool HdRprSphereLight::IsDirtyGeomParam(std::map<TfToken, float> & params)
 {
-	if (params.find(HdRprSphereLightTokens->radius) == params.end())
+	if (params.find(HdLightTokens->radius) == params.end())
 	{
 		return false;
 	}
 
-	float radius = params[HdRprSphereLightTokens->radius];
+	float radius = params[HdLightTokens->radius];
 
 	bool isDirty = radius != m_radius;
 
@@ -38,7 +30,7 @@ const TfTokenVector & HdRprSphereLight::FetchLightGeometryParamNames() const
 	return k_requiredGeometryParam;
 }
 
-RprApiObject HdRprSphereLight::CreateLightMesh(std::map<TfToken, float> & params)
+RprApiObjectPtr HdRprSphereLight::CreateLightMesh(std::map<TfToken, float>& params)
 {
 	
 	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
@@ -48,15 +40,13 @@ RprApiObject HdRprSphereLight::CreateLightMesh(std::map<TfToken, float> & params
 		return nullptr;
 	}
 
-	return rprApi->CreateSphereLightMesh(params[HdRprSphereLightTokens->radius]);
+	return rprApi->CreateSphereLightMesh(params[HdLightTokens->radius]);
 }
 
-GfVec3f HdRprSphereLight::NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & inColor)
-{
-	float radius = params[HdRprSphereLightTokens->radius];
-	if (radius <= 0.0f)
-	{
-		   radius = 1.0f;
+GfVec3f HdRprSphereLight::NormalizeLightColor(const GfMatrix4d& transform, std::map<TfToken, float>& params, const GfVec3f& inColor) {
+	float radius = params[HdLightTokens->radius];
+	if (radius <= 0.0f) {
+		radius = 1.0f;
 	}
 
 	const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * radius;

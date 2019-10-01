@@ -1,7 +1,6 @@
 #include "renderBuffer.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
-#include "tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 

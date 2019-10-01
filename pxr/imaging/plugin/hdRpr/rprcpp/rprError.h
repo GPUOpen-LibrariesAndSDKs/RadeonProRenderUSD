@@ -1,9 +1,10 @@
 #ifndef RPRCPP_EXCEPTION_H
 #define RPRCPP_EXCEPTION_H
 
+#include "pxr/pxr.h"
+#include "pxr/base/arch/functionLite.h"
+
 #include <RadeonProRender.h>
-#include <pxr/base/arch/functionLite.h>
-#include <pxr/pxr.h>
 #include <stdexcept>
 #include <cassert>
 #include <string>

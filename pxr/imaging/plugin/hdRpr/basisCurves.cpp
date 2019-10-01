@@ -18,15 +18,6 @@ HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id, HdRprApiSharedPtr rprApi,
 		m_rprApiWeakPtr = rprApi;
 	}
 
-HdRprBasisCurves::~HdRprBasisCurves()
-{
-	if (auto rprApi = m_rprApiWeakPtr.lock()) {
-	    for (auto material : m_rprMaterials) {
-	        rprApi->DeleteMaterial(material);
-	    }
-	}
-}
-
 
 HdDirtyBits
 HdRprBasisCurves::_PropagateDirtyBits(HdDirtyBits bits) const
@@ -75,11 +66,6 @@ void HdRprBasisCurves::Sync(HdSceneDelegate * sceneDelegate, HdRenderParam * ren
 			generateIndexes(points.size(), indexes);
 		}
 
-		if (m_rprCurve)
-		{
-			rprApi->DeleteMesh(m_rprCurve);
-		}
-
 		VtValue widthVal = sceneDelegate->Get(id, HdTokens->widths);
 
 
@@ -106,14 +92,19 @@ void HdRprBasisCurves::Sync(HdSceneDelegate * sceneDelegate, HdRenderParam * ren
 			pointsTransformed.push_back( GfVec3f(pointTransformed[0], pointTransformed[1], pointTransformed[2]) );
 		}
 
-
-
 		m_rprCurve = rprApi->CreateCurve(pointsTransformed, indexes, curveWidth);
+		if (!m_rprCurve) {
+			TF_RUNTIME_ERROR("Failed to create curve");
+			return;
+		}
+	}
 
-		const HdRprMaterial * material = static_cast<const HdRprMaterial *>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(GetId())));
+	if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
+		auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(GetId())));
 
-		if (material == NULL) {
-
+		if (material && material->GetRprMaterialObject()) {
+			rprApi->SetCurveMaterial(m_rprCurve.get(), material->GetRprMaterialObject());
+		} else {
 			HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant);
 
 			VtValue val = sceneDelegate->Get(id, HdPrimvarRoleTokens->color);
@@ -121,16 +112,13 @@ void HdRprBasisCurves::Sync(HdSceneDelegate * sceneDelegate, HdRenderParam * ren
 			if (!val.IsEmpty()) {
 				VtArray<GfVec4f> color = val.Get<VtArray<GfVec4f>>();
 				MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::COLOR,
-				MaterialParams{ { HdPrimvarRoleTokens->color, VtValue(color[0]) } });
-				RprApiMaterial * rprMaterial = rprApi->CreateMaterial(matAdapter);
+					MaterialParams{ { HdPrimvarRoleTokens->color, VtValue(color[0]) } });
+				m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
 
-				rprApi->SetCurveMaterial(m_rprCurve, rprMaterial);
-                m_rprMaterials.push_back(rprMaterial);
+				rprApi->SetCurveMaterial(m_rprCurve.get(), m_fallbackMaterial.get());
+			} else {
+				rprApi->SetCurveMaterial(m_rprCurve.get(), nullptr);
 			}
-		}
-		else if (material &&  material->GetRprMaterialObject())
-		{
-			rprApi->SetCurveMaterial(m_rprCurve, material->GetRprMaterialObject());
 		}
 	}
 

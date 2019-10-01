@@ -242,10 +242,6 @@ std::unique_ptr<Context> Context::Create(PluginType requestedPlugin, RenderDevic
         }
     }
 
-    if (context) {
-        RPR_ERROR_CHECK(rprContextSetParameter1u(context->GetHandle(), "yflip", 0), "Fail to set context YFLIP parameter");
-    }
-
     return context;
 }
 

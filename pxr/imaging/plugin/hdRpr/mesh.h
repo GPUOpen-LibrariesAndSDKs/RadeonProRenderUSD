@@ -17,7 +17,7 @@ public:
 	HF_MALLOC_TAG_NEW("new HdRprMesh");
 
 	HdRprMesh(SdfPath const& id, HdRprApiSharedPtr rprApi, SdfPath const& instancerId = SdfPath());
-	~HdRprMesh() override;
+	~HdRprMesh() override = default;
 
 	void Sync(
 		HdSceneDelegate* sceneDelegate,
@@ -63,9 +63,9 @@ protected:
 private:
 
     HdRprApiWeakPtr m_rprApiWeakPtr;
-    std::vector<RprApiObject> m_rprMeshes;
-    std::vector<std::vector<RprApiObject>> m_rprMeshInstances;
-    RprApiMaterial* m_fallbackMaterial = nullptr;
+    std::vector<RprApiObjectPtr> m_rprMeshes;
+    std::vector<std::vector<RprApiObjectPtr>> m_rprMeshInstances;
+    RprApiObjectPtr m_fallbackMaterial;
     GfMatrix4d m_transform;
 };
 

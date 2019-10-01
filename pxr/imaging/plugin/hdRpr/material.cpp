@@ -3,12 +3,6 @@
 #include "materialFactory.h"
 #include "materialAdapter.h"
 
-#include "pxr/base/tf/token.h"
-#include "pxr/base/gf/vec3f.h"
-#include "pxr/base/gf/vec4f.h"
-
-#include "tokens.h"
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(
@@ -50,13 +44,6 @@ HdRprMaterial::HdRprMaterial(SdfPath const & id, HdRprApiSharedPtr rprApi) : HdM
 	m_rprApiWeakPtr = rprApi;
 }
 
-HdRprMaterial::~HdRprMaterial()
-{
-    if (auto rprApi = m_rprApiWeakPtr.lock()) {
-        rprApi->DeleteMaterial(m_rprMaterial);
-    }
-}
-
 void HdRprMaterial::Sync(HdSceneDelegate *sceneDelegate,
 	HdRenderParam   *renderParam,
 	HdDirtyBits     *dirtyBits)
@@ -77,14 +64,12 @@ void HdRprMaterial::Sync(HdSceneDelegate *sceneDelegate,
 			EMaterialType materialType;
 			HdMaterialNetwork surface;
 
-			if (!getMaterial(networkMap, materialType, surface))
-			{
+			if (getMaterial(networkMap, materialType, surface)) {
+				MaterialAdapter matAdapter = MaterialAdapter(materialType, surface);
+				m_rprMaterial = rprApi->CreateMaterial(matAdapter);
+			} else {
 				TF_CODING_WARNING("Material type not supported");
-				return;
 			}
-
-			MaterialAdapter matAdapter = MaterialAdapter(materialType, surface);
-			m_rprMaterial = rprApi->CreateMaterial(matAdapter);
 		}
 	}
 
@@ -101,9 +86,8 @@ void HdRprMaterial::Reload()
 	// no-op
 }
 
-const RprApiMaterial * HdRprMaterial::GetRprMaterialObject() const
-{
-	return m_rprMaterial;
+RprApiObject const* HdRprMaterial::GetRprMaterialObject() const {
+	return m_rprMaterial.get();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
