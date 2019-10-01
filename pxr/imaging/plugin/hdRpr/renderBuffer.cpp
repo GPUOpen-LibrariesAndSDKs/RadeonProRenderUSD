@@ -137,11 +137,6 @@ bool HdRprRenderBuffer::IsMapped() const {
 }
 
 void HdRprRenderBuffer::Resolve() {
-    // XXX: Houdini Solaris workaround to track AOV selection
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        rprApi->EnableAov(m_aovName, m_format);
-    }
-
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
         m_dataCache = rprApi->GetFramebufferData(m_aovName, m_dataCache, &m_dataCacheSize);
         if (m_aovName == HdRprAovTokens->primId) {

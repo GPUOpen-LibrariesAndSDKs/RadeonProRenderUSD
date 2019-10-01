@@ -30,7 +30,7 @@ public:
 		);
 
 	/// Renderpass destructor.
-	virtual ~HdRprRenderPass();
+	~HdRprRenderPass() override = default;
 
 	/// Return false if scene is require to be rendered or true otherwise
 	/// In order to specific RPR api scene always should be rendered
