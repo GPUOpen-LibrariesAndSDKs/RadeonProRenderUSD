@@ -90,9 +90,9 @@ pxr_plugin(hdRpr
         ${GLEW_INCLUDE_DIR}
 		
 		${OptIncludeDir}
-				
-    PUBLIC_CLASSES
-        config
+
+    PRIVATE_CLASSES
+    config
 		rendererPlugin
         renderDelegate
 		resourceRegistry
@@ -113,13 +113,11 @@ pxr_plugin(hdRpr
 		
 		${OptClass}
 
-    PUBLIC_HEADERS
-		api.h
-        renderParam.h
-		materialFactory.h
-
     PRIVATE_HEADERS
         boostIncludePath.h
+        api.h
+        renderParam.h
+        materialFactory.h
 
     RESOURCE_FILES
         plugInfo.json
@@ -181,7 +179,12 @@ if(WIN32)
         FILES ${RPR_BINARIES} ${RIF_BINARIES} ${OptBin}
         DESTINATION bin)
 else(WIN32)
+    if(RPR_BUILD_AS_HOUDINI_PLUGIN)
+        _get_install_dir("Libraries" installPrefix)
+    else()
+        _get_install_dir("lib" installPrefix)
+    endif()
     install(
         FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY} ${OptLibs}
-        DESTINATION lib )
+        DESTINATION ${installPrefix})
 endif(WIN32)

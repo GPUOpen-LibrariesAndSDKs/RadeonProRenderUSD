@@ -18,10 +18,6 @@ public:
 
     virtual HdDirtyBits GetInitialDirtyBitsMask() const override;
 
-    virtual void Sync(HdSceneDelegate *sceneDelegate,
-                      HdRenderParam *renderParam,
-                      HdDirtyBits *dirtyBits) override;
-
     virtual bool Allocate(GfVec3i const& dimensions,
                           HdFormat format,
                           bool multiSampled) override;

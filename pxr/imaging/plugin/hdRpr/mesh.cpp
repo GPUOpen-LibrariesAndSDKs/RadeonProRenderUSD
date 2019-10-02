@@ -268,11 +268,15 @@ void HdRprMesh::Sync(
                             int pointIndex = indexes[faceIndexesOffset + i];
                             subsetPoints.push_back(points[pointIndex]);
 
-                            int normalIndex = normalIndexes.empty() ? pointIndex : normalIndexes[faceIndexesOffset + i];
-                            subsetNormals.push_back(normals[normalIndex]);
+                            if (!normals.empty()) {
+                                int normalIndex = normalIndexes.empty() ? pointIndex : normalIndexes[faceIndexesOffset + i];
+                                subsetNormals.push_back(normals[normalIndex]);
+                            }
 
-                            int stIndex = stIndexes.empty() ? pointIndex : stIndexes[faceIndexesOffset + i];
-                            subsetSt.push_back(st[stIndex]);
+                            if (!st.empty()) {
+                                int stIndex = stIndexes.empty() ? pointIndex : stIndexes[faceIndexesOffset + i];
+                                subsetSt.push_back(st[stIndex]);
+                            }
                         }
                     }
 
