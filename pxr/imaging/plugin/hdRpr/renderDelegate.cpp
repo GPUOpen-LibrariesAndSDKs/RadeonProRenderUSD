@@ -1,6 +1,5 @@
 #include "renderDelegate.h"
 
-#include "pxr/imaging/glf/glew.h"
 #include "pxr/imaging/hd/camera.h"
 
 #include "renderPass.h"

@@ -4,9 +4,9 @@
 #include "../RprTools.h"
 #include "../RprTools.cpp"
 
-#include <GL/glew.h>
-#include <pxr/base/arch/env.h>
-#include <pxr/base/tf/diagnostic.h>
+#include "pxr/imaging/glf/glew.h"
+#include "pxr/base/arch/env.h"
+#include "pxr/base/tf/diagnostic.h"
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
@@ -170,11 +170,9 @@ std::unique_ptr<Context> Context::CreateContext(PluginType plugin, RenderDeviceT
         context->m_activePlugin == PluginType::HYBRID)) {
         context->m_useGlInterop = false;
     }
-    if (context->m_useGlInterop) {
-        if (GLenum err = glewInit()) {
-            TF_WARN("Failed to init GLEW. Error code: %s. Disabling GL interop", glewGetErrorString(err));
-            context->m_useGlInterop = false;
-        }
+    if (context->m_useGlInterop && !GlfGlewInit()) {
+        TF_WARN("Failed to init GLEW. Disabling GL interop");
+        context->m_useGlInterop = false;
     }
 
     auto cachePath = GetCachePath();
