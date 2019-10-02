@@ -3,13 +3,16 @@
 
 #include "pxr/pxr.h"
 
-#include "pxr/imaging/hdSt/instancer.h"
+#include "pxr/imaging/hd/changeTracker.h"
+#include "pxr/imaging/hd/instancer.h"
 
 #include "pxr/base/gf/vec3f.h"
+#include "pxr/base/gf/vec4f.h"
+#include "pxr/base/gf/matrix4d.h"
 #include "pxr/base/gf/rotation.h"
 #include "pxr/base/gf/quaternion.h"
+#include "pxr/base/vt/array.h"
 
-#include <vector>
 #include <mutex>
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -17,11 +20,11 @@ PXR_NAMESPACE_OPEN_SCOPE
 class HdSceneDelegate;
 class SdfPath;
 
-class HdRprInstancer : public HdStInstancer {
+class HdRprInstancer : public HdInstancer {
 public:
 	HdRprInstancer(HdSceneDelegate* delegate, SdfPath const &id,
-		SdfPath const &parentInstancerId) : 
-		HdStInstancer(delegate, id, parentInstancerId) {}
+		SdfPath const &parentInstancerId) :
+		HdInstancer(delegate, id, parentInstancerId) {}
 
 	VtMatrix4dArray ComputeTransforms(SdfPath const& prototypeId);
 
@@ -34,7 +37,7 @@ private:
 	VtQuaternionArray m_rotate;
 	VtVec3fArray m_scale;
 
-	std::mutex m_mutex;
+    std::mutex m_syncMutex;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
