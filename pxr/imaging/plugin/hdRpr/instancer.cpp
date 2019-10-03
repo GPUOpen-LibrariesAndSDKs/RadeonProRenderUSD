@@ -1,19 +1,6 @@
 #include "instancer.h"
 
-#include "pxr/base/gf/vec3f.h"
-#include "pxr/base/gf/vec4f.h"
-#include "pxr/base/gf/matrix4d.h"
-#include "pxr/base/gf/rotation.h"
-#include "pxr/base/gf/quaternion.h"
-
 #include "pxr/imaging/hd/sceneDelegate.h"
-
-#include "pxr/imaging/hd/drawItem.h"
-#include "pxr/imaging/hd/debugCodes.h"
-#include "pxr/imaging/hd/rprimSharedData.h"
-#include "pxr/imaging/hd/sceneDelegate.h"
-#include "pxr/imaging/hd/vtBufferSource.h"
-#include "pxr/imaging/hdSt/resourceRegistry.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -35,14 +22,20 @@ void HdRprInstancer::Sync()
 
 	HdChangeTracker &changeTracker = GetDelegate()->GetRenderIndex().GetChangeTracker();
 
+	// Use the double-checked locking pattern to check if this instancer's
+	// primvars are dirty.
 	int dirtyBits = changeTracker.GetInstancerDirtyBits(instancerId);
 	if (!HdChangeTracker::IsAnyPrimvarDirty(dirtyBits, instancerId)) {
 		return;
 	}
 
-	//TfTokenVector primVarNames = GetDelegate()->GetPrimvarInstanceNames(instancerId);
-	HdPrimvarDescriptorVector primvars = GetDelegate()->GetPrimvarDescriptors(instancerId, HdInterpolationInstance);
+	std::lock_guard<std::mutex> lock(m_syncMutex);
+	dirtyBits = changeTracker.GetInstancerDirtyBits(instancerId);
+	if (!HdChangeTracker::IsAnyPrimvarDirty(dirtyBits, instancerId)) {
+		return;
+	}
 
+	HdPrimvarDescriptorVector primvars = GetDelegate()->GetPrimvarDescriptors(instancerId, HdInterpolationInstance);
 	TF_FOR_ALL(primvarIt, primvars) {
 		if (!HdChangeTracker::IsPrimvarDirty(dirtyBits, instancerId, primvarIt->name))
 		{
@@ -79,8 +72,6 @@ void HdRprInstancer::Sync()
 
 VtMatrix4dArray HdRprInstancer::ComputeTransforms(SdfPath const& prototypeId)
 {
-	std::lock_guard<std::mutex> lock(m_mutex);
-
 	Sync();
 
 	GfMatrix4d instancerTransform =
@@ -88,11 +79,11 @@ VtMatrix4dArray HdRprInstancer::ComputeTransforms(SdfPath const& prototypeId)
 
 	VtIntArray instanceIndices =
 		GetDelegate()->GetInstanceIndices(GetId(), prototypeId);
-	
+
 	VtMatrix4dArray transforms;
 	transforms.reserve(instanceIndices.size());
 	for (int idx : instanceIndices)
-	{		
+	{
 		GfMatrix4d translateMat(1);
 		GfMatrix4d rotateMat(1);
 		GfMatrix4d scaleMat(1);

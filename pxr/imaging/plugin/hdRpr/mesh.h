@@ -19,7 +19,7 @@ public:
 	HdRprMesh(SdfPath const& id, HdRprApiSharedPtr rprApi, SdfPath const& instancerId = SdfPath());
 	~HdRprMesh() override;
 
-	virtual void Sync(
+	void Sync(
 		HdSceneDelegate* sceneDelegate,
 		HdRenderParam*   renderParam,
 		HdDirtyBits*     dirtyBits,
@@ -62,10 +62,11 @@ protected:
 		
 private:
 
-	HdRprApiWeakPtr m_rprApiWeakPtr;
+    HdRprApiWeakPtr m_rprApiWeakPtr;
     std::vector<RprApiObject> m_rprMeshes;
-	VtArray<RprApiObject> m_rprMeshInstances;
-	RprApiMaterial* m_fallbackMaterial = nullptr;
+    std::vector<std::vector<RprApiObject>> m_rprMeshInstances;
+    RprApiMaterial* m_fallbackMaterial = nullptr;
+    GfMatrix4d m_transform;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
