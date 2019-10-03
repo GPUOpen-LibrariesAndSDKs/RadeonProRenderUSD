@@ -152,7 +152,7 @@ endif(APPLE)
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
         FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/HdRprPlugin_Viewport.ds
-        DESTINATION Resources/houdini/soho/parameters)
+        DESTINATION "${HOUDINI_HH}/soho/parameters")
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_install_dir(lib/python/rpr installPrefix)
 
