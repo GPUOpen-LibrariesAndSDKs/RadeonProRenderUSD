@@ -22,23 +22,10 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId) : HdMesh(id, instancerId)
-{
-	m_rprApiWeakPtr = rprApiShared;
-}
+HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId)
+    : HdMesh(id, instancerId)
+    , m_rprApiWeakPtr(rprApiShared) {
 
-HdRprMesh::~HdRprMesh() {
-    if (auto rprApi = m_rprApiWeakPtr.lock()) {
-        rprApi->DeleteMaterial(m_fallbackMaterial);
-        for (auto meshInstances : m_rprMeshInstances) {
-            for (auto instance : meshInstances) {
-                rprApi->DeleteInstance(instance);
-            }
-        }
-        for (auto rprMesh : m_rprMeshes) {
-            rprApi->DeleteMesh(rprMesh);
-        }
-    }
 }
 
 HdDirtyBits
@@ -211,29 +198,26 @@ void HdRprMesh::Sync(
             }
         }
 
-        for (auto& rprMesh : m_rprMeshes) {
-            rprApi->DeleteMesh(rprMesh);
-        }
         m_rprMeshes.clear();
 
-        auto setMeshMaterial = [&sceneDelegate, &rprApi](RprApiObject rprMesh, SdfPath const& materialId, RprApiMaterial* fallbackMaterial) {
+        auto setMeshMaterial = [&sceneDelegate, &rprApi, this](RprApiObjectPtr& rprMesh, SdfPath const& materialId) {
             auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
             if (material && material->GetRprMaterialObject()) {
-                rprApi->SetMeshMaterial(rprMesh, material->GetRprMaterialObject());
-            } else if (fallbackMaterial) {
-                rprApi->SetMeshMaterial(rprMesh, fallbackMaterial);
+                rprApi->SetMeshMaterial(rprMesh.get(), material->GetRprMaterialObject());
+            } else if (m_fallbackMaterial) {
+                rprApi->SetMeshMaterial(rprMesh.get(), m_fallbackMaterial.get());
             }
         };
         if (geomSubsets.empty()) {
             if (auto rprMesh = rprApi->CreateMesh(points, indexes, normals, normalIndexes, st, stIndexes, vertexPerFace)) {
-                m_rprMeshes.push_back(rprMesh);
-                setMeshMaterial(rprMesh, hdMaterialId, m_fallbackMaterial);
+                setMeshMaterial(rprMesh, hdMaterialId);
+                m_rprMeshes.push_back(std::move(rprMesh));
             }
         } else {
             if (geomSubsets.size() == 1) {
                 if (auto rprMesh = rprApi->CreateMesh(points, indexes, normals, normalIndexes, st, stIndexes, vertexPerFace)) {
-                    m_rprMeshes.push_back(rprMesh);
-                    setMeshMaterial(rprMesh, geomSubsets.back().materialId, m_fallbackMaterial);
+                    setMeshMaterial(rprMesh, geomSubsets.back().materialId);
+                    m_rprMeshes.push_back(std::move(rprMesh));
                 }
             } else {
                 // GeomSubset may reference face subset in any given order so we need to be able to
@@ -284,10 +268,9 @@ void HdRprMesh::Sync(
                         }
                     }
 
-                    if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace))
-                    {
-                        m_rprMeshes.push_back(rprMesh);
-                        setMeshMaterial(rprMesh, subset.materialId, m_fallbackMaterial);
+                    if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace)) {
+                        setMeshMaterial(rprMesh, subset.materialId);
+                        m_rprMeshes.push_back(std::move(rprMesh));
                     }
                 }
             }
@@ -306,34 +289,26 @@ void HdRprMesh::Sync(
         if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) {
             int refineLevel = sceneDelegate->GetDisplayStyle(id).refineLevel;
             auto boundaryInterpolation = refineLevel > 0 ? sceneDelegate->GetSubdivTags(id).GetVertexInterpolationRule() : TfToken();
-            for (auto rprMesh : m_rprMeshes)
-            {
-                rprApi->SetMeshRefineLevel(rprMesh, refineLevel, boundaryInterpolation);
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetMeshRefineLevel(rprMesh.get(), refineLevel, boundaryInterpolation);
             }
         }
 
         if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
             _UpdateVisibility(sceneDelegate, dirtyBits);
-            for (auto mesh : m_rprMeshes) {
-                rprApi->SetMeshVisibility(mesh, _sharedData.visible);
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetMeshVisibility(rprMesh.get(), _sharedData.visible);
             }
         }
 
         if (*dirtyBits & HdChangeTracker::DirtyInstancer) {
             if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()))) {
-                // XXX: if current number of meshes less than previous we have a memory leak
-                //      but instead of releasing it here we should refactor rprApi to return
-                //      complete object that obeys RAII idiom
-                m_rprMeshInstances.resize(m_rprMeshes.size());
-
                 auto transforms = instancer->ComputeTransforms(_sharedData.rprimID);
                 if (transforms.empty()) {
+                    // Reset to state without instances
+                    m_rprMeshInstances.clear();
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
-                        rprApi->SetMeshVisibility(m_rprMeshes[i], _sharedData.visible);
-                        for (auto instance : m_rprMeshInstances[i]) {
-                            rprApi->DeleteInstance(instance);
-                        }
-                        m_rprMeshInstances[i].clear();
+                        rprApi->SetMeshVisibility(m_rprMeshes[i].get(), _sharedData.visible);
                     }
                 } else {
                     updateTransform = false;
@@ -346,24 +321,20 @@ void HdRprMesh::Sync(
                         auto& meshInstances = m_rprMeshInstances[i];
                         if (meshInstances.size() != transforms.size()) {
                             if (meshInstances.size() > transforms.size()) {
-                                for (int j = transforms.size(); j < meshInstances.size(); ++j) {
-                                    rprApi->DeleteInstance(meshInstances[j]);
-                                }
-                                meshInstances.resize(transforms.size(), nullptr);
-                            }
-                            else {
+                                meshInstances.resize(transforms.size());
+                            } else {
                                 for (int j = meshInstances.size(); j < transforms.size(); ++j) {
-                                    meshInstances.push_back(rprApi->CreateMeshInstance(m_rprMeshes[i]));
+                                    meshInstances.push_back(rprApi->CreateMeshInstance(m_rprMeshes[i].get()));
                                 }
                             }
                         }
 
                         for (int j = 0; j < transforms.size(); ++j) {
-                            rprApi->SetMeshTransform(meshInstances[j], transforms[j]);
+                            rprApi->SetMeshTransform(meshInstances[j].get(), transforms[j]);
                         }
 
                         // Hide prototype
-                        rprApi->SetMeshVisibility(m_rprMeshes[i], false);
+                        rprApi->SetMeshVisibility(m_rprMeshes[i].get(), false);
                     }
                 }
             }
@@ -371,7 +342,7 @@ void HdRprMesh::Sync(
 
         if (updateTransform) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshTransform(rprMesh, m_transform);
+                rprApi->SetMeshTransform(rprMesh.get(), m_transform);
             }
         }
     }

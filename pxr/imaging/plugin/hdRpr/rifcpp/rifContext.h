@@ -1,7 +1,7 @@
 #ifndef RIFCPP_CONTEXT_H
 #define RIFCPP_CONTEXT_H
 
-#include "RadeonProRender.h"
+#include <RadeonProRender.h>
 #include "RadeonImageFilters.h"
 #include "rifImage.h"
 

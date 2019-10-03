@@ -1,8 +1,9 @@
 #ifndef RIFCPP_EXCEPTION_H
 #define RIFCPP_EXCEPTION_H
 
+#include "pxr/base/arch/functionLite.h"
+
 #include <RadeonImageFilters.h>
-#include <pxr/base/arch/functionLite.h>
 #include <stdexcept>
 #include <string>
 

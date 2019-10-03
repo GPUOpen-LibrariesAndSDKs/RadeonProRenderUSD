@@ -184,6 +184,7 @@ void HdRprVolume::Sync(
 {
 	if (*dirtyBits & HdChangeTracker::DirtyParams)
 	{
+        m_rprHeteroVolume = nullptr;
 
 		std::string openVdbPath = findOpenVdbFilePath(sceneDelegate, GetId());
 
@@ -373,8 +374,7 @@ void HdRprVolume::Sync(
 			return;
 		}
 
-		rprApi->CreateVolume(gridDencity, idxDencity, gridAlbedo, idxAlbedo, GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], voxelSize[1], voxelSize[2]), nullptr, nullptr);
-
+        m_rprHeteroVolume = rprApi->CreateVolume(gridDencity, idxDencity, gridAlbedo, idxAlbedo, GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], voxelSize[1], voxelSize[2]));
 	}
 
 	* dirtyBits = HdChangeTracker::Clean;

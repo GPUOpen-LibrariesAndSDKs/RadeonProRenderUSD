@@ -11,14 +11,11 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-struct RprApiMaterial;
-
-
 class HdRprMaterial final : public HdMaterial {
 public:
 	HdRprMaterial(SdfPath const& id, HdRprApiSharedPtr rprApi);
 
-	virtual ~HdRprMaterial();
+	~HdRprMaterial() override = default;
 
 	/// Synchronizes state from the delegate to this object.
 
@@ -37,12 +34,11 @@ public:
 
 	/// Get pointer to RPR material
 	/// In case material сreation failure return nullptr
-	const RprApiMaterial * GetRprMaterialObject() const;
+	const RprApiObject * GetRprMaterialObject() const;
 
 private:
 	HdRprApiWeakPtr m_rprApiWeakPtr;
-
-	RprApiMaterial * m_rprMaterial = nullptr;
+	RprApiObjectPtr m_rprMaterial;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

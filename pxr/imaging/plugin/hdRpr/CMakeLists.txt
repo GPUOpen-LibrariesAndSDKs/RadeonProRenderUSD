@@ -109,7 +109,6 @@ pxr_plugin(hdRpr
 		sphereLight
         renderBuffer
 		basisCurves
-		tokens
 		
 		${OptClass}
 

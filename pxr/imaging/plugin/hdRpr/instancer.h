@@ -1,17 +1,14 @@
 #ifndef HDRPR_INSTANCER_H
 #define HDRPR_INSTANCER_H
 
-#include "pxr/pxr.h"
-
-#include "pxr/imaging/hd/changeTracker.h"
 #include "pxr/imaging/hd/instancer.h"
 
+#include "pxr/base/vt/array.h"
 #include "pxr/base/gf/vec3f.h"
 #include "pxr/base/gf/vec4f.h"
 #include "pxr/base/gf/matrix4d.h"
 #include "pxr/base/gf/rotation.h"
 #include "pxr/base/gf/quaternion.h"
-#include "pxr/base/vt/array.h"
 
 #include <mutex>
 

@@ -2,9 +2,9 @@
 #include "renderDelegate.h"
 #include "config.h"
 #include "rprApi.h"
+#include "pxr/imaging/hd/renderPassState.h"
 
 #include <GL/glew.h>
-#include <pxr/imaging/hd/renderPassState.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 

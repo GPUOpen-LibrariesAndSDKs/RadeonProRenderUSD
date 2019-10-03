@@ -12,7 +12,6 @@
 #include "material.h"
 #include "renderBuffer.h"
 #include "basisCurves.h"
-#include "tokens.h"
 
 #ifdef USE_VOLUME
 #include "volume.h"
@@ -25,9 +24,10 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
 TF_DEFINE_PUBLIC_TOKENS(HdRprRenderQualityTokens, HDRPR_RENDER_QUALITY_TOKENS);
 
-TF_DEFINE_PRIVATE_TOKENS(
-    _tokens,
-    (openvdbAsset));
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+	(openvdbAsset) \
+	(rpr)
+);
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES =
 {
@@ -37,7 +37,7 @@ const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES =
 #ifdef USE_VOLUME
 	HdPrimTypeTokens->volume,
 #endif
-	
+
 };
 
 const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES =
@@ -50,7 +50,7 @@ const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES =
 };
 
 const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES =
-{ 
+{
 #ifdef USE_VOLUME
     _tokens->openvdbAsset,
 #endif
@@ -105,13 +105,13 @@ void
 HdRprDelegate::CommitResources(HdChangeTracker *tracker)
 {
     // CommitResources() is called after prim sync has finished, but before any
-    // tasks (such as draw tasks) have run. 
+    // tasks (such as draw tasks) have run.
 
 }
 
 TfToken
 HdRprDelegate::GetMaterialNetworkSelector() const {
-	return HdRprTokens->rpr;
+	return _tokens->rpr;
 }
 
 TfTokenVector const&
@@ -223,7 +223,7 @@ HdRprDelegate::CreateSprim(TfToken const& typeId,
 HdSprim *
 HdRprDelegate::CreateFallbackSprim(TfToken const& typeId)
 {
-	
+
 	// For fallback sprims, create objects with an empty scene path.
 	// They'll use default values and won't be updated by a scene delegate.
 	if (typeId == HdPrimTypeTokens->camera) {

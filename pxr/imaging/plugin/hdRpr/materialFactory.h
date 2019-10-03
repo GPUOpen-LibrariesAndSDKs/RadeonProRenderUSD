@@ -3,7 +3,7 @@
 
 #include "pxr/pxr.h"
 
-#include "RadeonProRender.h"
+#include <RadeonProRender.h>
 
 #include "materialAdapter.h"
 
@@ -27,7 +27,7 @@ public:
 
 	void AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial* material);
 
-	void AttachCurveToShape(rpr_shape mesh, const RprApiMaterial* material);
+    void AttachMaterialToCurve(rpr_shape mesh, const RprApiMaterial* material);
 
 private:
     rpr_material_system m_matSys;

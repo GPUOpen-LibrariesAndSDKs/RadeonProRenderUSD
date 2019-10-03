@@ -23,7 +23,7 @@ FrameBuffer::~FrameBuffer() {
     Delete();
 }
 
-FrameBuffer const& FrameBuffer::operator=(FrameBuffer&& fb) noexcept {
+FrameBuffer& FrameBuffer::operator=(FrameBuffer&& fb) noexcept {
     m_context = fb.m_context;
     m_width = fb.m_width;
     m_height = fb.m_height;

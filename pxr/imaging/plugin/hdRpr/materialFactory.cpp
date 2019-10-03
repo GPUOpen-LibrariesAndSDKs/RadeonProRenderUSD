@@ -1,7 +1,7 @@
 ﻿#include "materialFactory.h"
 
-#include <pxr/usd/ar/resolver.h>
-#include <pxr/imaging/glf/uvTextureData.h>
+#include "pxr/usd/ar/resolver.h"
+#include "pxr/imaging/glf/uvTextureData.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -297,17 +297,19 @@ void RprMaterialFactory::DeleteMaterial(RprApiMaterial* material)
     delete material;
 }
 
-void RprMaterialFactory::AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial * material)
-{
-	rprShapeSetMaterial(mesh, material->rootMaterial);
-	if (material->displacementMaterial) {
-	    rprShapeSetDisplacementMaterial(mesh, material->displacementMaterial);
-	}
+void RprMaterialFactory::AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial* material) {
+    if (material) {
+        rprShapeSetMaterial(mesh, material->rootMaterial);
+        if (material->displacementMaterial) {
+            rprShapeSetDisplacementMaterial(mesh, material->displacementMaterial);
+        }
+    } else {
+        rprShapeSetMaterial(mesh, nullptr);
+    }
 }
 
-void RprMaterialFactory::AttachCurveToShape(rpr_shape curve, const RprApiMaterial * material)
-{
-	rprCurveSetMaterial(curve, material->rootMaterial);
+void RprMaterialFactory::AttachMaterialToCurve(rpr_shape curve, const RprApiMaterial* material) {
+    rprCurveSetMaterial(curve, material ? material->rootMaterial : nullptr);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
