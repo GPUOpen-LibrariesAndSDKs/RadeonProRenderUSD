@@ -52,7 +52,7 @@ public:
     void SetOutput(rif_image rifImage);
     void SetOutput(rif_image_desc imageDesc);
     void SetOutput(rpr::FrameBuffer* rprFrameBuffer);
-    void AddParam(const char* name, FilterParam param);
+    void SetParam(const char* name, FilterParam param);
 
     rif_image GetOutput();
 
@@ -65,7 +65,6 @@ protected:
     virtual void AttachFilter() = 0;
 
     void ApplyParameters();
-    void SetupVarianceImageFilter(rif_image_filter inputFilter, rif_image outVarianceImage);
 
 protected:
     Context* m_rifContext;
@@ -86,7 +85,13 @@ protected:
 
     rif_image m_outputImage = nullptr;
 
-    bool m_isDirty = true;
+    enum ChangeTracker {
+        Clean = 0,
+        DirtyAll = ~0u,
+        DirtyIOImage = 1 << 0,
+        DirtyParameters = 1 << 2
+    };
+    uint32_t m_dirtyFlags = DirtyAll;
 };
 
 } // namespace rif

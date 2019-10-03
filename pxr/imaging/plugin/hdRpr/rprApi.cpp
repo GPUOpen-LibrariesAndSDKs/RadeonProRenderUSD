@@ -987,7 +987,7 @@ public:
                     ndcDepthFilter->SetOutput(imageDesc);
 
                     auto viewProjectionMatrix = m_cameraViewMatrix * m_cameraProjectionMatrix;
-                    ndcDepthFilter->AddParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
+                    ndcDepthFilter->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
 
                     aovFrameBuffer.postprocessFilter = std::move(ndcDepthFilter);
                 } else if (aovFrameBufferEntry.first == HdRprAovTokens->normal &&
@@ -1000,9 +1000,9 @@ public:
 
                     remapFilter->SetOutput(imageDesc);
 
-                    remapFilter->AddParam("srcRangeAuto", 0);
-                    remapFilter->AddParam("dstLo", -1.0f);
-                    remapFilter->AddParam("dstHi", 1.0f);
+                    remapFilter->SetParam("srcRangeAuto", 0);
+                    remapFilter->SetParam("dstLo", -1.0f);
+                    remapFilter->SetParam("dstHi", 1.0f);
 
                     aovFrameBuffer.postprocessFilter = std::move(remapFilter);
                 } else if (aovFrameBuffer.format != HdFormatInvalid &&
@@ -1022,7 +1022,7 @@ public:
                        (m_dirtyFlags & ChangeTracker::DirtyCamera)) {
                 if (auto ndcDepthFilter = aovFrameBuffer.postprocessFilter.get()) {
                     auto viewProjectionMatrix = m_cameraViewMatrix * m_cameraProjectionMatrix;
-                    ndcDepthFilter->AddParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
+                    ndcDepthFilter->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
                 }
             }
         }
@@ -1133,11 +1133,6 @@ public:
             break;
         }
         case rif::FilterType::EawDenoise: {
-            m_denoiseFilterPtr->AddParam("colorSigma", 1.0f);
-            m_denoiseFilterPtr->AddParam("normalSigma", 1.0f);
-            m_denoiseFilterPtr->AddParam("depthSigma", 1.0f);
-            m_denoiseFilterPtr->AddParam("transSigma", 1.0f);
-
             EnableAov(HdRprAovTokens->albedo);
             EnableAov(HdRprAovTokens->linearDepth);
             EnableAov(HdRprAovTokens->normal);
