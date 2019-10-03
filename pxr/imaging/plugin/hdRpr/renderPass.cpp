@@ -37,10 +37,6 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
         }
     }
 
-    auto& vp = renderPassState->GetViewport();
-    GfVec2i fbSize(vp[2], vp[3]);
-    rprApi->ResizeAovFramebuffers(fbSize[0], fbSize[1]);
-
     auto& cameraViewMatrix = rprApi->GetCameraViewMatrix();
     auto& wvm = renderPassState->GetWorldToViewMatrix();
     if (cameraViewMatrix != wvm) {
@@ -57,8 +53,20 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
 
     auto& aovBindings = renderPassState->GetAovBindings();
     if (aovBindings.empty()) {
-        if (auto colorBuffer = rprApi->GetFramebufferData(rprApi->GetActiveAov())) {
-            glDrawPixels(fbSize[0], fbSize[1], GL_RGBA, GL_FLOAT, colorBuffer.get());
+        auto& activeAov = rprApi->GetActiveAov();
+        if (auto colorBuffer = rprApi->GetAovData(activeAov)) {
+            auto aovSize = rprApi->GetAovSize(activeAov);
+            auto& vp = renderPassState->GetViewport();
+
+            float currentZoomX;
+            float currentZoomY;
+            glGetFloatv(GL_ZOOM_X, &currentZoomX);
+            glGetFloatv(GL_ZOOM_Y, &currentZoomY);
+
+            // Viewport size is not required to be of the same size as AOV framebuffer
+            glPixelZoom(float(vp[2]) / aovSize[0], float(vp[3]) / aovSize[1]);
+            glDrawPixels(aovSize[0], aovSize[1], GL_RGBA, GL_FLOAT, colorBuffer.get());
+            glPixelZoom(currentZoomX, currentZoomY);
         }
     }
 }

@@ -65,16 +65,20 @@ HdDirtyBits HdRprRenderBuffer::GetInitialDirtyBitsMask() const
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
                       HdFormat format,
                       bool multiSampled) {
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        if (!m_aovName.IsEmpty()) {
-            rprApi->EnableAov(m_aovName, m_format);
-            return true;
-        } else {
-            return false;
-        }
+    if (m_aovName.IsEmpty()) {
+        return false;
     }
 
-    TF_CODING_ERROR("RprApi is expired");
+    if (auto rprApi = m_rprApiWeakPrt.lock()) {
+        if (rprApi->EnableAov(m_aovName, dimensions[0], dimensions[1], m_format)) {
+            m_width = dimensions[0];
+            m_height = dimensions[1];
+            return true;
+        }
+    } else {
+        TF_CODING_ERROR("RprApi is expired");
+    }
+
     return false;
 }
 
@@ -84,24 +88,18 @@ void HdRprRenderBuffer::_Deallocate() {
             rprApi->DisableAov(m_aovName);
         }
     }
+
+    m_format = HdFormatInvalid;
+    m_width = 0u;
+    m_height = 0u;
 }
 
 unsigned int HdRprRenderBuffer::GetWidth() const {
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        GfVec2i fbSize;
-        rprApi->GetFramebufferSize(&fbSize);
-        return fbSize[0];
-    }
-    return 0u;
+    return m_width;
 }
 
 unsigned int HdRprRenderBuffer::GetHeight() const {
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        GfVec2i fbSize;
-        rprApi->GetFramebufferSize(&fbSize);
-        return fbSize[1];
-    }
-    return 0u;
+    return m_height;
 }
 
 unsigned int HdRprRenderBuffer::GetDepth() const {
@@ -137,7 +135,7 @@ bool HdRprRenderBuffer::IsMapped() const {
 
 void HdRprRenderBuffer::Resolve() {
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        m_dataCache = rprApi->GetFramebufferData(m_aovName, m_dataCache, &m_dataCacheSize);
+        m_dataCache = rprApi->GetAovData(m_aovName, m_dataCache, &m_dataCacheSize);
         if (m_aovName == HdRprAovTokens->primId) {
             // RPR store integer ID values to RGB images using such formula:
             // c[i].x = i;
@@ -146,11 +144,9 @@ void HdRprRenderBuffer::Resolve() {
             // i.e. saving little endian int24 to uchar3
             // That's why we interpret the value as int and filling the alpha channel with zeros
             auto primIdData = reinterpret_cast<int*>(m_dataCache.get());
-            GfVec2i size;
-            rprApi->GetFramebufferSize(&size);
-            for (int y = 0; y < size[1]; ++y) {
-                int yOffset = y * size[0];
-                for (int x = 0; x < size[0]; ++x) {
+            for (uint32_t y = 0; y < m_height; ++y) {
+                uint32_t yOffset = y * m_width;
+                for (uint32_t x = 0; x < m_width; ++x) {
                     primIdData[x + yOffset] &= 0xFFFFFF;
                 }
             }
