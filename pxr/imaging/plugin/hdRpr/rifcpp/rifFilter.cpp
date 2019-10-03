@@ -63,6 +63,7 @@ public:
 FilterAIDenoise::FilterAIDenoise(Context* rifContext) : Filter(rifContext) {
     m_rifFilter = rifContext->CreateImageFilter(RIF_IMAGE_FILTER_AI_DENOISE);
 
+    // setup const parameters
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1u(m_rifFilter, "useHDR", 1), "Failed to set filter \"usdHDR\" parameter");
     // TODO: set correct model path
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterString(m_rifFilter, "modelPath", "../models"), "Failed to set filter \"modelPath\" parameter");
@@ -119,10 +120,11 @@ void FilterEaw::AttachFilter() {
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1f(m_rifFilter, "depthSigma", m_inputs.at(Depth).sigma), "Failed to set filter parameter");
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1f(m_rifFilter, "transSigma", m_inputs.at(ObjectId).sigma), "Failed to set filter parameter");
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_auxFilters[Mlaa], "normalsImg", m_inputs.at(Normal).rifImage), "Failed to set filter parameter");
-    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_auxFilters[Mlaa], "meshIDImg", m_inputs.at(ObjectId).rifImage), "Failed to set filter parameter");
-
-    // setup color variance filter
-    SetupVarianceImageFilter(m_auxFilters[ColorVar], m_auxImages[ColorVarianceImage]->GetHandle());
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_auxFilters[Mlaa], "meshIDImg", m_inputs.at(ObjectId).rifImage), "Failed to set filter parameter")
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_auxFilters[ColorVar], "positionsImg", m_inputs.at(WorldCoordinate).rifImage), "Failed to set variance filter parameter");
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_auxFilters[ColorVar], "normalsImg", m_inputs.at(Normal).rifImage), "Failed to set variance filter parameter");
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_auxFilters[ColorVar], "meshIdsImg", m_inputs.at(ObjectId).rifImage), "Failed to set variance filter parameter");
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_auxFilters[ColorVar], "outVarianceImg", m_auxImages[ColorVarianceImage]->GetHandle()), "Failed to set variance filter parameter");
 
     m_rifContext->AttachFilter(m_auxFilters[ColorVar], m_inputs.at(Color).rifImage, m_outputImage);
     m_rifContext->AttachFilter(m_rifFilter, m_outputImage, m_auxImages[DenoisedOutputImage]->GetHandle());
@@ -132,7 +134,7 @@ void FilterEaw::AttachFilter() {
 FilterResample::FilterResample(Context* rifContext, std::uint32_t width, std::uint32_t height) : Filter(rifContext) {
     m_rifFilter = rifContext->CreateImageFilter(RIF_IMAGE_FILTER_RESAMPLE);
 
-    // setup inputs
+    // setup const parameters
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1u(m_rifFilter, "interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST), "Failed to set parameter of resample filter");
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter2u(m_rifFilter, "outSize", width, height), "Failed to set parameter of resample filter");
 }
@@ -188,7 +190,7 @@ void Filter::SetInput(FilterInputType inputType, rif_image rifImage, const float
     assert(rifImage);
 
     m_inputs[inputType] = {rifImage, nullptr, sigma};
-    m_isDirty = true;
+    m_dirtyFlags |= DirtyIOImage;
 }
 
 void Filter::SetInput(FilterInputType inputType, rpr::FrameBuffer* rprFrameBuffer, const float sigma) {
@@ -196,7 +198,7 @@ void Filter::SetInput(FilterInputType inputType, rpr::FrameBuffer* rprFrameBuffe
 
     m_retainedImages.push_back(m_rifContext->CreateImage(rprFrameBuffer));
     m_inputs[inputType] = {m_retainedImages.back()->GetHandle(), rprFrameBuffer, sigma};
-    m_isDirty = true;
+    m_dirtyFlags |= DirtyIOImage;
 }
 
 void Filter::SetOutput(rif_image_desc imageDesc) {
@@ -206,7 +208,7 @@ void Filter::SetOutput(rif_image_desc imageDesc) {
 
 void Filter::SetOutput(rif_image rifImage) {
     m_outputImage = rifImage;
-    m_isDirty = true;
+    m_dirtyFlags |= DirtyIOImage;
 }
 
 void Filter::SetOutput(rpr::FrameBuffer* rprFrameBuffer) {
@@ -218,17 +220,18 @@ rif_image Filter::GetOutput() {
     return m_outputImage;
 }
 
-void Filter::AddParam(const char* name, FilterParam param) {
+void Filter::SetParam(const char* name, FilterParam param) {
     m_params[name] = param;
-    m_isDirty = true;
+    m_dirtyFlags |= DirtyParameters;
 }
 
 void Filter::Update() {
-    if (m_isDirty) {
-        DettachFilter();
+    if (m_dirtyFlags & DirtyParameters) {
         ApplyParameters();
+    }
+    if (m_dirtyFlags & DirtyIOImage) {
+        DettachFilter();
         AttachFilter();
-        m_isDirty = false;
     }
 
     for (auto& input : m_inputs) {
@@ -236,6 +239,8 @@ void Filter::Update() {
             m_rifContext->UpdateInputImage(input.second.rprFrameBuffer, input.second.rifImage);
         }
     }
+
+    m_dirtyFlags = Clean;
 }
 
 void Filter::DettachFilter() {
@@ -277,13 +282,6 @@ void Filter::ApplyParameters() {
         setter.filter = m_rifFilter;
         RIF_ERROR_CHECK_THROW(BOOST_NS::apply_visitor(setter, param.second), "Failed to set image filter parameter");
     }
-}
-
-void Filter::SetupVarianceImageFilter(rif_image_filter inputFilter, rif_image outVarianceImage) {
-    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(inputFilter, "positionsImg", m_inputs.at(WorldCoordinate).rifImage), "Failed to set variance filter parameter");
-    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(inputFilter, "normalsImg", m_inputs.at(Normal).rifImage), "Failed to set variance filter parameter");
-    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(inputFilter, "meshIdsImg", m_inputs.at(ObjectId).rifImage), "Failed to set variance filter parameter");
-    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(inputFilter, "outVarianceImg", outVarianceImage), "Failed to set variance filter parameter");
 }
 
 } // namespace rif
