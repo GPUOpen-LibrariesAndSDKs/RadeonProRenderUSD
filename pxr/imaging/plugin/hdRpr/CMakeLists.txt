@@ -74,7 +74,7 @@ pxr_plugin(hdRpr
         ${RPR_LIBRARY}
         ${RIF_LIBRARY}
         ${Boost_LIBRARIES}
-        ${TBB_LIBRARIES}
+        ${TBB_tbb_LIBRARY}
         ${GLEW_LIBRARY}
 		${OPENGL_LIBRARIES}
 		${PYTHON_LIBRARIES}
