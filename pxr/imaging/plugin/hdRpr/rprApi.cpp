@@ -4,10 +4,6 @@
 #include "rifcpp/rifFilter.h"
 #include "rifcpp/rifImage.h"
 
-#include <RadeonProRender.h>
-#include "RadeonProRender_CL.h"
-#include "RadeonProRender_GL.h"
-
 #include "config.h"
 #include "material.h"
 #include "materialFactory.h"
@@ -16,6 +12,8 @@
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 
+#include <RadeonProRender.h>
+#include <RadeonProRender_Baikal.h>
 #include <vector>
 #include <mutex>
 
@@ -837,7 +835,7 @@ public:
         auto& preferences = HdRprConfig::GetInstance();
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
             if (preferences.IsDirty(HdRprConfig::DirtyHybridQuality)) {
-                rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(preferences.GetHybridQuality()));
+                rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, int(preferences.GetHybridQuality()));
             }
         }
 
@@ -1099,9 +1097,9 @@ private:
             return;
         }
 
-        RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "yflip", 0), "Fail to set context YFLIP parameter");
+        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_Y_FLIP, 0), "Fail to set context YFLIP parameter");
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-            RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(HdRprConfig::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, int(HdRprConfig::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
         }
     }
 

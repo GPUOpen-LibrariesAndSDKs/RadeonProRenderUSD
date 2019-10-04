@@ -248,19 +248,19 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const MaterialParams 
 	switch (type)
 	{
 	case EMaterialType::COLOR:
-		PoulateRprxColor(params);
+		PopulateRprColor(params);
 		break;
 
 	case EMaterialType::EMISSIVE:
-		PoulateEmissive(params);
+		PopulateEmissive(params);
 		break;
 
 	case EMaterialType::TRANSPERENT:
-		PoulateTransparent(params);
+		PopulateTransparent(params);
 		break;
 
 	case EMaterialType::USD_PREVIEW_SURFACE:
-		PoulateUsdPreviewSurface(params, materualTextures);
+		PopulateUsdPreviewSurface(params, materualTextures);
 		break;
     default:
         break;
@@ -285,7 +285,7 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const HdMaterialNetwo
 		MaterialTextures materialTextures;
 		getTextures(materialNetwork, materialTextures);
 
-		PoulateUsdPreviewSurface(materialParameters, materialTextures);
+		PopulateUsdPreviewSurface(materialParameters, materialTextures);
 		break;
 	}
     default:
@@ -293,53 +293,32 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const HdMaterialNetwo
 	}
 }
 
-void MaterialAdapter::PoulateRprxColor(const MaterialParams & params)
-{
-	for (MaterialParams::const_iterator param = params.begin(); param != params.end(); ++param)
-	{
-		const TfToken & paramName = param->first;
-		const VtValue & paramValue = param->second;
+void MaterialAdapter::PopulateRprColor(const MaterialParams& params) {
+    for (MaterialParams::const_iterator param = params.begin(); param != params.end(); ++param) {
+        const TfToken& paramName = param->first;
+        const VtValue& paramValue = param->second;
 
-		if (paramName == HdRprTokens->color)
-		{
-			m_vec4fRprParams.insert({ HdRprTokens->color, VtValToVec4f(paramValue) });
-		}
-	}
+        if (paramName == HdRprTokens->color) {
+            m_vec4fRprParams.insert({RPR_MATERIAL_INPUT_COLOR, VtValToVec4f(paramValue)});
+        }
+    }
 }
 
-
-void MaterialAdapter::PoulateRprColor(const MaterialParams & params)
+void MaterialAdapter::PopulateEmissive(const MaterialParams & params)
 {
-	
-	for (MaterialParams::const_iterator param = params.begin(); param != params.end(); ++param)
-	{
-		const TfToken & paramName = param->first;
-		const VtValue & paramValue = param->second;
-
-		if (paramName == HdRprTokens->color)
-		{
-			m_vec4fRprParams.insert({ HdRprTokens->color, VtValToVec4f(paramValue) });
-		}
-
-	}
-	
+    PopulateRprColor(params);
 }
 
-void MaterialAdapter::PoulateEmissive(const MaterialParams & params)
+void MaterialAdapter::PopulateTransparent(const MaterialParams & params)
 {
-	PoulateRprColor(params);
+    PopulateRprColor(params);
 }
 
-void MaterialAdapter::PoulateTransparent(const MaterialParams & params)
-{
-	PoulateRprColor(params);
-}
-
-void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, const MaterialTextures & textures)
+void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams & params, const MaterialTextures & textures)
 {
 	// initial params
-	m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_WEIGHT , GfVec4f(1.0f) });
-	m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_WEIGHT , GfVec4f(1.0f) });
+	m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_WEIGHT , GfVec4f(1.0f) });
+	m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_WEIGHT , GfVec4f(1.0f) });
 	
 	int useSpecular = 0;
 	GfVec4f albedoColor = GfVec4f(1.0f);
@@ -358,15 +337,15 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 		if (paramName == HdRprTokens->diffuseColor)
 		{
 			albedoColor = VtValToVec4f(paramValue);
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_COLOR , albedoColor });
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_COLOR , albedoColor });
 		}
 		else if (paramName == HdRprTokens->emissiveColor)
 		{
 			GfVec4f emmisionColor = VtValToVec4f(paramValue);
 			if (!isColorBlack(emmisionColor))
 			{
-				m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_EMISSION_WEIGHT , GfVec4f(1.0f) });
-				m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_EMISSION_COLOR , emmisionColor });
+				m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_EMISSION_WEIGHT , GfVec4f(1.0f) });
+				m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_EMISSION_COLOR , emmisionColor });
 			}
 		}
 		else if (paramName == HdRprTokens->useSpecularWorkflow)
@@ -379,27 +358,27 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 		}
 		else if (paramName == HdRprTokens->metallic)
 		{
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_METALNESS, VtValToVec4f(paramValue)});
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_METALNESS, VtValToVec4f(paramValue)});
 		}
 		else if (paramName == HdRprTokens->roughness)
 		{
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_ROUGHNESS, VtValToVec4f(paramValue)});
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_ROUGHNESS, VtValToVec4f(paramValue)});
 		}
 		else if (paramName == HdRprTokens->clearcoat)
 		{
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_COATING_WEIGHT, VtValToVec4f(paramValue)});
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_COATING_WEIGHT, VtValToVec4f(paramValue)});
 		}
 		else if (paramName == HdRprTokens->clearcoatRoughness)
 		{
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_COATING_ROUGHNESS, VtValToVec4f(paramValue)});
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_COATING_ROUGHNESS, VtValToVec4f(paramValue)});
 		}
 		else if (paramName == HdRprTokens->ior)
 		{
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_IOR, VtValToVec4f(paramValue)});
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_IOR, VtValToVec4f(paramValue)});
 		}
 		else if (paramName == HdRprTokens->opacity)
 		{
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_WEIGHT, GfVec4f(1.0f) - VtValToVec4f(paramValue)});
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_WEIGHT, GfVec4f(1.0f) - VtValToVec4f(paramValue)});
 		}
 
 	}
@@ -412,12 +391,12 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 		{
 			isAlbedoTexture = true;
 			albedoTex = materialTexture;
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_COLOR, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_COLOR, materialTexture });
 		}
 		else if (paramName == HdRprTokens->emissiveColor)
 		{
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_EMISSION_WEIGHT , GfVec4f(1.0f) });
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_EMISSION_COLOR, materialTexture });
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_EMISSION_WEIGHT , GfVec4f(1.0f) });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_EMISSION_COLOR, materialTexture });
 		}
 		else if (paramName == HdRprTokens->specularColor)
 		{
@@ -426,33 +405,33 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 		}
 		else if (paramName == HdRprTokens->metallic)
 		{
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_METALNESS, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_METALNESS, materialTexture });
 		}
 		else if (paramName == HdRprTokens->roughness)
 		{
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_ROUGHNESS, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_ROUGHNESS, materialTexture });
 		}
 		else if (paramName == HdRprTokens->clearcoat)
 		{
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_COATING_WEIGHT, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_COATING_WEIGHT, materialTexture });
 		}
 		else if (paramName == HdRprTokens->clearcoatRoughness)
 		{
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_COATING_ROUGHNESS, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_COATING_ROUGHNESS, materialTexture });
 		}
 		else if (paramName == HdRprTokens->ior)
 		{
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_IOR, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_IOR, materialTexture });
 		}
 		else if (paramName == HdRprTokens->opacity)
 		{
 			//materialTexture.IsOneMinusSrcColor = true;
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_WEIGHT, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_WEIGHT, materialTexture });
 		}
 		else if (paramName == HdRprTokens->normal)
 		{
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_NORMAL, materialTexture });
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_NORMAL, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_NORMAL, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_NORMAL, materialTexture });
 		}
 		else if (paramName == HdRprTokens->displacement)
 		{
@@ -462,27 +441,27 @@ void MaterialAdapter::PoulateUsdPreviewSurface(const MaterialParams & params, co
 	}
 
 	if(useSpecular) {
-		m_uRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_MODE , RPR_UBER_MATERIAL_IOR_MODE_PBR });
+		m_uRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_MODE , RPR_UBER_MATERIAL_IOR_MODE_PBR });
 
 		if (isReflectionTexture)
 		{
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR, reflectionTex });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR, reflectionTex });
 		}
 		else
 		{
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR , reflectionColor });
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR , reflectionColor });
 		}
 		
 	} else {
-		m_uRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_MODE , RPR_UBER_MATERIAL_IOR_MODE_METALNESS });
+		m_uRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_MODE , RPR_UBER_MATERIAL_IOR_MODE_METALNESS });
 
 		if (isAlbedoTexture)
 		{
-			m_texRprx.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR, albedoTex });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR, albedoTex });
 		}
 		else
 		{
-			m_vec4fRprxParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR , albedoColor });
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR , albedoColor });
 		}
 	}
 
