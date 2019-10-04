@@ -48,6 +48,8 @@ protected:
 private:
     HdRprApiWeakPtr m_rprApiWeakPrt;
     TfToken m_aovName;
+    uint32_t m_width = 0u;
+    uint32_t m_height = 0u;
     HdFormat m_format = HdFormat::HdFormatInvalid;
 
     std::shared_ptr<char> m_dataCache;

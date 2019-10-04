@@ -600,13 +600,16 @@ public:
         return m_cameraProjectionMatrix;
     }
 
-    void EnableAov(TfToken const& aovName, HdFormat format = HdFormatInvalid, bool setAsActive = false) {
-        if (!m_rprContext) return;
+    bool EnableAov(TfToken const& aovName, int width, int height, HdFormat format = HdFormatInvalid, bool setAsActive = false) {
+        if (!m_rprContext ||
+            width < 1 || height < 1) {
+            return false;
+        }
 
         auto rprAovIt = kAovTokenToRprAov.find(aovName);
         if (rprAovIt == kAovTokenToRprAov.end()) {
             TF_WARN("Unsupported aov type: %s", aovName.GetText());
-            return;
+            return false;
         }
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
@@ -615,16 +618,16 @@ public:
             // While usdview does not have correct AOV system
             // we have ambiguity in currently selected AOV that we can't distinguish
             if (aovName == HdRprAovTokens->depth) {
-                return;
+                return true;
             }
 
             if (setAsActive) {
-                if (m_currentAov != aovName) {
+                if (m_activeAov != aovName) {
                     m_dirtyFlags |= ChangeTracker::DirtyActiveAOV;
                 }
-                m_currentAov = aovName;
+                m_activeAov = aovName;
             }
-            return;
+            return true;
         }
 
         try {
@@ -633,9 +636,9 @@ public:
 
             // We compute depth from worldCoordinate in the postprocess step
             if (aovName == HdRprAovTokens->depth) {
-                EnableAov(HdRprAovTokens->worldCoordinate);
+                EnableAov(HdRprAovTokens->worldCoordinate, width, height);
             } else {
-                aovFrameBuffer.aov = make_unique<rpr::FrameBuffer>(m_rprContext->GetHandle(), m_fbWidth, m_fbHeight);
+                aovFrameBuffer.aov = make_unique<rpr::FrameBuffer>(m_rprContext->GetHandle(), width, height);
                 if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID && aovName == HdRprAovTokens->normal) {
                     // TODO: remove me when Hybrid gain RPR_AOV_GEOMETRIC_NORMAL support
                     aovFrameBuffer.aov->AttachAs(RPR_AOV_SHADING_NORMAL);
@@ -645,7 +648,7 @@ public:
 
                 // XXX: Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
                 if (m_rprContext->GetActivePluginType() != rpr::PluginType::HYBRID) {
-                    aovFrameBuffer.resolved = make_unique<rpr::FrameBuffer>(m_rprContext->GetHandle(), m_fbWidth, m_fbHeight);
+                    aovFrameBuffer.resolved = make_unique<rpr::FrameBuffer>(m_rprContext->GetHandle(), width, height);
                 }
             }
 
@@ -653,11 +656,14 @@ public:
             m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
 
             if (setAsActive) {
-                m_currentAov = aovName;
+                m_activeAov = aovName;
             }
         } catch (rpr::Error const& e) {
             TF_CODING_ERROR("Failed to enable %s AOV: %s", aovName.GetText(), e.what());
+            return false;
         }
+
+        return true;
     }
 
     void DisableAov(TfToken const& aovName, bool force = false) {
@@ -683,13 +689,6 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
     }
 
-    void DisableAovs() {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        m_aovFrameBuffers.clear();
-        m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
-    }
-
     bool IsAovEnabled(TfToken const& aovName) {
         return m_aovFrameBuffers.count(aovName) != 0;
     }
@@ -708,45 +707,23 @@ public:
         }
     }
 
-    void ResizeAovFramebuffers(int width, int height) {
-        if (!m_rprContext) return;
+    GfVec2i GetAovSize(TfToken const& aovName) const {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        if (width <= 0 || height <= 0 ||
-            (width == m_fbWidth && height == m_fbHeight)) {
-            return;
-        }
-
-        m_fbWidth = width;
-        m_fbHeight = height;
-
-        for (auto& aovFb : m_aovFrameBuffers) {
-            if (!aovFb.second.aov) {
-                continue;
-            }
-
-            try {
-                aovFb.second.aov->Resize(width, height);
-                aovFb.second.resolved->Resize(width, height);
-                aovFb.second.isDirty = true;
-            } catch (rpr::Error const& e) {
-                TF_CODING_ERROR("Failed to resize AOV framebuffer: %s", e.what());
-            }
-        }
-
-        m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers | ChangeTracker::DirtyCamera;
-    }
-
-    void GetFramebufferSize(GfVec2i* resolution) const {
-        resolution->Set(m_fbWidth, m_fbHeight);
-    }
-
-    std::shared_ptr<char> GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize) {
         auto it = m_aovFrameBuffers.find(aovName);
         if (it == m_aovFrameBuffers.end()) {
-            return nullptr;
+            return GfVec2i(-1, -1);
         }
 
-        if (!m_fbWidth || !m_fbHeight) {
+        auto desc = it->second.aov->GetDesc();
+        return GfVec2i(desc.fb_width, desc.fb_height);
+    }
+
+    std::shared_ptr<char> GetAovData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        auto it = m_aovFrameBuffers.find(aovName);
+        if (it == m_aovFrameBuffers.end()) {
             return nullptr;
         }
 
@@ -778,8 +755,6 @@ public:
             return buffer;
         };
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
         if (aovName == HdRprAovTokens->color && m_denoiseFilterPtr) {
             buffer = readRifImage(m_denoiseFilterPtr->GetOutput(), bufferSize);
         } else {
@@ -801,10 +776,6 @@ public:
         }
 
         return buffer;
-    }
-
-    void ClearFramebuffers() {
-        m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
     rif_image_desc GetRifImageDesc(uint32_t width, uint32_t height, HdFormat format) {
@@ -855,8 +826,6 @@ public:
             if (aovFrameBuffer.isDirty) {
                 aovFrameBuffer.isDirty = false;
 
-                rif_image_desc imageDesc = GetRifImageDesc(m_fbWidth, m_fbHeight, aovFrameBuffer.format);
-
                 if (aovFrameBufferEntry.first == HdRprAovTokens->depth) {
                     // Calculate clip space depth from world coordinate AOV
                     if (m_aovFrameBuffers.count(HdRprAovTokens->worldCoordinate) == 0) {
@@ -867,10 +836,12 @@ public:
                     auto ndcDepthFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, m_rifContext.get());
 
                     auto& worldCoordinateAovFb = m_aovFrameBuffers[HdRprAovTokens->worldCoordinate];
+
                     auto inputRprFrameBuffer = (worldCoordinateAovFb.resolved ? worldCoordinateAovFb.resolved : worldCoordinateAovFb.aov).get();
                     ndcDepthFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
 
-                    ndcDepthFilter->SetOutput(imageDesc);
+                    auto fbDesc = worldCoordinateAovFb.aov->GetDesc();
+                    ndcDepthFilter->SetOutput(GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, aovFrameBuffer.format));
 
                     auto viewProjectionMatrix = m_cameraViewMatrix * m_cameraProjectionMatrix;
                     ndcDepthFilter->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
@@ -884,7 +855,8 @@ public:
                     auto inputRprFrameBuffer = (aovFrameBuffer.resolved ? aovFrameBuffer.resolved : aovFrameBuffer.aov).get();
                     remapFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
 
-                    remapFilter->SetOutput(imageDesc);
+                    auto fbDesc = aovFrameBuffer.aov->GetDesc();
+                    remapFilter->SetOutput(GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, aovFrameBuffer.format));
 
                     remapFilter->SetParam("srcRangeAuto", 0);
                     remapFilter->SetParam("dstLo", -1.0f);
@@ -892,12 +864,13 @@ public:
 
                     aovFrameBuffer.postprocessFilter = std::move(remapFilter);
                 } else if (aovFrameBuffer.format != HdFormatInvalid &&
-                           aovFrameBuffer.format != HdFormatFloat32Vec4 &&
-                           m_fbWidth != 0 && m_fbHeight != 0) {
+                           aovFrameBuffer.format != HdFormatFloat32Vec4) {
                     // Convert from RPR native to Hydra format
                     auto inputRprFrameBuffer = (aovFrameBuffer.resolved ? aovFrameBuffer.resolved : aovFrameBuffer.aov).get();
+                    auto fbDesc = aovFrameBuffer.aov->GetDesc();
+                    rif_image_desc imageDesc = GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, aovFrameBuffer.format);
                     if (inputRprFrameBuffer && imageDesc.type != 0 && imageDesc.num_components != 0) {
-                        auto converter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), m_fbWidth, m_fbHeight);
+                        auto converter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), fbDesc.fb_width, fbDesc.fb_height);
                         converter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
                         converter->SetOutput(imageDesc);
 
@@ -940,8 +913,7 @@ public:
     }
 
     void UpdateCamera() {
-        if ((m_dirtyFlags & ChangeTracker::DirtyCamera) == 0 ||
-            m_fbWidth == 0 || m_fbHeight == 0) {
+        if ((m_dirtyFlags & ChangeTracker::DirtyCamera) == 0) {
             return;
         }
         m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -968,7 +940,8 @@ public:
             RPR_ERROR_CHECK(rprCameraSetOrthoWidth(camera, orthoWidth), "Failed to set camera ortho width");
             RPR_ERROR_CHECK(rprCameraSetOrthoHeight(camera, orthoHeight), "Failed to set camera ortho height");
         } else {
-            auto ratio = (double)m_fbWidth / m_fbHeight;
+            auto fbDesc = m_aovFrameBuffers.begin()->second.aov->GetDesc();
+            auto ratio = double(fbDesc.fb_width) / fbDesc.fb_height;
             auto focalLength = m_cameraProjectionMatrix[1][1] / (2.0 * ratio);
             auto sensorWidth = 1.0f;
             auto sensorHeight = 1.0f / ratio;
@@ -1005,28 +978,30 @@ public:
             filterType = rif::FilterType::AIDenoise;
         }
 #endif // __APPLE__
-        m_denoiseFilterPtr = rif::Filter::Create(filterType, m_rifContext.get(), m_fbWidth, m_fbHeight);
+        auto& colorAovFb = m_aovFrameBuffers[HdRprAovTokens->color];
+        auto fbDesc = colorAovFb.aov->GetDesc();
+        m_denoiseFilterPtr = rif::Filter::Create(filterType, m_rifContext.get(), fbDesc.fb_width, fbDesc.fb_height);
 
         switch (filterType) {
         case rif::FilterType::AIDenoise: {
-            EnableAov(HdRprAovTokens->albedo);
-            EnableAov(HdRprAovTokens->linearDepth);
-            EnableAov(HdRprAovTokens->normal);
+            EnableAov(HdRprAovTokens->albedo, fbDesc.fb_width, fbDesc.fb_height);
+            EnableAov(HdRprAovTokens->linearDepth, fbDesc.fb_width, fbDesc.fb_height);
+            EnableAov(HdRprAovTokens->normal, fbDesc.fb_width, fbDesc.fb_height);
 
-            m_denoiseFilterPtr->SetInput(rif::Color, m_aovFrameBuffers[HdRprAovTokens->color].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get(), 1.0f);
             m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
             m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
             m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
             break;
         }
         case rif::FilterType::EawDenoise: {
-            EnableAov(HdRprAovTokens->albedo);
-            EnableAov(HdRprAovTokens->linearDepth);
-            EnableAov(HdRprAovTokens->normal);
-            EnableAov(HdRprAovTokens->primId);
-            EnableAov(HdRprAovTokens->worldCoordinate);
+            EnableAov(HdRprAovTokens->albedo, fbDesc.fb_width, fbDesc.fb_height);
+            EnableAov(HdRprAovTokens->linearDepth, fbDesc.fb_width, fbDesc.fb_height);
+            EnableAov(HdRprAovTokens->normal, fbDesc.fb_width, fbDesc.fb_height);
+            EnableAov(HdRprAovTokens->primId, fbDesc.fb_width, fbDesc.fb_height);
+            EnableAov(HdRprAovTokens->worldCoordinate, fbDesc.fb_width, fbDesc.fb_height);
 
-            m_denoiseFilterPtr->SetInput(rif::Color, m_aovFrameBuffers[HdRprAovTokens->color].resolved.get(), 1.0f);
+            m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get(), 1.0f);
             m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
             m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
             m_denoiseFilterPtr->SetInput(rif::ObjectId, m_aovFrameBuffers[HdRprAovTokens->primId].resolved.get(), 1.0f);
@@ -1038,7 +1013,7 @@ public:
             break;
         }
 
-        m_denoiseFilterPtr->SetOutput(GetRifImageDesc(m_fbWidth, m_fbHeight, m_aovFrameBuffers[HdRprAovTokens->color].format));
+        m_denoiseFilterPtr->SetOutput(GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, colorAovFb.format));
     }
 
     void Render() {
@@ -1082,8 +1057,8 @@ public:
         rprObjectDelete(instance);
     }
 
-    TfToken GetActiveAov() const {
-        return m_currentAov;
+    TfToken const& GetActiveAov() const {
+        return m_activeAov;
     }
 
     bool IsGlInteropEnabled() const {
@@ -1279,9 +1254,6 @@ private:
     };
     uint32_t m_dirtyFlags = ChangeTracker::AllDirty;
 
-    rpr_uint m_fbWidth = 0;
-    rpr_uint m_fbHeight = 0;
-
     std::unique_ptr<rpr::Context> m_rprContext;
     std::unique_ptr<rif::Context> m_rifContext;
     RprApiObjectPtr m_scene;
@@ -1298,7 +1270,7 @@ private:
         bool isDirty = true;
     };
     std::map<TfToken, AovFrameBuffer> m_aovFrameBuffers;
-    TfToken m_currentAov;
+    TfToken m_activeAov;
 
     GfMatrix4d m_cameraViewMatrix = GfMatrix4d(1.f);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
@@ -1366,7 +1338,7 @@ HdRprApi::~HdRprApi() {
     delete m_impl;
 }
 
-TfToken HdRprApi::GetActiveAov() const {
+TfToken const& HdRprApi::GetActiveAov() const {
     return m_impl->GetActiveAov();
 }
 
@@ -1447,36 +1419,24 @@ void HdRprApi::SetCameraProjectionMatrix(const GfMatrix4d& m) {
     m_impl->SetCameraProjectionMatrix(m);
 }
 
-void HdRprApi::EnableAov(TfToken const& aovName, HdFormat format) {
-    m_impl->EnableAov(aovName, format, true);
+bool HdRprApi::EnableAov(TfToken const& aovName, int width, int height, HdFormat format) {
+    return m_impl->EnableAov(aovName, width, height, format, true);
 }
 
 void HdRprApi::DisableAov(TfToken const& aovName) {
     m_impl->DisableAov(aovName);
 }
 
-void HdRprApi::DisableAovs() {
-    m_impl->DisableAovs();
-}
-
 bool HdRprApi::IsAovEnabled(TfToken const& aovName) {
     return m_impl->IsAovEnabled(aovName);
 }
 
-void HdRprApi::ClearFramebuffers() {
-    m_impl->ClearFramebuffers();
+GfVec2i HdRprApi::GetAovSize(TfToken const& aovName) const {
+    return m_impl->GetAovSize(aovName);
 }
 
-void HdRprApi::ResizeAovFramebuffers(int width, int height) {
-    m_impl->ResizeAovFramebuffers(width, height);
-}
-
-void HdRprApi::GetFramebufferSize(GfVec2i* resolution) const {
-    m_impl->GetFramebufferSize(resolution);
-}
-
-std::shared_ptr<char> HdRprApi::GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize) {
-    return m_impl->GetFramebufferData(aovName, buffer, bufferSize);
+std::shared_ptr<char> HdRprApi::GetAovData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize) {
+    return m_impl->GetAovData(aovName, buffer, bufferSize);
 }
 
 void HdRprApi::Render() {

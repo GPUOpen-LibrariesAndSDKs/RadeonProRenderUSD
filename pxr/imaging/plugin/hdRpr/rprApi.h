@@ -87,20 +87,19 @@ public:
 
     const GfMatrix4d& GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;
-
     void SetCameraViewMatrix(const GfMatrix4d& m );
     void SetCameraProjectionMatrix(const GfMatrix4d& m);
 
-    void EnableAov(TfToken const& aovName, HdFormat format = HdFormatCount);
+    bool EnableAov(TfToken const& aovName, int width, int height, HdFormat format = HdFormatCount);
     void DisableAov(TfToken const& aovName);
-    void DisableAovs();
     bool IsAovEnabled(TfToken const& aovName);
-    TfToken GetActiveAov() const;
+    GfVec2i GetAovSize(TfToken const& aovName) const;
+    std::shared_ptr<char> GetAovData(TfToken const& aovName, std::shared_ptr<char> buffer = nullptr, size_t* bufferSize = nullptr);
 
-    void ResizeAovFramebuffers(int width, int height);
-    void GetFramebufferSize(GfVec2i* resolution) const;
-    std::shared_ptr<char> GetFramebufferData(TfToken const& aovName, std::shared_ptr<char> buffer = nullptr, size_t* bufferSize = nullptr);
-    void ClearFramebuffers();
+    // This function exist for only one particular reason:
+    //   for explicit bliting to GL framebuffer when there are no aovBindings in renderPass::_Execute
+    //   we need to know the latest enabled AOV so we can draw it
+    TfToken const& GetActiveAov() const;
 
     void Render();
 
