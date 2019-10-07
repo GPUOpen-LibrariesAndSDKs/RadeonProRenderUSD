@@ -102,3 +102,8 @@ endif()
 #
 # The long term plan is to adhere to the required behavior.
 include_directories(SYSTEM ${PYTHON_INCLUDE_DIR})
+
+# hdRpr changes
+if(WIN32)
+    add_definitions(-DWIN32)
+endif()

@@ -80,7 +80,7 @@ pxr_plugin(hdRpr
 		${PYTHON_LIBRARIES}
 		
 		${OptLibs}
-        half
+        Half
 
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
@@ -179,7 +179,7 @@ if(WIN32)
         DESTINATION bin)
 else(WIN32)
     if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-        _get_install_dir("Libraries" installPrefix)
+        _get_install_dir("${HOUDINI_PLUGIN_INSTALL_RELPATH}" installPrefix)
     else()
         _get_install_dir("lib" installPrefix)
     endif()

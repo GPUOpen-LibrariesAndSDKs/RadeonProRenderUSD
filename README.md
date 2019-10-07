@@ -72,6 +72,13 @@ specifying the cmake flag ```RPR_ENABLE_OPENVDB_SUPPORT=TRUE```.
 | ------------------         |-----------------------------------------------------------------------  | -------          |
 | OPENVDB_LOCATION           | OpenVDB directory with include and lib dirs                             |                  |
 
+#### Utility cmake options
+
+##### `RPR_SDK_PLATFORM` - Forcing build against specific platform libraries
+
+Let's say you are on centos 7 and want to force it to use the centos6 build,
+then you need to specify ```RPR_SDK_PLATFORM=centos6``` cmake flag
+
 #### Example
 
 ```
