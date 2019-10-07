@@ -20,3 +20,5 @@ else()
     set(HOUDINI_HH Resources/houdini)
 endif()
 add_definitions(-DBUILD_AS_HOUDINI_PLUGIN)
+
+list(APPEND CMAKE_PREFIX_PATH ${HOUDINI_LIB})
