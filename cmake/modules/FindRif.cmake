@@ -1,6 +1,5 @@
 
 if (APPLE)
-    set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS} -undefined dynamic_lookup")
 elseif (WIN32)
     add_definitions(-DWIN32)
 endif()
@@ -14,8 +13,7 @@ if (APPLE)
     if (NOT RIF_LOCATION_LIB)
         set (RIF_LOCATION_LIB ${RIF_LOCATION}/OSX/Bin/Release/x64)
     endif ()
-    set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS} -undefined dynamic_lookup")
-
+    
     if (NOT RIF_LOCATION_INCLUDE)
         set (RIF_LOCATION_INCLUDE ${RIF_LOCATION}/OSX/RadeonImageFilters)
     endif ()

@@ -139,6 +139,10 @@ const rpr_creation_flags getRprCreationFlags(RenderDeviceType renderDevice, rpr_
         return 0x0;
     }
 
+    #if __APPLE__
+        flags |= RPR_CREATION_FLAGS_ENABLE_METAL;
+    #endif
+
     return flags;
 }
 
