@@ -66,7 +66,7 @@ else(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
     find_package(Boost
         COMPONENTS
-            python27
+            python
         REQUIRED
     )
 endif()
