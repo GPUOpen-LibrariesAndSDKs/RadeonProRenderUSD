@@ -6,13 +6,14 @@
 #include <RadeonProRender.h>
 
 #include "materialAdapter.h"
+#include "rprcpp/rprImage.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 struct RprApiMaterial {
     rpr_material_node rootMaterial;
     rpr_material_node displacementMaterial;
-	std::vector<rpr_image> materialImages;
+	std::vector<std::unique_ptr<rpr::Image>> materialImages;
 	std::vector<rpr_material_node> materialNodes;
 };
 

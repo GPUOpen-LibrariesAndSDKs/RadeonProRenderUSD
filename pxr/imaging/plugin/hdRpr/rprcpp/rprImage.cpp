@@ -6,6 +6,9 @@
 #include <PXL/PXL_Raster.h>
 #endif
 
+#include <vector>
+#include <array>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 namespace rpr {
@@ -32,7 +35,7 @@ rpr_image_desc GetRprImageDesc(rpr_image_format format, rpr_uint width, rpr_uint
 
 } // namespace anonymous
 
-Image::Image(Context* context, const char* path) {
+Image::Image(rpr_context context, const char* path) {
 #ifdef ENABLE_RAT
     auto dot = strrchr(path, '.');
     if (dot && strcmp(dot, ".rat") == 0) {
@@ -42,11 +45,13 @@ Image::Image(Context* context, const char* path) {
         }
 
         UT_Array<PXL_Raster*> images;
-        if (!ratImage->readImages(images) ||
-            images.isEmpty()) {
+        std::shared_ptr<void> deferImagesRelease(nullptr, [&images](...) {
             for (auto image : images) {
                 delete image;
             }
+        });
+        if (!ratImage->readImages(images) ||
+            images.isEmpty()) {
             throw rpr::Error((std::string("Failed to load image: ") + path).c_str());
         }
 
@@ -82,9 +87,25 @@ Image::Image(Context* context, const char* path) {
             throw rpr::Error("Failed to create image: incorrect dimensions");
         }
 
+        // RAT image is flipped in Y axis
+        std::vector<uint8_t> flippedImage;
+        flippedImage.reserve(image->getStride() * desc.image_height);
+        for (int y = 0; y < desc.image_height; ++y) {
+            auto srcData = reinterpret_cast<uint8_t*>(image->getPixels()) + image->getStride() * y;
+            auto dstData = &flippedImage[image->getStride() * (desc.image_height - 1 - y)];
+            std::memcpy(dstData, srcData, image->getStride());
+        }
+
         rpr_image rprImage = nullptr;
-        RPR_ERROR_CHECK_THROW(rprContextCreateImage(context->GetHandle(), format, &desc, image->getRawPixels(), &rprImage), "Failed to create image");
+        RPR_ERROR_CHECK_THROW(rprContextCreateImage(context, format, &desc, flippedImage.data(), &rprImage), "Failed to create image");
         m_rprObjectHandle = rprImage;
+
+        if (image->getColorSpace() == PXL_CS_LINEAR ||
+            image->getColorSpace() == PXL_CS_GAMMA2_2 || 
+            image->getColorSpace() == PXL_CS_CUSTOM_GAMMA) {
+            RPR_ERROR_CHECK_THROW(rprImageSetGamma(rprImage, image->getColorSpaceGamma()), "Failed to set image gamma");
+        }
+
         return;
     }
 #endif
@@ -93,18 +114,18 @@ Image::Image(Context* context, const char* path) {
     m_rprObjectHandle = image;
 }
 
-Image::Image(Context* context, void const* encodedData, size_t dataSize) {
-    throw Error("Image::Image(Context*, void const*, size_t) not implemented. This functionality can be added only with RPR 1.34.3");
+Image::Image(rpr_context context, void const* encodedData, size_t dataSize) {
+    throw Error("Image::Image(rpr_context, void const*, size_t) not implemented. This functionality can be added only with RPR 1.34.3");
 }
 
-Image::Image(Context* context, rpr_uint width, rpr_uint height, rpr_image_format format, void const* data)
+Image::Image(rpr_context context, rpr_uint width, rpr_uint height, rpr_image_format format, void const* data)
     : Image(context, GetRprImageDesc(format, width, height), format, data) {
 
 }
 
-Image::Image(Context* context, rpr_image_desc const& desc, rpr_image_format format, void const* data) {
+Image::Image(rpr_context context, rpr_image_desc const& desc, rpr_image_format format, void const* data) {
     rpr_image image = nullptr;
-    RPR_ERROR_CHECK_THROW(rprContextCreateImage(context->GetHandle(), format, &desc, data, &image), "Failed to create image");
+    RPR_ERROR_CHECK_THROW(rprContextCreateImage(context, format, &desc, data, &image), "Failed to create image");
     m_rprObjectHandle = image;
 }
 
