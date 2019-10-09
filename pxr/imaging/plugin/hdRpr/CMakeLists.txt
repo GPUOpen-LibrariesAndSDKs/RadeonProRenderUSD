@@ -138,6 +138,12 @@ if(WIN32 OR LINUX)
 	add_definitions(-DUSE_GL_INTEROP)
 endif(WIN32 OR LINUX)
 
+if (APPLE)
+    add_custom_command(TARGET hdRpr
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -change @loader_path/libRadeonProRender64.dylib @rpath/libRadeonProRender64.dylib $<TARGET_FILE:hdRpr> )
+endif(APPLE)
+
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
         FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/HdRprPlugin_Viewport.ds
