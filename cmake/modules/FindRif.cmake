@@ -1,40 +1,23 @@
+macro(SET_RIF_VARIABLES dirName)
+    if(NOT RIF_LOCATION_LIB)
+        set(RIF_LOCATION_LIB ${RIF_LOCATION}/${dirName}/Bin/Release/x64)
+    endif()
 
-if (APPLE)
-elseif (WIN32)
-    add_definitions(-DWIN32)
-endif()
+    if(NOT RIF_LOCATION_INCLUDE)
+        set(RIF_LOCATION_INCLUDE ${RIF_LOCATION}/${dirName}/RadeonImageFilters)
+    endif()
+endmacro(SET_RIF_VARIABLES)
 
-
-
-
-
-
-if (APPLE)
-    if (NOT RIF_LOCATION_LIB)
-        set (RIF_LOCATION_LIB ${RIF_LOCATION}/OSX/Bin/Release/x64)
-    endif ()
-    
-    if (NOT RIF_LOCATION_INCLUDE)
-        set (RIF_LOCATION_INCLUDE ${RIF_LOCATION}/OSX/RadeonImageFilters)
-    endif ()
-elseif (WIN32)
-    if (NOT RIF_LOCATION_LIB)
-        set (RIF_LOCATION_LIB ${RIF_LOCATION}/Windows/Bin/Release/x64)
-	endif ()
-	
-	if (NOT RIF_LOCATION_INCLUDE)
-        set (RIF_LOCATION_INCLUDE ${RIF_LOCATION}/Windows/RadeonImageFilters)
-    endif ()
-	
-    add_definitions(-DWIN32)
-elseif (UNIX)
-    if (NOT RIF_LOCATION_LIB)
-        set (RIF_LOCATION_LIB ${RIF_LOCATION}/CentOS7/Bin/Release/x64)
-    endif ()
-
-    if (NOT RIF_LOCATION_INCLUDE)
-        set (RIF_LOCATION_INCLUDE ${RIF_LOCATION}/CentOS7/RadeonImageFilters)
-    endif ()
+if(APPLE)
+    SET_RIF_VARIABLES(OSX)
+elseif(WIN32)
+    SET_RIF_VARIABLES(Windows)
+elseif(RPR_SDK_PLATFORM STREQUAL "ubuntu18.04")
+    SET_RIF_VARIABLES(Ubuntu18)
+elseif(RPR_SDK_PLATFORM STREQUAL "ubuntu16.04")
+    SET_RIF_VARIABLES(Ubuntu)
+elseif(RPR_SDK_PLATFORM STREQUAL "centos7")
+    SET_RIF_VARIABLES(CentOS7)
 endif()
 
 find_library(RIF_LIBRARY

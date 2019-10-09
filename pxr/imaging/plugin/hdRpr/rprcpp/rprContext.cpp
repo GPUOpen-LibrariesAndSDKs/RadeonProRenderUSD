@@ -15,6 +15,8 @@
 #elif defined(WIN32)
 #include <shlobj_core.h>
 #pragma comment(lib,"Shell32.lib")
+#elif defined(__linux__)
+#include <limits.h>
 #endif // __APPLE__
 
 PXR_NAMESPACE_OPEN_SCOPE
