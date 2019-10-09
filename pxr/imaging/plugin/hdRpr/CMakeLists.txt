@@ -46,9 +46,6 @@ set(USD_LIBRARIES
     pxOsd)
 
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
-        ${HOUDINI_ROOT}/toolkit/include)
-
     set(USD_LIB_PREFIX pxr_)
     if(WIN32)
         set(USD_LIB_PREFIX libpxr_)
@@ -60,9 +57,6 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     endforeach()
     set(USD_LIBRARIES "${HOUDINI_USD_LIBRARIES}")
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
-        ${Boost_INCLUDE_DIRS})
-
     if(${USD_LIBRARY_MONOLITHIC})
         set(USD_LIBRARIES usd_ms)
     endif()
@@ -85,7 +79,7 @@ pxr_plugin(hdRpr
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
 	    ${RIF_LOCATION_INCLUDE}
-        ${BUILD_TYPE_SPECIFIC_INCLUDE_DIRS}
+        ${Boost_INCLUDE_DIRS}
         ${TBB_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIR}
 		

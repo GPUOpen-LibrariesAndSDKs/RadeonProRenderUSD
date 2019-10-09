@@ -38,6 +38,7 @@ if (WIN32)
         HINTS
             "${GLEW_LOCATION}/include"
             "$ENV{GLEW_LOCATION}/include"
+            "${GLEW_INCLUDEDIR}"
         PATHS
             "$ENV{PROGRAMFILES}/GLEW/include"
             "${PROJECT_SOURCE_DIR}/extern/glew/include"
@@ -71,6 +72,7 @@ if (${CMAKE_HOST_UNIX})
         HINTS
             "${GLEW_LOCATION}/include"
             "$ENV{GLEW_LOCATION}/include"
+            "${GLEW_INCLUDEDIR}"
         PATHS
             /usr/include
             /usr/local/include
