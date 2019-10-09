@@ -26,6 +26,15 @@ if(RPR_ENABLE_OPENVDB_SUPPORT)
 
 endif(RPR_ENABLE_OPENVDB_SUPPORT)
 
+if(RPR_ENABLE_RAT_SUPPORT)
+    if(TARGET Houdini)
+        list(APPEND OptLibs Houdini)
+        add_definitions(-DENABLE_RAT)
+    else()
+        message(WARNING "To enable RAT support HDK required. Specify HOUDINI_ROOT")
+    endif()
+endif()
+
 set(USD_LIBRARIES
     ar
     arch
@@ -184,6 +193,6 @@ else(WIN32)
         _get_install_dir("lib" installPrefix)
     endif()
     install(
-        FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY} ${OptLibs}
+        FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY}
         DESTINATION ${installPrefix})
 endif(WIN32)
