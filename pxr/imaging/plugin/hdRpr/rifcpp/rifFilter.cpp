@@ -232,6 +232,7 @@ void Filter::Update() {
     if (m_dirtyFlags & DirtyIOImage) {
         DettachFilter();
         AttachFilter();
+        m_isAttached = true;
     }
 
     for (auto& input : m_inputs) {
@@ -244,9 +245,10 @@ void Filter::Update() {
 }
 
 void Filter::DettachFilter() {
-    if (!m_rifContext) {
+    if (!m_rifContext || !m_isAttached) {
         return;
     }
+    m_isAttached = false;
 
     for (const rif_image_filter& auxFilter : m_auxFilters) {
         m_rifContext->DettachFilter(auxFilter);
