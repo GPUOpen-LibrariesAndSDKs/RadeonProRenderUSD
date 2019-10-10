@@ -62,7 +62,7 @@ HdRprDelegate::HdRprDelegate() {
     m_rprApiSharedPtr = std::shared_ptr<HdRprApi>(new HdRprApi);
 
     auto& config = HdRprConfig::GetInstance();
-    m_settingDescriptors.resize(6);
+    m_settingDescriptors.resize(5);
     m_settingDescriptors[0] = { "Enable Denoising",
         HdRprRenderSettingsTokens->enableDenoising,
         VtValue(config.IsDenoisingEnabled()) };
@@ -91,15 +91,11 @@ HdRprDelegate::HdRprDelegate() {
         HdRprRenderSettingsTokens->maxSamples,
         VtValue(config.GetMaxSamples()) };
 
-    m_settingDescriptors[3] = { "Enable Adaptive Sampling",
-        HdRprRenderSettingsTokens->enableAdaptiveSampling,
-        VtValue(config.IsAdaptiveSamplingEnabled()) };
-
-    m_settingDescriptors[4] = { "Adaptive Sampling: Min Samples",
+    m_settingDescriptors[3] = { "Adaptive Sampling: Min Samples",
         HdRprRenderSettingsTokens->minAdaptiveSamples,
         VtValue(config.GetMinSamples()) };
 
-    m_settingDescriptors[5] = { "Adaptive Sampling: Variance Threshold",
+    m_settingDescriptors[4] = { "Adaptive Sampling: Variance Threshold",
         HdRprRenderSettingsTokens->varianceThreshold,
         VtValue(config.GetVariance()) };
 

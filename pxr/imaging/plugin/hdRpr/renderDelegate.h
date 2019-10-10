@@ -14,7 +14,6 @@ PXR_NAMESPACE_OPEN_SCOPE
     (enableDenoising)                \
     (renderQuality)                  \
     (maxSamples)                     \
-    (enableAdaptiveSampling)         \
     (minAdaptiveSamples)             \
     (varianceThreshold)
 

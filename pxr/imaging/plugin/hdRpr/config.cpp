@@ -101,18 +101,6 @@ int HdRprConfig::GetVariance() const {
     return m_prefData.m_variance;
 }
 
-void HdRprConfig::SetAdaptiveSampling(bool enable) {
-    if (m_prefData.m_enableAdaptiveSampling != enable) {
-        m_prefData.m_enableAdaptiveSampling = enable;
-        m_dirtyFlags |= DirtySampling;
-        Save();
-    }
-}
-
-bool HdRprConfig::IsAdaptiveSamplingEnabled() const {
-    return m_prefData.m_enableAdaptiveSampling;
-}
-
 bool HdRprConfig::IsDirty(ChangeTracker dirtyFlag) const {
     return m_dirtyFlags & dirtyFlag;
 }
@@ -179,7 +167,6 @@ void HdRprConfig::PrefData::SetDefault() {
     m_minSamples = kDefaultMinSamples;
     m_maxSamples = kDefaultMaxSamples;
     m_variance = kDefaultVariance;
-    m_enableAdaptiveSampling = false;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

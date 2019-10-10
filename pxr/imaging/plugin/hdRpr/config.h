@@ -55,9 +55,6 @@ public:
     void SetVariance(float variance);
     int GetVariance() const;
 
-    void SetAdaptiveSampling(bool enable);
-    bool IsAdaptiveSamplingEnabled() const;
-
     bool IsDirty(ChangeTracker dirtyFlag) const;
     void CleanDirtyFlag(ChangeTracker dirtyFlag);
     void ResetDirty();
@@ -79,7 +76,6 @@ private:
         int m_minSamples;
         int m_maxSamples;
         float m_variance;
-        bool m_enableAdaptiveSampling;
 
         PrefData();
         void SetDefault();

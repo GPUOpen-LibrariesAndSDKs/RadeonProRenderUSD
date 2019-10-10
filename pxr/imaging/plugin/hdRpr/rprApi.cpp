@@ -930,14 +930,8 @@ public:
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
 
-            if (preferences.IsAdaptiveSamplingEnabled()) {
-                RPR_ERROR_CHECK(rprContextSetParameter1f(m_rprContext->GetHandle(), "as.threshold", preferences.GetVariance()), "Failed to set as.threshold");
-                RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "as.minspp", preferences.GetMinSamples()), "Failed to set as.minspp");
-            } else {
-                // XXX: Maybe there is a better way to disable it?
-                // i.e. never check for variance
-                RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "as.minspp", m_maxSamples + 1), "Failed to set as.minspp");
-            }
+            RPR_ERROR_CHECK(rprContextSetParameter1f(m_rprContext->GetHandle(), "as.threshold", preferences.GetVariance()), "Failed to set as.threshold");
+            RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "as.minspp", preferences.GetMinSamples()), "Failed to set as.minspp");
         }
     }
 

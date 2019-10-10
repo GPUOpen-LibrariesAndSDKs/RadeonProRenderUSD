@@ -44,7 +44,6 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
 
         config.SetDenoising(getBoolSetting(HdRprRenderSettingsTokens->enableDenoising, false));
         config.SetMaxSamples(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->maxSamples, HdRprConfig::kDefaultMaxSamples));
-        config.SetAdaptiveSampling(getBoolSetting(HdRprRenderSettingsTokens->enableAdaptiveSampling, false));
         config.SetMinSamples(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->minAdaptiveSamples, HdRprConfig::kDefaultMinSamples));
         config.SetVariance(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->varianceThreshold, HdRprConfig::kDefaultVariance));
     }

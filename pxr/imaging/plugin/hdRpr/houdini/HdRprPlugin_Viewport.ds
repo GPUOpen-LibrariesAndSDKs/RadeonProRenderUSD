@@ -50,17 +50,6 @@
     }
 
     parm {
-        name    "enableAdaptiveSampling"
-        label   "Enable Adaptive Sampling"
-        type    toggle
-        size    1
-        parmtag { "spare_category" "Rendering" }
-        parmtag { "uiscope" "viewport" }
-        parmtag { "usdvaluetype" "bool" }
-        default { 0 }
-    }
-
-    parm {
         name    "minSamples"
         label   "Min Pixel Samples"
         type    int
@@ -70,7 +59,6 @@
         parmtag { "usdvaluetype" "int" }
         default { 64 }
         range { 1! 1024 }
-        disablewhen  "{ enableAdaptiveSampling == 0 }"
         help    "Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than 'Variance Threshold'."
     }
 
@@ -84,7 +72,6 @@
         parmtag { "usdvaluetype" "float" }
         default { 0.0 }
         range { 0! 1 }
-        disablewhen  "{ enableAdaptiveSampling == 0 }"
         help    "Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff."
     }
 }
