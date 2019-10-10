@@ -2,6 +2,7 @@
 #include "renderDelegate.h"
 #include "config.h"
 #include "rprApi.h"
+#include "renderBuffer.h"
 #include "pxr/imaging/hd/renderPassState.h"
 
 #include <GL/glew.h>
@@ -50,6 +51,7 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
     }
 
     rprApi->Render();
+    bool is_converged = rprApi->IsConverged();
 
     auto& aovBindings = renderPassState->GetAovBindings();
     if (aovBindings.empty()) {
@@ -68,6 +70,20 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
             glDrawPixels(aovSize[0], aovSize[1], GL_RGBA, GL_FLOAT, colorBuffer.get());
             glPixelZoom(currentZoomX, currentZoomY);
         }
+    }
+    else {
+        // set all RenderBuffers converged
+        if(is_converged) {
+            for (auto& aovBinding : aovBindings) {
+                HdRprRenderBuffer * buff = (HdRprRenderBuffer* ) aovBinding.renderBuffer;
+                buff->SetConverged(true);
+            }
+        }
+    }
+
+    // set render pass converged
+    if(is_converged) {
+        m_isConverged = true;
     }
 }
 

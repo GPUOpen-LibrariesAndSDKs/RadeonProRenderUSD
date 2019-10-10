@@ -23,6 +23,7 @@ HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprAp
     }
 
     m_rprApiWeakPrt = rprApi;
+    m_isConverged.store(false);
 
     auto& idName = id.GetName();
     if (idName == _tokens->aov_color)
@@ -155,7 +156,11 @@ void HdRprRenderBuffer::Resolve() {
 }
 
 bool HdRprRenderBuffer::IsConverged() const {
-    return false;
+    return m_isConverged.load();
+}
+
+void HdRprRenderBuffer::SetConverged(bool converged) {
+    return m_isConverged.store(converged);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
