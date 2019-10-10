@@ -44,7 +44,7 @@
         parmtag { "spare_category" "Sampling" }
         parmtag { "uiscope" "viewport" }
         parmtag { "usdvaluetype" "int" }
-        default { 128 }
+        default { 256 }
         range { 1! 1024 }
         help    "Maximum number of samples to render for each pixel."
     }
@@ -68,7 +68,7 @@
         parmtag { "spare_category" "Sampling" }
         parmtag { "uiscope" "viewport" }
         parmtag { "usdvaluetype" "int" }
-        default { 128 }
+        default { 64 }
         range { 1! 1024 }
         disablewhen  "{ enableAdaptiveSampling == 0 }"
         help    "Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than 'Variance Threshold'."
