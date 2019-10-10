@@ -3,6 +3,10 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+const int HdRprConfig::kDefaultMaxSamples;
+const int HdRprConfig::kDefaultMinSamples;
+const float HdRprConfig::kDefaultVariance;
+
 HdRprConfig& HdRprConfig::GetInstance() {
     static HdRprConfig instance;
     return instance;
@@ -97,8 +101,24 @@ int HdRprConfig::GetVariance() const {
     return m_prefData.m_variance;
 }
 
+void HdRprConfig::SetAdaptiveSampling(bool enable) {
+    if (m_prefData.m_enableAdaptiveSampling != enable) {
+        m_prefData.m_enableAdaptiveSampling = enable;
+        m_dirtyFlags |= DirtySampling;
+        Save();
+    }
+}
+
+bool HdRprConfig::IsAdaptiveSamplingEnabled() const {
+    return m_prefData.m_enableAdaptiveSampling;
+}
+
 bool HdRprConfig::IsDirty(ChangeTracker dirtyFlag) const {
     return m_dirtyFlags & dirtyFlag;
+}
+
+void HdRprConfig::CleanDirtyFlag(ChangeTracker dirtyFlag) {
+    m_dirtyFlags &= ~dirtyFlag;
 }
 
 void HdRprConfig::ResetDirty() {
@@ -156,6 +176,10 @@ void HdRprConfig::PrefData::SetDefault() {
     m_plugin = rpr::PluginType::TAHOE;
     m_hybridQuality = HdRprHybridQuality::LOW;
     m_enableDenoising = false;
+    m_minSamples = kDefaultMinSamples;
+    m_maxSamples = kDefaultMaxSamples;
+    m_variance = kDefaultVariance;
+    m_enableAdaptiveSampling = false;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

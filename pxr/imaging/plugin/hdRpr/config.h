@@ -18,6 +18,10 @@ enum class HdRprHybridQuality {
 
 class HdRprConfig {
 public:
+    constexpr static int kDefaultMaxSamples = 128;
+    constexpr static int kDefaultMinSamples = 128;
+    constexpr static float kDefaultVariance = 0.0f;
+
     enum ChangeTracker {
         Clean = 0,
         DirtyAll = ~0u,
@@ -51,7 +55,11 @@ public:
     void SetVariance(float variance);
     int GetVariance() const;
 
+    void SetAdaptiveSampling(bool enable);
+    bool IsAdaptiveSamplingEnabled() const;
+
     bool IsDirty(ChangeTracker dirtyFlag) const;
+    void CleanDirtyFlag(ChangeTracker dirtyFlag);
     void ResetDirty();
 
 private:
@@ -71,6 +79,7 @@ private:
         int m_minSamples;
         int m_maxSamples;
         float m_variance;
+        bool m_enableAdaptiveSampling;
 
         PrefData();
         void SetDefault();
