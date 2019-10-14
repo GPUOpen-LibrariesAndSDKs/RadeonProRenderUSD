@@ -31,7 +31,9 @@ find_library(RPR_LIBRARY
 )
 
 if(WIN32)
-    set(RPR_BIN_LOCATION ${RPR_LOCATION}/binWin64)
+    if(NOT RPR_BIN_LOCATION)
+        set(RPR_BIN_LOCATION ${RPR_LOCATION}/binWin64)
+    endif()
 
     if (EXISTS "${RPR_BIN_LOCATION}/Tahoe64.dll")
         set(RPR_TAHOE_BINARY ${RPR_BIN_LOCATION}/Tahoe64.dll)
