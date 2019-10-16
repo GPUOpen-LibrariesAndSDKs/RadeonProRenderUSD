@@ -461,6 +461,13 @@ public:
         return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
     }
 
+    void SetLightTransform(rpr_light light, GfMatrix4f const& transform) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        if (!RPR_ERROR_CHECK(rprLightSetTransform(light, false, transform.GetArray()), "Fail set light transformation")) {
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+    }
+
     RprApiObjectPtr CreateMaterial(const MaterialAdapter& materialAdapter) {
         if (!m_rprContext || !m_rprMaterialFactory) {
             return nullptr;
@@ -1380,6 +1387,11 @@ RprApiObjectPtr HdRprApi::CreateSphereLightMesh(float radius) {
 
 RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float width, float height, const GfVec3f& emmisionColor) {
     return m_impl->CreateDiskLightMesh(width, height, emmisionColor);
+}
+
+void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4d const& transform) {
+    GfMatrix4f transformF(transform);
+    m_impl->SetLightTransform(light->GetHandle(), transformF);
 }
 
 RprApiObjectPtr HdRprApi::CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& gridSize, const GfVec3f& voxelSize) {

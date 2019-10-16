@@ -42,6 +42,13 @@ void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
 
 	HdDirtyBits bits = *dirtyBits;
 
+    if (bits & HdLight::DirtyTransform) {
+        m_transform = sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>();
+        // XXX: Required to match orientation with Houdini's Karma
+        m_transform *= GfMatrix4d(1.0).SetScale(GfVec3d(-1.0f, 1.0f, 1.0f));
+    }
+
+    bool newLight = false;
     if (bits & HdLight::DirtyParams) {
         m_rprLight = nullptr;
 
@@ -78,9 +85,17 @@ void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
         } else {
             m_rprLight = rprApi->CreateEnvironmentLight(texturePath, computedIntensity);
         }
+
+        if (m_rprLight) {
+            newLight = true;
+        }
     }
 
-	*dirtyBits = HdLight::Clean;
+    if (newLight && (bits & HdLight::DirtyTransform)) {
+        rprApi->SetLightTransform(m_rprLight.get(), m_transform);
+    }
+
+    *dirtyBits = HdLight::Clean;
 }
 
 

@@ -37,6 +37,7 @@ public:
 protected:
 	HdRprApiWeakPtr m_rprApiWeakPtr;
 	RprApiObjectPtr m_rprLight;
+    GfMatrix4d m_transform;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
