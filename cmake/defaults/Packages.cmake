@@ -57,18 +57,23 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
     set(TBB_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
     set(TBB_LIBRARY ${HOUDINI_LIB})
+
+    set(GLEW_LOCATION ${HOUDINI_LIB})
+    set(GLEW_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
+
+    set(Boost_INCLUDE_DIRS ${HOUDINI_INCLUDE_DIR})
+    find_library(Boost_LIBRARIES
+        NAMES libhboost_python libhboost_python-mt hboost_python hboost_python-mt
+        PATHS "${HOUDINI_LIB}"
+        NO_DEFAULT_PATH
+        NO_SYSTEM_ENVIRONMENT_PATH)
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    # --Python.  We are generally but not completely 2.6 compliant.
-    # We don't need this flag if we are on 0.8.2.
-    if (${USD_VERSION} VERSION_LESS "0.8.2")
-        add_definitions(-DPXR_PYTHON_SUPPORT_ENABLED)
-    endif ()
     find_package(PythonInterp 2.7 REQUIRED)
     find_package(PythonLibs 2.7 REQUIRED)
 
     find_package(Boost
         COMPONENTS
-            python27
+            python
         REQUIRED
     )
 endif()

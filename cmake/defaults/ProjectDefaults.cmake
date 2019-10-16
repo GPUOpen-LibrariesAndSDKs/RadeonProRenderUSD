@@ -49,3 +49,8 @@ if (PXR_BUILD_TESTS)
     # Enable CTest
     enable_testing()
 endif()
+
+if(NOT DEFINED RPR_SDK_PLATFORM)
+    include(PlatformIntrospection)
+    DETERMINE_PLATFORM(RPR_SDK_PLATFORM)
+endif()

@@ -92,6 +92,8 @@ protected:
         DirtyParameters = 1 << 2
     };
     uint32_t m_dirtyFlags = DirtyAll;
+
+    bool m_isAttached = false;
 };
 
 } // namespace rif

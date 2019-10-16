@@ -92,7 +92,9 @@ ContextGPU::ContextGPU(rpr_context rprContext) {
     RPR_ERROR_CHECK_THROW(rprContextGetInfo(rprContext, RPR_CL_COMMAND_QUEUE, sizeof(rpr_cl_command_queue), &clCommandQueue, nullptr), "Failed to query CL command queue");
 
     std::vector<rpr_char> path = GetRprCachePath(rprContext);
+    #ifndef __APPLE__
     RIF_ERROR_CHECK_THROW(rifCreateContextFromOpenClContext(RIF_API_VERSION, clContext, clDevice, clCommandQueue, path.data(), &m_context), "Failed to create RIF context")
+    #endif
 }
 
 std::unique_ptr<Image> ContextGPU::CreateImage(rpr::FrameBuffer* rprFrameBuffer) {
@@ -102,6 +104,7 @@ std::unique_ptr<Image> ContextGPU::CreateImage(rpr::FrameBuffer* rprFrameBuffer)
 
     rif_image rifImage = nullptr;
 
+    #ifndef __APPLE__
     if (auto rprFrameBufferGL = dynamic_cast<rpr::FrameBufferGL*>(rprFrameBuffer)) {
         RIF_ERROR_CHECK_THROW(rifContextCreateImageFromOpenGlTexture(m_context, GL_TEXTURE_2D, 0, rprFrameBufferGL->GetGL(), &rifImage), "Failed to create RIF image from OpenGL texture")
     } else {
@@ -112,8 +115,11 @@ std::unique_ptr<Image> ContextGPU::CreateImage(rpr::FrameBuffer* rprFrameBuffer)
         }
 
         auto rifImageDesc = GetRifImageDesc(rprFrameBuffer);
-        RIF_ERROR_CHECK_THROW(rifContextCreateImageFromOpenClMemory(m_context, &rifImageDesc, clMem, false, &rifImage), "Failed to create RIF image from OpenCL memory");
+        
+            RIF_ERROR_CHECK_THROW(rifContextCreateImageFromOpenClMemory(m_context, &rifImageDesc, clMem, false, &rifImage), "Failed to create RIF image from OpenCL memory");
+
     }
+    #endif
 
     return std::unique_ptr<Image>(new Image(rifImage));
 }
@@ -282,15 +288,14 @@ std::unique_ptr<Context> Context::Create(rpr_context rprContext) {
 
     std::unique_ptr<Context> rifContext;
 #ifdef __APPLE__
-    if (contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL) {
-        rifContext.reset(new ContextGPUMetal(rprContext));
-    } else
-#endif // __APPLE__
+    rifContext.reset(new ContextGPUMetal(rprContext));
+#else // __APPLE__
     if (HasGpuContext(contextFlags)) {
         rifContext.reset(new ContextGPU(rprContext));
     } else {
         rifContext.reset(new ContextCPU(rprContext));
     }
+#endif
 
     RIF_ERROR_CHECK_THROW(rifContextCreateCommandQueue(rifContext->m_context, &rifContext->m_commandQueue), "Failed to create RIF command queue");
 

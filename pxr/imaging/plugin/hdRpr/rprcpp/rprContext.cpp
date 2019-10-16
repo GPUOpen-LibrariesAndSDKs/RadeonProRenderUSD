@@ -15,6 +15,8 @@
 #elif defined(WIN32)
 #include <shlobj_core.h>
 #pragma comment(lib,"Shell32.lib")
+#elif defined(__linux__)
+#include <limits.h>
 #endif // __APPLE__
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -138,6 +140,10 @@ const rpr_creation_flags getRprCreationFlags(RenderDeviceType renderDevice, rpr_
         TF_CODING_ERROR("Unknown RenderDeviceType");
         return 0x0;
     }
+
+    #if __APPLE__
+        flags |= RPR_CREATION_FLAGS_ENABLE_METAL;
+    #endif
 
     return flags;
 }

@@ -55,9 +55,6 @@ set(USD_LIBRARIES
     pxOsd)
 
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
-        ${HOUDINI_ROOT}/toolkit/include)
-
     set(USD_LIB_PREFIX pxr_)
     if(WIN32)
         set(USD_LIB_PREFIX libpxr_)
@@ -69,9 +66,6 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     endforeach()
     set(USD_LIBRARIES "${HOUDINI_USD_LIBRARIES}")
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    set(BUILD_TYPE_SPECIFIC_INCLUDE_DIRS
-        ${Boost_INCLUDE_DIRS})
-
     if(${USD_LIBRARY_MONOLITHIC})
         set(USD_LIBRARIES usd_ms)
     endif()
@@ -89,12 +83,12 @@ pxr_plugin(hdRpr
 		${PYTHON_LIBRARIES}
 		
 		${OptLibs}
-        half
+        Half
 
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
 	    ${RIF_LOCATION_INCLUDE}
-        ${BUILD_TYPE_SPECIFIC_INCLUDE_DIRS}
+        ${Boost_INCLUDE_DIRS}
         ${TBB_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIR}
 		
@@ -147,16 +141,6 @@ if(WIN32 OR LINUX)
 	add_definitions(-DUSE_GL_INTEROP)
 endif(WIN32 OR LINUX)
 
-if (APPLE)
-    add_custom_command(TARGET hdRpr
-        POST_BUILD COMMAND
-        ${CMAKE_INSTALL_NAME_TOOL} -id @loader_path/libRadeonProRender64.dylib  ${RPR_LIBRARY})
-
-    add_custom_command(TARGET hdRpr
-        POST_BUILD COMMAND
-        ${CMAKE_INSTALL_NAME_TOOL} -change @loader_path/libRadeonProRender64.dylib ${RPR_LIBRARY} $<TARGET_FILE:hdRpr> )
-endif(APPLE)
-
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
         FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/HdRprPlugin_Viewport.ds
@@ -188,7 +172,7 @@ if(WIN32)
         DESTINATION bin)
 else(WIN32)
     if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-        _get_install_dir("Libraries" installPrefix)
+        _get_install_dir("${HOUDINI_PLUGIN_INSTALL_RELPATH}" installPrefix)
     else()
         _get_install_dir("lib" installPrefix)
     endif()
