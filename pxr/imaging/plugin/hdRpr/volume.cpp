@@ -1,6 +1,9 @@
 #include "volume.h"
-
+#pragma warning(push)
+#pragma warning(disable:4146)
 #include "openvdb/openvdb.h"
+#pragma warning(pop)
+
 #include "openvdb/points/PointDataGrid.h"
 #include <openvdb/tools/Interpolation.h>
 
@@ -20,9 +23,9 @@ TF_DEFINE_PRIVATE_TOKENS(
 
 namespace
 {
-	const float defaultDencity = 1.f;
+	const float defaultDensity = 1.f;
 	const float defaultAlbedo = 1.f;
-	GfVec4f defaultColor = GfVec4f(35.0f, 35.0f, 35.f, 1.0f);
+	GfVec4f defaultColor = GfVec4f(10.0f, 0.0f, 0.0f, 1.0f);
 }
 
 /*
@@ -123,10 +126,12 @@ std::string findOpenVdbFilePath(HdSceneDelegate* sceneDelegate, const SdfPath & 
 			return param.Get<SdfAssetPath>().GetAssetPath();
 		}
 	}
+
+	return "";
 }
 
 template <class TPtr, class TValueOnIt>
-openvdb::CoordBBox computeGrigOnBB(TPtr grid)
+openvdb::CoordBBox computeGridOnBB(TPtr grid)
 {
 	if (grid->empty())
 	{
@@ -154,17 +159,59 @@ openvdb::CoordBBox computeGrigOnBB(TPtr grid)
 
 
 template <class TPtr, class TValueOnIt>
-void fillGridOnWithDefaultColor(TPtr grid, VtVec4fArray & out_grid, VtArray<size_t> & out_idx, openvdb::Coord & out_gridOnBBSize)
+void fillGridOnWithDefaultAlbedo(TPtr grid, VtArray<float> & out_density_grid, VtArray<size_t> & out_density_idx, VtArray<float> & out_albedo_grid, VtArray<size_t> & out_albedo_idx, openvdb::Coord & out_gridOnBBSize)
 {
-	openvdb::CoordBBox gridOnBB = computeGrigOnBB< TPtr, TValueOnIt>(grid);
+	openvdb::CoordBBox gridOnBB = computeGridOnBB< TPtr, TValueOnIt>(grid);
 	out_gridOnBBSize = gridOnBB.max() - gridOnBB.min();
 
 	for (TValueOnIt iter = grid->beginValueOn(); iter; ++iter) {
-		out_grid.push_back(defaultColor);
-		out_idx.push_back(coordToIndex(iter.getCoord(), gridOnBB, out_gridOnBBSize));
+		out_density_grid.push_back(grid->getAccessor().GetValue(iter.getCoord()));
+		out_albedo_grid.push_back(defaultColor);
+
+		size_t idx = coordToIndex(iter.getCoord(), gridOnBB, out_gridOnBBSize);
+		out_density_idx.push_back(idx);
+		out_albedo_idx.push_back(idx);
 	}
 }
 
+template <class TGrid>
+void ReadDensityFromGrid(openvdb::GridBase::Ptr inGrid, std::vector<uint32_t> &outDensityGridOnIndices, std::vector<float> &outDensityGridOnValueIndices, std::vector<float> &outDensityGridValues)
+{
+	TGrid::Ptr grid = openvdb::gridPtrCast<TGrid>(inGrid);
+	openvdb::CoordBBox gridOnBB = grid->evalActiveVoxelBoundingBox();
+
+	TGrid::ValueType minValue, maxValue;
+	grid->evalMinMax(minValue, maxValue);
+	for (TGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
+		openvdb::Coord curCoord = iter.getCoord() - gridOnBB.min();
+		outDensityGridOnIndices.push_back(curCoord.x());
+		outDensityGridOnIndices.push_back(curCoord.y());
+		outDensityGridOnIndices.push_back(curCoord.z());
+
+		float value = (float)(grid->getAccessor().getValue(iter.getCoord()));
+		outDensityGridOnValueIndices.push_back((value - minValue) / (maxValue - minValue));
+	}
+	outDensityGridValues.push_back(minValue);
+	outDensityGridValues.push_back(minValue);
+	outDensityGridValues.push_back(minValue);
+	outDensityGridValues.push_back(maxValue);
+	outDensityGridValues.push_back(maxValue);
+	outDensityGridValues.push_back(maxValue);
+}
+
+void HdRprVolume::CreateDefaultColorGridFromDensityGrid()
+{
+	//color grid has same voxels as density grid
+	m_colorGridOnIndices = m_densityGridOnIndices;
+
+	//color grid has one uniform color
+	m_colorGridValues.clear();
+	m_colorGridValues.push_back(defaultColor.data()[0]);
+	m_colorGridValues.push_back(defaultColor.data()[1]);
+	m_colorGridValues.push_back(defaultColor.data()[2]);
+
+	m_colorGridOnValueIndices.resize(m_densityGridOnValueIndices.size(), 0);
+}
 
 HdRprVolume::HdRprVolume(SdfPath const& id, HdRprApiSharedPtr rprApi): HdVolume(id)
 {
@@ -211,8 +258,8 @@ void HdRprVolume::Sync(
 
 		openvdb::GridPtrVecPtr grids = file.getGrids();
 
-		VtArray<float> gridDencity;
-		VtArray<size_t> idxDencity;
+		VtArray<float> gridDensity;
+		VtArray<size_t> idxDensity;
 
 		VtArray<float> gridAlbedo;
 		VtArray<unsigned int> idxAlbedo;
@@ -231,115 +278,113 @@ void HdRprVolume::Sync(
 			return;
 		}
 
-		bool isDencity = gridNames.find(HdRprVolumeTokens->density) != gridNames.end();
+		bool isDensity = gridNames.find(HdRprVolumeTokens->density) != gridNames.end();
 		bool isTemperature = gridNames.find(HdRprVolumeTokens->temperature) != gridNames.end();
 		bool isColor = gridNames.find(HdRprVolumeTokens->color) != gridNames.end();
 
 
-		if (isDencity || isTemperature || isColor)
-		{
-			openvdb::FloatGrid::Ptr dencityGrid = (isDencity) ? openvdb::gridPtrCast<openvdb::FloatGrid>(file.readGrid(HdRprVolumeTokens->density)) : nullptr;
-			openvdb::FloatGrid::Ptr temperatureGrid = (isTemperature) ? openvdb::gridPtrCast<openvdb::FloatGrid>(file.readGrid(HdRprVolumeTokens->temperature)) : nullptr;
+		//if (isDensity || isTemperature || isColor)
+		//{
+		//	openvdb::FloatGrid::Ptr densityGrid = (isDensity) ? openvdb::gridPtrCast<openvdb::FloatGrid>(file.readGrid(HdRprVolumeTokens->density)) : nullptr;
+		//	openvdb::FloatGrid::Ptr temperatureGrid = (isTemperature) ? openvdb::gridPtrCast<openvdb::FloatGrid>(file.readGrid(HdRprVolumeTokens->temperature)) : nullptr;
 
 
-			openvdb::FloatGrid::Ptr fpGrig;
+		//	openvdb::FloatGrid::Ptr fpGrig;
 
-			if (isDencity)
-			{
-				fpGrig = dencityGrid;
-			}
-			else if (isTemperature)
-			{
-				fpGrig = temperatureGrid;
-			}
-			else
-			{
-				*dirtyBits = HdChangeTracker::Clean;
-				return;
-			}
+		//	if (isDensity)
+		//	{
+		//		fpGrig = densityGrid;
+		//	}
+		//	else if (isTemperature)
+		//	{
+		//		fpGrig = temperatureGrid;
+		//	}
+		//	else
+		//	{
+		//		*dirtyBits = HdChangeTracker::Clean;
+		//		return;
+		//	}
 
-			voxelSize = fpGrig->voxelSize();
+		//	voxelSize = fpGrig->voxelSize();
 
-			openvdb::CoordBBox gridOnBB = computeGrigOnBB<openvdb::FloatGrid::Ptr,openvdb::FloatGrid::ValueOnIter>(fpGrig);
-			gridOnBBSize = gridOnBB.max() - gridOnBB.min();
+		//	openvdb::CoordBBox gridOnBB = computeGridOnBB<openvdb::FloatGrid::Ptr,openvdb::FloatGrid::ValueOnIter>(fpGrig);
+		//	gridOnBBSize = gridOnBB.max() - gridOnBB.min();
 
-			//
+		//	//
 
-			for (openvdb::FloatGrid::ValueOnIter iter = fpGrig->beginValueOn(); iter; ++iter) {
+		//	for (openvdb::FloatGrid::ValueOnIter iter = fpGrig->beginValueOn(); iter; ++iter)
+		//	{
+		//		openvdb::Coord coord = iter.getCoord();
+		//		float density = defaultDensity;
 
-				openvdb::Coord coord = iter.getCoord();
-				float dencity = defaultDencity;
-
-
-				if (dencityGrid)
-				{
-					openvdb::FloatGrid::ConstAccessor dencityAccesor = dencityGrid->getConstAccessor();
-					dencity = dencityAccesor.getValue(coord);
-				}
-
+		//		if (densityGrid)
+		//		{
+		//			openvdb::FloatGrid::ConstAccessor densityAccesor = densityGrid->getConstAccessor();
+		//			density = densityAccesor.getValue(coord);
+		//		}
 
 
-				if (isTemperature)
-				{
-					// Not implemented
-				}
-				else if (isColor)
-				{
-					GfVec4f voxelColor;
+		//		if (isTemperature)
+		//		{
+		//			// Not implemented
+		//		}
+		//		else if (isColor)
+		//		{
+		//			GfVec4f voxelColor;
 
-					openvdb::GridBase::Ptr colorGrid = file.readGrid(HdRprVolumeTokens->color);
-					if(colorGrid->isType<openvdb::Vec3IGrid>())
-					{
-						openvdb::Vec3i color = openvdb::gridPtrCast<openvdb::Vec3IGrid>(colorGrid)->getAccessor().getValue(coord);
-						voxelColor[0] = static_cast<float>(color[0]);
-						voxelColor[1] = static_cast<float>(color[1]);
-						voxelColor[2] = static_cast<float>(color[2]);
-					}
-					else if (colorGrid->isType<openvdb::Vec3SGrid>())
-					{
-						openvdb::Vec3f color = openvdb::gridPtrCast<openvdb::Vec3SGrid>(colorGrid)->getAccessor().getValue(coord);
-						voxelColor[0] = color[0];
-						voxelColor[1] = color[1];
-						voxelColor[2] = color[2];
-					}
-					else if (colorGrid->isType<openvdb::Vec3DGrid>())
-					{
-						openvdb::Vec3d color = openvdb::gridPtrCast<openvdb::Vec3DGrid>(colorGrid)->getAccessor().getValue(coord);
-						voxelColor[0] = static_cast<float>(color[0]);
-						voxelColor[1] = static_cast<float>(color[1]);
-						voxelColor[2] = static_cast<float>(color[2]);
-					}
+		//			openvdb::GridBase::Ptr colorGrid = file.readGrid(HdRprVolumeTokens->color);
+		//			if(colorGrid->isType<openvdb::Vec3IGrid>())
+		//			{
+		//				openvdb::Vec3i color = openvdb::gridPtrCast<openvdb::Vec3IGrid>(colorGrid)->getAccessor().getValue(coord);
+		//				voxelColor[0] = static_cast<float>(color[0]);
+		//				voxelColor[1] = static_cast<float>(color[1]);
+		//				voxelColor[2] = static_cast<float>(color[2]);
+		//			}
+		//			else if (colorGrid->isType<openvdb::Vec3SGrid>())
+		//			{
+		//				openvdb::Vec3f color = openvdb::gridPtrCast<openvdb::Vec3SGrid>(colorGrid)->getAccessor().getValue(coord);
+		//				voxelColor[0] = color[0];
+		//				voxelColor[1] = color[1];
+		//				voxelColor[2] = color[2];
+		//			}
+		//			else if (colorGrid->isType<openvdb::Vec3DGrid>())
+		//			{
+		//				openvdb::Vec3d color = openvdb::gridPtrCast<openvdb::Vec3DGrid>(colorGrid)->getAccessor().getValue(coord);
+		//				voxelColor[0] = static_cast<float>(color[0]);
+		//				voxelColor[1] = static_cast<float>(color[1]);
+		//				voxelColor[2] = static_cast<float>(color[2]);
+		//			}
 
-					gridAlbedo.push_back(voxelColor[0]);
-					gridAlbedo.push_back(voxelColor[1]);
-					gridAlbedo.push_back(voxelColor[2]);
+		//			gridAlbedo.push_back(voxelColor[0]);
+		//			gridAlbedo.push_back(voxelColor[1]);
+		//			gridAlbedo.push_back(voxelColor[2]);
 
-					const unsigned int nextIdx = (idxAlbedo.empty()) ? 0 : idxAlbedo.back() + 1;
+		//			const unsigned int nextIdx = (idxAlbedo.empty()) ? 0 : idxAlbedo.back() + 1;
 
-					idxAlbedo.push_back(nextIdx + 0);
-					idxAlbedo.push_back(nextIdx + 1);
-					idxAlbedo.push_back(nextIdx + 2);
-				}
-				else
-				{
-					gridAlbedo.push_back(defaultAlbedo);
+		//			idxAlbedo.push_back(nextIdx + 0);
+		//			idxAlbedo.push_back(nextIdx + 1);
+		//			idxAlbedo.push_back(nextIdx + 2);
+		//		}
+		//		else
+		//		{
+		//			gridAlbedo.push_back(defaultAlbedo);
 
-					const unsigned int nextIdx = (idxAlbedo.empty()) ? 0 : idxAlbedo.back() + 1;
+		//			const unsigned int nextIdx = (idxAlbedo.empty()) ? 0 : idxAlbedo.back() + 1;
 
-					idxAlbedo.push_back(nextIdx);
-					idxAlbedo.push_back(nextIdx);
-					idxAlbedo.push_back(nextIdx);
-				}
+		//			idxAlbedo.push_back(nextIdx);
+		//			idxAlbedo.push_back(nextIdx);
+		//			idxAlbedo.push_back(nextIdx);
+		//		}
 
-				gridDencity.push_back((dencityGrid) ? dencityGrid->getConstAccessor().getValue(coord) : 0.f);
-				idxDencity.push_back(coordToIndex(iter.getCoord(), gridOnBB, gridOnBBSize));
-			}
-		}
-		else if (gridNames.find(HdRprVolumeTokens->points) != gridNames.end())
-		{
-			// Not implemented
-		}
-		else
+		//		gridDensity.push_back((densityGrid) ? densityGrid->getConstAccessor().getValue(coord) : 0.f);
+		//		idxDensity.push_back(coordToIndex(iter.getCoord(), gridOnBB, gridOnBBSize));
+		//	}
+		//}
+		//else if (gridNames.find(HdRprVolumeTokens->points) != gridNames.end())
+		//{
+		//	// Not implemented
+		//}
+		//else
 		{
 			openvdb::GridBase::Ptr baseGrid = file.readGrid( * file.beginName());
 			if (baseGrid->empty())
@@ -348,20 +393,40 @@ void HdRprVolume::Sync(
 				return;
 			}
 
-
-			/*
 			voxelSize = baseGrid->voxelSize();
 
-			if (baseGrid->isType<openvdb::BoolGrid>())			fillGridOnWithDefaultColor< openvdb::BoolGrid::Ptr, openvdb::BoolGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::BoolGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::FloatGrid>())	fillGridOnWithDefaultColor< openvdb::FloatGrid::Ptr, openvdb::FloatGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::FloatGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::DoubleGrid>())	fillGridOnWithDefaultColor< openvdb::DoubleGrid::Ptr, openvdb::DoubleGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::DoubleGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Int32Grid>())	fillGridOnWithDefaultColor< openvdb::Int32Grid::Ptr, openvdb::Int32Grid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Int32Grid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Int64Grid>())	fillGridOnWithDefaultColor< openvdb::Int64Grid::Ptr, openvdb::Int64Grid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Int64Grid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Vec3IGrid>())	fillGridOnWithDefaultColor< openvdb::Vec3IGrid::Ptr, openvdb::Vec3IGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Vec3IGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Vec3SGrid>())	fillGridOnWithDefaultColor< openvdb::Vec3SGrid::Ptr, openvdb::Vec3SGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Vec3SGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Vec3DGrid>())	fillGridOnWithDefaultColor< openvdb::Vec3DGrid::Ptr, openvdb::Vec3DGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Vec3DGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::StringGrid>())	fillGridOnWithDefaultColor< openvdb::StringGrid::Ptr, openvdb::StringGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::StringGrid>(baseGrid), grid, idx, gridOnBBSize);
-			*/
+			if (baseGrid->isType<openvdb::BoolGrid>())
+				voxelSize = voxelSize;
+				//fillGridOnWithDefaultColor< openvdb::BoolGrid::Ptr, openvdb::BoolGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::BoolGrid>(baseGrid), grid, idx, gridOnBBSize);
+			else if (baseGrid->isType<openvdb::FloatGrid>())
+			{
+				gridOnBBSize = baseGrid->evalActiveVoxelDim();
+				ReadDensityFromGrid<openvdb::FloatGrid>(baseGrid, m_densityGridOnIndices, m_densityGridOnValueIndices, m_densityGridValues);
+				CreateDefaultColorGridFromDensityGrid();
+				//fillGridOnWithDefaultColor< openvdb::FloatGrid::Ptr, openvdb::FloatGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::FloatGrid>(baseGrid), gridDensity, idxDensity, gridAlbedo, idxAlbedo, gridOnBBSize);
+			}
+			else if (baseGrid->isType<openvdb::DoubleGrid>())
+				voxelSize = voxelSize;
+			//fillGridOnWithDefaultColor< openvdb::DoubleGrid::Ptr, openvdb::DoubleGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::DoubleGrid>(baseGrid), grid, idx, gridOnBBSize);
+			else if (baseGrid->isType<openvdb::Int32Grid>())
+				voxelSize = voxelSize;
+			//fillGridOnWithDefaultColor< openvdb::Int32Grid::Ptr, openvdb::Int32Grid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Int32Grid>(baseGrid), grid, idx, gridOnBBSize);
+			else if (baseGrid->isType<openvdb::Int64Grid>())
+				voxelSize = voxelSize;
+			//fillGridOnWithDefaultColor< openvdb::Int64Grid::Ptr, openvdb::Int64Grid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Int64Grid>(baseGrid), grid, idx, gridOnBBSize);
+			else if (baseGrid->isType<openvdb::Vec3IGrid>())
+				voxelSize = voxelSize;
+			//fillGridOnWithDefaultColor< openvdb::Vec3IGrid::Ptr, openvdb::Vec3IGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Vec3IGrid>(baseGrid), grid, idx, gridOnBBSize);
+			else if (baseGrid->isType<openvdb::Vec3SGrid>())
+				voxelSize = voxelSize;
+			//fillGridOnWithDefaultColor< openvdb::Vec3SGrid::Ptr, openvdb::Vec3SGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Vec3SGrid>(baseGrid), grid, idx, gridOnBBSize);
+			else if (baseGrid->isType<openvdb::Vec3DGrid>())
+				voxelSize = voxelSize;
+			//fillGridOnWithDefaultColor< openvdb::Vec3DGrid::Ptr, openvdb::Vec3DGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Vec3DGrid>(baseGrid), grid, idx, gridOnBBSize);
+			else if (baseGrid->isType<openvdb::StringGrid>())
+				voxelSize = voxelSize;
+			//fillGridOnWithDefaultColor< openvdb::StringGrid::Ptr, openvdb::StringGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::StringGrid>(baseGrid), grid, idx, gridOnBBSize);
+			
 		}
 
 		file.close();
@@ -374,7 +439,10 @@ void HdRprVolume::Sync(
 			return;
 		}
 
-        m_rprHeteroVolume = rprApi->CreateVolume(gridDencity, idxDencity, gridAlbedo, idxAlbedo, GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], voxelSize[1], voxelSize[2]));
+        //m_rprHeteroVolume = rprApi->CreateVolume(gridDensity, idxDensity, gridAlbedo, idxAlbedo, GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], (float)voxelSize[1], (float)voxelSize[2]));
+		m_rprHeteroVolume = rprApi->CreateVolume(m_densityGridOnIndices, m_densityGridOnValueIndices, m_densityGridValues,
+			m_colorGridOnIndices, m_colorGridOnValueIndices, m_colorGridValues,
+			GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], (float)voxelSize[1], (float)voxelSize[2]));
 	}
 
 	* dirtyBits = HdChangeTracker::Clean;

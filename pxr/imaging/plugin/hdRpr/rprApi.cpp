@@ -5,6 +5,8 @@
 #include "rifcpp/rifImage.h"
 
 #include <RadeonProRender.h>
+#include <math/matrix.h>
+#include <math/mathutils.h>
 #include "RadeonProRender_CL.h"
 #include "RadeonProRender_GL.h"
 
@@ -470,35 +472,39 @@ public:
         });
     }
 
-    RprApiObjectPtr CreateHeterVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize) {
+	RprApiObjectPtr CreateHeterVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+		const GfVec3i& gridSize) {
         if (!m_rprContext) {
             return nullptr;
         }
 
         rpr_hetero_volume heteroVolume = nullptr;
-        if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume(m_rprContext->GetHandle(), &heteroVolume), "Fail create hetero dencity volume")) return nullptr;
+        if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume(m_rprContext->GetHandle(), &heteroVolume), "Fail create hetero density volume")) return nullptr;
         auto heteroVolumeObject = RprApiObject::Wrap(heteroVolume);
 
-        rpr_grid rprGridDencity;
-        if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridDencity
-            , grigSize[0], grigSize[1], grigSize[2], &indexesDencity[0]
-            , indexesDencity.size(), RPR_GRID_INDICES_TOPOLOGY_I_U64
-            , &gridDencityData[0], gridDencityData.size() * sizeof(gridDencityData[0])
+        rpr_grid rprGridDensity;
+        if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridDensity
+            , gridSize[0], gridSize[1], gridSize[2], &densityGridOnIndices[0]
+            , densityGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
+            , &densityGridOnValueIndices[0], densityGridOnValueIndices.size() * sizeof(densityGridOnValueIndices[0])
             , 0)
-            , "Fail create dencity grid")) return nullptr;
-        heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridDencity));
+            , "Fail create density grid")) return nullptr;
+        heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridDensity));
 
         rpr_grid rprGridAlbedo;
         if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridAlbedo
-            , grigSize[0], grigSize[1], grigSize[2], &indexesAlbedo[0]
-            , indexesAlbedo.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
-            , &gridAlbedoData[0], gridAlbedoData.size() * sizeof(gridAlbedoData[0])
+            , gridSize[0], gridSize[1], gridSize[2], &colorGridOnIndices[0]
+            , colorGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
+            , &colorGridOnValueIndices[0], colorGridOnValueIndices.size() * sizeof(colorGridOnValueIndices[0])
             , 0)
             , "Fail create albedo grid")) return nullptr;
         heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridAlbedo));
 
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityGrid(heteroVolume, rprGridDencity), "Fail to set density hetero volume")) return nullptr;
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoGrid(heteroVolume, rprGridAlbedo), "Fail to set albedo hetero volume")) return nullptr;
+        if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityGrid(heteroVolume, rprGridDensity), "Fail to set density hetero volume")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityLookup(heteroVolume, &densityGridValues[0], densityGridValues.size() / 3), "Fail to set density volume lookup")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoGrid(heteroVolume, rprGridAlbedo), "Fail to set albedo hetero volume")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoLookup(heteroVolume, &colorGridValues[0], colorGridValues.size() / 3), "Fail to set albedo volume lookup")) return nullptr;
 
         if (RPR_ERROR_CHECK(rprSceneAttachHeteroVolume(m_scene->GetHandle(), heteroVolume), "Fail attach hetero volume to scene")) return nullptr;
         m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -516,10 +522,12 @@ public:
         RPR_ERROR_CHECK(rprHeteroVolumeSetTransform(heteroVolume, false, m.GetArray()), "Fail to set hetero volume transform");
     }
 
-    RprApiObjectPtr CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize) {
+	RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+		const GfVec3i& gridSize, const GfVec3f& voxelSize) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        auto heteroVolume = CreateHeterVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, grigSize);
+        auto heteroVolume = CreateHeterVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, gridSize);
         if (!heteroVolume) {
             return nullptr;
         }
@@ -539,7 +547,7 @@ public:
         }
 
         GfMatrix4f meshTransform(1.0f);
-        GfVec3f volumeSize = GfVec3f(voxelSize[0] * grigSize[0], voxelSize[1] * grigSize[1], voxelSize[2] * grigSize[2]);
+        GfVec3f volumeSize = GfVec3f(voxelSize[0] * gridSize[0], voxelSize[1] * gridSize[1], voxelSize[2] * gridSize[2]);
         meshTransform.SetScale(volumeSize);
 
         SetMeshMaterial(cubeMesh->GetHandle(), static_cast<RprApiMaterial*>(transparentMaterial->GetHandle()));
@@ -1374,8 +1382,10 @@ RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float width, float height, const G
     return m_impl->CreateDiskLightMesh(width, height, emmisionColor);
 }
 
-RprApiObjectPtr HdRprApi::CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& gridSize, const GfVec3f& voxelSize) {
-    return m_impl->CreateVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, gridSize, voxelSize);
+RprApiObjectPtr HdRprApi::CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+	const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+	const GfVec3i& gridSize, const GfVec3f& voxelSize){
+    return m_impl->CreateVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, gridSize, voxelSize);
 }
 
 RprApiObjectPtr HdRprApi::CreateMaterial(MaterialAdapter& materialAdapter) {

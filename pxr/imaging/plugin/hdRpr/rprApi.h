@@ -12,6 +12,8 @@
 #include "pxr/base/tf/staticTokens.h"
 
 #include <memory>
+#include <vector>
+#include <string.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -71,7 +73,10 @@ public:
     RprApiObjectPtr CreateSphereLightMesh(float radius);
     RprApiObjectPtr CreateDiskLightMesh(float width, float height, const GfVec3f& color);
 
-    RprApiObjectPtr CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize);
+    //RprApiObjectPtr CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize);
+	RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+		const GfVec3i& gridSize, const GfVec3f& voxelSize);
 
     RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf);
     RprApiObjectPtr CreateMeshInstance(RprApiObject* prototypeMesh);
