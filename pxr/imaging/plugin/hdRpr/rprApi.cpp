@@ -472,7 +472,7 @@ public:
         });
     }
 
-	RprApiObjectPtr CreateHeterVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+	RprApiObjectPtr CreateHeteroVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
 		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
 		const GfVec3i& gridSize) {
         if (!m_rprContext) {
@@ -527,7 +527,7 @@ public:
 		const GfVec3i& gridSize, const GfVec3f& voxelSize) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        auto heteroVolume = CreateHeterVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, gridSize);
+        auto heteroVolume = CreateHeteroVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, gridSize);
         if (!heteroVolume) {
             return nullptr;
         }
