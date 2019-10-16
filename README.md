@@ -53,11 +53,11 @@ UsdView plugin is build by default (```RPR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
 
 ##### Houdini plugin Components
 
-To build houdini plugin set cmake flag ```RPR_BUILD_AS_HOUDINI_PLUGIN=TRUE```.
+To build houdini plugin set cmake flag ```RPR_BUILD_AS_HOUDINI_PLUGIN=TRUE```. `HOUDINI_ROOT` is the directory containing the `houdini_setup` file.
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
-| HOUDINI_ROOT               | Houdini installation directory                                          | 18               |
+| HOUDINI_ROOT               | Houdini toolkit directory                                               | 18               |
 
 #### Optional Components
 
