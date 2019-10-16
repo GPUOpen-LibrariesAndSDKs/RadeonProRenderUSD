@@ -1141,7 +1141,7 @@ private:
                 }
             } else {
                 const int commonVertex = *idxIt;
-                for (int i = 0; i < vCount - 1; ++i) {
+                for (int i = 1; i < vCount - 1; ++i) {
                     out_newIndexes.push_back(commonVertex);
                     out_newIndexes.push_back(*(idxIt + i + 0));
                     out_newIndexes.push_back(*(idxIt + i + 1));
