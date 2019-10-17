@@ -61,42 +61,6 @@ bool HdRprConfig::IsDenoisingEnabled() const {
     return m_prefData.m_enableDenoising;
 }
 
-void HdRprConfig::SetMinSamples(int minSamples) {
-    if (m_prefData.m_minSamples != minSamples) {
-        m_prefData.m_minSamples = minSamples;
-        m_dirtyFlags |= DirtySampling;
-        Save();
-    }
-}
-
-int HdRprConfig::GetMinSamples() const {
-    return m_prefData.m_minSamples;
-}
-
-void HdRprConfig::SetMaxSamples(int maxSamples) {
-    if (m_prefData.m_maxSamples != maxSamples) {
-        m_prefData.m_maxSamples = maxSamples;
-        m_dirtyFlags |= DirtySampling;
-        Save();
-    }
-}
-
-int HdRprConfig::GetMaxSamples() const {
-    return m_prefData.m_maxSamples;
-}
-
-void HdRprConfig::SetVariance(float variance) {
-    if (m_prefData.m_variance != variance) {
-        m_prefData.m_variance = variance;
-        m_dirtyFlags |= DirtySampling;
-        Save();
-    }
-}
-
-int HdRprConfig::GetVariance() const {
-    return m_prefData.m_variance;
-}
-
 bool HdRprConfig::IsDirty(ChangeTracker dirtyFlag) const {
     return m_dirtyFlags & dirtyFlag;
 }

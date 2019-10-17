@@ -34,7 +34,7 @@ public:
 
 	/// Return false if scene is require to be rendered or true otherwise
 	/// In order to specific RPR api scene always should be rendered
-	virtual bool IsConverged() const override { return m_isConverged; }
+	virtual bool IsConverged() const override { return false; }
 
 	// -----------------------------------------------------------------------
 	// HdRenderPass API
@@ -54,7 +54,6 @@ private:
 	HdRprApiWeakPtr m_rprApiWeakPtr;
 
     int m_lastSettingsVersion;
-    bool m_isConverged = false;
 
 };
 

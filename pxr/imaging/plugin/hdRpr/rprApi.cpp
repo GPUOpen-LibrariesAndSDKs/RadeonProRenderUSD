@@ -65,9 +65,6 @@ public:
         CreateCamera();
     }
 
-    int m_iter = 0;
-    int m_maxSamples = 0;
-
     void CreateScene() {
         if (!m_rprContext) {
             return;
@@ -824,12 +821,6 @@ public:
             }
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtySampling)) {
-            m_maxSamples =  preferences.GetMaxSamples();
-            rprContextSetParameter1f(m_rprContext->GetHandle(), "as.threshold", preferences.GetVariance());
-            rprContextSetParameter1u(m_rprContext->GetHandle(), "as.minspp", preferences.GetMinSamples());
-        }
-
         // In case there is no Lights in scene - create default
         if (!m_isLightPresent) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
@@ -1042,7 +1033,6 @@ public:
 
         Update();
 
-        
         if (RPR_ERROR_CHECK(rprContextRender(m_rprContext->GetHandle()), "Fail contex render framebuffer")) return;
 
         ResolveFramebuffers();
@@ -1051,25 +1041,6 @@ public:
             m_rifContext->ExecuteCommandQueue();
         } catch (std::runtime_error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
-        }
-    }
-
-    bool IsConverged() { 
-        // return Converged if max samples is reached
-        if(m_iter > m_maxSamples) {
-            return true;
-        }
-        else {
-            // if not max samples check if all pixels converged to threshold
-            auto& preferences = HdRprConfig::GetInstance();
-
-            float variance_setting = preferences.GetVariance();
-            if(variance_setting > 0.0f) {
-                int active_pixels = 0;
-                rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(active_pixels), &active_pixels, NULL);
-                return active_pixels == 0;
-            }
-            return false;
         }
     }
 
@@ -1488,10 +1459,6 @@ std::shared_ptr<char> HdRprApi::GetAovData(TfToken const& aovName, std::shared_p
 
 void HdRprApi::Render() {
     m_impl->Render();
-}
-
-bool HdRprApi::IsConverged() {
-    return m_impl->IsConverged();
 }
 
 bool HdRprApi::IsGlInteropEnabled() const {
