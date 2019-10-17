@@ -35,4 +35,43 @@
         default { 0 }
         parmtag { "uiicon" VIEW_display_denoise }
     }
+
+    parm {
+        name    "maxSamples"
+        label   "Max Pixel Samples"
+        type    int
+        size    1
+        parmtag { "spare_category" "Sampling" }
+        parmtag { "uiscope" "viewport" }
+        parmtag { "usdvaluetype" "int" }
+        default { 256 }
+        range { 1! 1024 }
+        help    "Maximum number of samples to render for each pixel."
+    }
+
+    parm {
+        name    "minSamples"
+        label   "Min Pixel Samples"
+        type    int
+        size    1
+        parmtag { "spare_category" "Sampling" }
+        parmtag { "uiscope" "viewport" }
+        parmtag { "usdvaluetype" "int" }
+        default { 64 }
+        range { 1! 1024 }
+        help    "Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than 'Variance Threshold'."
+    }
+
+    parm {
+        name    "variance"
+        label   "Variance Threshold"
+        type    float
+        size    1
+        parmtag { "spare_category" "Shading" }
+        parmtag { "uiscope" "viewport" }
+        parmtag { "usdvaluetype" "float" }
+        default { 0.0 }
+        range { 0! 1 }
+        help    "Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff."
+    }
 }
