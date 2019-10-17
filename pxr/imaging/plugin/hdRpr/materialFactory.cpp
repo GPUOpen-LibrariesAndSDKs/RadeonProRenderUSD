@@ -262,6 +262,14 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             rprImageSetGamma(material->materialImages.back(), 2.2f);
         }
 
+        // normal map textures need to be passed through the normal map node
+        if (paramId == RPR_UBER_MATERIAL_INPUT_DIFFUSE_NORMAL ||
+            paramId == RPR_UBER_MATERIAL_INPUT_REFLECTION_NORMAL) {
+            rpr_material_node temp = outTexture;
+            int status = rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_NORMAL_MAP, &outTexture);
+            status = rprMaterialNodeSetInputNByKey(outTexture, RPR_MATERIAL_INPUT_COLOR, temp);
+        }
+
         rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outTexture);
     }
 
