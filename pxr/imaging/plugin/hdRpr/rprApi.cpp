@@ -939,8 +939,8 @@ public:
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
 
-            RPR_ERROR_CHECK(rprContextSetParameter1f(m_rprContext->GetHandle(), "as.threshold", preferences.GetVariance()), "Failed to set as.threshold");
-            RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "as.minspp", preferences.GetMinSamples()), "Failed to set as.minspp");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, preferences.GetVariance()), "Failed to set as.threshold");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinSamples()), "Failed to set as.minspp");
         }
     }
 
