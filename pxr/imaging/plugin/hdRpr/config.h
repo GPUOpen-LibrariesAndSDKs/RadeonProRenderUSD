@@ -24,7 +24,8 @@ public:
         DirtyRenderDevice = 1 << 0,
         DirtyPlugin = 1 << 1,
         DirtyHybridQuality = 1 << 2,
-        DirtyDenoising = 1 << 3
+        DirtyDenoising = 1 << 3,
+        DirtySampling = 1 << 4
     };
 
     static HdRprConfig& GetInstance();
@@ -40,6 +41,15 @@ public:
 
     void SetDenoising(bool enableDenoising);
     bool IsDenoisingEnabled() const;
+
+    void SetMinSamples(int minSamples);
+    int GetMinSamples() const;
+
+    void SetMaxSamples(int maxSamples);
+    int GetMaxSamples() const;
+
+    void SetVariance(float variance);
+    int GetVariance() const;
 
     bool IsDirty(ChangeTracker dirtyFlag) const;
     void ResetDirty();
@@ -58,6 +68,9 @@ private:
         rpr::PluginType m_plugin;
         HdRprHybridQuality m_hybridQuality;
         bool m_enableDenoising;
+        int m_minSamples;
+        int m_maxSamples;
+        float m_variance;
 
         PrefData();
         void SetDefault();

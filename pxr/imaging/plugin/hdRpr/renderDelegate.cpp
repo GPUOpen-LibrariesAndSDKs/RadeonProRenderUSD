@@ -62,10 +62,11 @@ HdRprDelegate::HdRprDelegate() {
     m_rprApiSharedPtr = std::shared_ptr<HdRprApi>(new HdRprApi);
 
     auto& config = HdRprConfig::GetInstance();
-    m_settingDescriptors.resize(2);
+    m_settingDescriptors.resize(5);
     m_settingDescriptors[0] = { "Enable Denoising",
         HdRprRenderSettingsTokens->enableDenoising,
         VtValue(config.IsDenoisingEnabled()) };
+    
     auto renderQuality = HdRprRenderQualityTokens->full;
     if (config.GetPlugin() == rpr::PluginType::HYBRID) {
         switch (config.GetHybridQuality()) {
@@ -85,7 +86,22 @@ HdRprDelegate::HdRprDelegate() {
     m_settingDescriptors[1] = { "Render Quality",
         HdRprRenderSettingsTokens->renderQuality,
         VtValue(renderQuality) };
+    
+    m_settingDescriptors[2] = { "Min Samples",
+        HdRprRenderSettingsTokens->minSamples,
+        VtValue(config.GetMinSamples()) };
+
+    m_settingDescriptors[3] = { "Max Samples",
+        HdRprRenderSettingsTokens->maxSamples,
+        VtValue(config.GetMaxSamples()) };
+
+    m_settingDescriptors[4] = { "Variance",
+        HdRprRenderSettingsTokens->variance,
+        VtValue(config.GetVariance()) };
+
     _PopulateDefaultSettings(m_settingDescriptors);
+
+
 }
 
 HdRprDelegate::~HdRprDelegate() {
