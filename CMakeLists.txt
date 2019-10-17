@@ -38,7 +38,12 @@ set(CMAKE_CXX_FLAGS "${_PXR_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
 include(Public)
 
 # add_compile_options(-Wall -DBUILD_OPTLEVEL_OPT -DBUILD_COMPONENT_SRC_PREFIX="")
-set(CMAKE_CXX_STANDARD 11)
+if(RPR_BUILD_AS_HOUDINI_PLUGIN)
+	# We use HDK to load .rat images, it requires 14th standard
+	set(CMAKE_CXX_STANDARD 14)
+else()
+	set(CMAKE_CXX_STANDARD 11)
+endif()
 
 
 include_directories(${USD_INCLUDE_DIR})

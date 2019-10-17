@@ -1,6 +1,7 @@
 #include "rprApi.h"
 #include "rprcpp/rprFramebufferGL.h"
 #include "rprcpp/rprContext.h"
+#include "rprcpp/rprImage.h"
 #include "rifcpp/rifFilter.h"
 #include "rifcpp/rifImage.h"
 
@@ -289,7 +290,7 @@ public:
         return RprApiObject::Wrap(curve);
     }
 
-    RprApiObjectPtr CreateEnvironmentLight(RprApiObjectPtr&& image, float intensity) {
+    RprApiObjectPtr CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
         rpr_light light;
 
         if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_rprContext->GetHandle(), &light), "Fail to create environment light")) return nullptr;
@@ -327,11 +328,14 @@ public:
         }
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
-        rpr_image image = nullptr;
-        if (RPR_ERROR_CHECK(rprContextCreateImageFromFile(m_rprContext->GetHandle(), path.c_str(), &image), std::string("Fail to load image ") + path)) return nullptr;
-        auto imageObject = RprApiObject::Wrap(image);
+        try {
+            auto image = make_unique<rpr::Image>(m_rprContext->GetHandle(), path.c_str());
+            return CreateEnvironmentLight(std::move(image), intensity);
+        } catch (rpr::Error const& error) {
+            TF_RUNTIME_ERROR(error.what());
+        }
 
-        return CreateEnvironmentLight(std::move(imageObject), intensity);
+        return nullptr;
     }
 
     RprApiObjectPtr CreateEnvironmentLight(GfVec3f color, float intensity) {
@@ -339,19 +343,19 @@ public:
             return nullptr;
         }
 
-        // Set the background image to a solid color.
-        std::array<float, 3> backgroundColor = { color[0],  color[1],  color[2] };
-        rpr_image_format format = { 3, RPR_COMPONENT_TYPE_FLOAT32 };
+        std::array<float, 3> backgroundColor = {color[0], color[1], color[2]};
+        rpr_image_format format = {3, RPR_COMPONENT_TYPE_FLOAT32};
         rpr_uint imageSize = m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID ? 64 : 1;
-        rpr_image_desc desc = { imageSize, imageSize, 0, static_cast<rpr_uint>(imageSize * imageSize * 3 * sizeof(float)), 0 };
         std::vector<std::array<float, 3>> imageData(imageSize * imageSize, backgroundColor);
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        rpr_image image = nullptr;
-        if (RPR_ERROR_CHECK(rprContextCreateImage(m_rprContext->GetHandle(), format, &desc, imageData.data(), &image), "Fail to create image from color")) return nullptr;
-        auto imageObject = RprApiObject::Wrap(image);
+        try {
+            auto image = make_unique<rpr::Image>(m_rprContext->GetHandle(), imageSize, imageSize, format, imageData[0].data());
+            return CreateEnvironmentLight(std::move(image), intensity);
+        } catch (rpr::Error const& error) {
+            TF_RUNTIME_ERROR(error.what());
+        }
 
-        return CreateEnvironmentLight(std::move(imageObject), intensity);
+        return nullptr;
     }
 
     RprApiObjectPtr CreateRectLightMesh(float width, float height) {
@@ -455,6 +459,13 @@ public:
         m_isLightPresent = true;
 
         return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
+    }
+
+    void SetLightTransform(rpr_light light, GfMatrix4f const& transform) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        if (!RPR_ERROR_CHECK(rprLightSetTransform(light, false, transform.GetArray()), "Fail set light transformation")) {
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
     }
 
     RprApiObjectPtr CreateMaterial(const MaterialAdapter& materialAdapter) {
@@ -1313,6 +1324,10 @@ RprApiObject::~RprApiObject() {
     }
 }
 
+void RprApiObject::AttachDependency(std::unique_ptr<rpr::Object>&& dependencyObject) {
+    m_dependencyRprObjects.push_back(std::move(dependencyObject));
+}
+
 void RprApiObject::AttachDependency(RprApiObjectPtr&& dependencyObject) {
     m_dependencyObjects.push_back(std::move(dependencyObject));
 }
@@ -1372,6 +1387,11 @@ RprApiObjectPtr HdRprApi::CreateSphereLightMesh(float radius) {
 
 RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float width, float height, const GfVec3f& emmisionColor) {
     return m_impl->CreateDiskLightMesh(width, height, emmisionColor);
+}
+
+void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4d const& transform) {
+    GfMatrix4f transformF(transform);
+    m_impl->SetLightTransform(light->GetHandle(), transformF);
 }
 
 RprApiObjectPtr HdRprApi::CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& gridSize, const GfVec3f& voxelSize) {

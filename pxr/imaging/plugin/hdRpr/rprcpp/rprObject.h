@@ -13,6 +13,11 @@ class Object {
 public:
     Object(Object const&) = delete;
     Object& operator=(Object const&) = delete;
+    Object& operator=(Object&& object) noexcept {
+        m_rprObjectHandle = object.m_rprObjectHandle;
+        object.m_rprObjectHandle = nullptr;
+        return *this;
+    }
 
     virtual ~Object() {
         Delete();

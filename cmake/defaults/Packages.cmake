@@ -45,6 +45,8 @@ find_package(Threads REQUIRED)
 set(PXR_THREAD_LIBS "${CMAKE_THREAD_LIBS_INIT}")
 
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
+    find_package(Houdini REQUIRED CONFIG PATHS ${HOUDINI_ROOT}/toolkit/cmake)
+
     if(WIN32)
         set(PYTHON_INCLUDE_DIRS ${HOUDINI_ROOT}/python27/include)
         set(PYTHON_LIBRARY ${HOUDINI_ROOT}/python27/libs/python27.lib)

@@ -115,56 +115,50 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         rpr_image img = nullptr;
         rpr_material_node materialNode = nullptr;
 
-        auto textureData = GlfUVTextureData::New(matTex.Path, INT_MAX, 0, 0, 0, 0);
-        if (!textureData || !textureData->Read(0, false)) {
-            TF_CODING_ERROR("Failed to read image %s", matTex.Path.c_str());
+        try {
+            std::unique_ptr<rpr::Image> rprImage;
+
+            auto textureData = GlfUVTextureData::New(matTex.Path, INT_MAX, 0, 0, 0, 0);
+            if (textureData && textureData->Read(0, false)) {
+                rpr_image_format format = {};
+                switch (textureData->GLType()) {
+                    case GL_UNSIGNED_BYTE:
+                        format.type = RPR_COMPONENT_TYPE_UINT8;
+                        break;
+                    case GL_FLOAT:
+                        format.type = RPR_COMPONENT_TYPE_FLOAT32;
+                        break;
+                    default:
+                        TF_CODING_ERROR("Failed to create image %s. Unsupported pixel data GLtype: %#x", matTex.Path.c_str(), textureData->GLType());
+                        return nullptr;
+                }
+
+                switch (textureData->GLFormat()) {
+                    case GL_RED:
+                        format.num_components = 1;
+                        break;
+                    case GL_RGB:
+                        format.num_components = 3;
+                        break;
+                    case GL_RGBA:
+                        format.num_components = 4;
+                        break;
+                    default:
+                        TF_CODING_ERROR("Failed to create image %s. Unsupported pixel data GLformat: %#x", matTex.Path.c_str(), textureData->GLFormat());
+                        return nullptr;
+                }
+
+                rprImage.reset(new rpr::Image(rprContext, textureData->ResizedWidth(), textureData->ResizedHeight(), format, textureData->GetRawBuffer()));
+            } else {
+                rprImage.reset(new rpr::Image(rprContext, matTex.Path.c_str()));
+            }
+
+            img = rprImage->GetHandle();
+            material->materialImages.push_back(std::move(rprImage));
+        } catch (rpr::Error const& error) {
+            TF_RUNTIME_ERROR("Failed to read image %s: %s", matTex.Path.c_str(), error.what());
             return nullptr;
         }
-
-        rpr_image_format format = {};
-        int bytesPerChannel = 0;
-        switch (textureData->GLType()) {
-            case GL_UNSIGNED_BYTE:
-                format.type = RPR_COMPONENT_TYPE_UINT8;
-                bytesPerChannel = 1;
-                break;
-            case GL_FLOAT:
-                format.type = RPR_COMPONENT_TYPE_FLOAT32;
-                bytesPerChannel = 4;
-                break;
-            default:
-                TF_CODING_ERROR("Failed to create image %s. Unsupported pixel data GLtype: %#x", matTex.Path.c_str(), textureData->GLType());
-                return nullptr;
-        }
-
-        switch (textureData->GLFormat()) {
-            case GL_RED:
-                format.num_components = 1;
-                break;
-            case GL_RGB:
-                format.num_components = 3;
-                break;
-            case GL_RGBA:
-                format.num_components = 4;
-                break;
-            default:
-                TF_CODING_ERROR("Failed to create image %s. Unsupported pixel data GLformat: %#x", matTex.Path.c_str(), textureData->GLFormat());
-                return nullptr;
-        }
-        int bytesPerPixel = bytesPerChannel * format.num_components;
-
-        rpr_image_desc desc = {};
-        desc.image_width = textureData->ResizedWidth();
-        desc.image_height = textureData->ResizedHeight();
-        desc.image_depth = 1;
-        desc.image_row_pitch = bytesPerPixel * desc.image_width;
-        desc.image_slice_pitch = desc.image_row_pitch * desc.image_height;
-        status = rprContextCreateImage(rprContext, format, &desc, textureData->GetRawBuffer(), &img);
-        if (status != RPR_SUCCESS) {
-            TF_CODING_ERROR("Failed to create image %s  Error code %d", matTex.Path.c_str(), status);
-            return nullptr;
-        }
-        material->materialImages.push_back(img);
 
         if (getWrapType(matTex.WrapS, rprWrapSType) && getWrapType(matTex.WrapT, rprWrapTType))
         {
@@ -267,7 +261,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         if ((paramId == RPR_UBER_MATERIAL_INPUT_DIFFUSE_COLOR ||
             paramId == RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR) &&
             ArGetResolver().GetExtension(matTex.Path) == "png") {
-            rprImageSetGamma(material->materialImages.back(), 2.2f);
+            rprImageSetGamma(material->materialImages.back()->GetHandle(), 2.2f);
         }
 
         rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outTexture);
@@ -286,10 +280,6 @@ void RprMaterialFactory::DeleteMaterial(RprApiMaterial* material)
 
     SAFE_DELETE_RPR_OBJECT(material->rootMaterial);
     SAFE_DELETE_RPR_OBJECT(material->displacementMaterial);
-    for (auto img : material->materialImages)
-    {
-        SAFE_DELETE_RPR_OBJECT(img);
-    }
     for (auto node : material->materialNodes)
     {
         SAFE_DELETE_RPR_OBJECT(node);

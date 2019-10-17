@@ -83,6 +83,11 @@ public:
         : std::runtime_error(ConstructErrorMessage(messageOnFail, errorStatus, context)) {
 
     }
+
+    Error(const char* errorMesssage)
+        : std::runtime_error(errorMesssage) {
+
+    }
 };
 
 } // namespace rpr

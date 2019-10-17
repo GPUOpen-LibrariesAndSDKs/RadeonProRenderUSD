@@ -56,6 +56,9 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
         list(APPEND HOUDINI_USD_LIBRARIES "${USD_LIB_PREFIX}${name}")
     endforeach()
     set(USD_LIBRARIES "${HOUDINI_USD_LIBRARIES}")
+
+    list(APPEND OptLibs Houdini)
+    add_definitions(-DENABLE_RAT)
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     if(${USD_LIBRARY_MONOLITHIC})
         set(USD_LIBRARIES usd_ms)
@@ -135,7 +138,7 @@ endif(WIN32 OR LINUX)
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
         FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/HdRprPlugin_Viewport.ds
-        DESTINATION "${HOUDINI_HH}/soho/parameters")
+        DESTINATION "houdini/soho/parameters")
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_install_dir(lib/python/rpr installPrefix)
 
@@ -168,6 +171,6 @@ else(WIN32)
         _get_install_dir("lib" installPrefix)
     endif()
     install(
-        FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY} ${OptLibs}
+        FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY}
         DESTINATION ${installPrefix})
 endif(WIN32)

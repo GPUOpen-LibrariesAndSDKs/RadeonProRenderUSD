@@ -11,6 +11,8 @@
 #include "pxr/imaging/hd/types.h"
 #include "pxr/base/tf/staticTokens.h"
 
+#include "rprcpp/rprObject.h"
+
 #include <memory>
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -31,6 +33,7 @@ public:
     ~RprApiObject();
 
     void AttachDependency(std::unique_ptr<RprApiObject>&& dependencyObject);
+    void AttachDependency(std::unique_ptr<rpr::Object>&& dependencyObject);
 
     void AttachOnReleaseAction(TfToken const& actionName, std::function<void (void*)> action);
     void DettachOnReleaseAction(TfToken const& actionName);
@@ -41,6 +44,7 @@ private:
     void* m_handle;
     std::function<void (void*)> m_deleter;
     std::vector<std::unique_ptr<RprApiObject>> m_dependencyObjects;
+    std::vector<std::unique_ptr<rpr::Object>> m_dependencyRprObjects;
     std::map<TfToken, std::function<void (void*)>> m_onReleaseActions;
 };
 using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
@@ -70,6 +74,7 @@ public:
     RprApiObjectPtr CreateRectLightMesh(float width, float height);
     RprApiObjectPtr CreateSphereLightMesh(float radius);
     RprApiObjectPtr CreateDiskLightMesh(float width, float height, const GfVec3f& color);
+    void SetLightTransform(RprApiObject* light, GfMatrix4d const& transform);
 
     RprApiObjectPtr CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize);
 
