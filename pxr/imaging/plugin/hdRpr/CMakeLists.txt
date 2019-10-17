@@ -106,6 +106,7 @@ pxr_plugin(hdRpr
 		sphereLight
         renderBuffer
 		basisCurves
+        imageCache
 		
 		${OptClass}
 

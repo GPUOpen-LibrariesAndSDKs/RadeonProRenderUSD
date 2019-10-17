@@ -6,6 +6,7 @@
 #include "rifcpp/rifImage.h"
 
 #include "config.h"
+#include "imageCache.h"
 #include "material.h"
 #include "materialFactory.h"
 #include "materialAdapter.h"
@@ -1134,6 +1135,8 @@ private:
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
             RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, int(HdRprConfig::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
         }
+
+        m_imageCache.reset(new ImageCache(m_rprContext.get()));
     }
 
     void InitRif() {
@@ -1152,7 +1155,7 @@ private:
         rpr_material_system matsys;
         if (RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_rprContext->GetHandle(), 0, & matsys), "Fail create Material System resolve")) return;
         m_matsys = RprApiObject::Wrap(matsys);
-        m_rprMaterialFactory.reset(new RprMaterialFactory(matsys, m_rprContext->GetHandle()));
+        m_rprMaterialFactory.reset(new RprMaterialFactory(matsys, m_imageCache.get()));
     }
 
     void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes, VtIntArray & out_newVpf) {
@@ -1312,6 +1315,7 @@ private:
 
     std::unique_ptr<rpr::Context> m_rprContext;
     std::unique_ptr<rif::Context> m_rifContext;
+    std::unique_ptr<ImageCache> m_imageCache;
     RprApiObjectPtr m_scene;
     RprApiObjectPtr m_camera;
     RprApiObjectPtr m_tonemap;

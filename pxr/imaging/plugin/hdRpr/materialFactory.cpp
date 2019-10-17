@@ -1,7 +1,6 @@
 ﻿#include "materialFactory.h"
-
+#include "rprcpp/rprImage.h"
 #include "pxr/usd/ar/resolver.h"
-#include "pxr/imaging/glf/uvTextureData.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -51,7 +50,7 @@ bool getSelectedChanel(const EColorChanel & colorChanel, rpr_int & out_selectedC
 	return false;
 }
 
-RprMaterialFactory::RprMaterialFactory(rpr_material_system matSys, rpr_context rprContext) : m_matSys(matSys), m_context(rprContext)
+RprMaterialFactory::RprMaterialFactory(rpr_material_system matSys, ImageCache* imageCache) : m_matSys(matSys), m_imageCache(imageCache)
 {
 }
 
@@ -95,73 +94,32 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         rprMaterialNodeSetInputUByKey(material->rootMaterial, paramId, paramValue);
     }
 
-    auto getTextureMaterialNode = [&material](rpr_context rprContext, rpr_material_system matSys, MaterialTexture const& matTex) -> rpr_material_node {
+    auto getTextureMaterialNode = [&material](ImageCache* imageCache, rpr_material_system matSys, MaterialTexture const& matTex) -> rpr_material_node {
         if (matTex.Path.empty()) {
             return nullptr;
         }
 
-        rpr_image_wrap_type rprWrapSType;
-        rpr_image_wrap_type rprWrapTType;
-
         rpr_int status = RPR_SUCCESS;
-        rpr_image img = nullptr;
-        rpr_material_node materialNode = nullptr;
 
-        try {
-            std::unique_ptr<rpr::Image> rprImage;
-
-            auto textureData = GlfUVTextureData::New(matTex.Path, INT_MAX, 0, 0, 0, 0);
-            if (textureData && textureData->Read(0, false)) {
-                rpr_image_format format = {};
-                switch (textureData->GLType()) {
-                    case GL_UNSIGNED_BYTE:
-                        format.type = RPR_COMPONENT_TYPE_UINT8;
-                        break;
-                    case GL_FLOAT:
-                        format.type = RPR_COMPONENT_TYPE_FLOAT32;
-                        break;
-                    default:
-                        TF_CODING_ERROR("Failed to create image %s. Unsupported pixel data GLtype: %#x", matTex.Path.c_str(), textureData->GLType());
-                        return nullptr;
-                }
-
-                switch (textureData->GLFormat()) {
-                    case GL_RED:
-                        format.num_components = 1;
-                        break;
-                    case GL_RGB:
-                        format.num_components = 3;
-                        break;
-                    case GL_RGBA:
-                        format.num_components = 4;
-                        break;
-                    default:
-                        TF_CODING_ERROR("Failed to create image %s. Unsupported pixel data GLformat: %#x", matTex.Path.c_str(), textureData->GLFormat());
-                        return nullptr;
-                }
-
-                rprImage.reset(new rpr::Image(rprContext, textureData->ResizedWidth(), textureData->ResizedHeight(), format, textureData->GetRawBuffer()));
-            } else {
-                rprImage.reset(new rpr::Image(rprContext, matTex.Path.c_str()));
-            }
-
-            img = rprImage->GetHandle();
-            material->materialImages.push_back(std::move(rprImage));
-        } catch (rpr::Error const& error) {
-            TF_RUNTIME_ERROR("Failed to read image %s: %s", matTex.Path.c_str(), error.what());
+        auto image = imageCache->GetImage(matTex.Path);
+        if (!image) {
             return nullptr;
         }
+        auto rprImage = image->GetHandle();
+        material->materialImages.push_back(std::move(image));
 
+        rpr_image_wrap_type rprWrapSType;
+        rpr_image_wrap_type rprWrapTType;
         if (getWrapType(matTex.WrapS, rprWrapSType) && getWrapType(matTex.WrapT, rprWrapTType))
         {
             if (rprWrapSType != rprWrapTType)
             {
                 TF_CODING_WARNING("RPR renderer does not support different WrapS and WrapT modes");
             }
-            rprImageSetWrap(img, rprWrapSType);
+            rprImageSetWrap(rprImage, rprWrapSType);
         }
 
-
+        rpr_material_node materialNode = nullptr;
         rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_IMAGE_TEXTURE, &materialNode);
         rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, img);
 		material->materialNodes.push_back(materialNode);
@@ -242,7 +200,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         const uint32_t & paramId = texParam.first;
         const MaterialTexture & matTex = texParam.second;
 
-        rpr_material_node outTexture = getTextureMaterialNode(m_context, m_matSys, matTex);
+        rpr_material_node outTexture = getTextureMaterialNode(m_imageCache, m_matSys, matTex);
         if (!outTexture) {
             continue;
         }
@@ -267,7 +225,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outTexture);
     }
 
-    material->displacementMaterial = getTextureMaterialNode(m_context, m_matSys, materialAdapter.GetDisplacementTexture());
+    material->displacementMaterial = getTextureMaterialNode(m_imageCache, m_matSys, materialAdapter.GetDisplacementTexture());
 
     return material;
 }
