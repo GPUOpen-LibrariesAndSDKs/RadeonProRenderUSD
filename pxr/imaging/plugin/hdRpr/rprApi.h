@@ -107,6 +107,7 @@ public:
     TfToken const& GetActiveAov() const;
 
     void Render();
+    bool IsConverged();
 
     bool IsGlInteropEnabled() const;
 

@@ -1,8 +1,8 @@
 #include "rprContext.h"
 #include "rprError.h"
 
-#include "../RprTools.h"
-#include "../RprTools.cpp"
+#include "../RprTools/RprTools.h"
+#include "../RprTools/RprTools.cpp"
 
 #include "pxr/imaging/glf/glew.h"
 #include "pxr/base/arch/env.h"
@@ -62,7 +62,7 @@ std::string GetRprSdkPath() {
 void SetupRprTracing() {
     auto enableTracingEnv = ArchGetEnv("RPR_ENABLE_TRACING");
     if (enableTracingEnv == "1") {
-        RPR_ERROR_CHECK(rprContextSetParameter1u(nullptr, "tracing", 1), "Fail to set context tracing parameter");
+        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(nullptr, RPR_CONTEXT_TRACING_ENABLED, 1), "Fail to set context tracing parameter");
 
         auto tracingFolder = ArchGetEnv("RPR_TRACING_PATH");
         if (tracingFolder.empty()) {
@@ -83,7 +83,7 @@ void SetupRprTracing() {
 #endif
         }
         printf("RPR tracing folder: %s\n", tracingFolder.c_str());
-        RPR_ERROR_CHECK(rprContextSetParameterString(nullptr, "tracingfolder", tracingFolder.c_str()), "Fail to set tracing folder parameter");
+        RPR_ERROR_CHECK(rprContextSetParameterByKeyString(nullptr, RPR_CONTEXT_TRACING_PATH, tracingFolder.c_str()), "Fail to set tracing folder parameter");
     }
 }
 

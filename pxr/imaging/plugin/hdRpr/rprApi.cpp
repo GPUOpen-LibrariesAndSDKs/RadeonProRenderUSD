@@ -5,10 +5,6 @@
 #include "rifcpp/rifFilter.h"
 #include "rifcpp/rifImage.h"
 
-#include <RadeonProRender.h>
-#include "RadeonProRender_CL.h"
-#include "RadeonProRender_GL.h"
-
 #include "config.h"
 #include "imageCache.h"
 #include "material.h"
@@ -18,6 +14,8 @@
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 
+#include <RadeonProRender.h>
+#include <RadeonProRender_Baikal.h>
 #include <vector>
 #include <mutex>
 
@@ -67,6 +65,9 @@ public:
         CreatePosteffects();
         CreateCamera();
     }
+
+    int m_iter = 0;
+    int m_maxSamples = 0;
 
     void CreateScene() {
         if (!m_rprContext) {
@@ -820,7 +821,7 @@ public:
         auto& preferences = HdRprConfig::GetInstance();
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
             if (preferences.IsDirty(HdRprConfig::DirtyHybridQuality)) {
-                rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(preferences.GetHybridQuality()));
+                rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, int(preferences.GetHybridQuality()));
             }
         }
 
@@ -831,6 +832,7 @@ public:
         }
 
         UpdateCamera();
+        UpdateSampling();
         UpdateDenoiseFilter();
 
         for (auto& aovFrameBufferEntry : m_aovFrameBuffers) {
@@ -898,7 +900,10 @@ public:
             }
         }
 
-        if (m_dirtyFlags & ChangeTracker::DirtyScene) {
+        if (m_dirtyFlags & ChangeTracker::DirtyScene ||
+            m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers ||
+            m_dirtyFlags & ChangeTracker::DirtyCamera) {
+            m_iter = 0;
             for (auto& aovFb : m_aovFrameBuffers) {
                 if (aovFb.second.aov) {
                     aovFb.second.aov->Clear();
@@ -924,11 +929,26 @@ public:
         preferences.ResetDirty();
     }
 
+    void UpdateSampling() {
+        auto& preferences = HdRprConfig::GetInstance();
+        if (preferences.IsDirty(HdRprConfig::DirtySampling)) {
+            preferences.CleanDirtyFlag(HdRprConfig::DirtySampling);
+
+            m_maxSamples = preferences.GetMaxSamples();
+            if (m_maxSamples < m_iter) {
+                // Force framebuffers clear to render required number of samples
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, preferences.GetVariance()), "Failed to set as.threshold");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinSamples()), "Failed to set as.minspp");
+        }
+    }
+
     void UpdateCamera() {
         if ((m_dirtyFlags & ChangeTracker::DirtyCamera) == 0) {
             return;
         }
-        m_dirtyFlags |= ChangeTracker::DirtyScene;
 
         auto camera = m_camera->GetHandle();
         auto iwvm = m_cameraViewMatrix.GetInverse();
@@ -1035,6 +1055,9 @@ public:
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         Update();
+        if (IsConverged()) {
+            return;
+        }
 
         if (RPR_ERROR_CHECK(rprContextRender(m_rprContext->GetHandle()), "Fail contex render framebuffer")) return;
 
@@ -1044,6 +1067,28 @@ public:
             m_rifContext->ExecuteCommandQueue();
         } catch (std::runtime_error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
+        }
+
+        m_iter++;
+    }
+
+    bool IsConverged() { 
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        // return Converged if max samples is reached
+        if (m_iter > m_maxSamples) {
+            return true;
+        } else {
+            // if not max samples check if all pixels converged to threshold
+            auto& preferences = HdRprConfig::GetInstance();
+
+            float varianceSetting = preferences.GetVariance();
+            if (varianceSetting > 0.0f) {
+                int activePixels = 0;
+                if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(activePixels), &activePixels, NULL), "Failed to query active pixels")) return false;
+                return activePixels == 0;
+            }
+            return false;
         }
     }
 
@@ -1086,9 +1131,9 @@ private:
             return;
         }
 
-        RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "yflip", 0), "Fail to set context YFLIP parameter");
+        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_Y_FLIP, 0), "Fail to set context YFLIP parameter");
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-            RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "render_quality", int(HdRprConfig::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, int(HdRprConfig::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
         }
 
         m_imageCache.reset(new ImageCache(m_rprContext.get()));
@@ -1155,7 +1200,7 @@ private:
                 }
             } else {
                 const int commonVertex = *idxIt;
-                for (int i = 0; i < vCount - 1; ++i) {
+                for (int i = 1; i < vCount - 1; ++i) {
                     out_newIndexes.push_back(commonVertex);
                     out_newIndexes.push_back(*(idxIt + i + 0));
                     out_newIndexes.push_back(*(idxIt + i + 1));
@@ -1465,6 +1510,10 @@ std::shared_ptr<char> HdRprApi::GetAovData(TfToken const& aovName, std::shared_p
 
 void HdRprApi::Render() {
     m_impl->Render();
+}
+
+bool HdRprApi::IsConverged() {
+    return m_impl->IsConverged();
 }
 
 bool HdRprApi::IsGlInteropEnabled() const {

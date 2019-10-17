@@ -3,6 +3,10 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+const int HdRprConfig::kDefaultMaxSamples;
+const int HdRprConfig::kDefaultMinSamples;
+const float HdRprConfig::kDefaultVariance;
+
 HdRprConfig& HdRprConfig::GetInstance() {
     static HdRprConfig instance;
     return instance;
@@ -61,8 +65,48 @@ bool HdRprConfig::IsDenoisingEnabled() const {
     return m_prefData.m_enableDenoising;
 }
 
+void HdRprConfig::SetMinSamples(int minSamples) {
+    if (m_prefData.m_minSamples != minSamples) {
+        m_prefData.m_minSamples = minSamples;
+        m_dirtyFlags |= DirtySampling;
+        Save();
+    }
+}
+
+int HdRprConfig::GetMinSamples() const {
+    return m_prefData.m_minSamples;
+}
+
+void HdRprConfig::SetMaxSamples(int maxSamples) {
+    if (m_prefData.m_maxSamples != maxSamples) {
+        m_prefData.m_maxSamples = maxSamples;
+        m_dirtyFlags |= DirtySampling;
+        Save();
+    }
+}
+
+int HdRprConfig::GetMaxSamples() const {
+    return m_prefData.m_maxSamples;
+}
+
+void HdRprConfig::SetVariance(float variance) {
+    if (m_prefData.m_variance != variance) {
+        m_prefData.m_variance = variance;
+        m_dirtyFlags |= DirtySampling;
+        Save();
+    }
+}
+
+int HdRprConfig::GetVariance() const {
+    return m_prefData.m_variance;
+}
+
 bool HdRprConfig::IsDirty(ChangeTracker dirtyFlag) const {
     return m_dirtyFlags & dirtyFlag;
+}
+
+void HdRprConfig::CleanDirtyFlag(ChangeTracker dirtyFlag) {
+    m_dirtyFlags &= ~dirtyFlag;
 }
 
 void HdRprConfig::ResetDirty() {
@@ -120,6 +164,9 @@ void HdRprConfig::PrefData::SetDefault() {
     m_plugin = rpr::PluginType::TAHOE;
     m_hybridQuality = HdRprHybridQuality::LOW;
     m_enableDenoising = false;
+    m_minSamples = kDefaultMinSamples;
+    m_maxSamples = kDefaultMaxSamples;
+    m_variance = kDefaultVariance;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

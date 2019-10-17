@@ -12,7 +12,10 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 #define HDRPR_RENDER_SETTINGS_TOKENS \
     (enableDenoising)                \
-    (renderQuality)
+    (renderQuality)                  \
+    (maxSamples)                     \
+    (minAdaptiveSamples)             \
+    (varianceThreshold)
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
 

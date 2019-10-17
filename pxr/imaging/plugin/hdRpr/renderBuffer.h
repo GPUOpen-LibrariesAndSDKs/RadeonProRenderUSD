@@ -42,6 +42,8 @@ public:
 
     virtual bool IsConverged() const override;
 
+    void SetConverged(bool converged);
+
 protected:
     virtual void _Deallocate() override;
 
@@ -55,6 +57,7 @@ private:
     std::shared_ptr<char> m_dataCache;
     size_t m_dataCacheSize = 0;
     std::atomic<int> m_numMappers;
+    std::atomic<bool> m_isConverged;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -26,15 +26,6 @@ if(RPR_ENABLE_OPENVDB_SUPPORT)
 
 endif(RPR_ENABLE_OPENVDB_SUPPORT)
 
-if(RPR_ENABLE_RAT_SUPPORT)
-    if(TARGET Houdini)
-        list(APPEND OptLibs Houdini)
-        add_definitions(-DENABLE_RAT)
-    else()
-        message(WARNING "To enable RAT support HDK required. Specify HOUDINI_ROOT")
-    endif()
-endif()
-
 set(USD_LIBRARIES
     ar
     arch
@@ -65,6 +56,9 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
         list(APPEND HOUDINI_USD_LIBRARIES "${USD_LIB_PREFIX}${name}")
     endforeach()
     set(USD_LIBRARIES "${HOUDINI_USD_LIBRARIES}")
+
+    list(APPEND OptLibs Houdini)
+    add_definitions(-DENABLE_RAT)
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     if(${USD_LIBRARY_MONOLITHIC})
         set(USD_LIBRARIES usd_ms)

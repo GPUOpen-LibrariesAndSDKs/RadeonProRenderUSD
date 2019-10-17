@@ -2,7 +2,9 @@
 #include "renderDelegate.h"
 #include "config.h"
 #include "rprApi.h"
+#include "renderBuffer.h"
 #include "pxr/imaging/hd/renderPassState.h"
+#include "pxr/imaging/hd/renderIndex.h"
 
 #include <GL/glew.h>
 
@@ -29,12 +31,21 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
     if (m_lastSettingsVersion != currentSettingsVersion) {
         m_lastSettingsVersion = currentSettingsVersion;
 
-        auto enableDenoisingValue = renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->enableDenoising);
-        if (enableDenoisingValue.IsHolding<int64_t>()) {
-            HdRprConfig::GetInstance().SetDenoising(enableDenoisingValue.UncheckedGet<int64_t>());
-        } else if (enableDenoisingValue.IsHolding<bool>()) {
-            HdRprConfig::GetInstance().SetDenoising(enableDenoisingValue.UncheckedGet<bool>());
-        }
+        auto getBoolSetting = [&renderDelegate](TfToken const& token, bool defaultValue) {
+            auto boolValue = renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->enableDenoising);
+            if (boolValue.IsHolding<int64_t>()) {
+                return static_cast<bool>(boolValue.UncheckedGet<int64_t>());
+            } else if (boolValue.IsHolding<bool>()) {
+                return static_cast<bool>(boolValue.UncheckedGet<bool>());
+            }
+            return defaultValue;
+        };
+        auto& config = HdRprConfig::GetInstance();
+
+        config.SetDenoising(getBoolSetting(HdRprRenderSettingsTokens->enableDenoising, false));
+        config.SetMaxSamples(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->maxSamples, HdRprConfig::kDefaultMaxSamples));
+        config.SetMinSamples(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->minAdaptiveSamples, HdRprConfig::kDefaultMinSamples));
+        config.SetVariance(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->varianceThreshold, HdRprConfig::kDefaultVariance));
     }
 
     auto& cameraViewMatrix = rprApi->GetCameraViewMatrix();
@@ -50,6 +61,7 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
     }
 
     rprApi->Render();
+    m_isConverged = rprApi->IsConverged();
 
     auto& aovBindings = renderPassState->GetAovBindings();
     if (aovBindings.empty()) {
@@ -67,6 +79,16 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
             glPixelZoom(float(vp[2]) / aovSize[0], float(vp[3]) / aovSize[1]);
             glDrawPixels(aovSize[0], aovSize[1], GL_RGBA, GL_FLOAT, colorBuffer.get());
             glPixelZoom(currentZoomX, currentZoomY);
+        }
+    } else {
+        for (auto& aovBinding : aovBindings) {
+            auto buff = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
+            if (!buff) {
+                buff = static_cast<HdRprRenderBuffer*>(GetRenderIndex()->GetBprim(HdPrimTypeTokens->renderBuffer, aovBinding.renderBufferId));
+            }
+            if (buff) {
+                buff->SetConverged(m_isConverged);
+            }
         }
     }
 }
