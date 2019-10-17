@@ -51,11 +51,9 @@ struct MaterialTexture
 typedef std::map<TfToken, VtValue> MaterialParams;
 typedef std::map<TfToken, MaterialTexture> MaterialTextures;
 
-typedef std::map<TfToken, GfVec4f> MaterialRprParamsVec4f;
-
-typedef std::map<uint32_t, GfVec4f> MaterialRprxParamsVec4f;
-typedef std::map<uint32_t, uint32_t> MaterialRprxParamsU;
-typedef std::map<uint32_t, MaterialTexture> MaterialRprxParamsTexture;
+typedef std::map<uint32_t, GfVec4f> MaterialRprParamsVec4f;
+typedef std::map<uint32_t, uint32_t> MaterialRprParamsU;
+typedef std::map<uint32_t, MaterialTexture> MaterialRprParamsTexture;
 
 enum class EMaterialType : int32_t
 {
@@ -85,19 +83,14 @@ public:
 		return m_vec4fRprParams;
 	}
 
-	const MaterialRprxParamsVec4f & GetVec4fRprxParams() const
+	const MaterialRprParamsU & GetURprParams() const
 	{
-		return m_vec4fRprxParams;
+		return m_uRprParams;
 	}
 
-	const MaterialRprxParamsU & GetURprxParams() const
+	const MaterialRprParamsTexture & GetTexRprParams() const
 	{
-		return m_uRprxParams;
-	}
-
-	const MaterialRprxParamsTexture & GetTexRprxParams() const
-	{
-		return m_texRprx;
+		return m_texRpr;
 	}
 
 	const MaterialTexture& GetDisplacementTexture() const
@@ -106,18 +99,16 @@ public:
 	}
 
 private:
-	void PoulateRprxColor(const MaterialParams & params);
-	void PoulateRprColor(const MaterialParams & params);
-	void PoulateEmissive(const MaterialParams & params);
-	void PoulateTransparent(const MaterialParams & params);
-	void PoulateUsdPreviewSurface(const MaterialParams & params, const MaterialTextures & textures);
+	void PopulateRprColor(const MaterialParams & params);
+	void PopulateEmissive(const MaterialParams & params);
+	void PopulateTransparent(const MaterialParams & params);
+	void PopulateUsdPreviewSurface(const MaterialParams & params, const MaterialTextures & textures);
 
 	const EMaterialType m_type;
-	MaterialRprParamsVec4f m_vec4fRprParams;
 
-	MaterialRprxParamsVec4f m_vec4fRprxParams;
-	MaterialRprxParamsU	m_uRprxParams;
-	MaterialRprxParamsTexture m_texRprx;
+	MaterialRprParamsVec4f m_vec4fRprParams;
+	MaterialRprParamsU	m_uRprParams;
+	MaterialRprParamsTexture m_texRpr;
 
     MaterialTexture m_displacementTexture;
 };

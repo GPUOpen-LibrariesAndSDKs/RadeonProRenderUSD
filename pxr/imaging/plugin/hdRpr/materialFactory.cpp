@@ -81,21 +81,13 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
     for (auto const& param : materialAdapter.GetVec4fRprParams())
     {
-        const TfToken & paramName = param.first;
-        const GfVec4f & paramValue = param.second;
-
-        rprMaterialNodeSetInputF(material->rootMaterial, paramName.data(), paramValue[0], paramValue[1], paramValue[2], paramValue[3]);
-    }
-
-    for (auto const& param : materialAdapter.GetVec4fRprxParams())
-    {
         const uint32_t & paramId = param.first;
         const GfVec4f & paramValue = param.second;
 
         rprMaterialNodeSetInputFByKey(material->rootMaterial, paramId, paramValue[0], paramValue[1], paramValue[2], paramValue[3]);
     }
 
-    for (auto param : materialAdapter.GetURprxParams())
+    for (auto param : materialAdapter.GetURprParams())
     {
         const uint32_t & paramId = param.first;
         const uint32_t & paramValue = param.second;
@@ -171,7 +163,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
 
         rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_IMAGE_TEXTURE, &materialNode);
-        rprMaterialNodeSetInputImageData(materialNode, "data", img);
+        rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, img);
 		material->materialNodes.push_back(materialNode);
 
         // TODO: one minus src color
@@ -180,8 +172,8 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         {
             rpr_material_node uv_node = nullptr;
             status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &uv_node);
-            status = rprMaterialNodeSetInputU(uv_node, "value", RPR_MATERIAL_NODE_LOOKUP_UV);
-			material->materialNodes.push_back(uv_node);
+            status = rprMaterialNodeSetInputUByKey(uv_node, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_UV);
+            material->materialNodes.push_back(uv_node);
 
             rpr_material_node uv_scaled_node;
             rpr_material_node uv_bias_node;
@@ -191,11 +183,11 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             {
                 const GfVec4f & scale = matTex.Scale;
                 status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_scaled_node);
-				material->materialNodes.push_back(uv_scaled_node);
+                material->materialNodes.push_back(uv_scaled_node);
 
-                status = rprMaterialNodeSetInputU(uv_scaled_node, "op", RPR_MATERIAL_NODE_OP_MUL);
-                status = rprMaterialNodeSetInputN(uv_scaled_node, "color0", uv_node);
-                status = rprMaterialNodeSetInputF(uv_scaled_node, "color1", scale[0], scale[1], scale[2], 0);
+                status = rprMaterialNodeSetInputUByKey(uv_scaled_node, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
+                status = rprMaterialNodeSetInputNByKey(uv_scaled_node, RPR_MATERIAL_INPUT_COLOR0, uv_node);
+                status = rprMaterialNodeSetInputFByKey(uv_scaled_node, RPR_MATERIAL_INPUT_COLOR1, scale[0], scale[1], scale[2], 0);
             }
 
             if (matTex.IsBiasEnabled)
@@ -206,13 +198,13 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
                 status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_bias_node);
 				material->materialNodes.push_back(uv_bias_node);
 
-                status = rprMaterialNodeSetInputU(uv_bias_node, "op", RPR_MATERIAL_NODE_OP_ADD);
-                status = rprMaterialNodeSetInputN(uv_bias_node, "color0", color0Input);
-                status = rprMaterialNodeSetInputF(uv_bias_node, "color1", bias[0], bias[1], bias[2], 0);
+                status = rprMaterialNodeSetInputUByKey(uv_bias_node, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
+                status = rprMaterialNodeSetInputNByKey(uv_bias_node, RPR_MATERIAL_INPUT_COLOR0, color0Input);
+                status = rprMaterialNodeSetInputFByKey(uv_bias_node, RPR_MATERIAL_INPUT_COLOR1, bias[0], bias[1], bias[2], 0);
             }
 
             rpr_material_node & uvIn = (matTex.IsBiasEnabled) ? uv_bias_node : uv_scaled_node;
-            rprMaterialNodeSetInputN(materialNode, "uv", uvIn);
+            rprMaterialNodeSetInputNByKey(materialNode, RPR_MATERIAL_INPUT_UV, uvIn);
 
         }
 
@@ -225,9 +217,9 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             {
                 rpr_material_node arithmetic = nullptr;
                 status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
-                status = rprMaterialNodeSetInputN(arithmetic, "color0", materialNode);
-                status = rprMaterialNodeSetInputF(arithmetic, "color1", 0.0, 0.0, 0.0, 0.0);
-                status = rprMaterialNodeSetInputU(arithmetic, "op", selectedChanel);
+                status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode);
+                status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, 0.0, 0.0, 0.0, 0.0);
+                status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, selectedChanel);
 				material->materialNodes.push_back(arithmetic);
 
                 outTexture = arithmetic;
@@ -245,7 +237,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         return outTexture;
     };
 
-    for (auto const& texParam : materialAdapter.GetTexRprxParams())
+    for (auto const& texParam : materialAdapter.GetTexRprParams())
     {
         const uint32_t & paramId = texParam.first;
         const MaterialTexture & matTex = texParam.second;
@@ -262,6 +254,14 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             paramId == RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR) &&
             ArGetResolver().GetExtension(matTex.Path) == "png") {
             rprImageSetGamma(material->materialImages.back()->GetHandle(), 2.2f);
+        }
+
+        // normal map textures need to be passed through the normal map node
+        if (paramId == RPR_UBER_MATERIAL_INPUT_DIFFUSE_NORMAL ||
+            paramId == RPR_UBER_MATERIAL_INPUT_REFLECTION_NORMAL) {
+            rpr_material_node temp = outTexture;
+            int status = rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_NORMAL_MAP, &outTexture);
+            status = rprMaterialNodeSetInputNByKey(outTexture, RPR_MATERIAL_INPUT_COLOR, temp);
         }
 
         rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outTexture);
