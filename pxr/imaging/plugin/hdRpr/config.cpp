@@ -3,6 +3,10 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+const int HdRprConfig::kDefaultMaxSamples;
+const int HdRprConfig::kDefaultMinSamples;
+const float HdRprConfig::kDefaultVariance;
+
 HdRprConfig& HdRprConfig::GetInstance() {
     static HdRprConfig instance;
     return instance;
@@ -101,6 +105,10 @@ bool HdRprConfig::IsDirty(ChangeTracker dirtyFlag) const {
     return m_dirtyFlags & dirtyFlag;
 }
 
+void HdRprConfig::CleanDirtyFlag(ChangeTracker dirtyFlag) {
+    m_dirtyFlags &= ~dirtyFlag;
+}
+
 void HdRprConfig::ResetDirty() {
     m_dirtyFlags = Clean;
 }
@@ -156,6 +164,9 @@ void HdRprConfig::PrefData::SetDefault() {
     m_plugin = rpr::PluginType::TAHOE;
     m_hybridQuality = HdRprHybridQuality::LOW;
     m_enableDenoising = false;
+    m_minSamples = kDefaultMinSamples;
+    m_maxSamples = kDefaultMaxSamples;
+    m_variance = kDefaultVariance;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

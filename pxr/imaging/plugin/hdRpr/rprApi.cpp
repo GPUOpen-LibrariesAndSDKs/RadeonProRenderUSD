@@ -815,12 +815,6 @@ public:
             }
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtySampling)) {
-            m_maxSamples =  preferences.GetMaxSamples();
-            rprContextSetParameter1f(m_rprContext->GetHandle(), "as.threshold", preferences.GetVariance());
-            rprContextSetParameter1u(m_rprContext->GetHandle(), "as.minspp", preferences.GetMinSamples());
-        }
-
         // In case there is no Lights in scene - create default
         if (!m_isLightPresent) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
@@ -828,6 +822,7 @@ public:
         }
 
         UpdateCamera();
+        UpdateSampling();
         UpdateDenoiseFilter();
 
         for (auto& aovFrameBufferEntry : m_aovFrameBuffers) {
@@ -895,7 +890,10 @@ public:
             }
         }
 
-        if (m_dirtyFlags & ChangeTracker::DirtyScene) {
+        if (m_dirtyFlags & ChangeTracker::DirtyScene ||
+            m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers ||
+            m_dirtyFlags & ChangeTracker::DirtyCamera) {
+            m_iter = 0;
             for (auto& aovFb : m_aovFrameBuffers) {
                 if (aovFb.second.aov) {
                     aovFb.second.aov->Clear();
@@ -921,11 +919,26 @@ public:
         preferences.ResetDirty();
     }
 
+    void UpdateSampling() {
+        auto& preferences = HdRprConfig::GetInstance();
+        if (preferences.IsDirty(HdRprConfig::DirtySampling)) {
+            preferences.CleanDirtyFlag(HdRprConfig::DirtySampling);
+
+            m_maxSamples = preferences.GetMaxSamples();
+            if (m_maxSamples < m_iter) {
+                // Force framebuffers clear to render required number of samples
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+
+            RPR_ERROR_CHECK(rprContextSetParameter1f(m_rprContext->GetHandle(), "as.threshold", preferences.GetVariance()), "Failed to set as.threshold");
+            RPR_ERROR_CHECK(rprContextSetParameter1u(m_rprContext->GetHandle(), "as.minspp", preferences.GetMinSamples()), "Failed to set as.minspp");
+        }
+    }
+
     void UpdateCamera() {
         if ((m_dirtyFlags & ChangeTracker::DirtyCamera) == 0) {
             return;
         }
-        m_dirtyFlags |= ChangeTracker::DirtyScene;
 
         auto camera = m_camera->GetHandle();
         auto iwvm = m_cameraViewMatrix.GetInverse();
@@ -1032,8 +1045,10 @@ public:
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         Update();
+        if (IsConverged()) {
+            return;
+        }
 
-        
         if (RPR_ERROR_CHECK(rprContextRender(m_rprContext->GetHandle()), "Fail contex render framebuffer")) return;
 
         ResolveFramebuffers();
@@ -1043,22 +1058,25 @@ public:
         } catch (std::runtime_error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
         }
+
+        m_iter++;
     }
 
     bool IsConverged() { 
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
         // return Converged if max samples is reached
-        if(m_iter > m_maxSamples) {
+        if (m_iter > m_maxSamples) {
             return true;
-        }
-        else {
+        } else {
             // if not max samples check if all pixels converged to threshold
             auto& preferences = HdRprConfig::GetInstance();
 
-            float variance_setting = preferences.GetVariance();
-            if(variance_setting > 0.0f) {
-                int active_pixels = 0;
-                rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(active_pixels), &active_pixels, NULL);
-                return active_pixels == 0;
+            float varianceSetting = preferences.GetVariance();
+            if (varianceSetting > 0.0f) {
+                int activePixels = 0;
+                if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(activePixels), &activePixels, NULL), "Failed to query active pixels")) return false;
+                return activePixels == 0;
             }
             return false;
         }

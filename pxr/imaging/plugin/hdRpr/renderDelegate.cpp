@@ -86,17 +86,17 @@ HdRprDelegate::HdRprDelegate() {
     m_settingDescriptors[1] = { "Render Quality",
         HdRprRenderSettingsTokens->renderQuality,
         VtValue(renderQuality) };
-    
-    m_settingDescriptors[2] = { "Min Samples",
-        HdRprRenderSettingsTokens->minSamples,
-        VtValue(config.GetMinSamples()) };
 
-    m_settingDescriptors[3] = { "Max Samples",
+    m_settingDescriptors[2] = { "Max Samples",
         HdRprRenderSettingsTokens->maxSamples,
         VtValue(config.GetMaxSamples()) };
 
-    m_settingDescriptors[4] = { "Variance",
-        HdRprRenderSettingsTokens->variance,
+    m_settingDescriptors[3] = { "Adaptive Sampling: Min Samples",
+        HdRprRenderSettingsTokens->minAdaptiveSamples,
+        VtValue(config.GetMinSamples()) };
+
+    m_settingDescriptors[4] = { "Adaptive Sampling: Variance Threshold",
+        HdRprRenderSettingsTokens->varianceThreshold,
         VtValue(config.GetVariance()) };
 
     _PopulateDefaultSettings(m_settingDescriptors);
