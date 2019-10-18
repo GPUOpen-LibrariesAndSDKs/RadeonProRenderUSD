@@ -33,15 +33,6 @@ protected:
 
 	HdRprApiWeakPtr m_rprApiWeakPtr;
 	RprApiObjectPtr m_rprHeteroVolume;
-
-	std::vector<float> m_densityGridOnValueIndices;
-	std::vector<uint32_t> m_densityGridOnIndices;
-	std::vector<float> m_densityGridValues;
-	std::vector<float> m_colorGridOnValueIndices;
-	std::vector<uint32_t> m_colorGridOnIndices;
-	std::vector<float> m_colorGridValues;
-
-	void CreateDefaultColorGridFromDensityGrid();
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

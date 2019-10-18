@@ -18,102 +18,144 @@ TF_DEFINE_PRIVATE_TOKENS(
 	(density)		\
 	(temperature)	\
 	(color)			\
-	(points)
+	(points)		\
+	(temperatureOffset)\
+	(temperatureScale)
 );
 
 namespace
 {
-	const float defaultDensity = 1.f;
-	const float defaultAlbedo = 1.f;
-	GfVec4f defaultColor = GfVec4f(10.0f, 0.0f, 0.0f, 1.0f);
+	const float defaultDensity = 100.f;                      //RPR take density value of 100 as fully opaque
+	GfVec3f defaultColor = GfVec3f(0.0f, 0.0f, 0.0f);        //Default color of black
+	GfVec3f defaultEmission = GfVec3f(0.0f, 0.0f, 0.0f);     //Default to no emission
 }
 
-/*
-nmaespace
+namespace
 {
-	std::map<int, GfVec3f> tempColors
-	{
-		{0,GfVec3f(0.000000f, 0.000000f, 0.000000f)},
-		{1000,GfVec3f(1.000000f, 0.027490f, 0.000000f)}, //  1000 K
-		{1500,GfVec3f(1.000000f, 0.149664f, 0.000000f)}, //  1500 K
-		{2000,GfVec3f(1.000000f, 0.256644f, 0.008095f)}, //  2000 K
-		{2500,GfVec3f(1.000000f, 0.372033f, 0.067450f)}, //  2500 K
-		{3000,GfVec3f(1.000000f, 0.476725f, 0.153601f)}, //  3000 K
-		{3500,GfVec3f(1.000000f, 0.570376f, 0.259196f)}, //  3500 K
-		{4000,GfVec3f(1.000000f, 0.653480f, 0.377155f)}, //  4000 K
-		{4500,GfVec3f(1.000000f, 0.726878f, 0.501606f)}, //  4500 K
-		{5000,GfVec3f(1.000000f, 0.791543f, 0.628050f)}, //  5000 K
-		{5500,GfVec3f(1.000000f, 0.848462f, 0.753228f)} , //  5500 K
-		{6000,GfVec3f(1.000000f, 0.898581f, 0.874905f)}, //  6000 K
-		{6500,GfVec3f(1.000000f, 0.942771f, 0.991642f)}, //  6500 K
-		{7000,GfVec3f(0.906947f, 0.890456f, 1.000000f)}, //  7000 K
-		{7500,GfVec3f(0.828247f, 0.841838f, 1.000000f)}, //  7500 K
-		{8000,GfVec3f(0.765791f, 0.801896f, 1.000000f)}, //  8000 K
-		{8500,GfVec3f(0.715255f, 0.768579f, 1.000000f)}, //  8500 K
-		{9000,GfVec3f(0.673683f, 0.740423f, 1.000000f)}, //  9000 K
-		{9500,GfVec3f(0.638992f, 0.716359f, 1.000000f)}, //  9500 K
-		{10000,GfVec3f(0.609681f, 0.695588f, 1.000000f)}, // 10000 K
+	float kelvin_table[] = {
+		  0.0f / 255.0f,   0.0f / 255.0f,   0.0f / 255.0f, // 0K
+		  0.0f / 255.0f,   0.0f / 255.0f,   0.0f / 255.0f, // 100K
+		  0.0f / 255.0f,   0.0f / 255.0f,   0.0f / 255.0f, // 200K
+		  0.0f / 255.0f,   0.0f / 255.0f,   0.0f / 255.0f, // 300K
+		 55.0f / 255.0f,   0.0f / 255.0f,   0.0f / 255.0f, // 400K
+		100.0f / 255.0f,   0.0f / 255.0f,   0.0f / 255.0f, // 500K
+		155.0f / 255.0f,   0.0f / 255.0f,   0.0f / 255.0f, // 600K
+		205.0f / 255.0f,   0.0f / 255.0f,   0.0f / 255.0f, // 700K
+		255.0f / 255.0f,  16.0f / 255.0f,   0.0f / 255.0f, // 800K
+		255.0f / 255.0f,  38.0f / 255.0f,   0.0f / 255.0f, // 900K
+		255.0f / 255.0f,  56.0f / 255.0f,   0.0f / 255.0f, // 1000K
+		255.0f / 255.0f,  71.0f / 255.0f,   0.0f / 255.0f, // 1100K
+		255.0f / 255.0f,  83.0f / 255.0f,   0.0f / 255.0f, // 1200K
+		255.0f / 255.0f,  93.0f / 255.0f,   0.0f / 255.0f, // 1300K
+		255.0f / 255.0f, 101.0f / 255.0f,   0.0f / 255.0f, // 1400K
+		255.0f / 255.0f, 109.0f / 255.0f,   0.0f / 255.0f, // 1500K
+		255.0f / 255.0f, 115.0f / 255.0f,   0.0f / 255.0f, // 1600K
+		255.0f / 255.0f, 121.0f / 255.0f,   0.0f / 255.0f, // 1700K
+		255.0f / 255.0f, 126.0f / 255.0f,   0.0f / 255.0f, // 1800K
+		255.0f / 255.0f, 131.0f / 255.0f,   0.0f / 255.0f, // 1900K
+		255.0f / 255.0f, 138.0f / 255.0f,  18.0f / 255.0f, // 2000K
+		255.0f / 255.0f, 142.0f / 255.0f,  33.0f / 255.0f, // 2100K
+		255.0f / 255.0f, 147.0f / 255.0f,  44.0f / 255.0f, // 2200K
+		255.0f / 255.0f, 152.0f / 255.0f,  54.0f / 255.0f, // 2300K
+		255.0f / 255.0f, 157.0f / 255.0f,  63.0f / 255.0f, // 2400K
+		255.0f / 255.0f, 161.0f / 255.0f,  72.0f / 255.0f, // 2500K
+		255.0f / 255.0f, 165.0f / 255.0f,  79.0f / 255.0f, // 2600K
+		255.0f / 255.0f, 169.0f / 255.0f,  87.0f / 255.0f, // 2700K
+		255.0f / 255.0f, 173.0f / 255.0f,  94.0f / 255.0f, // 2800K
+		255.0f / 255.0f, 177.0f / 255.0f, 101.0f / 255.0f, // 2900K
+		255.0f / 255.0f, 180.0f / 255.0f, 107.0f / 255.0f, // 3000K
+		255.0f / 255.0f, 184.0f / 255.0f, 114.0f / 255.0f, // 3100K
+		255.0f / 255.0f, 187.0f / 255.0f, 120.0f / 255.0f, // 3200K
+		255.0f / 255.0f, 190.0f / 255.0f, 126.0f / 255.0f, // 3300K
+		255.0f / 255.0f, 193.0f / 255.0f, 132.0f / 255.0f, // 3400K
+		255.0f / 255.0f, 196.0f / 255.0f, 137.0f / 255.0f, // 3500K
+		255.0f / 255.0f, 199.0f / 255.0f, 143.0f / 255.0f, // 3600K
+		255.0f / 255.0f, 201.0f / 255.0f, 148.0f / 255.0f, // 3700K
+		255.0f / 255.0f, 204.0f / 255.0f, 153.0f / 255.0f, // 3800K
+		255.0f / 255.0f, 206.0f / 255.0f, 159.0f / 255.0f, // 3900K
+		255.0f / 255.0f, 209.0f / 255.0f, 163.0f / 255.0f, // 4000K
+		255.0f / 255.0f, 211.0f / 255.0f, 168.0f / 255.0f, // 4100K
+		255.0f / 255.0f, 213.0f / 255.0f, 173.0f / 255.0f, // 4200K
+		255.0f / 255.0f, 215.0f / 255.0f, 177.0f / 255.0f, // 4300K
+		255.0f / 255.0f, 217.0f / 255.0f, 182.0f / 255.0f, // 4400K
+		255.0f / 255.0f, 219.0f / 255.0f, 186.0f / 255.0f, // 4500K
+		255.0f / 255.0f, 221.0f / 255.0f, 190.0f / 255.0f, // 4600K
+		255.0f / 255.0f, 223.0f / 255.0f, 194.0f / 255.0f, // 4700K
+		255.0f / 255.0f, 225.0f / 255.0f, 198.0f / 255.0f, // 4800K
+		255.0f / 255.0f, 227.0f / 255.0f, 202.0f / 255.0f, // 4900K
+		255.0f / 255.0f, 228.0f / 255.0f, 206.0f / 255.0f, // 5000K
+		255.0f / 255.0f, 230.0f / 255.0f, 210.0f / 255.0f, // 5100K
+		255.0f / 255.0f, 232.0f / 255.0f, 213.0f / 255.0f, // 5200K
+		255.0f / 255.0f, 233.0f / 255.0f, 217.0f / 255.0f, // 5300K
+		255.0f / 255.0f, 235.0f / 255.0f, 220.0f / 255.0f, // 5400K
+		255.0f / 255.0f, 236.0f / 255.0f, 224.0f / 255.0f, // 5500K
+		255.0f / 255.0f, 238.0f / 255.0f, 227.0f / 255.0f, // 5600K
+		255.0f / 255.0f, 239.0f / 255.0f, 230.0f / 255.0f, // 5700K
+		255.0f / 255.0f, 240.0f / 255.0f, 233.0f / 255.0f, // 5800K
+		255.0f / 255.0f, 242.0f / 255.0f, 236.0f / 255.0f, // 5900K
+		255.0f / 255.0f, 243.0f / 255.0f, 239.0f / 255.0f, // 6000K
+		255.0f / 255.0f, 244.0f / 255.0f, 242.0f / 255.0f, // 6100K
+		255.0f / 255.0f, 245.0f / 255.0f, 245.0f / 255.0f, // 6200K
+		255.0f / 255.0f, 246.0f / 255.0f, 247.0f / 255.0f, // 6300K
+		255.0f / 255.0f, 248.0f / 255.0f, 251.0f / 255.0f, // 6400K
+		255.0f / 255.0f, 249.0f / 255.0f, 253.0f / 255.0f, // 6500K
+		254.0f / 255.0f, 249.0f / 255.0f, 255.0f / 255.0f, // 6600K
+		252.0f / 255.0f, 247.0f / 255.0f, 255.0f / 255.0f, // 6700K
+		249.0f / 255.0f, 246.0f / 255.0f, 255.0f / 255.0f, // 6800K
+		247.0f / 255.0f, 245.0f / 255.0f, 255.0f / 255.0f, // 6900K
+		245.0f / 255.0f, 243.0f / 255.0f, 255.0f / 255.0f, // 7000K
+		243.0f / 255.0f, 242.0f / 255.0f, 255.0f / 255.0f, // 7100K
+		240.0f / 255.0f, 241.0f / 255.0f, 255.0f / 255.0f, // 7200K
+		239.0f / 255.0f, 240.0f / 255.0f, 255.0f / 255.0f, // 7300K
+		237.0f / 255.0f, 239.0f / 255.0f, 255.0f / 255.0f, // 7400K
+		235.0f / 255.0f, 238.0f / 255.0f, 255.0f / 255.0f, // 7500K
+		233.0f / 255.0f, 237.0f / 255.0f, 255.0f / 255.0f, // 7600K
+		231.0f / 255.0f, 236.0f / 255.0f, 255.0f / 255.0f, // 7700K
+		230.0f / 255.0f, 235.0f / 255.0f, 255.0f / 255.0f, // 7800K
+		228.0f / 255.0f, 234.0f / 255.0f, 255.0f / 255.0f, // 7900K
+		227.0f / 255.0f, 233.0f / 255.0f, 255.0f / 255.0f, // 8000K
+		225.0f / 255.0f, 232.0f / 255.0f, 255.0f / 255.0f, // 8100K
+		224.0f / 255.0f, 231.0f / 255.0f, 255.0f / 255.0f, // 8200K
+		222.0f / 255.0f, 230.0f / 255.0f, 255.0f / 255.0f, // 8300K
+		221.0f / 255.0f, 230.0f / 255.0f, 255.0f / 255.0f, // 8400K
+		220.0f / 255.0f, 229.0f / 255.0f, 255.0f / 255.0f, // 8500K
+		218.0f / 255.0f, 229.0f / 255.0f, 255.0f / 255.0f, // 8600K
+		217.0f / 255.0f, 227.0f / 255.0f, 255.0f / 255.0f, // 8700K
+		216.0f / 255.0f, 227.0f / 255.0f, 255.0f / 255.0f, // 8800K
+		215.0f / 255.0f, 226.0f / 255.0f, 255.0f / 255.0f, // 8900K
+		214.0f / 255.0f, 225.0f / 255.0f, 255.0f / 255.0f, // 9000K
+		212.0f / 255.0f, 225.0f / 255.0f, 255.0f / 255.0f, // 9100K
+		211.0f / 255.0f, 224.0f / 255.0f, 255.0f / 255.0f, // 9200K
+		210.0f / 255.0f, 223.0f / 255.0f, 255.0f / 255.0f, // 9300K
+		209.0f / 255.0f, 223.0f / 255.0f, 255.0f / 255.0f, // 9400K
+		208.0f / 255.0f, 222.0f / 255.0f, 255.0f / 255.0f, // 9500K
+		207.0f / 255.0f, 221.0f / 255.0f, 255.0f / 255.0f, // 9600K
+		207.0f / 255.0f, 221.0f / 255.0f, 255.0f / 255.0f, // 9700K
+		206.0f / 255.0f, 220.0f / 255.0f, 255.0f / 255.0f, // 9800K
+		205.0f / 255.0f, 220.0f / 255.0f, 255.0f / 255.0f, // 9900K
+		207.0f / 255.0f, 218.0f / 255.0f, 255.0f / 255.0f, //10000K
+		207.0f / 255.0f, 218.0f / 255.0f, 255.0f / 255.0f, //10100K
+		206.0f / 255.0f, 217.0f / 255.0f, 255.0f / 255.0f, //10200K
+		205.0f / 255.0f, 217.0f / 255.0f, 255.0f / 255.0f, //10300K
+		204.0f / 255.0f, 216.0f / 255.0f, 255.0f / 255.0f, //10400K
+		204.0f / 255.0f, 216.0f / 255.0f, 255.0f / 255.0f, //10500K
+		203.0f / 255.0f, 215.0f / 255.0f, 255.0f / 255.0f, //10600K
+		202.0f / 255.0f, 215.0f / 255.0f, 255.0f / 255.0f, //10700K
+		202.0f / 255.0f, 214.0f / 255.0f, 255.0f / 255.0f, //10800K
+		201.0f / 255.0f, 214.0f / 255.0f, 255.0f / 255.0f, //10900K
+		200.0f / 255.0f, 213.0f / 255.0f, 255.0f / 255.0f, //11000K
+		200.0f / 255.0f, 213.0f / 255.0f, 255.0f / 255.0f, //11100K
+		199.0f / 255.0f, 212.0f / 255.0f, 255.0f / 255.0f, //11200K
+		198.0f / 255.0f, 212.0f / 255.0f, 255.0f / 255.0f, //11300K
+		198.0f / 255.0f, 212.0f / 255.0f, 255.0f / 255.0f, //11400K
+		197.0f / 255.0f, 211.0f / 255.0f, 255.0f / 255.0f, //11500K
+		197.0f / 255.0f, 211.0f / 255.0f, 255.0f / 255.0f, //11600K
+		197.0f / 255.0f, 210.0f / 255.0f, 255.0f / 255.0f, //11700K
+		196.0f / 255.0f, 210.0f / 255.0f, 255.0f / 255.0f, //11800K
+		195.0f / 255.0f, 210.0f / 255.0f, 255.0f / 255.0f, //11900K
+		195.0f / 255.0f, 209.0f / 255.0f, 255.0f / 255.0f  //12000K
 	};
 }
-
-
-GfVec3f colorLerp(const GfVec3f & color0, const GfVec3f & color1, const float & w)
-{
-	return color0 + (color1 - color0) * w;
-}
-
-
-GfVec3f temteratureToColor(const float & temperature)
-{
-	if (temperature <= tempColors.begin()->first)
-	{
-		return tempColors.begin()->second;
-	}
-	if (temperature >= tempColors.rbegin()->first)
-	{
-		tempColors.rbegin()->second;
-	}
-
-	auto tIt = tempColors.begin();
-	float tLess = tIt->first;
-	GfVec3f colorLess = tIt->second;
-
-	for (++tIt; tIt != tempColors.end(); tIt++)
-	{
-		if ((int)temperature < tIt->first)
-		{
-			float tMore = tIt->first;
-			GfVec3f colorMore = tIt->second;
-
-			float waight = (temperature - tLess) / (tMore - tLess);
-
-			return colorLerp(colorLess, colorMore, waight);
-		}
-
-		tLess = tIt->first;
-		colorLess = tIt->second;
-	}
-
-	return GfVec3f();
-}*/
-
-size_t coordToIndex(const openvdb::Coord & coord, const openvdb::CoordBBox & activeBB, openvdb::Coord gridSize)
-{
-	const openvdb::Coord & v0 = activeBB.min();
-	const openvdb::Coord & v1 = activeBB.max();
-
-	float dx = ((float)(coord.x() - v0.x())) / (v1.x() - v0.x());
-	float dy = ((float)(coord.y() - v0.y())) / (v1.y() - v0.y());
-	float dz = ((float)(coord.z() - v0.z())) / (v1.z() - v0.z());
-
-
-	size_t xn = static_cast<size_t>(roundf(dx * gridSize.x()));
-	size_t yn = static_cast<size_t>(roundf(dy * gridSize.y()));
-	size_t zn = static_cast<size_t>(roundf(dz * gridSize.z()));
-
-	return (zn)*(gridSize.x()* gridSize.y()) + (yn)*(gridSize.x())+xn;
-};
-
 
 std::string findOpenVdbFilePath(HdSceneDelegate* sceneDelegate, const SdfPath & id)
 {
@@ -130,93 +172,79 @@ std::string findOpenVdbFilePath(HdSceneDelegate* sceneDelegate, const SdfPath & 
 	return "";
 }
 
-template <class TPtr, class TValueOnIt>
-openvdb::CoordBBox computeGridOnBB(TPtr grid)
+void findNeededChannels(HdSceneDelegate* sceneDelegate, const SdfPath & id, bool &outNeedColor, bool &outNeedDensity, bool &outNeedEmissive)
 {
-	if (grid->empty())
+	outNeedColor = false;
+	outNeedDensity = false;
+	outNeedEmissive = false;
+	for (auto it : sceneDelegate->GetVolumeFieldDescriptors(id))
 	{
-		return openvdb::CoordBBox();
-	}
+		VtValue param = sceneDelegate->Get(it.fieldId, HdRprVolumeTokens->filePath);
 
-	openvdb::Coord min = grid->beginValueOn().getCoord();
-	openvdb::Coord max = grid->beginValueOn().getCoord();
-
-	for (TValueOnIt iter = grid->beginValueOn(); iter; ++iter) {
-
-		openvdb::Coord coord = iter.getCoord();
-
-		min.x() = std::min(min.x(), coord.x());
-		min.y() = std::min(min.y(), coord.y());
-		min.z() = std::min(min.z(), coord.z());
-
-		max.x() = std::max(max.x(), coord.x());
-		max.y() = std::max(max.y(), coord.y());
-		max.z() = std::max(max.z(), coord.z());
-	}
-
-	return openvdb::CoordBBox(min, max);
-}
-
-
-template <class TPtr, class TValueOnIt>
-void fillGridOnWithDefaultAlbedo(TPtr grid, VtArray<float> & out_density_grid, VtArray<size_t> & out_density_idx, VtArray<float> & out_albedo_grid, VtArray<size_t> & out_albedo_idx, openvdb::Coord & out_gridOnBBSize)
-{
-	openvdb::CoordBBox gridOnBB = computeGridOnBB< TPtr, TValueOnIt>(grid);
-	out_gridOnBBSize = gridOnBB.max() - gridOnBB.min();
-
-	for (TValueOnIt iter = grid->beginValueOn(); iter; ++iter) {
-		out_density_grid.push_back(grid->getAccessor().GetValue(iter.getCoord()));
-		out_albedo_grid.push_back(defaultColor);
-
-		size_t idx = coordToIndex(iter.getCoord(), gridOnBB, out_gridOnBBSize);
-		out_density_idx.push_back(idx);
-		out_albedo_idx.push_back(idx);
+		if (param.IsHolding<SdfAssetPath>())
+		{
+			if (it.fieldName.GetString() == "color")
+				outNeedColor = true;
+			if (it.fieldName.GetString() == "density")
+				outNeedDensity = true;
+			if (it.fieldName.GetString() == "emissive")
+				outNeedEmissive = true;
+		}
 	}
 }
 
-template <class TGrid>
-void ReadDensityFromGrid(openvdb::GridBase::Ptr inGrid, std::vector<uint32_t> &outDensityGridOnIndices, std::vector<float> &outDensityGridOnValueIndices, std::vector<float> &outDensityGridValues)
+void findTemperatureOffsetAndScale(HdSceneDelegate* sceneDelegate, const SdfPath & id, float &outOffset, float &outScale)
 {
-	TGrid::Ptr grid = openvdb::gridPtrCast<TGrid>(inGrid);
+	for (auto it : sceneDelegate->GetVolumeFieldDescriptors(id))
+	{
+		VtValue param = sceneDelegate->Get(it.fieldId, HdRprVolumeTokens->temperatureOffset);
+		if (param.IsHolding<float>())
+			outOffset = param.Get<float>();
+
+		param = sceneDelegate->Get(it.fieldId, HdRprVolumeTokens->temperatureScale);
+		if (param.IsHolding<float>())
+			outScale = param.Get<float>();
+	}
+}
+
+void ReadFloatGrid(openvdb::FloatGrid::Ptr grid, const openvdb::Coord &coordOffset, float valueOffset, float valueScale, std::vector<uint32_t> &outDensityGridOnIndices, std::vector<float> &outDensityGridOnValueIndices)
+{
 	openvdb::CoordBBox gridOnBB = grid->evalActiveVoxelBoundingBox();
 
-	TGrid::ValueType minValue, maxValue;
-	grid->evalMinMax(minValue, maxValue);
-	for (TGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
-		openvdb::Coord curCoord = iter.getCoord() - gridOnBB.min();
+	for (openvdb::FloatGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
+		openvdb::Coord curCoord = iter.getCoord() + coordOffset;
 		outDensityGridOnIndices.push_back(curCoord.x());
 		outDensityGridOnIndices.push_back(curCoord.y());
 		outDensityGridOnIndices.push_back(curCoord.z());
 
 		float value = (float)(grid->getAccessor().getValue(iter.getCoord()));
-		outDensityGridOnValueIndices.push_back((value - minValue) / (maxValue - minValue));
+		outDensityGridOnValueIndices.push_back((value + valueOffset) * valueScale);
 	}
-	outDensityGridValues.push_back(minValue);
-	outDensityGridValues.push_back(minValue);
-	outDensityGridValues.push_back(minValue);
-	outDensityGridValues.push_back(maxValue);
-	outDensityGridValues.push_back(maxValue);
-	outDensityGridValues.push_back(maxValue);
-}
-
-void HdRprVolume::CreateDefaultColorGridFromDensityGrid()
-{
-	//color grid has same voxels as density grid
-	m_colorGridOnIndices = m_densityGridOnIndices;
-
-	//color grid has one uniform color
-	m_colorGridValues.clear();
-	m_colorGridValues.push_back(defaultColor.data()[0]);
-	m_colorGridValues.push_back(defaultColor.data()[1]);
-	m_colorGridValues.push_back(defaultColor.data()[2]);
-
-	m_colorGridOnValueIndices.resize(m_densityGridOnValueIndices.size(), 0);
 }
 
 HdRprVolume::HdRprVolume(SdfPath const& id, HdRprApiSharedPtr rprApi): HdVolume(id)
 {
 	m_rprApiWeakPtr = rprApi;
 }
+
+struct GridData {
+	std::vector<float>    values;
+	std::vector<uint32_t> indices;
+	std::vector<float>    valueLUT;
+
+	void DuplicateWithUniformValue(GridData &target, float valueChannel0, float valueChannel1, float valueChannel2) const
+	{
+		target.indices = indices;
+
+		//color grid has one uniform color
+		target.valueLUT.clear();
+		target.valueLUT.push_back(valueChannel0);
+		target.valueLUT.push_back(valueChannel1);
+		target.valueLUT.push_back(valueChannel2);
+
+		target.values.resize(values.size(), 0);
+	}
+};
 
 HdRprVolume::~HdRprVolume()
 {
@@ -238,8 +266,18 @@ void HdRprVolume::Sync(
 		if (openVdbPath.empty())
 		{
 			*dirtyBits = HdChangeTracker::Clean;
+			fprintf(stderr, "[Node: %s]: vdb path empty\n", GetId().GetName().c_str());
 			return;
 		}
+
+		bool bNeedColor = false;
+		bool bNeedDensity = false;
+		bool bNeedEmissive = false;
+		findNeededChannels(sceneDelegate, GetId(), bNeedColor, bNeedDensity, bNeedEmissive);
+
+		float temperatureOffset = 0.0f;
+		float temperatureScale = 1.0f;
+		findTemperatureOffsetAndScale(sceneDelegate, GetId(), temperatureOffset, temperatureScale);
 
 		openvdb::initialize();
 
@@ -251,21 +289,12 @@ void HdRprVolume::Sync(
 		catch (openvdb::IoError e)
 		{
 			TF_CODING_ERROR("%s", e.what());
+			fprintf(stderr, "[Node: %s]: error opening vdb file %s\n", GetId().GetName().c_str(), openVdbPath.c_str());
 			*dirtyBits = HdChangeTracker::Clean;
 			return;
 		}
 
-
 		openvdb::GridPtrVecPtr grids = file.getGrids();
-
-		VtArray<float> gridDensity;
-		VtArray<size_t> idxDensity;
-
-		VtArray<float> gridAlbedo;
-		VtArray<unsigned int> idxAlbedo;
-
-		openvdb::Coord gridOnBBSize;
-		openvdb::Vec3d voxelSize;
 
 		std::set<std::string> gridNames;
 		for (auto name = file.beginName(); name != file.endName(); ++name)
@@ -275,159 +304,105 @@ void HdRprVolume::Sync(
 		if (gridNames.empty())
 		{
 			*dirtyBits = HdChangeTracker::Clean;
+			fprintf(stderr, "[Node: %s]: vdb file %s has no grids\n", GetId().GetName().c_str(), openVdbPath.c_str());
 			return;
 		}
 
-		bool isDensity = gridNames.find(HdRprVolumeTokens->density) != gridNames.end();
-		bool isTemperature = gridNames.find(HdRprVolumeTokens->temperature) != gridNames.end();
-		bool isColor = gridNames.find(HdRprVolumeTokens->color) != gridNames.end();
+		bool hasDensity = gridNames.find(HdRprVolumeTokens->density) != gridNames.end();
+		bool hasTemperature = gridNames.find(HdRprVolumeTokens->temperature) != gridNames.end();
 
+		openvdb::FloatGrid::Ptr densityGrid = (hasDensity) ? openvdb::gridPtrCast<openvdb::FloatGrid>(file.readGrid(HdRprVolumeTokens->density)) : nullptr;
+		openvdb::FloatGrid::Ptr temperatureGrid = (hasTemperature) ? openvdb::gridPtrCast<openvdb::FloatGrid>(file.readGrid(HdRprVolumeTokens->temperature)) : nullptr;
 
-		//if (isDensity || isTemperature || isColor)
-		//{
-		//	openvdb::FloatGrid::Ptr densityGrid = (isDensity) ? openvdb::gridPtrCast<openvdb::FloatGrid>(file.readGrid(HdRprVolumeTokens->density)) : nullptr;
-		//	openvdb::FloatGrid::Ptr temperatureGrid = (isTemperature) ? openvdb::gridPtrCast<openvdb::FloatGrid>(file.readGrid(HdRprVolumeTokens->temperature)) : nullptr;
-
-
-		//	openvdb::FloatGrid::Ptr fpGrig;
-
-		//	if (isDensity)
-		//	{
-		//		fpGrig = densityGrid;
-		//	}
-		//	else if (isTemperature)
-		//	{
-		//		fpGrig = temperatureGrid;
-		//	}
-		//	else
-		//	{
-		//		*dirtyBits = HdChangeTracker::Clean;
-		//		return;
-		//	}
-
-		//	voxelSize = fpGrig->voxelSize();
-
-		//	openvdb::CoordBBox gridOnBB = computeGridOnBB<openvdb::FloatGrid::Ptr,openvdb::FloatGrid::ValueOnIter>(fpGrig);
-		//	gridOnBBSize = gridOnBB.max() - gridOnBB.min();
-
-		//	//
-
-		//	for (openvdb::FloatGrid::ValueOnIter iter = fpGrig->beginValueOn(); iter; ++iter)
-		//	{
-		//		openvdb::Coord coord = iter.getCoord();
-		//		float density = defaultDensity;
-
-		//		if (densityGrid)
-		//		{
-		//			openvdb::FloatGrid::ConstAccessor densityAccesor = densityGrid->getConstAccessor();
-		//			density = densityAccesor.getValue(coord);
-		//		}
-
-
-		//		if (isTemperature)
-		//		{
-		//			// Not implemented
-		//		}
-		//		else if (isColor)
-		//		{
-		//			GfVec4f voxelColor;
-
-		//			openvdb::GridBase::Ptr colorGrid = file.readGrid(HdRprVolumeTokens->color);
-		//			if(colorGrid->isType<openvdb::Vec3IGrid>())
-		//			{
-		//				openvdb::Vec3i color = openvdb::gridPtrCast<openvdb::Vec3IGrid>(colorGrid)->getAccessor().getValue(coord);
-		//				voxelColor[0] = static_cast<float>(color[0]);
-		//				voxelColor[1] = static_cast<float>(color[1]);
-		//				voxelColor[2] = static_cast<float>(color[2]);
-		//			}
-		//			else if (colorGrid->isType<openvdb::Vec3SGrid>())
-		//			{
-		//				openvdb::Vec3f color = openvdb::gridPtrCast<openvdb::Vec3SGrid>(colorGrid)->getAccessor().getValue(coord);
-		//				voxelColor[0] = color[0];
-		//				voxelColor[1] = color[1];
-		//				voxelColor[2] = color[2];
-		//			}
-		//			else if (colorGrid->isType<openvdb::Vec3DGrid>())
-		//			{
-		//				openvdb::Vec3d color = openvdb::gridPtrCast<openvdb::Vec3DGrid>(colorGrid)->getAccessor().getValue(coord);
-		//				voxelColor[0] = static_cast<float>(color[0]);
-		//				voxelColor[1] = static_cast<float>(color[1]);
-		//				voxelColor[2] = static_cast<float>(color[2]);
-		//			}
-
-		//			gridAlbedo.push_back(voxelColor[0]);
-		//			gridAlbedo.push_back(voxelColor[1]);
-		//			gridAlbedo.push_back(voxelColor[2]);
-
-		//			const unsigned int nextIdx = (idxAlbedo.empty()) ? 0 : idxAlbedo.back() + 1;
-
-		//			idxAlbedo.push_back(nextIdx + 0);
-		//			idxAlbedo.push_back(nextIdx + 1);
-		//			idxAlbedo.push_back(nextIdx + 2);
-		//		}
-		//		else
-		//		{
-		//			gridAlbedo.push_back(defaultAlbedo);
-
-		//			const unsigned int nextIdx = (idxAlbedo.empty()) ? 0 : idxAlbedo.back() + 1;
-
-		//			idxAlbedo.push_back(nextIdx);
-		//			idxAlbedo.push_back(nextIdx);
-		//			idxAlbedo.push_back(nextIdx);
-		//		}
-
-		//		gridDensity.push_back((densityGrid) ? densityGrid->getConstAccessor().getValue(coord) : 0.f);
-		//		idxDensity.push_back(coordToIndex(iter.getCoord(), gridOnBB, gridOnBBSize));
-		//	}
-		//}
-		//else if (gridNames.find(HdRprVolumeTokens->points) != gridNames.end())
-		//{
-		//	// Not implemented
-		//}
-		//else
+		bool bNeedToReadDensityGrid = bNeedDensity && hasDensity;
+		if (bNeedToReadDensityGrid && !densityGrid.get())
 		{
-			openvdb::GridBase::Ptr baseGrid = file.readGrid( * file.beginName());
-			if (baseGrid->empty())
-			{
-				*dirtyBits = HdChangeTracker::Clean;
-				return;
-			}
-
-			voxelSize = baseGrid->voxelSize();
-
-			if (baseGrid->isType<openvdb::BoolGrid>())
-				voxelSize = voxelSize;
-				//fillGridOnWithDefaultColor< openvdb::BoolGrid::Ptr, openvdb::BoolGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::BoolGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::FloatGrid>())
-			{
-				gridOnBBSize = baseGrid->evalActiveVoxelDim();
-				ReadDensityFromGrid<openvdb::FloatGrid>(baseGrid, m_densityGridOnIndices, m_densityGridOnValueIndices, m_densityGridValues);
-				CreateDefaultColorGridFromDensityGrid();
-				//fillGridOnWithDefaultColor< openvdb::FloatGrid::Ptr, openvdb::FloatGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::FloatGrid>(baseGrid), gridDensity, idxDensity, gridAlbedo, idxAlbedo, gridOnBBSize);
-			}
-			else if (baseGrid->isType<openvdb::DoubleGrid>())
-				voxelSize = voxelSize;
-			//fillGridOnWithDefaultColor< openvdb::DoubleGrid::Ptr, openvdb::DoubleGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::DoubleGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Int32Grid>())
-				voxelSize = voxelSize;
-			//fillGridOnWithDefaultColor< openvdb::Int32Grid::Ptr, openvdb::Int32Grid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Int32Grid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Int64Grid>())
-				voxelSize = voxelSize;
-			//fillGridOnWithDefaultColor< openvdb::Int64Grid::Ptr, openvdb::Int64Grid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Int64Grid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Vec3IGrid>())
-				voxelSize = voxelSize;
-			//fillGridOnWithDefaultColor< openvdb::Vec3IGrid::Ptr, openvdb::Vec3IGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Vec3IGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Vec3SGrid>())
-				voxelSize = voxelSize;
-			//fillGridOnWithDefaultColor< openvdb::Vec3SGrid::Ptr, openvdb::Vec3SGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Vec3SGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::Vec3DGrid>())
-				voxelSize = voxelSize;
-			//fillGridOnWithDefaultColor< openvdb::Vec3DGrid::Ptr, openvdb::Vec3DGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::Vec3DGrid>(baseGrid), grid, idx, gridOnBBSize);
-			else if (baseGrid->isType<openvdb::StringGrid>())
-				voxelSize = voxelSize;
-			//fillGridOnWithDefaultColor< openvdb::StringGrid::Ptr, openvdb::StringGrid::ValueOnIter >(openvdb::gridPtrCast<openvdb::StringGrid>(baseGrid), grid, idx, gridOnBBSize);
-			
+			fprintf(stderr, "[Node: %s]: vdb file %s density grid doesn't have float type.\n", GetId().GetName().c_str(), openVdbPath.c_str());
+			bNeedToReadDensityGrid = false;
 		}
+
+		bool bNeedToReadTemperatureGrid = (bNeedColor || bNeedEmissive) && hasTemperature;
+		if (bNeedToReadTemperatureGrid && !temperatureGrid.get())
+		{
+			fprintf(stderr, "[Node: %s]: vdb file %s temperature grid doesn't have float type.\n", GetId().GetName().c_str(), openVdbPath.c_str());
+			bNeedToReadTemperatureGrid = false;
+		}
+
+		if (!bNeedToReadDensityGrid && !bNeedToReadTemperatureGrid)
+		{
+			fprintf(stderr, "[Node: %s]: vdb file %s does not have the needed grids.\n", GetId().GetName().c_str(), openVdbPath.c_str());
+			return;
+		}
+
+		//If we need to read from both grids, check compatibility
+		if (bNeedToReadDensityGrid && bNeedToReadTemperatureGrid)
+		{
+			if (densityGrid->voxelSize() != temperatureGrid->voxelSize())
+				fprintf(stderr, "[Node: %s]: vdb file %s has different voxel sizes for density grid and temperature grid. Taking voxel size of density grid\n", GetId().GetName().c_str(), openVdbPath.c_str());
+		}
+
+		openvdb::Vec3d voxelSize = bNeedToReadDensityGrid ? densityGrid->voxelSize() : temperatureGrid->voxelSize();
+		openvdb::CoordBBox gridOnBB;
+		if (bNeedToReadDensityGrid)
+			gridOnBB.expand(densityGrid->evalActiveVoxelBoundingBox());
+		if (bNeedToReadTemperatureGrid)
+			gridOnBB.expand(temperatureGrid->evalActiveVoxelBoundingBox());
+		openvdb::Coord gridOnBBSize = gridOnBB.extents();
+
+		GridData srcDensityGridData;
+		GridData srcTemperatureGridData;
+		GridData defaultEmissionGridData;
+		GridData defaultColorGridData;
+		GridData defaultDensityGridData;
+
+		GridData *pDensityGridData = nullptr;
+		GridData *pColorGridData = nullptr;
+		GridData *pEmissiveGridData = nullptr;
+
+		if (bNeedToReadDensityGrid)
+		{
+			float minVal, maxVal;
+			densityGrid->evalMinMax(minVal, maxVal);
+			float valueScale = (maxVal <= minVal) ? 1.0f : (1.0f / (maxVal - minVal));
+			ReadFloatGrid(densityGrid, -gridOnBB.min(), -minVal, valueScale, srcDensityGridData.indices, srcDensityGridData.values);
+			srcDensityGridData.valueLUT.push_back(minVal);
+			srcDensityGridData.valueLUT.push_back(minVal);
+			srcDensityGridData.valueLUT.push_back(minVal);
+			srcDensityGridData.valueLUT.push_back(maxVal);
+			srcDensityGridData.valueLUT.push_back(maxVal);
+			srcDensityGridData.valueLUT.push_back(maxVal);
+
+			if (bNeedDensity)
+				pDensityGridData = &srcDensityGridData;
+		}
+		if (bNeedToReadTemperatureGrid)
+		{
+			ReadFloatGrid(temperatureGrid, -gridOnBB.min(), temperatureOffset, temperatureScale / 12000.0f, srcTemperatureGridData.indices, srcTemperatureGridData.values);
+			for (int i = 0; i < sizeof(kelvin_table) / sizeof(kelvin_table[0]); i++)
+				srcTemperatureGridData.valueLUT.push_back(kelvin_table[i]);
+
+			if (bNeedColor)
+				pColorGridData = &srcTemperatureGridData;
+			if (bNeedEmissive)
+				pEmissiveGridData = &srcTemperatureGridData;
+		}
+
+		if (!pDensityGridData)
+		{
+			srcTemperatureGridData.DuplicateWithUniformValue(defaultDensityGridData, defaultDensity, defaultDensity, defaultDensity);
+			pDensityGridData = &defaultDensityGridData;
+		}
+		if (!pEmissiveGridData)
+		{
+			srcDensityGridData.DuplicateWithUniformValue(defaultEmissionGridData, defaultEmission.data()[0], defaultEmission.data()[1], defaultEmission.data()[2]);
+			pEmissiveGridData = &defaultEmissionGridData;
+		}
+		if (!pColorGridData)
+		{
+			srcDensityGridData.DuplicateWithUniformValue(defaultColorGridData, defaultColor.data()[0], defaultColor.data()[1], defaultColor.data()[2]);
+			pColorGridData = &defaultColorGridData;
+		}
+
 
 		file.close();
 
@@ -439,13 +414,12 @@ void HdRprVolume::Sync(
 			return;
 		}
 
-        //m_rprHeteroVolume = rprApi->CreateVolume(gridDensity, idxDensity, gridAlbedo, idxAlbedo, GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], (float)voxelSize[1], (float)voxelSize[2]));
-		m_rprHeteroVolume = rprApi->CreateVolume(m_densityGridOnIndices, m_densityGridOnValueIndices, m_densityGridValues,
-			m_colorGridOnIndices, m_colorGridOnValueIndices, m_colorGridValues,
+		m_rprHeteroVolume = rprApi->CreateVolume(pDensityGridData->indices, pDensityGridData->values, pDensityGridData->valueLUT,
+			pColorGridData->indices, pColorGridData->values, pColorGridData->valueLUT, pEmissiveGridData->indices, pEmissiveGridData->values, pEmissiveGridData->valueLUT,
 			GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], (float)voxelSize[1], (float)voxelSize[2]));
 	}
 
-	* dirtyBits = HdChangeTracker::Clean;
+	*dirtyBits = HdChangeTracker::Clean;
 }
 
 HdDirtyBits
