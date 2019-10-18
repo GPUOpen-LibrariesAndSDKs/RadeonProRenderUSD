@@ -18,9 +18,9 @@ enum class HdRprHybridQuality {
 
 class HdRprConfig {
 public:
-    constexpr static int kDefaultMaxSamples = 256;
-    constexpr static int kDefaultMinSamples = 64;
-    constexpr static float kDefaultVariance = 0.0f;
+    static const int kDefaultMaxSamples;
+    static const int kDefaultMinSamples;
+    static const float kDefaultVariance;
 
     enum ChangeTracker {
         Clean = 0,

@@ -2,6 +2,7 @@
 #define HDRPR_IMAGE_CACHE_H
 
 #include "pxr/pxr.h"
+#include "rprcpp/rprImage.h"
 
 #include <memory>
 #include <unordered_map>
@@ -11,7 +12,6 @@ PXR_NAMESPACE_OPEN_SCOPE
 namespace rpr {
 
 class Context;
-class Image;
 
 } // namespace rpr
 

@@ -121,7 +121,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
         rpr_material_node materialNode = nullptr;
         rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_IMAGE_TEXTURE, &materialNode);
-        rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, img);
+        rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, rprImage);
 		material->materialNodes.push_back(materialNode);
 
         // TODO: one minus src color
