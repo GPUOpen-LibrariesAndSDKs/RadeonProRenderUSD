@@ -17,12 +17,6 @@ def getRprPath(_pathCache=[None]):
         _pathCache[0] = plugin.path
     return _pathCache[0]
 
-def createRprTmpDirIfNeeded(rprLib):
-    rprLib.GetHdRprTmpDir.restype = c_char_p
-    rprTmpDir = rprLib.GetHdRprTmpDir()
-    if not os.path.exists(rprTmpDir):
-        os.makedirs(rprTmpDir)
-
 def reemitStage(usdviewApi):
     usdviewApi._UsdviewApi__appController._reopenStage()
     usdviewApi._UsdviewApi__appController._rendererPluginChanged('HdRprPlugin')
@@ -31,7 +25,6 @@ def setRenderDevice(usdviewApi, renderDeviceId):
     rprPath = getRprPath()
     if rprPath is not None:
         lib = cdll.LoadLibrary(rprPath)
-        createRprTmpDirIfNeeded(lib)
         lib.SetHdRprRenderDevice(renderDeviceId)
         reemitStage(usdviewApi)
 
@@ -39,7 +32,6 @@ def setRenderQuality(usdviewApi, quality):
     rprPath = getRprPath()
     if rprPath is not None:
         lib = cdll.LoadLibrary(rprPath)
-        createRprTmpDirIfNeeded(lib)
         lib.SetHdRprRenderQuality(quality)
         reemitStage(usdviewApi)
 

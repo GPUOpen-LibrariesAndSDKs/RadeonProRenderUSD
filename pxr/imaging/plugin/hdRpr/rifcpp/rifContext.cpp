@@ -19,7 +19,7 @@ namespace {
 
 class ContextGPU final : public Context {
 public:
-    explicit ContextGPU(rpr_context rprContext);
+    explicit ContextGPU(rpr_context rprContext, std::string const& modelPath);
     ~ContextGPU() override = default;
 
     std::unique_ptr<Image> CreateImage(rpr::FrameBuffer* rprFrameBuffer) override;
@@ -29,7 +29,7 @@ private:
 
 class ContextGPUMetal final : public Context {
 public:
-    explicit ContextGPUMetal(rpr_context rprContext);
+    explicit ContextGPUMetal(rpr_context rprContext, std::string const& modelPath);
     ~ContextGPUMetal() override = default;
 
     std::unique_ptr<Image> CreateImage(rpr::FrameBuffer* rprFrameBuffer) override;
@@ -39,7 +39,7 @@ private:
 
 class ContextCPU final : public Context {
 public:
-    explicit ContextCPU(rpr_context rprContext);
+    explicit ContextCPU(rpr_context rprContext, std::string const& modelPath);
     ~ContextCPU() override = default;
 
     std::unique_ptr<Image> CreateImage(rpr::FrameBuffer* rprFrameBuffer) override;
@@ -74,7 +74,8 @@ rif_image_desc GetRifImageDesc(rpr::FrameBuffer* rprFrameBuffer) {
     return imageDesc;
 }
 
-ContextGPU::ContextGPU(rpr_context rprContext) {
+ContextGPU::ContextGPU(rpr_context rprContext, std::string const& modelPath)
+    : Context(modelPath) {
     int deviceCount = 0;
     RIF_ERROR_CHECK_THROW(rifGetDeviceCount(rifBackendApiType, &deviceCount), "Failed to query device count");
 
@@ -124,7 +125,8 @@ std::unique_ptr<Image> ContextGPU::CreateImage(rpr::FrameBuffer* rprFrameBuffer)
     return std::unique_ptr<Image>(new Image(rifImage));
 }
 
-ContextCPU::ContextCPU(rpr_context rprContext) {
+ContextCPU::ContextCPU(rpr_context rprContext, std::string const& modelPath)
+    : Context(modelPath) {
     int deviceCount = 0;
     RIF_ERROR_CHECK_THROW(rifGetDeviceCount(rifBackendApiType, &deviceCount), "Failed to query device count");
 
@@ -217,7 +219,8 @@ rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags) {
     return -1;
 }
 
-ContextGPUMetal::ContextGPUMetal(rpr_context rprContext) {
+ContextGPUMetal::ContextGPUMetal(rpr_context rprContext, std::string const& modelPath)
+    : Context(modelPath) {
     int deviceCount = 0;
     RIF_ERROR_CHECK_THROW(rifGetDeviceCount(rifBackendApiType, &deviceCount), "Failed to query device count");
 
@@ -278,7 +281,7 @@ bool HasGpuContext(rpr_creation_flags contextFlags) {
 
 } // namespace anonymous
 
-std::unique_ptr<Context> Context::Create(rpr_context rprContext) {
+std::unique_ptr<Context> Context::Create(rpr_context rprContext, std::string const& modelPath) {
     if (!rprContext) {
         return nullptr;
     }
@@ -288,18 +291,23 @@ std::unique_ptr<Context> Context::Create(rpr_context rprContext) {
 
     std::unique_ptr<Context> rifContext;
 #ifdef __APPLE__
-    rifContext.reset(new ContextGPUMetal(rprContext));
+    rifContext.reset(new ContextGPUMetal(rprContext, modelPath));
 #else // __APPLE__
     if (HasGpuContext(contextFlags)) {
-        rifContext.reset(new ContextGPU(rprContext));
+        rifContext.reset(new ContextGPU(rprContext, modelPath));
     } else {
-        rifContext.reset(new ContextCPU(rprContext));
+        rifContext.reset(new ContextCPU(rprContext, modelPath));
     }
 #endif
 
     RIF_ERROR_CHECK_THROW(rifContextCreateCommandQueue(rifContext->m_context, &rifContext->m_commandQueue), "Failed to create RIF command queue");
 
     return rifContext;
+}
+
+Context::Context(std::string const& modelPath)
+    : m_modelPath(modelPath) {
+
 }
 
 Context::~Context() {
@@ -346,6 +354,10 @@ void Context::ExecuteCommandQueue() {
 
     RIF_ERROR_CHECK_THROW(rifContextExecuteCommandQueue(m_context, m_commandQueue, nullptr, nullptr, nullptr), "Failed to execute command queue");
     RIF_ERROR_CHECK_THROW(rifSyncronizeQueue(m_commandQueue), "Failed to synchronize command queue");
+}
+
+std::string const& Context::GetModelPath() const {
+    return m_modelPath;
 }
 
 } // namespace rif

@@ -111,7 +111,8 @@ public:
 
     bool IsGlInteropEnabled() const;
 
-    static const char* GetTmpDir();
+    static std::string GetAppDataPath();
+    static std::string GetCachePath();
 
 private:
     HdRprApiImpl* m_impl = nullptr;

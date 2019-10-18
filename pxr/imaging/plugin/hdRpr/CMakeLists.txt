@@ -140,6 +140,13 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
         FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/HdRprPlugin_Viewport.ds
         DESTINATION "houdini/soho/parameters")
+
+    set(RIF_MODELS_INSTALL_DIR "${HOUDINI_ROOT}/houdini/RIF_models")
+    set(RIF_MODELS_VERSIONING_FILE ${CMAKE_CURRENT_BINARY_DIR}/${RIF_VERSION_STRING}.version)
+    file(TOUCH ${RIF_MODELS_VERSIONING_FILE})
+    install(
+        FILES ${RIF_MODELS_VERSIONING_FILE}
+        DESTINATION ${RIF_MODELS_INSTALL_DIR})
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_install_dir(lib/python/rpr installPrefix)
 
@@ -159,7 +166,15 @@ else(RPR_BUILD_AS_HOUDINI_PLUGIN)
         \\\"Includes\\\": [ \\\"*/resources/\\\" ]
     }
         \")")
+
+    GetAppDataPath(APP_DATA_PATH)
+    set(HDRPR_DATA_PATH "${APP_DATA_PATH}/hdRpr")
+    set(RIF_MODELS_INSTALL_DIR "${HDRPR_DATA_PATH}/RIF_models_${RIF_VERSION_STRING}")
 endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
+
+install(
+    DIRECTORY ${RIF_MODELS_DIR}/
+    DESTINATION ${RIF_MODELS_INSTALL_DIR})
 
 if(WIN32)
     install(

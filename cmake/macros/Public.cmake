@@ -23,6 +23,27 @@
 #
 include(Private)
 
+macro(GetAppDataPath retVal)
+    if(WIN32)
+        if(DEFINED ENV{PROGRAMDATA})
+            file(TO_CMAKE_PATH $ENV{PROGRAMDATA} _APP_DATA_PATH)
+        endif()
+    elseif(APPLE)
+        set(_APP_DATA_PATH "/Library/Application Support")
+    else()
+        if(DEFINED ENV{XDG_DATA_HOME} AND IS_ABSOLUTE $ENV{XDG_DATA_HOME})
+            set(_APP_DATA_PATH "$ENV{XDG_DATA_HOME}")
+        elseif(DEFINED ENV{HOME})
+            set(_APP_DATA_PATH "$ENV{HOME}/.config")
+        endif()
+    endif()
+
+    if(NOT DEFINED _APP_DATA_PATH)
+        message(FATAL_ERROR "Unable to determine app data folder")
+    endif()
+    set(${retVal} "${_APP_DATA_PATH}")
+endmacro()
+
 function(pxr_python_bin BIN_NAME)
     set(oneValueArgs
         PYTHON_FILE

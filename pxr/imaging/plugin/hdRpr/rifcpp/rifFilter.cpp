@@ -65,8 +65,7 @@ FilterAIDenoise::FilterAIDenoise(Context* rifContext) : Filter(rifContext) {
 
     // setup const parameters
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1u(m_rifFilter, "useHDR", 1), "Failed to set filter \"usdHDR\" parameter");
-    // TODO: set correct model path
-    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterString(m_rifFilter, "modelPath", "../models"), "Failed to set filter \"modelPath\" parameter");
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterString(m_rifFilter, "modelPath", rifContext->GetModelPath().c_str()), "Failed to set filter \"modelPath\" parameter");
 
     // auxillary filters
     //m_auxFilters.resize(AuxFilterMax, nullptr);

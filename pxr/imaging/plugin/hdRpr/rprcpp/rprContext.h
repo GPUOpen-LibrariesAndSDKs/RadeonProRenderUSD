@@ -29,9 +29,7 @@ enum class RenderDeviceType
 
 class Context : public Object {
 public:
-    static const char* GetCachePath();
-
-    static std::unique_ptr<Context> Create(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop);
+    static std::unique_ptr<Context> Create(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop, char const* cachePath);
 
     ~Context() override = default;
 
@@ -42,7 +40,7 @@ public:
 
 private:
     Context() = default;
-    static std::unique_ptr<Context> CreateContext(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop);
+    static std::unique_ptr<Context> CreateContext(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop, char const* cachePath);
 
 private:
     PluginType m_activePlugin = PluginType::NONE;

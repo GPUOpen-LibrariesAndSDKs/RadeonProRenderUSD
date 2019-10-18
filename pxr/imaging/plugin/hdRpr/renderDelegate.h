@@ -243,9 +243,6 @@ extern "C"
 
     HDRPR_API
     void SetHdRprRenderQuality(int quality);
-
-    HDRPR_API
-    const char* GetHdRprTmpDir();
 }
 
 #endif // HDRPR_RENDER_DELEGATE_H

@@ -13,11 +13,20 @@
 
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/imaging/pxOsd/tokens.h"
+#include "pxr/base/arch/fileSystem.h"
 
 #include <RadeonProRender.h>
 #include <RadeonProRender_Baikal.h>
 #include <vector>
 #include <mutex>
+
+#ifdef WIN32
+#include <shlobj_core.h>
+#pragma comment(lib,"Shell32.lib")
+#elif defined(__linux__)
+#include <limits.h>
+#include <sys/stat.h>
+#endif // __APPLE__
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -40,6 +49,14 @@ std::recursive_mutex g_rprAccessMutex;
 template <typename T, typename... Args>
 std::unique_ptr<T> make_unique(Args&&... args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+bool ArchCreateDirectory(const char* path) {
+#ifdef WIN32
+    return CreateDirectory(path, NULL) == TRUE;
+#else
+    return mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
+#endif
 }
 
 } // namespace anonymous
@@ -1126,7 +1143,8 @@ private:
     void InitRpr() {
         auto plugin = HdRprConfig::GetInstance().GetPlugin();
         auto renderDevice = HdRprConfig::GetInstance().GetRenderDevice();
-        m_rprContext = rpr::Context::Create(plugin, renderDevice, false);
+        auto cachePath = HdRprApi::GetCachePath();
+        m_rprContext = rpr::Context::Create(plugin, renderDevice, false, cachePath.c_str());
         if (!m_rprContext) {
             return;
         }
@@ -1144,7 +1162,40 @@ private:
             return;
         }
 
-        m_rifContext = rif::Context::Create(m_rprContext->GetHandle());
+        // XXX: such unsafe define names are going to be fixed in next RIF release but until hold yourself, time will come
+        auto rifVersionString = std::to_string(VERSION_MAJOR) + "." + std::to_string(VERSION_MINOR) + "." + std::to_string(VERSION_REVISION);
+
+        std::string modelsDir("RIF_models");
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+        std::string modelsPath;
+        auto houdiniPath = std::getenv("HH");
+        if (houdiniPath) {
+            modelsPath = houdiniPath + ("/" + modelsDir);
+
+            // To ensure that current RIF implementation will use correct models we check for the file that points to models version
+            double dummy;
+            auto rifVersioningFilename = modelsPath + "/" + (rifVersionString + ".version");
+            if (!ArchGetModificationTime(rifVersioningFilename.c_str(), &dummy)) {
+                TF_RUNTIME_ERROR("RIF version mismatch");
+                modelsPath = "";
+            }
+        } else {
+            TF_RUNTIME_ERROR("Failed to query \"HH\" environment variable");
+        }
+#else
+        // In case of 'usdview' plugin build type we install models to AppData.
+        // For one user many versions of the plugin could be installed independently, the same situation for multiple users
+        // In the general case, we do not want to encounter issues caused by incorrect models version
+        // So that's why we install models in appropriate folder with versioning:
+        // $APPDATA/RIF_models_$RIF_VERSION_STRING
+        double dummy;
+        auto modelsPath = (HdRprApi::GetAppDataPath() + ARCH_PATH_SEP) + (modelsDir + "_" + rifVersionString);
+        if (!ArchGetModificationTime(modelsPath.c_str(), &dummy)) {
+            TF_RUNTIME_ERROR("Could not find required RIF models folder");
+            modelsPath = "";
+        }
+#endif
+        m_rifContext = rif::Context::Create(m_rprContext->GetHandle(), modelsPath);
     }
 
     void InitMaterialSystem() {
@@ -1520,8 +1571,46 @@ bool HdRprApi::IsGlInteropEnabled() const {
     return m_impl->IsGlInteropEnabled();
 }
 
-const char* HdRprApi::GetTmpDir() {
-    return rpr::Context::GetCachePath();
+std::string HdRprApi::GetAppDataPath() {
+    auto appDataPath = []() -> std::string {
+#ifdef WIN32
+        char appDataPath[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath))) {
+            return appDataPath + std::string("\\hdRpr");
+        }
+#elif defined(__linux__)
+        if (auto homeEnv = getenv("XDG_DATA_HOME")) {
+            if (homeEnv[0] == '/') {
+                return homeEnv + std::string("/hdRpr");
+            }
+        }
+
+        int uid = getuid();
+        auto homeEnv = std::getenv("HOME");
+        if (uid != 0 && homeEnv) {
+            return homeEnv + std::string("/.config/hdRpr");
+        }
+
+#elif defined(__APPLE__)
+        return "/Library/Application Support/hdRPR";
+#else
+#warning "Unknown platform"
+#endif
+        return "";
+    }();
+    if (!appDataPath.empty()) {
+        ArchCreateDirectory(appDataPath.c_str());
+    }
+    return appDataPath;
+}
+
+std::string HdRprApi::GetCachePath() {
+    auto path = GetAppDataPath();
+    if (!path.empty()) {
+        path = (path + ARCH_PATH_SEP) + "cache";
+        ArchCreateDirectory(path.c_str());
+    }
+    return path;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

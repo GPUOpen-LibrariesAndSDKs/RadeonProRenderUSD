@@ -365,7 +365,3 @@ void SetHdRprRenderQuality(int quality) {
         TF_WARN("Invalid parameter: quality = %d", quality);
     }
 }
-
-const char* GetHdRprTmpDir() {
-    return PXR_INTERNAL_NS::HdRprApi::GetTmpDir();
-}

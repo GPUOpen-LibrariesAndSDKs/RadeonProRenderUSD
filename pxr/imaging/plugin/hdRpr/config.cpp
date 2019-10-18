@@ -1,5 +1,6 @@
 #include "config.h"
 #include "rprApi.h"
+#include "pxr/base/arch/fileSystem.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -124,8 +125,8 @@ HdRprConfig::~HdRprConfig() {
 }
 
 bool HdRprConfig::Load() {
-    std::string tmpDir = HdRprApi::GetTmpDir();
-    std::string rprPreferencePath = (tmpDir.empty()) ? k_rprPreferenceFilename : tmpDir + k_rprPreferenceFilename;
+    std::string appDataDir = HdRprApi::GetAppDataPath();
+    std::string rprPreferencePath = (appDataDir.empty()) ? k_rprPreferenceFilename : (appDataDir + ARCH_PATH_SEP) + k_rprPreferenceFilename;
 
     if (FILE* f = fopen(rprPreferencePath.c_str(), "rb")) {
         if (!fread(&m_prefData, sizeof(PrefData), 1, f)) {
@@ -139,8 +140,8 @@ bool HdRprConfig::Load() {
 }
 
 void HdRprConfig::Save() {
-    std::string tmpDir = HdRprApi::GetTmpDir();
-    std::string rprPreferencePath = (tmpDir.empty()) ? k_rprPreferenceFilename : tmpDir + k_rprPreferenceFilename;
+    std::string appDataDir = HdRprApi::GetAppDataPath();
+    std::string rprPreferencePath = (appDataDir.empty()) ? k_rprPreferenceFilename : (appDataDir + ARCH_PATH_SEP) + k_rprPreferenceFilename;
 
     if (FILE* f = fopen(rprPreferencePath.c_str(), "wb")) {
         if (!fwrite(&m_prefData, sizeof(PrefData), 1, f)) {
