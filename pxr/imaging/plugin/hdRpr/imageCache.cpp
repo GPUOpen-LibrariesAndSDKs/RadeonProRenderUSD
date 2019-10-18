@@ -1,5 +1,4 @@
 #include "imageCache.h"
-#include "rprcpp/rprImage.h"
 #include "rprcpp/rprContext.h"
 #include "pxr/imaging/glf/glew.h"
 #include "pxr/imaging/glf/uvTextureData.h"

@@ -3,9 +3,9 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-const int HdRprConfig::kDefaultMaxSamples;
-const int HdRprConfig::kDefaultMinSamples;
-const float HdRprConfig::kDefaultVariance;
+const int HdRprConfig::kDefaultMaxSamples = 256;
+const int HdRprConfig::kDefaultMinSamples = 64;
+const float HdRprConfig::kDefaultVariance = 0.0f;
 
 HdRprConfig& HdRprConfig::GetInstance() {
     static HdRprConfig instance;
