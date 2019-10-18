@@ -77,7 +77,7 @@ public:
 	RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
 		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
 		const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-		const GfVec3i& gridSize, const GfVec3f& voxelSize);
+		const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow);
 
     RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf);
     RprApiObjectPtr CreateMeshInstance(RprApiObject* prototypeMesh);

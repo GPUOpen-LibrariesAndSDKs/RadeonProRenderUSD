@@ -339,9 +339,12 @@ void HdRprVolume::Sync(
 		{
 			if (densityGrid->voxelSize() != temperatureGrid->voxelSize())
 				fprintf(stderr, "[Node: %s]: vdb file %s has different voxel sizes for density grid and temperature grid. Taking voxel size of density grid\n", GetId().GetName().c_str(), openVdbPath.c_str());
+			if (densityGrid->transform() != temperatureGrid->transform())
+				fprintf(stderr, "[Node: %s]: vdb file %s has different transform for density grid and temperature grid. Taking transform of density grid\n", GetId().GetName().c_str(), openVdbPath.c_str());
 		}
 
 		openvdb::Vec3d voxelSize = bNeedToReadDensityGrid ? densityGrid->voxelSize() : temperatureGrid->voxelSize();
+		openvdb::math::Transform gridTransform = bNeedToReadDensityGrid ? densityGrid->transform() : temperatureGrid->transform();
 		openvdb::CoordBBox gridOnBB;
 		if (bNeedToReadDensityGrid)
 			gridOnBB.expand(densityGrid->evalActiveVoxelBoundingBox());
@@ -414,9 +417,12 @@ void HdRprVolume::Sync(
 			return;
 		}
 
+		openvdb::Vec3d gridMin = gridTransform.indexToWorld(gridOnBB.min());
+		GfVec3f gridBBLow = GfVec3f((float)(gridMin.x() - voxelSize[0] / 2), (float)(gridMin.y() - voxelSize[1] / 2), (float)(gridMin.z() - voxelSize[2] / 2));
+
 		m_rprHeteroVolume = rprApi->CreateVolume(pDensityGridData->indices, pDensityGridData->values, pDensityGridData->valueLUT,
 			pColorGridData->indices, pColorGridData->values, pColorGridData->valueLUT, pEmissiveGridData->indices, pEmissiveGridData->values, pEmissiveGridData->valueLUT,
-			GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], (float)voxelSize[1], (float)voxelSize[2]));
+			GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], (float)voxelSize[1], (float)voxelSize[2]), gridBBLow);
 	}
 
 	*dirtyBits = HdChangeTracker::Clean;

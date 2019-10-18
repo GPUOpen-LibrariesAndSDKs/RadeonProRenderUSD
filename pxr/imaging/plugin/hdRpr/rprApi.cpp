@@ -537,7 +537,7 @@ public:
 	RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
 		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
 		const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-		const GfVec3i& gridSize, const GfVec3f& voxelSize) {
+		const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         auto heteroVolume = CreateHeteroVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues, gridSize);
@@ -560,8 +560,9 @@ public:
         }
 
         GfMatrix4f meshTransform(1.0f);
-        GfVec3f volumeSize = GfVec3f(voxelSize[0] * gridSize[0], voxelSize[1] * gridSize[1], voxelSize[2] * gridSize[2]);
-        meshTransform.SetScale(volumeSize);
+		GfVec3f volumeSize = GfVec3f(voxelSize[0] * gridSize[0], voxelSize[1] * gridSize[1], voxelSize[2] * gridSize[2]);
+		meshTransform.SetScale(volumeSize);
+		meshTransform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
 
         SetMeshMaterial(cubeMesh->GetHandle(), static_cast<RprApiMaterial*>(transparentMaterial->GetHandle()));
         SetMeshHeteroVolume(cubeMesh->GetHandle(), heteroVolume->GetHandle());
@@ -1172,41 +1173,41 @@ private:
         }
     }
 
-    RprApiObjectPtr CreateCubeMesh(const float & width, const float & height, const float & depth) {
+    RprApiObjectPtr CreateCubeMesh(const float & halfWidth, const float & halfHeight, const float & halfDepth) {
         constexpr const size_t cubeVertexCount = 24;
         constexpr const size_t cubeNormalCount = 24;
         constexpr const size_t cubeVpfCount = 12;
 
         VtVec3fArray position(cubeVertexCount);
-        position[0] = GfVec3f(-width, height, -depth);
-        position[1] = GfVec3f(width, height, -depth);
-        position[2] = GfVec3f(width, height, depth);
-        position[3] = GfVec3f(-width, height, depth);
+        position[0] = GfVec3f(-halfWidth, halfHeight, -halfDepth);
+        position[1] = GfVec3f(halfWidth, halfHeight, -halfDepth);
+        position[2] = GfVec3f(halfWidth, halfHeight, halfDepth);
+        position[3] = GfVec3f(-halfWidth, halfHeight, halfDepth);
 
-        position[4] = GfVec3f(-width, -height, -depth);
-        position[5] = GfVec3f(width, -height, -depth);
-        position[6] = GfVec3f(width, -height, depth);
-        position[7] = GfVec3f(-width, -height, depth);
+        position[4] = GfVec3f(-halfWidth, -halfHeight, -halfDepth);
+        position[5] = GfVec3f(halfWidth, -halfHeight, -halfDepth);
+        position[6] = GfVec3f(halfWidth, -halfHeight, halfDepth);
+        position[7] = GfVec3f(-halfWidth, -halfHeight, halfDepth);
 
-        position[8] = GfVec3f(-width, -height, depth);
-        position[9] = GfVec3f(-width, -height, -depth);
-        position[10] = GfVec3f(-width, height, -depth);
-        position[11] = GfVec3f(-width, height, depth);
+        position[8] = GfVec3f(-halfWidth, -halfHeight, halfDepth);
+        position[9] = GfVec3f(-halfWidth, -halfHeight, -halfDepth);
+        position[10] = GfVec3f(-halfWidth, halfHeight, -halfDepth);
+        position[11] = GfVec3f(-halfWidth, halfHeight, halfDepth);
 
-        position[12] = GfVec3f(width, -height, depth);
-        position[13] = GfVec3f(width, -height, -depth);
-        position[14] = GfVec3f(width, height, -depth);
-        position[15] = GfVec3f(width, height, depth);
+        position[12] = GfVec3f(halfWidth, -halfHeight, halfDepth);
+        position[13] = GfVec3f(halfWidth, -halfHeight, -halfDepth);
+        position[14] = GfVec3f(halfWidth, halfHeight, -halfDepth);
+        position[15] = GfVec3f(halfWidth, halfHeight, halfDepth);
 
-        position[16] = GfVec3f(-width, -height, -depth);
-        position[17] = GfVec3f(width, -height, -depth);
-        position[18] = GfVec3f(width, height, -depth);
-        position[19] = GfVec3f(-width, height, -depth);
+        position[16] = GfVec3f(-halfWidth, -halfHeight, -halfDepth);
+        position[17] = GfVec3f(halfWidth, -halfHeight, -halfDepth);
+        position[18] = GfVec3f(halfWidth, halfHeight, -halfDepth);
+        position[19] = GfVec3f(-halfWidth, halfHeight, -halfDepth);
 
-        position[20] = GfVec3f(-width, -height, depth);
-        position[21] = GfVec3f(width, -height, depth);
-        position[22] = GfVec3f(width, height, depth);
-        position[23] = GfVec3f(-width, height, depth);
+        position[20] = GfVec3f(-halfWidth, -halfHeight, halfDepth);
+        position[21] = GfVec3f(halfWidth, -halfHeight, halfDepth);
+        position[22] = GfVec3f(halfWidth, halfHeight, halfDepth);
+        position[23] = GfVec3f(-halfWidth, halfHeight, halfDepth);
 
         VtVec3fArray normals(cubeNormalCount);
         normals[0] = GfVec3f(0.f, 1.f, 0.f);
@@ -1398,8 +1399,8 @@ RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float width, float height, const G
 RprApiObjectPtr HdRprApi::CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
 	const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
 	const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-	const GfVec3i& gridSize, const GfVec3f& voxelSize){
-    return m_impl->CreateVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues, gridSize, voxelSize);
+	const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow){
+    return m_impl->CreateVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues, gridSize, voxelSize, gridBBLow);
 }
 
 RprApiObjectPtr HdRprApi::CreateMaterial(MaterialAdapter& materialAdapter) {
