@@ -5,8 +5,6 @@
 #include "rifcpp/rifImage.h"
 
 #include <RadeonProRender.h>
-#include <math/matrix.h>
-#include <math/mathutils.h>
 #include "RadeonProRender_CL.h"
 #include "RadeonProRender_GL.h"
 
