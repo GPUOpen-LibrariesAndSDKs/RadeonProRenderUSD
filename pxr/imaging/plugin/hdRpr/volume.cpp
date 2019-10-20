@@ -1,8 +1,5 @@
 #include "volume.h"
-#pragma warning(push)
-#pragma warning(disable:4146)
 #include "openvdb/openvdb.h"
-#pragma warning(pop)
 
 #include "openvdb/points/PointDataGrid.h"
 #include <openvdb/tools/Interpolation.h>
@@ -30,9 +27,9 @@ namespace
 	GfVec3f defaultEmission = GfVec3f(0.0f, 0.0f, 0.0f);     //Default to no emission
 }
 
-std::string findOpenVdbFilePath(HdSceneDelegate* sceneDelegate, const SdfPath & id)
+std::string findOpenVdbFilePath(HdSceneDelegate* sceneDelegate, const HdVolumeFieldDescriptorVector &volumeFieldDescriptorVector)
 {
-	for (auto it : sceneDelegate->GetVolumeFieldDescriptors(id))
+	for (auto it : volumeFieldDescriptorVector)
 	{
 		VtValue param = sceneDelegate->Get(it.fieldId, HdRprVolumeTokens->filePath);
 
@@ -45,12 +42,12 @@ std::string findOpenVdbFilePath(HdSceneDelegate* sceneDelegate, const SdfPath & 
 	return "";
 }
 
-void findNeededChannels(HdSceneDelegate* sceneDelegate, const SdfPath & id, bool &outNeedColor, bool &outNeedDensity, bool &outNeedEmissive)
+void findNeededChannels(HdSceneDelegate* sceneDelegate, const HdVolumeFieldDescriptorVector & volumeFieldDescriptorVector, bool &outNeedColor, bool &outNeedDensity, bool &outNeedEmissive)
 {
 	outNeedColor = false;
 	outNeedDensity = false;
 	outNeedEmissive = false;
-	for (auto it : sceneDelegate->GetVolumeFieldDescriptors(id))
+	for (auto it : volumeFieldDescriptorVector)
 	{
 		VtValue param = sceneDelegate->Get(it.fieldId, HdRprVolumeTokens->filePath);
 
@@ -66,9 +63,9 @@ void findNeededChannels(HdSceneDelegate* sceneDelegate, const SdfPath & id, bool
 	}
 }
 
-void findTemperatureOffsetAndScale(HdSceneDelegate* sceneDelegate, const SdfPath & id, float &outOffset, float &outScale)
+void findTemperatureOffsetAndScale(HdSceneDelegate* sceneDelegate, const HdVolumeFieldDescriptorVector & volumeFieldDescriptorVector, float &outOffset, float &outScale)
 {
-	for (auto it : sceneDelegate->GetVolumeFieldDescriptors(id))
+	for (auto it : volumeFieldDescriptorVector)
 	{
 		VtValue param = sceneDelegate->Get(it.fieldId, HdRprVolumeTokens->temperatureOffset);
 		if (param.IsHolding<float>())
@@ -134,7 +131,8 @@ void HdRprVolume::Sync(
 	{
         m_rprHeteroVolume = nullptr;
 
-		std::string openVdbPath = findOpenVdbFilePath(sceneDelegate, GetId());
+		HdVolumeFieldDescriptorVector volumeFieldDescriptorVector = sceneDelegate->GetVolumeFieldDescriptors(GetId());
+		std::string openVdbPath = findOpenVdbFilePath(sceneDelegate, volumeFieldDescriptorVector);
 
 		if (openVdbPath.empty())
 		{
@@ -146,11 +144,11 @@ void HdRprVolume::Sync(
 		bool bNeedColor = false;
 		bool bNeedDensity = false;
 		bool bNeedEmissive = false;
-		findNeededChannels(sceneDelegate, GetId(), bNeedColor, bNeedDensity, bNeedEmissive);
+		findNeededChannels(sceneDelegate, volumeFieldDescriptorVector, bNeedColor, bNeedDensity, bNeedEmissive);
 
 		float temperatureOffset = 0.0f;
 		float temperatureScale = 1.0f;
-		findTemperatureOffsetAndScale(sceneDelegate, GetId(), temperatureOffset, temperatureScale);
+		findTemperatureOffsetAndScale(sceneDelegate, volumeFieldDescriptorVector, temperatureOffset, temperatureScale);
 
 		openvdb::initialize();
 
