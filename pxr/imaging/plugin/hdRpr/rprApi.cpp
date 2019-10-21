@@ -953,9 +953,9 @@ public:
         preferences.ResetDirty();
     }
 
-    void UpdateSampling() {
+    void UpdateSampling(bool force = false) {
         auto& preferences = HdRprConfig::GetInstance();
-        if (preferences.IsDirty(HdRprConfig::DirtySampling)) {
+        if (preferences.IsDirty(HdRprConfig::DirtySampling) || force) {
             preferences.CleanDirtyFlag(HdRprConfig::DirtySampling);
 
             m_maxSamples = preferences.GetMaxSamples();
@@ -1100,7 +1100,7 @@ public:
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         // return Converged if max samples is reached
-        if (m_iter > m_maxSamples) {
+        if (m_iter >= m_maxSamples) {
             return true;
         } else {
             // if not max samples check if all pixels converged to threshold
@@ -1160,6 +1160,8 @@ private:
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
             RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, int(HdRprConfig::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
         }
+
+        UpdateSampling(true);
 
         m_imageCache.reset(new ImageCache(m_rprContext.get()));
     }
