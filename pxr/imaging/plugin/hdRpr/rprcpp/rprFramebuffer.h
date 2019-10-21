@@ -25,7 +25,8 @@ public:
     void AttachAs(rpr_aov aov);
     void Clear();
     void Resolve(FrameBuffer* dstFrameBuffer);
-    virtual void Resize(rpr_uint width, rpr_uint height);
+    /// Return true if framebuffer was actually resized
+    virtual bool Resize(rpr_uint width, rpr_uint height);
 
     std::shared_ptr<char> GetData(std::shared_ptr<char> buffer = nullptr, size_t* bufferSize = nullptr);
     rpr_uint GetSize() const;

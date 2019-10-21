@@ -61,9 +61,9 @@ void FrameBuffer::Resolve(FrameBuffer* dstFrameBuffer) {
     RPR_ERROR_CHECK_THROW(rprContextResolveFrameBuffer(m_context, GetHandle(), dstFrameBuffer->m_rprObjectHandle, true), "Failed to resolve framebuffer", m_context);
 }
 
-void FrameBuffer::Resize(rpr_uint width, rpr_uint height) {
+bool FrameBuffer::Resize(rpr_uint width, rpr_uint height) {
     if (m_width == width && m_height == height) {
-        return;
+        return false;
     }
 
     rpr_aov aov = m_aov;
@@ -76,6 +76,8 @@ void FrameBuffer::Resize(rpr_uint width, rpr_uint height) {
     if (aov != kAovNone) {
         AttachAs(aov);
     }
+
+    return true;
 }
 
 std::shared_ptr<char> FrameBuffer::GetData(std::shared_ptr<char> buffer, size_t* bufferSize) {
