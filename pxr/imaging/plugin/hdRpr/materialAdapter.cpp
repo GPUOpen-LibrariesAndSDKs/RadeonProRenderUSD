@@ -383,10 +383,10 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams & params, c
 
 	}
 
-	for (MaterialTextures::const_iterator texture = textures.begin(); texture != textures.end(); ++texture)
+    for (auto textureEntry : textures)
 	{
-		const TfToken & paramName = texture->first;
-		const MaterialTexture & materialTexture = texture->second;
+		auto const& paramName = textureEntry.first;
+		auto& materialTexture = textureEntry.second;
 		if (paramName == HdRprTokens->diffuseColor)
 		{
 			isAlbedoTexture = true;
@@ -425,7 +425,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams & params, c
 		}
 		else if (paramName == HdRprTokens->opacity)
 		{
-			//materialTexture.IsOneMinusSrcColor = true;
+			materialTexture.IsOneMinusSrcColor = true;
 			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_WEIGHT, materialTexture });
 		}
 		else if (paramName == HdRprTokens->normal)

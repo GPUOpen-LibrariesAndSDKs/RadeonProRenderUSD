@@ -45,6 +45,8 @@ struct MaterialTexture
 
 	bool IsBiasEnabled = false;
 	GfVec4f Bias;
+
+    bool IsOneMinusSrcColor = false;
 };
 
 
