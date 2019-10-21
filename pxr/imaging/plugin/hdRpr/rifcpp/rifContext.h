@@ -1,11 +1,10 @@
 #ifndef RIFCPP_CONTEXT_H
 #define RIFCPP_CONTEXT_H
 
-#include <RadeonProRender.h>
-#include "RadeonImageFilters.h"
 #include "rifImage.h"
 
-#include <memory>
+#include <RadeonProRender.h>
+#include <string>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -19,7 +18,7 @@ namespace rif {
 
 class Context {
 public:
-    static std::unique_ptr<Context> Create(rpr_context rprContext);
+    static std::unique_ptr<Context> Create(rpr_context rprContext, std::string const& modelPath);
 
     virtual ~Context();
 
@@ -35,8 +34,10 @@ public:
 
     void ExecuteCommandQueue();
 
+    std::string const& GetModelPath() const;
+
 protected:
-    Context() = default;
+    Context(std::string const& modelPath);
 
 protected:
     rif_context m_context = nullptr;
@@ -44,6 +45,7 @@ protected:
 
 private:
     int m_numAttachedFilters = 0;
+    std::string m_modelPath;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

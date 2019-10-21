@@ -12,11 +12,6 @@
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
 #include <dlfcn.h>
-#elif defined(WIN32)
-#include <shlobj_core.h>
-#pragma comment(lib,"Shell32.lib")
-#elif defined(__linux__)
-#include <limits.h>
 #endif // __APPLE__
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -150,7 +145,7 @@ const rpr_creation_flags getRprCreationFlags(RenderDeviceType renderDevice, rpr_
 
 } // namespace anonymous
 
-std::unique_ptr<Context> Context::CreateContext(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop) {
+std::unique_ptr<Context> Context::CreateContext(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop, char const* cachePath) {
     auto context = std::unique_ptr<Context>(new Context);
     context->m_activePlugin = plugin;
     context->m_renderDevice = renderDevice;
@@ -181,7 +176,6 @@ std::unique_ptr<Context> Context::CreateContext(PluginType plugin, RenderDeviceT
         context->m_useGlInterop = false;
     }
 
-    auto cachePath = GetCachePath();
     rpr_creation_flags flags;
     if (context->m_activePlugin == PluginType::HYBRID) {
         // Call to getRprCreationFlags is broken in case of hybrid:
@@ -231,17 +225,17 @@ std::unique_ptr<Context> Context::CreateContext(PluginType plugin, RenderDeviceT
     return context;
 }
 
-std::unique_ptr<Context> Context::Create(PluginType requestedPlugin, RenderDeviceType renderDevice, bool enableGlInterop) {
+std::unique_ptr<Context> Context::Create(PluginType requestedPlugin, RenderDeviceType renderDevice, bool enableGlInterop, char const* cachePath) {
     SetupRprTracing();
 
-    auto context = CreateContext(requestedPlugin, renderDevice, enableGlInterop);
+    auto context = CreateContext(requestedPlugin, renderDevice, enableGlInterop, cachePath);
     if (!context) {
         TF_WARN("Failed to create context with requested plugin. Trying to create with first working variant");
         for (auto plugin = PluginType::FIRST; plugin != PluginType::LAST; plugin = PluginType(int(plugin) + 1)) {
             if (plugin == requestedPlugin) {
                 continue;
             }
-            context = CreateContext(plugin, renderDevice, enableGlInterop);
+            context = CreateContext(plugin, renderDevice, enableGlInterop, cachePath);
             if (context) {
                 break;
             }
@@ -265,34 +259,6 @@ PluginType Context::GetActivePluginType() const {
 
 RenderDeviceType Context::GetActiveRenderDeviceType() const {
     return m_renderDevice;
-}
-
-const char* Context::GetCachePath() {
-#ifdef WIN32
-    char appDataPath[MAX_PATH];
-    // Get path for each computer, non-user specific and non-roaming data.
-    if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath)))
-    {
-        static char path[MAX_PATH];
-        snprintf(path, sizeof(path), "%s\\hdRPR\\", appDataPath);
-        return path;
-    }
-#elif defined __linux__
-    if (auto homeEnv = getenv("HOME")) {
-        static char path[PATH_MAX];
-        snprintf(path, sizeof(path), "%s/.config/hdRPR/", homeEnv);
-        return path;
-    }
-#elif defined __APPLE__
-    if (auto homeEnv = getenv("HOME")) {
-        static char path[PATH_MAX];
-        snprintf(path, sizeof(path), "%s/Library/Application Support/hdRPR/", homeEnv);
-        return path;
-    }
-#else
-    #warning "Unknown platform"
-#endif
-        return "";
 }
 
 } // namespace rpr
