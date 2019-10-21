@@ -124,8 +124,6 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, rprImage);
 		material->materialNodes.push_back(materialNode);
 
-        // TODO: one minus src color
-
         if (matTex.IsScaleEnabled || matTex.IsBiasEnabled)
         {
             rpr_material_node uv_node = nullptr;
@@ -163,7 +161,17 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
             rpr_material_node & uvIn = (matTex.IsBiasEnabled) ? uv_bias_node : uv_scaled_node;
             rprMaterialNodeSetInputNByKey(materialNode, RPR_MATERIAL_INPUT_UV, uvIn);
+        }
 
+        if (matTex.IsOneMinusSrcColor) {
+            rpr_material_node arithmetic = nullptr;
+            status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
+            status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, 1.0, 1.0, 1.0, 1.0);
+            status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, materialNode);
+            status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_SUB);
+            material->materialNodes.push_back(arithmetic);
+
+            materialNode = arithmetic;
         }
 
         rpr_material_node outTexture = nullptr;
