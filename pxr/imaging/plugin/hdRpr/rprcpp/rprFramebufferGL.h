@@ -18,7 +18,7 @@ public:
 
     FrameBufferGL const& operator=(FrameBufferGL&& fb) noexcept;
 
-    void Resize(rpr_uint width, rpr_uint height) override;
+    bool Resize(rpr_uint width, rpr_uint height) override;
 
     rpr_GLuint GetGL() const;
 

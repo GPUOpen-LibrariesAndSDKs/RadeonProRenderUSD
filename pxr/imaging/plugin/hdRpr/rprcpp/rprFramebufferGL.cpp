@@ -27,9 +27,9 @@ FrameBufferGL::~FrameBufferGL() {
     DeleteGL();
 }
 
-void FrameBufferGL::Resize(rpr_uint width, rpr_uint height) {
+bool FrameBufferGL::Resize(rpr_uint width, rpr_uint height) {
     if (m_width == width && m_height == height) {
-        return;
+        return false;
     }
 
     rpr_aov aov = m_aov;
@@ -42,6 +42,8 @@ void FrameBufferGL::Resize(rpr_uint width, rpr_uint height) {
     if (aov != kAovNone) {
         AttachAs(aov);
     }
+
+    return true;
 }
 
 rpr_GLuint FrameBufferGL::GetGL() const {

@@ -645,6 +645,13 @@ public:
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         if (IsAovEnabled(aovName)) {
+            if (format != m_aovFrameBuffers[aovName].format) {
+                DisableAov(aovName, true);
+                return EnableAov(aovName, width, height, format);
+            }
+
+            ResizeAov(aovName, width, height);
+
             // While usdview does not have correct AOV system
             // we have ambiguity in currently selected AOV that we can't distinguish
             if (aovName == HdRprAovTokens->depth) {
@@ -1352,6 +1359,25 @@ private:
         VtVec2fArray uv; // empty
 
         return CreateMesh(position, indexes, normals, VtIntArray(), uv, VtIntArray(), vpf);
+    }
+
+    void ResizeAov(TfToken const& aovName, int width, int height) {
+        if (aovName == HdRprAovTokens->depth) {
+            ResizeAov(HdRprAovTokens->worldCoordinate, width, height);
+            return;
+        }
+
+        auto& aovFramebuffer = m_aovFrameBuffers.at(aovName);
+
+        if (aovFramebuffer.aov && aovFramebuffer.aov->Resize(width, height)) {
+            aovFramebuffer.isDirty = true;
+        }
+
+        if (aovFramebuffer.resolved && aovFramebuffer.resolved->Resize(width, height)) {
+            aovFramebuffer.isDirty = true;
+        }
+
+        m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
     }
 
     enum ChangeTracker : uint32_t {
