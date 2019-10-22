@@ -1001,10 +1001,6 @@ public:
             auto focalLength = m_cameraProjectionMatrix[1][1] / (2.0 * ratio);
             auto sensorWidth = 1.0f;
             auto sensorHeight = 1.0f / ratio;
-            if (ratio < 1.0f) {
-                sensorWidth = ratio;
-                sensorHeight = 1.0f;
-            }
 
             RPR_ERROR_CHECK(rprCameraSetMode(camera, RPR_CAMERA_MODE_PERSPECTIVE), "Failed to set camera mode");
             RPR_ERROR_CHECK(rprCameraSetFocalLength(camera, focalLength), "Fail to set camera focal length");
