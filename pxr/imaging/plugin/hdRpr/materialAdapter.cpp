@@ -426,7 +426,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams & params, c
 		else if (paramName == HdRprTokens->opacity)
 		{
 			materialTexture.IsOneMinusSrcColor = true;
-			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_WEIGHT, materialTexture });
+			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_TRANSPARENCY, materialTexture });
 		}
 		else if (paramName == HdRprTokens->normal)
 		{
