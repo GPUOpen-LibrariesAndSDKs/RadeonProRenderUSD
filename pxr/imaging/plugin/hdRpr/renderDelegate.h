@@ -3,29 +3,11 @@
 
 #include "pxr/pxr.h"
 #include "pxr/imaging/hd/renderDelegate.h"
-#include "pxr/imaging/hd/tokens.h"
 
 #include "api.h"
 #include "rprApi.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-
-#define HDRPR_RENDER_SETTINGS_TOKENS \
-    (enableDenoising)                \
-    (renderQuality)                  \
-    (maxSamples)                     \
-    (minAdaptiveSamples)             \
-    (varianceThreshold)
-
-TF_DECLARE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
-
-#define HDRPR_RENDER_QUALITY_TOKENS \
-    (low)                           \
-    (medium)                        \
-    (high)                          \
-    (full)                          \
-
-TF_DECLARE_PUBLIC_TOKENS(HdRprRenderQualityTokens, HDRPR_RENDER_QUALITY_TOKENS);
 
 ///
 /// \class HdRprDelegate
