@@ -58,7 +58,7 @@ render_setting_categories = [
                 'ui_name': 'Max Ray Depth',
                 'help': 'The number of times that a ray bounces off various surfaces before being terminated.',
                 'defaultValue': 8,
-                'minValue': 2,
+                'minValue': 1,
                 'maxValue': 50
             },
             {
@@ -66,39 +66,39 @@ render_setting_categories = [
                 'ui_name': 'Diffuse Ray Depth',
                 'help': 'The maximum number of times that a light ray can be bounced off diffuse surfaces.',
                 'defaultValue': 3,
-                'minValue': 2,
+                'minValue': 0,
                 'maxValue': 50
             },
             {
                 'name': 'maxRayDepthGlossy',
                 'ui_name': 'Glossy Ray Depth',
                 'help': 'The maximum number of ray bounces from specular surfaces.',
-                'defaultValue': 5,
-                'minValue': 2,
+                'defaultValue': 3,
+                'minValue': 0,
                 'maxValue': 50
             },
             {
                 'name': 'maxRayDepthRefraction',
                 'ui_name': 'Refraction Ray Depth',
                 'help': 'The maximum number of times that a light ray can be refracted, and is designated for clear transparent materials, such as glass.',
-                'defaultValue': 5,
-                'minValue': 2,
+                'defaultValue': 3,
+                'minValue': 0,
                 'maxValue': 50
             },
             {
                 'name': 'maxRayDepthGlossyRefraction',
                 'ui_name': 'Glossy Refraction Ray Depth',
                 'help': 'The Glossy Refraction Ray Depth parameter is similar to the Refraction Ray Depth. The difference is that it is aimed to work with matte refractive materials, such as semi-frosted glass.',
-                'defaultValue': 5,
-                'minValue': 2,
+                'defaultValue': 3,
+                'minValue': 0,
                 'maxValue': 50
             },
             {
                 'name': 'maxRayDepthShadow',
                 'ui_name': 'Shadow Ray Depth',
                 'help': 'Controls the accuracy of shadows cast by transparent objects. It defines the maximum number of surfaces that a light ray can encounter on its way causing these surfaces to cast shadows.',
-                'defaultValue': 5,
-                'minValue': 2,
+                'defaultValue': 2,
+                'minValue': 0,
                 'maxValue': 50
             },
             {
