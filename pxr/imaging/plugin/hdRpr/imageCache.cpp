@@ -34,6 +34,9 @@ std::shared_ptr<rpr::Image> ImageCache::CreateImage(std::string const& path) {
                 case GL_UNSIGNED_BYTE:
                     format.type = RPR_COMPONENT_TYPE_UINT8;
                     break;
+                case GL_HALF_FLOAT:
+                    format.type = RPR_COMPONENT_TYPE_FLOAT16;
+                    break;
                 case GL_FLOAT:
                     format.type = RPR_COMPONENT_TYPE_FLOAT32;
                     break;
