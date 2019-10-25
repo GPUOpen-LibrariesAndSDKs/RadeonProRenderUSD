@@ -2,6 +2,7 @@
 #include "rprcpp/rprContext.h"
 #include "pxr/imaging/glf/glew.h"
 #include "pxr/imaging/glf/uvTextureData.h"
+#include "pxr/imaging/glf/image.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -25,7 +26,9 @@ std::shared_ptr<rpr::Image> ImageCache::GetImage(std::string const& path) {
 
 std::shared_ptr<rpr::Image> ImageCache::CreateImage(std::string const& path) {
     try {
-        std::unique_ptr<rpr::Image> image;
+        if (!GlfImage::IsSupportedImageFile(path)) {
+            return std::make_shared<rpr::Image>(m_context->GetHandle(), path.c_str());
+        }
 
         auto textureData = GlfUVTextureData::New(path, INT_MAX, 0, 0, 0, 0);
         if (textureData && textureData->Read(0, false)) {
@@ -62,12 +65,13 @@ std::shared_ptr<rpr::Image> ImageCache::CreateImage(std::string const& path) {
 
             return std::make_shared<rpr::Image>(m_context->GetHandle(), textureData->ResizedWidth(), textureData->ResizedHeight(), format, textureData->GetRawBuffer());
         } else {
-            return std::make_shared<rpr::Image>(m_context->GetHandle(), path.c_str());
+            TF_RUNTIME_ERROR("Failed to load image %s: unsupported format", path.c_str());
         }
     } catch (rpr::Error const& error) {
         TF_RUNTIME_ERROR("Failed to read image %s: %s", path.c_str(), error.what());
-        return nullptr;
     }
+
+    return nullptr;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
