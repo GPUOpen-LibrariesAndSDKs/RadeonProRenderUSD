@@ -175,71 +175,62 @@ void getTextures(const  HdMaterialNetwork & materialNetwork, MaterialTextures & 
 {
 	out_materialTextures.clear();
 
-	TF_FOR_ALL(it, materialNetwork.nodes)
-	{
-		const HdMaterialNode & node = * it;
-		MaterialTexture materialNode;
-		if (node.identifier == HdRprTokens->UsdUVTexture)
-		{
-			VtValue param;
-			getParam(HdRprTokens->file, node, param);
+    for (auto& relationship : materialNetwork.relationships) {
+        auto nodeIter = std::find_if(materialNetwork.nodes.begin(), materialNetwork.nodes.end(),
+            [&relationship](HdMaterialNode const& node) {
+            return node.path == relationship.inputId;
+        });
+        if (nodeIter == materialNetwork.nodes.end()) {
+            TF_RUNTIME_ERROR("Invalid material network. Relationship %s does not match to any node", relationship.outputName.GetText());
+            continue;
+        }
+        if (nodeIter->identifier != HdRprTokens->UsdUVTexture) {
+            continue;
+        }
 
-			// Get image path
-			if (param.IsHolding<SdfAssetPath>())
-			{
-				auto& assetPath = param.UncheckedGet<SdfAssetPath>();
-				if (assetPath.GetResolvedPath().empty()) {
-					materialNode.Path = ArGetResolver().Resolve(assetPath.GetAssetPath());
-				} else {
-					materialNode.Path = assetPath.GetResolvedPath();
-				}
-			}
-			else
-			{
-				continue;
-			}
+        auto& node = *nodeIter;
 
-			// Find texture connection 
-			// If there is no connection we do not need to add it to MaterialTextures
-			auto relationships = materialNetwork.relationships;
-			auto finded = std::find_if(relationships.begin(), relationships.end()
-				, [&node](const HdMaterialRelationship & relationship) {
-				return node.path == relationship.inputId;
-			});
+        MaterialTexture materialNode;
 
+        VtValue param;
+        getParam(HdRprTokens->file, node, param);
 
-			if (finded == relationships.end())
-			{
-				continue;
-			}
+        // Get image path
+        if (param.IsHolding<SdfAssetPath>()) {
+            auto& assetPath = param.UncheckedGet<SdfAssetPath>();
+            if (assetPath.GetResolvedPath().empty()) {
+                materialNode.Path = ArGetResolver().Resolve(assetPath.GetAssetPath());
+            } else {
+                materialNode.Path = assetPath.GetResolvedPath();
+            }
+        } else {
+            continue;
+        }
+        
+        // Get chanel
+        // The input name descripe chanel(s) required 
+        materialNode.Chanel = getChanel(relationship.inputName);
 
-			// Get chanel
-			// The input name descripe chanel(s) required 
-			materialNode.Chanel = getChanel(finded->inputName);
+        // Get Wrap Modes
+        materialNode.WrapS = getWrapMode(HdRprTokens->wrapS, node);
+        materialNode.WrapT = getWrapMode(HdRprTokens->wrapT, node);
 
-			// Get Wrap Modes
-			materialNode.WrapS = getWrapMode(HdRprTokens->wrapS, node);
-			materialNode.WrapT = getWrapMode(HdRprTokens->wrapT, node);
+        // Get Scale
+        getParam(HdRprTokens->scale, node, param);
+        if (param.IsHolding<GfVec4f>()) {
+            materialNode.IsScaleEnabled = true;
+            materialNode.Scale = param.Get<GfVec4f>();
+        }
 
-			// Get Scale
-			getParam(HdRprTokens->scale, node, param);
-			if (param.IsHolding<GfVec4f>())
-			{
-				materialNode.IsScaleEnabled = true;
-				materialNode.Scale = param.Get<GfVec4f>();
-			}
+        // Get Bias
+        getParam(HdRprTokens->bias, node, param);
+        if (param.IsHolding<GfVec4f>()) {
+            materialNode.IsBiasEnabled = true;
+            materialNode.Bias = param.Get<GfVec4f>();
+        }
 
-			// Get Bias
-			getParam(HdRprTokens->bias, node, param);
-			if (param.IsHolding<GfVec4f>())
-			{
-				materialNode.IsBiasEnabled = true;
-				materialNode.Bias = param.Get<GfVec4f>();
-			}
-
-			out_materialTextures[finded->outputName] = materialNode;
-		}
-	}
+        out_materialTextures[relationship.outputName] = materialNode;
+    }
 }
 
 MaterialAdapter::MaterialAdapter(const EMaterialType type, const MaterialParams & params) : m_type(type)
