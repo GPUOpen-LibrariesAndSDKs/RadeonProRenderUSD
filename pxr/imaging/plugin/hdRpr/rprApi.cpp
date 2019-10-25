@@ -1574,8 +1574,12 @@ void HdRprApi::SetMeshTransform(RprApiObject* mesh, const GfMatrix4d& transform)
     m_impl->SetMeshTransform(mesh->GetHandle(), transformF);
 }
 
-void HdRprApi::SetMeshRefineLevel(RprApiObject* mesh, int level, TfToken boundaryInterpolation) {
-    m_impl->SetMeshRefineLevel(mesh->GetHandle(), level, boundaryInterpolation);
+void HdRprApi::SetMeshRefineLevel(RprApiObject* mesh, int level) {
+    m_impl->SetMeshRefineLevel(mesh->GetHandle(), level);
+}
+
+void HdRprApi::SetMeshVertexInterpolationRule(RprApiObject* mesh, TfToken boundaryInterpolation) {
+    m_impl->SetMeshVertexInterpolationRule(mesh->GetHandle(), boundaryInterpolation);
 }
 
 void HdRprApi::SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material) {
