@@ -122,7 +122,7 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    RprApiObjectPtr CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uv, const VtIntArray & uvIndexes, const VtIntArray & vpf) {
+    RprApiObjectPtr CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uvs, const VtIntArray & uvIndexes, const VtIntArray & vpf) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -140,16 +140,26 @@ public:
             SplitPolygons(normalIndexes, vpf, newNormalIndexes);
         }
 
+        auto normalIndicesData = !newNormalIndexes.empty() ? newNormalIndexes.data() : newIndexes.data();
+        if (normals.empty()) {
+            normalIndicesData = nullptr;
+        }
+
+        auto uvIndicesData = !newUvIndexes.empty() ? newUvIndexes.data() : uvIndexes.data();
+        if (uvs.empty()) {
+            uvIndicesData = nullptr;
+        }
+
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         rpr_shape mesh = nullptr;
         if (RPR_ERROR_CHECK(rprContextCreateMesh(m_rprContext->GetHandle(),
             (rpr_float const*)points.data(), points.size(), sizeof(GfVec3f),
-            (rpr_float const*)((normals.size() == 0) ? 0 : normals.data()), normals.size(), sizeof(GfVec3f),
-            (rpr_float const*)((uv.size() == 0) ? 0 : uv.data()), uv.size(), sizeof(GfVec2f),
-            (rpr_int const*)newIndexes.data(), sizeof(rpr_int),
-            (rpr_int const*)(!newNormalIndexes.empty() ? newNormalIndexes.data() : newIndexes.data()), sizeof(rpr_int),
-            (rpr_int const*)(!newUvIndexes.empty() ? newUvIndexes.data() : newIndexes.data()), sizeof(rpr_int),
+            (rpr_float const*)(normals.data()), normals.size(), sizeof(GfVec3f),
+            (rpr_float const*)(uvs.data()), uvs.size(), sizeof(GfVec2f),
+            newIndexes.data(), sizeof(rpr_int),
+            normalIndicesData, sizeof(rpr_int),
+            uvIndicesData, sizeof(rpr_int),
             newVpf.data(), newVpf.size(), &mesh)
         , "Fail create mesh")) {
             return nullptr;
@@ -177,7 +187,7 @@ public:
         }
     }
 
-    void SetMeshRefineLevel(rpr_shape mesh, const int level, TfToken const& boundaryInterpolation) {
+    void SetMeshRefineLevel(rpr_shape mesh, const int level) {
         if (!m_rprContext) {
             return;
         }
@@ -189,14 +199,47 @@ public:
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        if (RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, level), "Fail set mesh subdividion")) return;
-        m_dirtyFlags |= ChangeTracker::DirtyScene;
+        bool dirty = true;
 
-        if (level > 0) {
-            rpr_subdiv_boundary_interfop_type interfopType = boundaryInterpolation == PxOsdOpenSubdivTokens->edgeAndCorner ?
-                RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_AND_CORNER :
-                RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
-            if (RPR_ERROR_CHECK(rprShapeSetSubdivisionBoundaryInterop(mesh, interfopType), "Fail set mesh subdividion boundary")) return;
+        size_t dummy;
+        int oldLevel;
+        if (!RPR_ERROR_CHECK(rprShapeGetInfo(mesh, RPR_SHAPE_SUBDIVISION_FACTOR, sizeof(oldLevel), &oldLevel, &dummy), "Failed to query mesh subdivision factor")) {
+            dirty = level != oldLevel;
+        }
+
+        if (dirty) {
+            if (RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, level), "Fail set mesh subdividion")) return;
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+    }
+
+    void SetMeshVertexInterpolationRule(rpr_shape mesh, TfToken const& boundaryInterpolation) {
+        if (!m_rprContext) {
+            return;
+        }
+
+        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+            // Not supported
+            return;
+        }
+
+        rpr_subdiv_boundary_interfop_type newInterfopType = boundaryInterpolation == PxOsdOpenSubdivTokens->edgeAndCorner ?
+            RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_AND_CORNER :
+            RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        bool dirty = true;
+
+        size_t dummy;
+        rpr_subdiv_boundary_interfop_type interfopType;
+        if (!RPR_ERROR_CHECK(rprShapeGetInfo(mesh, RPR_SHAPE_SUBDIVISION_BOUNDARYINTEROP, sizeof(interfopType), &interfopType, &dummy), "Failed to query mesh subdivision interfopType")) {
+            dirty = newInterfopType != interfopType;
+        }
+
+        if (dirty) {
+            if (RPR_ERROR_CHECK(rprShapeSetSubdivisionBoundaryInterop(mesh, newInterfopType), "Fail set mesh subdividion boundary")) return;
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
 

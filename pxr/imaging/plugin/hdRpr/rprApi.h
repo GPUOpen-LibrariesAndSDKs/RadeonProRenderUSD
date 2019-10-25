@@ -81,7 +81,8 @@ public:
     RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf);
     RprApiObjectPtr CreateMeshInstance(RprApiObject* prototypeMesh);
     void SetMeshTransform(RprApiObject* mesh, const GfMatrix4d& transform);
-    void SetMeshRefineLevel(RprApiObject* mesh, int level, TfToken boundaryInterpolation);
+    void SetMeshRefineLevel(RprApiObject* mesh, int level);
+    void SetMeshVertexInterpolationRule(RprApiObject* mesh, TfToken boundaryInterpolation);
     void SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material);
     void SetMeshVisibility(RprApiObject* mesh, bool isVisible);
 
