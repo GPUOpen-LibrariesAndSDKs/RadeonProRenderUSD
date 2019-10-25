@@ -10,10 +10,7 @@
 #include "pxr/imaging/hd/smoothNormals.h"
 
 #include "pxr/base/gf/matrix4f.h"
-#include "pxr/base/gf/quaternion.h"
-#include "pxr/base/gf/rotation.h"
 
-#include "pxr/base/gf/vec2f.h"
 #include "pxr/base/gf/vec4f.h"
 
 #include "pxr/imaging/pxOsd/subdivTags.h"
@@ -63,6 +60,40 @@ HdRprMesh::_InitRepr(TfToken const &reprName,
 	// No-op
 }
 
+template <typename T>
+bool HdRprMesh::GetPrimvarData(
+    TfToken const& name,
+    HdSceneDelegate* sceneDelegate,
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation,
+    VtArray<T>& out_data,
+    VtIntArray& out_indices) {
+    out_data.clear();
+    out_indices.clear();
+
+    for (auto& primvarDescsEntry : primvarDescsPerInterpolation) {
+        for (auto& pv : primvarDescsEntry.second) {
+            if (pv.name == name) {
+                auto value = GetPrimvar(sceneDelegate, name);
+                if (value.IsHolding<VtArray<T>>()) {
+                    out_data = value.UncheckedGet<VtArray<T>>();
+                    if (primvarDescsEntry.first == HdInterpolationFaceVarying) {
+                        out_indices.reserve(m_faceVertexIndices.size());
+                        for (int i = 0; i < m_faceVertexIndices.size(); ++i) {
+                            out_indices.push_back(i);
+                        }
+                    }
+                    return true;
+                }
+                return false;
+            }
+        }
+    }
+
+    return false;
+}
+template bool HdRprMesh::GetPrimvarData<GfVec2f>(TfToken const& name, HdSceneDelegate* sceneDelegate, std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation, VtArray<GfVec2f>& out_data, VtIntArray& out_indices);
+template bool HdRprMesh::GetPrimvarData<GfVec3f>(TfToken const& name, HdSceneDelegate* sceneDelegate, std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation, VtArray<GfVec3f>& out_data, VtIntArray& out_indices);
+
 void HdRprMesh::Sync(
     HdSceneDelegate * sceneDelegate
     , HdRenderParam * renderParam
@@ -79,15 +110,98 @@ void HdRprMesh::Sync(
 
     SdfPath const& id = GetId();
 
-    if (*dirtyBits & HdChangeTracker::DirtyTopology) {
-        HdMeshTopology meshTopology = GetMeshTopology(sceneDelegate);
-        const VtIntArray& indexes = meshTopology.GetFaceVertexIndices();
-        const VtIntArray& vertexPerFace = meshTopology.GetFaceVertexCounts();
-        int numFaces = meshTopology.GetNumFaces();
+    ////////////////////////////////////////////////////////////////////////
+    // 1. Pull scene data.
 
+    bool newMesh = false;
+
+    if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->points)) {
+        VtValue pointsValue = sceneDelegate->Get(id, HdTokens->points);
+        m_points = pointsValue.Get<VtVec3fArray>();
+        m_normalsValid = false;
+
+        newMesh = true;
+    }
+
+    if (HdChangeTracker::IsTopologyDirty(*dirtyBits, id)) {
+        m_topology = GetMeshTopology(sceneDelegate);
+        m_faceVertexCounts = m_topology.GetFaceVertexCounts();
+        m_faceVertexIndices = m_topology.GetFaceVertexIndices();
+
+        m_adjacencyValid = false;
+        m_normalsValid = false;
+
+        // TODO: handle different winding order
+        // m_topology.GetOrientation() == HdTokens->leftHanded
+
+        m_enableSubdiv = m_topology.GetScheme() == PxOsdOpenSubdivTokens->catmullClark;
+
+        newMesh = true;
+    }
+
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation = {
+        {HdInterpolationFaceVarying, sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationFaceVarying)},
+        {HdInterpolationVertex, sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationVertex)},
+    };
+
+    if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->normals)) {
+        m_authoredNormals = GetPrimvarData(HdTokens->normals, sceneDelegate, primvarDescsPerInterpolation, m_normals, m_normalIndices);
+
+        newMesh = true;
+    }
+
+    auto stToken = UsdUtilsGetPrimaryUVSetName();
+    if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, stToken)) {
+        GetPrimvarData(stToken, sceneDelegate, primvarDescsPerInterpolation, m_uvs, m_uvIndices);
+
+        newMesh = true;
+    }
+
+    // TODO: Check materialId dirtiness
+
+    ////////////////////////////////////////////////////////////////////////
+    // 2. Resolve drawstyles
+
+    if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) {
+        auto displayStyle = sceneDelegate->GetDisplayStyle(id);
+        m_refineLevel = displayStyle.refineLevel;
+        m_flatShadingEnabled = displayStyle.flatShadingEnabled;
+        TF_UNUSED(displayStyle.displacementEnabled);
+    }
+
+    m_smoothNormals = m_flatShadingEnabled;
+    // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
+    m_smoothNormals = m_smoothNormals && !(m_enableSubdiv && m_refineLevel > 0);
+
+    if (!m_authoredNormals && m_smoothNormals) {
+        if (!m_adjacencyValid) {
+            m_adjacency.BuildAdjacencyTable(&m_topology);
+            m_adjacencyValid = true;
+            m_normalsValid = false;
+        }
+
+        if (!m_normalsValid) {
+            m_normals = Hd_SmoothNormals::ComputeSmoothNormals(&m_adjacency, m_points.size(), m_points.cdata());
+            m_normalsValid = true;
+
+            newMesh = true;
+        }
+    }
+
+    bool updateTransform = newMesh;
+    if (*dirtyBits & HdChangeTracker::DirtyTransform) {
+        m_transform = sceneDelegate->GetTransform(id);
+        updateTransform = true;
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+    // 3. Create RPR meshes
+
+    if (newMesh) {
+        auto numFaces = m_faceVertexCounts.size();
         auto hdMaterialId = sceneDelegate->GetMaterialId(id);
 
-        auto geomSubsets = meshTopology.GetGeomSubsets();
+        auto geomSubsets = m_topology.GetGeomSubsets();
         // If the geometry has been partitioned into subsets, add an
         // additional subset representing anything left over.
         if (!geomSubsets.empty()) {
@@ -120,79 +234,21 @@ void HdRprMesh::Sync(
             }
         }
 
-        HdPrimvarDescriptorVector primvarDescsPerInterpolation[HdInterpolationCount];
-        for (int i = 0; i < HdInterpolationCount; ++i) {
-            auto interpolation = static_cast<HdInterpolation>(i);
-            primvarDescsPerInterpolation[i] = sceneDelegate->GetPrimvarDescriptors(id, interpolation);
-        }
-        auto getPrimvarIndices = [&primvarDescsPerInterpolation, &indexes](
-            TfToken const& primvarName, VtIntArray& outIndices) {
-            auto it = std::find_if(primvarDescsPerInterpolation, primvarDescsPerInterpolation + HdInterpolationCount,
-                [&primvarName](HdPrimvarDescriptorVector const& descriptors) {
-                    return std::any_of(descriptors.begin(), descriptors.end(), [&primvarName](HdPrimvarDescriptor const& descriptor) {return descriptor.name == primvarName;});
-            });
-            auto interpolationType = static_cast<HdInterpolation>(std::distance(primvarDescsPerInterpolation, it));
-
-            if (interpolationType == HdInterpolationFaceVarying) {
-                outIndices.reserve(indexes.size());
-                for (size_t i = 0; i < indexes.size(); ++i) {
-                    outIndices.push_back(i);
-                }
-            } else if (interpolationType == HdInterpolationVertex
-                       // HdInterpolationCount implies no interpolation specified - assume vertex
-                       || interpolationType == HdInterpolationCount) {
-                // stIndexes same as pointIndexes - do nothing
-                return;
-            } else {
-                TF_CODING_WARNING("Not handled %s primvar interpolation type: %d", primvarName.GetText(),
-                                  interpolationType);
-            }
-        };
-
-        VtValue value;
-        value = sceneDelegate->Get(id, HdTokens->points);
-        VtVec3fArray points = value.Get<VtVec3fArray>();
-
-        auto stToken = UsdUtilsGetPrimaryUVSetName();
-        VtVec2fArray st;
-        VtIntArray stIndexes;
-        value = sceneDelegate->Get(id, stToken);
-        if (value.IsHolding<VtVec2fArray>()) {
-            st = value.UncheckedGet<VtVec2fArray>();
-            if (!st.empty()) {
-                getPrimvarIndices(stToken, stIndexes);
-            }
-        }
-
-        VtVec3fArray normals;
-        VtIntArray normalIndexes;
-        value = sceneDelegate->Get(id, HdTokens->normals);
-        if (value.IsHolding<VtVec3fArray>()) {
-            normals = value.UncheckedGet<VtVec3fArray>();
-            if (!normals.empty()) {
-                getPrimvarIndices(HdTokens->normals, normalIndexes);
-            }
-        } else {
-            Hd_VertexAdjacency adjacency;
-            adjacency.BuildAdjacencyTable(&meshTopology);
-
-            normals = Hd_SmoothNormals::ComputeSmoothNormals(&adjacency, points.size(), points.cdata());
-        }
-
         if (!m_fallbackMaterial) {
-            // get Color
+            // XXX: Currently, displayColor is used as one color for whole mesh,
+            // but it should be used as attribute per vertex/face.
+            // RPR does not have such functionality, yet
             HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant);
-
-            TF_FOR_ALL(primvarIt, primvars) {
-                if (primvarIt->name == HdTokens->displayColor) {
+            for (auto& pv : primvars) {
+                if (pv.name == HdTokens->displayColor) {
                     VtValue val = sceneDelegate->Get(id, HdTokens->displayColor);
 
-                    if (!val.IsEmpty()) {
-                        VtArray<GfVec3f> color = val.Get<VtArray<GfVec3f>>();
-                        MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::COLOR,
-                            MaterialParams{ {HdPrimvarRoleTokens->color, VtValue(color[0]) } });
-                        m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
+                    GfVec3f color(1.0f);
+                    if (val.IsHolding<VtVec3fArray>()) {
+                        color = val.UncheckedGet<VtVec3fArray>()[0];
                     }
+                    auto matAdapter = MaterialAdapter(EMaterialType::COLOR, MaterialParams{{HdPrimvarRoleTokens->color, VtValue(color)}});
+                    m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
                     break;
                 }
             }
@@ -208,100 +264,109 @@ void HdRprMesh::Sync(
                 rprApi->SetMeshMaterial(rprMesh.get(), m_fallbackMaterial.get());
             }
         };
-        if (geomSubsets.empty()) {
-            if (auto rprMesh = rprApi->CreateMesh(points, indexes, normals, normalIndexes, st, stIndexes, vertexPerFace)) {
-                setMeshMaterial(rprMesh, hdMaterialId);
+
+        if (geomSubsets.empty() || geomSubsets.size() == 1) {
+            if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts)) {
+                setMeshMaterial(rprMesh, geomSubsets.empty() ? hdMaterialId : geomSubsets[0].materialId);
                 m_rprMeshes.push_back(std::move(rprMesh));
             }
         } else {
-            if (geomSubsets.size() == 1) {
-                if (auto rprMesh = rprApi->CreateMesh(points, indexes, normals, normalIndexes, st, stIndexes, vertexPerFace)) {
-                    setMeshMaterial(rprMesh, geomSubsets.back().materialId);
-                    m_rprMeshes.push_back(std::move(rprMesh));
+            // GeomSubset may reference face subset in any given order so we need to be able to
+            //   randomly lookup face indexes but each face may be of an arbitrary number of vertices
+            std::vector<int> indexesOffsetPrefixSum;
+            indexesOffsetPrefixSum.reserve(m_faceVertexCounts.size());
+            int offset = 0;
+            for (auto numVerticesInFace : m_faceVertexCounts) {
+                indexesOffsetPrefixSum.push_back(offset);
+                offset += numVerticesInFace;
+            }
+
+            for (auto const& subset : geomSubsets) {
+                if (subset.type != HdGeomSubset::TypeFaceSet) {
+                    TF_RUNTIME_ERROR("Unknown HdGeomSubset Type");
+                    continue;
                 }
-            } else {
-                // GeomSubset may reference face subset in any given order so we need to be able to
-                //   randomly lookup face indexes but each face may be of an arbitrary number of vertices
-                std::vector<int> indexesOffsetPrefixSum;
-                indexesOffsetPrefixSum.reserve(vertexPerFace.size());
-                int offset = 0;
-                for (auto numVerticesInFace : vertexPerFace) {
-                    indexesOffsetPrefixSum.push_back(offset);
-                    offset += numVerticesInFace;
-                }
 
-                for (auto const& subset : geomSubsets) {
-                    if (subset.type != HdGeomSubset::TypeFaceSet) {
-                        TF_WARN("Unknown HdGeomSubset Type");
-                        continue;
-                    }
+                VtVec3fArray subsetPoints;
+                VtVec3fArray subsetNormals;
+                VtVec2fArray subsetSt;
+                VtIntArray subsetIndexes;
+                VtIntArray subsetVertexPerFace;
+                subsetVertexPerFace.reserve(subset.indices.size());
 
-                    VtVec3fArray subsetPoints;
-                    VtVec3fArray subsetNormals;
-                    VtVec2fArray subsetSt;
-                    VtIntArray subsetIndexes;
-                    VtIntArray subsetVertexPerFace;
-                    subsetVertexPerFace.reserve(subset.indices.size());
+                int count = 0;
+                for (auto faceIndex : subset.indices) {
+                    int numVerticesInFace = m_faceVertexCounts[faceIndex];
+                    subsetVertexPerFace.push_back(numVerticesInFace);
 
-                    int count = 0;
-                    for (auto faceIndex : subset.indices) {
-                        int numVerticesInFace = vertexPerFace[faceIndex];
-                        subsetVertexPerFace.push_back(numVerticesInFace);
+                    int faceIndexesOffset = indexesOffsetPrefixSum[faceIndex];
 
-                        int faceIndexesOffset = indexesOffsetPrefixSum[faceIndex];
+                    for (int i = 0; i < numVerticesInFace; ++i) {
+                        subsetIndexes.push_back(count++);
 
-                        for (int i = 0; i < numVerticesInFace; ++i) {
-                            subsetIndexes.push_back(count++);
+                        int pointIndex = m_faceVertexIndices[faceIndexesOffset + i];
+                        subsetPoints.push_back(m_points[pointIndex]);
 
-                            int pointIndex = indexes[faceIndexesOffset + i];
-                            subsetPoints.push_back(points[pointIndex]);
+                        if (!m_normals.empty()) {
+                            int normalIndex = m_normalIndices.empty() ? pointIndex : m_normalIndices[faceIndexesOffset + i];
+                            subsetNormals.push_back(m_normals[normalIndex]);
+                        }
 
-                            if (!normals.empty()) {
-                                int normalIndex = normalIndexes.empty() ? pointIndex : normalIndexes[faceIndexesOffset + i];
-                                subsetNormals.push_back(normals[normalIndex]);
-                            }
-
-                            if (!st.empty()) {
-                                int stIndex = stIndexes.empty() ? pointIndex : stIndexes[faceIndexesOffset + i];
-                                subsetSt.push_back(st[stIndex]);
-                            }
+                        if (!m_uvs.empty()) {
+                            int stIndex = m_uvIndices.empty() ? pointIndex : m_uvIndices[faceIndexesOffset + i];
+                            subsetSt.push_back(m_uvs[stIndex]);
                         }
                     }
+                }
 
-                    if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace)) {
-                        setMeshMaterial(rprMesh, subset.materialId);
-                        m_rprMeshes.push_back(std::move(rprMesh));
-                    }
+                if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace)) {
+                    setMeshMaterial(rprMesh, subset.materialId);
+                    m_rprMeshes.push_back(std::move(rprMesh));
                 }
             }
         }
     }
 
     if (!m_rprMeshes.empty()) {
-        // TODO: Check materialId dirtiness here
+        if (newMesh || (*dirtyBits & HdChangeTracker::DirtySubdivTags)) {
+            PxOsdSubdivTags subdivTags = sceneDelegate->GetSubdivTags(id);
 
-        bool updateTransform = false;
-        if (*dirtyBits & HdChangeTracker::DirtyTransform) {
-            m_transform = sceneDelegate->GetTransform(id);
-            updateTransform = true;
-        }
+            // XXX: RPR does not support this
+            /*
+            auto& cornerIndices = subdivTags.GetCornerIndices();
+            auto& cornerSharpness = subdivTags.GetCornerWeights();
+            if (!cornerIndices.empty() && !cornerSharpness.empty()) {
 
-        if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) {
-            int refineLevel = sceneDelegate->GetDisplayStyle(id).refineLevel;
-            auto boundaryInterpolation = refineLevel > 0 ? sceneDelegate->GetSubdivTags(id).GetVertexInterpolationRule() : TfToken();
+            }
+
+            auto& creaseIndices = subdivTags.GetCreaseIndices();
+            auto& creaseSharpness = subdivTags.GetCreaseWeights();
+            if (!creaseIndices.empty() && !creaseSharpness.empty()) {
+
+            }
+            */
+
+            auto vertexInterpolationRule = subdivTags.GetVertexInterpolationRule();
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh.get(), refineLevel, boundaryInterpolation);
+                rprApi->SetMeshVertexInterpolationRule(rprMesh.get(), vertexInterpolationRule);
             }
         }
 
-        if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
+        if (newMesh || (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)) {
+            int refineLevel = sceneDelegate->GetDisplayStyle(id).refineLevel;
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetMeshRefineLevel(rprMesh.get(), refineLevel);
+            }
+        }
+
+        if (newMesh || (*dirtyBits & HdChangeTracker::DirtyVisibility)) {
             _UpdateVisibility(sceneDelegate, dirtyBits);
             for (auto& rprMesh : m_rprMeshes) {
                 rprApi->SetMeshVisibility(rprMesh.get(), _sharedData.visible);
             }
         }
 
-        if (*dirtyBits & HdChangeTracker::DirtyInstancer) {
+        if (newMesh || (*dirtyBits & HdChangeTracker::DirtyInstancer)) {
             if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()))) {
                 auto transforms = instancer->ComputeTransforms(_sharedData.rprimID);
                 if (transforms.empty()) {

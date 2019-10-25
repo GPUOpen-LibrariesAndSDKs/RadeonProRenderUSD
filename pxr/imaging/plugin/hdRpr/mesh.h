@@ -5,6 +5,8 @@
 
 #include "pxr/imaging/hd/mesh.h"
 #include "pxr/imaging/hd/vertexAdjacency.h"
+#include "pxr/base/vt/array.h"
+#include "pxr/base/gf/vec2f.h"
 
 #include "rprApi.h"
 
@@ -60,13 +62,43 @@ protected:
 	virtual void _InitRepr(TfToken const &reprName,
 		HdDirtyBits *dirtyBits) override;
 		
-private:
 
+private:
+    template <typename T>
+    bool GetPrimvarData(
+        TfToken const& name,
+        HdSceneDelegate* sceneDelegate,
+        std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation,
+        VtArray<T>& out_data,
+        VtIntArray& out_indices);
+
+private:
     HdRprApiWeakPtr m_rprApiWeakPtr;
     std::vector<RprApiObjectPtr> m_rprMeshes;
     std::vector<std::vector<RprApiObjectPtr>> m_rprMeshInstances;
     RprApiObjectPtr m_fallbackMaterial;
     GfMatrix4d m_transform;
+
+    HdMeshTopology m_topology;
+    VtVec3fArray m_points;
+    VtIntArray m_faceVertexCounts;
+    VtIntArray m_faceVertexIndices;
+    bool m_enableSubdiv = false;
+
+    Hd_VertexAdjacency m_adjacency;
+    bool m_adjacencyValid = false;
+
+    VtVec3fArray m_normals;
+    VtIntArray m_normalIndices;
+    bool m_normalsValid = false;
+    bool m_authoredNormals = false;
+    bool m_smoothNormals = false;
+
+    VtVec2fArray m_uvs;
+    VtIntArray m_uvIndices;
+
+    int m_refineLevel = 0;
+    bool m_flatShadingEnabled = false;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
