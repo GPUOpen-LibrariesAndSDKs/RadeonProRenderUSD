@@ -65,6 +65,17 @@ else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     endif()
 endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
+set(GENERATED_FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/config.h
+    ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Viewport.ds)
+set(GEN_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/python/generateRenderSettingFiles.py)
+add_custom_command(
+    COMMAND ${PYTHON_EXECUTABLE} ${GEN_SCRIPT} ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS ${GEN_SCRIPT}
+    OUTPUT ${GENERATED_FILES}
+    COMMENT "Generating RenderSetting files")
+
 pxr_plugin(hdRpr
    LIBRARIES
         ${USD_LIBRARIES}
@@ -85,11 +96,11 @@ pxr_plugin(hdRpr
         ${Boost_INCLUDE_DIRS}
         ${TBB_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}
 		
 		${OptIncludeDir}
 
     PRIVATE_CLASSES
-    config
 		rendererPlugin
         renderDelegate
 		resourceRegistry
@@ -118,6 +129,9 @@ pxr_plugin(hdRpr
 
     RESOURCE_FILES
         plugInfo.json
+
+    CPPFILES
+        ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
 )
 
 add_subdirectory(rprcpp)
@@ -138,7 +152,7 @@ endif(WIN32 OR LINUX)
 
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
-        FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/HdRprPlugin_Viewport.ds
+        FILES ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Viewport.ds
         DESTINATION "houdini/soho/parameters")
 
     set(RIF_MODELS_INSTALL_DIR "houdini/RIF_models")

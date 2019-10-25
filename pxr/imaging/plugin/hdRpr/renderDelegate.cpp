@@ -21,9 +21,6 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
-TF_DEFINE_PUBLIC_TOKENS(HdRprRenderQualityTokens, HDRPR_RENDER_QUALITY_TOKENS);
-
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
 	(openvdbAsset) \
 	(rpr)
@@ -61,47 +58,8 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES =
 HdRprDelegate::HdRprDelegate() {
     m_rprApiSharedPtr = std::shared_ptr<HdRprApi>(new HdRprApi);
 
-    auto& config = HdRprConfig::GetInstance();
-    m_settingDescriptors.resize(5);
-    m_settingDescriptors[0] = { "Enable Denoising",
-        HdRprRenderSettingsTokens->enableDenoising,
-        VtValue(config.IsDenoisingEnabled()) };
-    
-    auto renderQuality = HdRprRenderQualityTokens->full;
-    if (config.GetPlugin() == rpr::PluginType::HYBRID) {
-        switch (config.GetHybridQuality()) {
-        case HdRprHybridQuality::LOW:
-            renderQuality = HdRprRenderQualityTokens->low;
-            break;
-        case HdRprHybridQuality::MEDIUM:
-            renderQuality = HdRprRenderQualityTokens->medium;
-            break;
-        case HdRprHybridQuality::HIGH:
-            renderQuality = HdRprRenderQualityTokens->high;
-            break;
-        default:
-            break;
-        }
-    }
-    m_settingDescriptors[1] = { "Render Quality",
-        HdRprRenderSettingsTokens->renderQuality,
-        VtValue(renderQuality) };
-
-    m_settingDescriptors[2] = { "Max Samples",
-        HdRprRenderSettingsTokens->maxSamples,
-        VtValue(config.GetMaxSamples()) };
-
-    m_settingDescriptors[3] = { "Adaptive Sampling: Min Samples",
-        HdRprRenderSettingsTokens->minAdaptiveSamples,
-        VtValue(config.GetMinSamples()) };
-
-    m_settingDescriptors[4] = { "Adaptive Sampling: Variance Threshold",
-        HdRprRenderSettingsTokens->varianceThreshold,
-        VtValue(config.GetVariance()) };
-
+    m_settingDescriptors = HdRprConfig::GetRenderSettingDescriptors();
     _PopulateDefaultSettings(m_settingDescriptors);
-
-
 }
 
 HdRprDelegate::~HdRprDelegate() {

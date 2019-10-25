@@ -25,28 +25,7 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
         return;
     }
 
-    // Synchronize HdRprConfig with Hydra render settings
-    auto renderDelegate = GetRenderIndex()->GetRenderDelegate();
-    int currentSettingsVersion = renderDelegate->GetRenderSettingsVersion();
-    if (m_lastSettingsVersion != currentSettingsVersion) {
-        m_lastSettingsVersion = currentSettingsVersion;
-
-        auto getBoolSetting = [&renderDelegate](TfToken const& token, bool defaultValue) {
-            auto boolValue = renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->enableDenoising);
-            if (boolValue.IsHolding<int64_t>()) {
-                return static_cast<bool>(boolValue.UncheckedGet<int64_t>());
-            } else if (boolValue.IsHolding<bool>()) {
-                return static_cast<bool>(boolValue.UncheckedGet<bool>());
-            }
-            return defaultValue;
-        };
-        auto& config = HdRprConfig::GetInstance();
-
-        config.SetDenoising(getBoolSetting(HdRprRenderSettingsTokens->enableDenoising, false));
-        config.SetMaxSamples(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->maxSamples, HdRprConfig::kDefaultMaxSamples));
-        config.SetMinSamples(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->minAdaptiveSamples, HdRprConfig::kDefaultMinSamples));
-        config.SetVariance(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->varianceThreshold, HdRprConfig::kDefaultVariance));
-    }
+    HdRprConfig::GetInstance().Sync(GetRenderIndex()->GetRenderDelegate());
 
     auto& cameraViewMatrix = rprApi->GetCameraViewMatrix();
     auto& wvm = renderPassState->GetWorldToViewMatrix();

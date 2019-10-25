@@ -899,7 +899,7 @@ public:
         }
 
         UpdateCamera();
-        UpdateSampling();
+        UpdateSettings();
         UpdateDenoiseFilter();
 
         for (auto& aovFrameBufferEntry : m_aovFrameBuffers) {
@@ -996,7 +996,7 @@ public:
         preferences.ResetDirty();
     }
 
-    void UpdateSampling(bool force = false) {
+    void UpdateSettings(bool force = false) {
         auto& preferences = HdRprConfig::GetInstance();
         if (preferences.IsDirty(HdRprConfig::DirtySampling) || force) {
             preferences.CleanDirtyFlag(HdRprConfig::DirtySampling);
@@ -1006,9 +1006,30 @@ public:
                 // Force framebuffers clear to render required number of samples
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
+        }
 
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, preferences.GetVariance()), "Failed to set as.threshold");
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinSamples()), "Failed to set as.minspp");
+        if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
+            preferences.CleanDirtyFlag(HdRprConfig::DirtyAdaptiveSampling);
+
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, preferences.GetVarianceThreshold()), "Failed to set as.threshold");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinAdaptiveSamples()), "Failed to set as.minspp");
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_RECURSION, preferences.GetMaxRayDepth()), "Failed to set max recursion");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetMaxRayDepthDiffuse()), "Failed to set max depth diffuse");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetMaxRayDepthGlossy()), "Failed to set max depth glossy");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetMaxRayDepthRefraction()), "Failed to set max depth refraction");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetMaxRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_SHADOW, preferences.GetMaxRayDepthShadow()), "Failed to set max depth shadow");
+
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetRaycastEpsilon()), "Failed to set ray cast epsilon");
+            auto radianceClamp = preferences.GetEnableRadianceClamping() ? preferences.GetRadianceClamping() : std::numeric_limits<float>::max();
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
 
@@ -1057,12 +1078,12 @@ public:
             return;
         }
 
-        if (!HdRprConfig::GetInstance().IsDirty(HdRprConfig::DirtyDenoising) &&
+        if (!HdRprConfig::GetInstance().IsDirty(HdRprConfig::DirtyDenoise) &&
             !(m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers)) {
             return;
         }
 
-        if (!HdRprConfig::GetInstance().IsDenoisingEnabled() || !IsAovEnabled(HdRprAovTokens->color)) {
+        if (!HdRprConfig::GetInstance().GetEnableDenoising() || !IsAovEnabled(HdRprAovTokens->color)) {
             m_denoiseFilterPtr.reset();
             return;
         }
@@ -1145,7 +1166,7 @@ public:
             // if not max samples check if all pixels converged to threshold
             auto& preferences = HdRprConfig::GetInstance();
 
-            float varianceSetting = preferences.GetVariance();
+            float varianceSetting = preferences.GetVarianceThreshold();
             if (varianceSetting > 0.0f) {
                 int activePixels = 0;
                 if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(activePixels), &activePixels, NULL), "Failed to query active pixels")) return false;
@@ -1200,7 +1221,7 @@ private:
             RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, int(HdRprConfig::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
         }
 
-        UpdateSampling(true);
+        UpdateSettings(true);
 
         m_imageCache.reset(new ImageCache(m_rprContext.get()));
     }
