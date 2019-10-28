@@ -122,22 +122,25 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    RprApiObjectPtr CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uvs, const VtIntArray & uvIndexes, const VtIntArray & vpf) {
+    RprApiObjectPtr CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uvs, const VtIntArray & uvIndexes, const VtIntArray & vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
         if (!m_rprContext) {
             return nullptr;
         }
 
         VtIntArray newIndexes, newVpf;
         SplitPolygons(pointIndexes, vpf, newIndexes, newVpf);
+        ConvertIndices(&newIndexes, newVpf, polygonWinding);
 
         VtIntArray newUvIndexes;
         if (!uvIndexes.empty()) {
             SplitPolygons(uvIndexes, vpf, newUvIndexes);
+            ConvertIndices(&newUvIndexes, newVpf, polygonWinding);
         }
 
         VtIntArray newNormalIndexes;
         if (!normalIndexes.empty()) {
             SplitPolygons(normalIndexes, vpf, newNormalIndexes);
+            ConvertIndices(&newNormalIndexes, newVpf, polygonWinding);
         }
 
         auto normalIndicesData = !newNormalIndexes.empty() ? newNormalIndexes.data() : newIndexes.data();
@@ -1330,6 +1333,20 @@ private:
         }
     }
 
+    void ConvertIndices(VtIntArray* indices, VtIntArray const& vpf, TfToken const& windingOrder) {
+        if (windingOrder == HdTokens->rightHanded) {
+            return;
+        }
+
+        // XXX: RPR does not allow to select which winding order we want to use and it's by default right handed
+        size_t indicesOffset = 0;
+        for (int iFace = 0; iFace < vpf.size(); ++iFace) {
+            auto faceIndices = indices->data() + indicesOffset;
+            std::swap(faceIndices[0], faceIndices[2]);
+            indicesOffset += vpf[iFace];
+        }
+    }
+
     RprApiObjectPtr CreateCubeMesh(const float & width, const float & height, const float & depth) {
         constexpr const size_t cubeVertexCount = 24;
         constexpr const size_t cubeNormalCount = 24;
@@ -1545,8 +1562,8 @@ TfToken const& HdRprApi::GetActiveAov() const {
     return m_impl->GetActiveAov();
 }
 
-RprApiObjectPtr HdRprApi::CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf) {
-    return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf);
+RprApiObjectPtr HdRprApi::CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding) {
+    return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf, polygonWinding);
 }
 
 RprApiObjectPtr HdRprApi::CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, float width) {

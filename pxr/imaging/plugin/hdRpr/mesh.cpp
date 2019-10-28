@@ -131,9 +131,6 @@ void HdRprMesh::Sync(
         m_adjacencyValid = false;
         m_normalsValid = false;
 
-        // TODO: handle different winding order
-        // m_topology.GetOrientation() == HdTokens->leftHanded
-
         m_enableSubdiv = m_topology.GetScheme() == PxOsdOpenSubdivTokens->catmullClark;
 
         newMesh = true;
@@ -266,7 +263,7 @@ void HdRprMesh::Sync(
         };
 
         if (geomSubsets.empty() || geomSubsets.size() == 1) {
-            if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts)) {
+            if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
                 setMeshMaterial(rprMesh, geomSubsets.empty() ? hdMaterialId : geomSubsets[0].materialId);
                 m_rprMeshes.push_back(std::move(rprMesh));
             }
@@ -319,7 +316,7 @@ void HdRprMesh::Sync(
                     }
                 }
 
-                if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace)) {
+                if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace, m_topology.GetOrientation())) {
                     setMeshMaterial(rprMesh, subset.materialId);
                     m_rprMeshes.push_back(std::move(rprMesh));
                 }
@@ -353,9 +350,8 @@ void HdRprMesh::Sync(
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)) {
-            int refineLevel = sceneDelegate->GetDisplayStyle(id).refineLevel;
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh.get(), refineLevel);
+                rprApi->SetMeshRefineLevel(rprMesh.get(), m_refineLevel);
             }
         }
 
