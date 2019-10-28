@@ -37,7 +37,8 @@ TF_DEFINE_PRIVATE_TOKENS(
 	(roughness)
 	(clearcoat)
 	(clearcoatRoughness)
-	(opacity)
+    (opacity)
+    (opacityThreshold)
 	(ior)
 	(normal)
 	(displacement)
@@ -258,30 +259,43 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const MaterialParams 
 	}
 }
 
-MaterialAdapter::MaterialAdapter(const EMaterialType type, const HdMaterialNetwork & materialNetwork) : m_type(type)
-{
-	switch (type)
-	{
-	case EMaterialType::USD_PREVIEW_SURFACE:
-	{
-		HdMaterialNode previewNode;
-		if (!getNode(HdRprTokens->UsdPreviewSurface, materialNetwork, previewNode))
-		{
-			break;
-		}
+MaterialAdapter::MaterialAdapter(const EMaterialType type, const HdMaterialNetwork& materialNetwork) : m_type(type) {
+    switch (type) {
+        case EMaterialType::USD_PREVIEW_SURFACE: {
+            HdMaterialNode previewNode;
+            if (!getNode(HdRprTokens->UsdPreviewSurface, materialNetwork, previewNode)) {
+                break;
+            }
 
-		MaterialParams materialParameters;
-		getParameters(materialNetwork, previewNode, materialParameters);
+            MaterialParams materialParameters;
+            getParameters(materialNetwork, previewNode, materialParameters);
 
-		MaterialTextures materialTextures;
-		getTextures(materialNetwork, materialTextures);
+            auto setFallbackValue = [&materialParameters](TfToken const& name, VtValue value) {
+                // TODO: change to try_emplace when it will be available
+                materialParameters.emplace(name, value);
+            };
+            setFallbackValue(HdRprTokens->diffuseColor, VtValue(GfVec3f(0.18f)));
+            setFallbackValue(HdRprTokens->emissiveColor, VtValue(GfVec3f(0.0f)));
+            setFallbackValue(HdRprTokens->useSpecularWorkflow, VtValue(0));
+            setFallbackValue(HdRprTokens->specularColor, VtValue(GfVec3f(0.0f)));
+            setFallbackValue(HdRprTokens->metallic, VtValue(0.0f));
+            setFallbackValue(HdRprTokens->roughness, VtValue(0.5f));
+            setFallbackValue(HdRprTokens->clearcoat, VtValue(0.0f));
+            setFallbackValue(HdRprTokens->clearcoatRoughness, VtValue(0.01f));
+            setFallbackValue(HdRprTokens->opacity, VtValue(1.0f));
+            setFallbackValue(HdRprTokens->opacityThreshold, VtValue(0.0f));
+            setFallbackValue(HdRprTokens->ior, VtValue(1.5f));
+            setFallbackValue(HdRprTokens->opacityThreshold, VtValue(0.0f));
 
-		PopulateUsdPreviewSurface(materialParameters, materialTextures);
-		break;
-	}
-    default:
-        break;
-	}
+            MaterialTextures materialTextures;
+            getTextures(materialNetwork, materialTextures);
+
+            PopulateUsdPreviewSurface(materialParameters, materialTextures);
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 void MaterialAdapter::PopulateRprColor(const MaterialParams& params) {
@@ -308,9 +322,9 @@ void MaterialAdapter::PopulateTransparent(const MaterialParams & params)
 void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams & params, const MaterialTextures & textures)
 {
 	// initial params
-	m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_WEIGHT , GfVec4f(1.0f) });
 	m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_WEIGHT , GfVec4f(1.0f) });
-	
+    m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_COLOR , GfVec4f(1.0f) });
+
 	int useSpecular = 0;
 	GfVec4f albedoColor = GfVec4f(1.0f);
 	MaterialTexture albedoTex;
@@ -353,8 +367,10 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams & params, c
 		}
 		else if (paramName == HdRprTokens->roughness)
 		{
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_ROUGHNESS, VtValToVec4f(paramValue)});
 			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_ROUGHNESS, VtValToVec4f(paramValue)});
-		}
+			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_ROUGHNESS, VtValToVec4f(paramValue)});
+        }
 		else if (paramName == HdRprTokens->clearcoat)
 		{
 			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_COATING_WEIGHT, VtValToVec4f(paramValue)});
@@ -367,11 +383,11 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams & params, c
 		{
 			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_IOR, VtValToVec4f(paramValue)});
 		}
-		else if (paramName == HdRprTokens->opacity)
-		{
-			m_vec4fRprParams.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_WEIGHT, GfVec4f(1.0f) - VtValToVec4f(paramValue)});
-		}
-
+        else if (paramName == HdRprTokens->opacity)
+        {
+            m_vec4fRprParams[RPR_UBER_MATERIAL_INPUT_DIFFUSE_WEIGHT] = VtValToVec4f(paramValue);
+            m_vec4fRprParams[RPR_UBER_MATERIAL_INPUT_REFRACTION_WEIGHT] = GfVec4f(1.0f) - m_vec4fRprParams[RPR_UBER_MATERIAL_INPUT_DIFFUSE_WEIGHT];
+        }
 	}
 
     for (auto textureEntry : textures)
@@ -400,7 +416,9 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams & params, c
 		}
 		else if (paramName == HdRprTokens->roughness)
 		{
-			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_ROUGHNESS, materialTexture });
+            m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_ROUGHNESS, materialTexture });
+            m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFLECTION_ROUGHNESS, materialTexture });
+            m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_ROUGHNESS, materialTexture });
 		}
 		else if (paramName == HdRprTokens->clearcoat)
 		{
@@ -416,7 +434,8 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams & params, c
 		}
 		else if (paramName == HdRprTokens->opacity)
 		{
-			materialTexture.IsOneMinusSrcColor = true;
+            m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_DIFFUSE_WEIGHT, materialTexture });
+            materialTexture.IsOneMinusSrcColor = true;
 			m_texRpr.insert({ RPR_UBER_MATERIAL_INPUT_REFRACTION_WEIGHT, materialTexture });
 		}
 		else if (paramName == HdRprTokens->normal)

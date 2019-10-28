@@ -1443,6 +1443,7 @@ private:
     void ResizeAov(TfToken const& aovName, int width, int height) {
         if (aovName == HdRprAovTokens->depth) {
             ResizeAov(HdRprAovTokens->worldCoordinate, width, height);
+            m_aovFrameBuffers[aovName].isDirty = true;
             return;
         }
 

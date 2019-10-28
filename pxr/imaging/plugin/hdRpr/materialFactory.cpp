@@ -83,6 +83,9 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         const uint32_t & paramId = param.first;
         const GfVec4f & paramValue = param.second;
 
+        if (materialAdapter.GetTexRprParams().count(paramId)) {
+            continue;
+        }
         rprMaterialNodeSetInputFByKey(material->rootMaterial, paramId, paramValue[0], paramValue[1], paramValue[2], paramValue[3]);
     }
 
