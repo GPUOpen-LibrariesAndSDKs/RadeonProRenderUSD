@@ -206,14 +206,19 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         return outTexture;
     };
 
-    for (auto const& texParam : materialAdapter.GetTexRprParams())
-    {
+    rpr_material_node emissionColorNode = nullptr;
+
+    for (auto const& texParam : materialAdapter.GetTexRprParams()) {
         const uint32_t & paramId = texParam.first;
         const MaterialTexture & matTex = texParam.second;
 
         rpr_material_node outTexture = getTextureMaterialNode(m_imageCache, m_matSys, matTex);
         if (!outTexture) {
             continue;
+        }
+
+        if (paramId == RPR_UBER_MATERIAL_INPUT_EMISSION_COLOR) {
+            emissionColorNode = outTexture;
         }
 
         // SIGGRAPH HACK: Fix for models from Apple AR quick look gallery.
@@ -234,6 +239,23 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         }
 
         rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outTexture);
+    }
+
+    if (emissionColorNode) {
+        rpr_material_node averageNode = nullptr;
+        rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_ARITHMETIC, &averageNode);
+        material->materialNodes.push_back(averageNode);
+        rprMaterialNodeSetInputUByKey(averageNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_AVERAGE_XYZ);
+        rprMaterialNodeSetInputNByKey(averageNode, RPR_MATERIAL_INPUT_COLOR0, emissionColorNode);
+
+        rpr_material_node isBlackColorNode = nullptr;
+        rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_ARITHMETIC, &isBlackColorNode);
+        material->materialNodes.push_back(isBlackColorNode);
+        rprMaterialNodeSetInputUByKey(isBlackColorNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_GREATER);
+        rprMaterialNodeSetInputNByKey(isBlackColorNode, RPR_MATERIAL_INPUT_COLOR0, averageNode);
+        rprMaterialNodeSetInputFByKey(isBlackColorNode, RPR_MATERIAL_INPUT_COLOR1, 0.0f, 0.0f, 0.0f, 0.0f);
+
+        rprMaterialNodeSetInputNByKey(material->rootMaterial, RPR_UBER_MATERIAL_INPUT_EMISSION_WEIGHT, isBlackColorNode);
     }
 
     material->displacementMaterial = getTextureMaterialNode(m_imageCache, m_matSys, materialAdapter.GetDisplacementTexture());
