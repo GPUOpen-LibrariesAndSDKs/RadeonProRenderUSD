@@ -352,7 +352,7 @@ public:
             }
         });
 
-        return RprApiObject::Wrap(curve);
+        return curveObject;
     }
 
     RprApiObjectPtr CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
