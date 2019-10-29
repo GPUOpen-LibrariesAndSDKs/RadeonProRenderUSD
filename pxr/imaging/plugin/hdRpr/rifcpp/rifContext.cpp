@@ -330,14 +330,14 @@ void Context::AttachFilter(rif_image_filter filter, rif_image inputImage, rif_im
     ++m_numAttachedFilters;
 }
 
-void Context::DettachFilter(rif_image_filter filter) {
+void Context::DetachFilter(rif_image_filter filter) {
     auto rifStatus = rifCommandQueueDetachImageFilter(m_commandQueue, filter);
     if (rifStatus == RIF_ERROR_INVALID_PARAMETER) {
         // Ignore if filter was not attached before
         return;
     }
 
-    RIF_ERROR_CHECK_THROW(rifStatus, "Failed to dettach image filter from queue");
+    RIF_ERROR_CHECK_THROW(rifStatus, "Failed to detach image filter from queue");
     --m_numAttachedFilters;
 }
 

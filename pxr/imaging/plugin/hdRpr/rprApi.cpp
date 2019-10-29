@@ -173,7 +173,7 @@ public:
             return nullptr;
         }
         meshObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* mesh) {
-            if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), mesh), "Failed to dettach mesh from scene")) {
+            if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), mesh), "Failed to detach mesh from scene")) {
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         });
@@ -265,6 +265,46 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
+#if 0
+    void SetCurveVisibility(rpr_curve curve, bool isVisible) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        if (!RPR_ERROR_CHECK(rprCurveSetVisibility(curve, isVisible), "Fail to set curve visibility")) {
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+    }
+#else
+    void AttachCurveToScene(RprApiObject* curve) {
+        if (curve->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
+            return;
+        }
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        if (!RPR_ERROR_CHECK(rprSceneAttachCurve(m_scene->GetHandle(), curve->GetHandle()), "Failed to attach curve to scene")) {
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+
+            curve->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* curve) {
+                if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve), "Failed to detach curve from scene")) {
+                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+                }
+            });
+        }
+    }
+
+    void DetachCurveFromScene(RprApiObject* curve) {
+        if (!curve->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
+            return;
+        }
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve->GetHandle()), "Failed to detach curve from scene")) {
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+
+            curve->DetachOnReleaseAction(RprApiObjectActionTokens->attach);
+        }
+    }
+#endif
+
     RprApiObjectPtr CreateMeshInstance(rpr_shape mesh) {
         if (!m_rprContext) {
             return nullptr;
@@ -284,7 +324,7 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
 
         meshInstanceObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* instance) {
-            if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), instance), "Failed to dettach mesh instance from scene")) {
+            if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), instance), "Failed to detach mesh instance from scene")) {
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         });
@@ -347,7 +387,7 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
 
         curveObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* curve) {
-            if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve), "Failed to dettach curve from scene")) {
+            if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve), "Failed to detach curve from scene")) {
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         });
@@ -375,7 +415,7 @@ public:
         } else {
             if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene->GetHandle(), light), "Fail to attach environment light to scene")) return nullptr;
             lightObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* light) {
-                if (!RPR_ERROR_CHECK(rprSceneDetachLight(m_scene->GetHandle(), light), "Fail to dettach environment light")) {
+                if (!RPR_ERROR_CHECK(rprSceneDetachLight(m_scene->GetHandle(), light), "Fail to detach environment light")) {
                     m_dirtyFlags |= ChangeTracker::DirtyScene;
                 }
             });
@@ -580,7 +620,7 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
 
         heteroVolumeObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* volume) {
-            if (!RPR_ERROR_CHECK(rprSceneDetachHeteroVolume(m_scene->GetHandle(), volume), "Failed to dettach hetero volume from scene")) {
+            if (!RPR_ERROR_CHECK(rprSceneDetachHeteroVolume(m_scene->GetHandle(), volume), "Failed to detach hetero volume from scene")) {
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         });
@@ -1543,8 +1583,12 @@ void RprApiObject::AttachOnReleaseAction(TfToken const& actionName, std::functio
     m_onReleaseActions.emplace(actionName, std::move(action));
 }
 
-void RprApiObject::DettachOnReleaseAction(TfToken const& actionName) {
+void RprApiObject::DetachOnReleaseAction(TfToken const& actionName) {
     m_onReleaseActions.erase(actionName);
+}
+
+bool RprApiObject::HasOnReleaseAction(TfToken const& actionName) {
+    return m_onReleaseActions.count(actionName) != 0;
 }
 
 void* RprApiObject::GetHandle() const {
@@ -1622,7 +1666,8 @@ void HdRprApi::SetMeshVertexInterpolationRule(RprApiObject* mesh, TfToken bounda
 }
 
 void HdRprApi::SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material) {
-    m_impl->SetMeshMaterial(mesh->GetHandle(), static_cast<RprApiMaterial*>(material->GetHandle()));
+    auto materialHandle = material ? static_cast<RprApiMaterial*>(material->GetHandle()) : nullptr;
+    m_impl->SetMeshMaterial(mesh->GetHandle(), materialHandle);
 }
 
 void HdRprApi::SetMeshVisibility(RprApiObject* mesh, bool isVisible) {
@@ -1630,7 +1675,21 @@ void HdRprApi::SetMeshVisibility(RprApiObject* mesh, bool isVisible) {
 }
 
 void HdRprApi::SetCurveMaterial(RprApiObject* curve, RprApiObject const* material) {
-    m_impl->SetCurveMaterial(curve->GetHandle(), static_cast<RprApiMaterial*>(material->GetHandle()));
+    auto materialHandle = material ? static_cast<RprApiMaterial*>(material->GetHandle()) : nullptr;
+    m_impl->SetCurveMaterial(curve->GetHandle(), materialHandle);
+}
+
+void HdRprApi::SetCurveVisibility(RprApiObject* curve, bool isVisible) {
+    // XXX: RPR API does not have function to manage curve visibility
+#if 0
+    m_impl->SetCurveVisibility(curve->GetHandle(), isVisible);
+#else
+    if (isVisible) {
+        m_impl->AttachCurveToScene(curve);
+    } else {
+        m_impl->DetachCurveFromScene(curve);
+    }
+#endif
 }
 
 const GfMatrix4d& HdRprApi::GetCameraViewMatrix() const {

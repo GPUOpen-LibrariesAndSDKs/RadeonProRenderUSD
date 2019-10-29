@@ -28,7 +28,7 @@ public:
     virtual std::unique_ptr<Image> CreateImage(rpr::FrameBuffer* rprFrameBuffer) = 0;
 
     void AttachFilter(rif_image_filter filter, rif_image inputImage, rif_image outputImage);
-    void DettachFilter(rif_image_filter filter);
+    void DetachFilter(rif_image_filter filter);
 
     virtual void UpdateInputImage(rpr::FrameBuffer* rprFrameBuffer, rif_image image);
 

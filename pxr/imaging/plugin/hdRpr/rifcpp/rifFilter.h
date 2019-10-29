@@ -61,7 +61,7 @@ public:
 protected:
     Filter(Context* rifContext) : m_rifContext(rifContext) {}
 
-    void DettachFilter();
+    void DetachFilter();
     virtual void AttachFilter() = 0;
 
     void ApplyParameters();

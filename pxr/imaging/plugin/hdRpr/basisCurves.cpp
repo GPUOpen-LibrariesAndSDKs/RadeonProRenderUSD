@@ -50,6 +50,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate * sceneDelegate, HdRenderParam * ren
 
 	SdfPath const& id = GetId();
 
+    bool newCurve = false;
 	if (*dirtyBits & HdChangeTracker::DirtyTopology) {
 		VtValue valuePoints = sceneDelegate->Get(id, HdTokens->points);
 		const VtVec3fArray & points = valuePoints.Get<VtVec3fArray>();
@@ -67,7 +68,6 @@ void HdRprBasisCurves::Sync(HdSceneDelegate * sceneDelegate, HdRenderParam * ren
 		}
 
 		VtValue widthVal = sceneDelegate->Get(id, HdTokens->widths);
-
 
 		VtFloatArray curveWidths = widthVal.Get<VtFloatArray>();
 		float curveWidth = curveWidths[0];
@@ -95,43 +95,56 @@ void HdRprBasisCurves::Sync(HdSceneDelegate * sceneDelegate, HdRenderParam * ren
 		m_rprCurve = rprApi->CreateCurve(pointsTransformed, indexes, curveWidth);
 		if (!m_rprCurve) {
 			TF_RUNTIME_ERROR("Failed to create curve");
-			return;
 		}
+
+        newCurve = true;
 	}
 
-	if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
-		auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(GetId())));
+    if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
+        m_cachedMaterial = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(id)));
+    }
 
-		if (material && material->GetRprMaterialObject()) {
-			rprApi->SetCurveMaterial(m_rprCurve.get(), material->GetRprMaterialObject());
-		} else {
-			HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant);
+    if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
+        _sharedData.visible = sceneDelegate->GetVisible(id);
+    }
 
-			VtValue val = sceneDelegate->Get(id, HdPrimvarRoleTokens->color);
+    if (newCurve || (*dirtyBits & HdChangeTracker::DirtyMaterialId)) {
+        if (m_cachedMaterial && m_cachedMaterial->GetRprMaterialObject()) {
+            rprApi->SetCurveMaterial(m_rprCurve.get(), m_cachedMaterial->GetRprMaterialObject());
+        } else {
+            if (!m_fallbackMaterial) {
+                auto primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant);
+                auto colorPrimvarDescIter = std::find_if(primvars.begin(), primvars.end(), [](HdPrimvarDescriptor const& desc) { return desc.name == HdPrimvarRoleTokens->color; });
+                if (colorPrimvarDescIter != primvars.end()) {
+                    VtValue val = sceneDelegate->Get(id, HdPrimvarRoleTokens->color);
+                    if (!val.IsEmpty()) {
+                        VtArray<GfVec4f> color = val.Get<VtArray<GfVec4f>>();
+                        MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::COLOR,
+                            MaterialParams{{HdPrimvarRoleTokens->color, VtValue(color[0])}});
+                        m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
+                    }
+                }
+            }
 
-			if (!val.IsEmpty()) {
-				VtArray<GfVec4f> color = val.Get<VtArray<GfVec4f>>();
-				MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::COLOR,
-					MaterialParams{ { HdPrimvarRoleTokens->color, VtValue(color[0]) } });
-				m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
+            rprApi->SetCurveMaterial(m_rprCurve.get(), m_fallbackMaterial.get());
+        }
+    }
 
-				rprApi->SetCurveMaterial(m_rprCurve.get(), m_fallbackMaterial.get());
-			} else {
-				rprApi->SetCurveMaterial(m_rprCurve.get(), nullptr);
-			}
-		}
-	}
+    if (newCurve || (*dirtyBits & HdChangeTracker::DirtyVisibility)) {
+        rprApi->SetCurveVisibility(m_rprCurve.get(), _sharedData.visible);
+    }
 
-	*dirtyBits = HdChangeTracker::Clean;
+    *dirtyBits = HdChangeTracker::Clean;
 }
 
-HdDirtyBits HdRprBasisCurves::GetInitialDirtyBitsMask() const
-{
-	HdDirtyBits mask =
-		HdChangeTracker::DirtyTopology
-		| HdChangeTracker::DirtyTransform;
+HdDirtyBits HdRprBasisCurves::GetInitialDirtyBitsMask() const {
+    HdDirtyBits mask =
+        HdChangeTracker::DirtyTopology
+        | HdChangeTracker::DirtyTransform
+        | HdChangeTracker::DirtyVisibility
+        | HdChangeTracker::DirtyMaterialId;
 
-	return mask;
+    return mask;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
