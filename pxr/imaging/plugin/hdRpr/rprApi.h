@@ -36,7 +36,8 @@ public:
     void AttachDependency(std::unique_ptr<rpr::Object>&& dependencyObject);
 
     void AttachOnReleaseAction(TfToken const& actionName, std::function<void (void*)> action);
-    void DettachOnReleaseAction(TfToken const& actionName);
+    void DetachOnReleaseAction(TfToken const& actionName);
+    bool HasOnReleaseAction(TfToken const& actionName);
 
     void* GetHandle() const;
 
@@ -88,6 +89,7 @@ public:
 
     RprApiObjectPtr CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, float width);
     void SetCurveMaterial(RprApiObject* curve, RprApiObject const* material);
+    void SetCurveVisibility(RprApiObject* curve, bool isVisible);
 
     RprApiObjectPtr CreateMaterial(MaterialAdapter& materialAdapter);
 

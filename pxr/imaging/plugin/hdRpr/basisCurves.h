@@ -7,6 +7,8 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprMaterial;
+
 class HdRprBasisCurves : public HdBasisCurves {
 
 public:
@@ -33,6 +35,8 @@ private:
     HdRprApiWeakPtr m_rprApiWeakPtr;
     RprApiObjectPtr m_rprCurve;
     RprApiObjectPtr m_fallbackMaterial;
+
+    HdRprMaterial const* m_cachedMaterial;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -170,7 +170,7 @@ std::unique_ptr<Filter> Filter::CreateCustom(rif_image_filter_type type, Context
 }
 
 Filter::~Filter() {
-    DettachFilter();
+    DetachFilter();
 
     rif_int rifStatus = RIF_SUCCESS;
 
@@ -229,7 +229,7 @@ void Filter::Update() {
         ApplyParameters();
     }
     if (m_dirtyFlags & DirtyIOImage) {
-        DettachFilter();
+        DetachFilter();
         AttachFilter();
         m_isAttached = true;
     }
@@ -243,16 +243,16 @@ void Filter::Update() {
     m_dirtyFlags = Clean;
 }
 
-void Filter::DettachFilter() {
+void Filter::DetachFilter() {
     if (!m_rifContext || !m_isAttached) {
         return;
     }
     m_isAttached = false;
 
     for (const rif_image_filter& auxFilter : m_auxFilters) {
-        m_rifContext->DettachFilter(auxFilter);
+        m_rifContext->DetachFilter(auxFilter);
     }
-    m_rifContext->DettachFilter(m_rifFilter);
+    m_rifContext->DetachFilter(m_rifFilter);
 }
 
 struct ParameterSetter : public BOOST_NS::static_visitor<rif_int> {
