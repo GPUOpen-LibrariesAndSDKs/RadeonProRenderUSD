@@ -14,7 +14,7 @@ bool getWrapType(const EWrapMode & wrapMode, rpr_image_wrap_type & rprWrapType)
 		rprWrapType = RPR_IMAGE_WRAP_TYPE_CLAMP_ZERO;
 		return true;
 	case EWrapMode::CLAMP:
-		rprWrapType = FR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE;
+		rprWrapType = RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE;
 		return true;
 	case EWrapMode::MIRROR:
 		rprWrapType = RPR_IMAGE_WRAP_TYPE_MIRRORED_REPEAT;
@@ -212,13 +212,13 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         const uint32_t & paramId = texParam.first;
         const MaterialTexture & matTex = texParam.second;
 
-        rpr_material_node outTexture = getTextureMaterialNode(m_imageCache, m_matSys, matTex);
-        if (!outTexture) {
+        rpr_material_node outNode = getTextureMaterialNode(m_imageCache, m_matSys, matTex);
+        if (!outNode) {
             continue;
         }
 
         if (paramId == RPR_UBER_MATERIAL_INPUT_EMISSION_COLOR) {
-            emissionColorNode = outTexture;
+            emissionColorNode = outNode;
         }
 
         // SIGGRAPH HACK: Fix for models from Apple AR quick look gallery.
@@ -233,12 +233,15 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         // normal map textures need to be passed through the normal map node
         if (paramId == RPR_UBER_MATERIAL_INPUT_DIFFUSE_NORMAL ||
             paramId == RPR_UBER_MATERIAL_INPUT_REFLECTION_NORMAL) {
-            rpr_material_node temp = outTexture;
-            int status = rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_NORMAL_MAP, &outTexture);
-            status = rprMaterialNodeSetInputNByKey(outTexture, RPR_MATERIAL_INPUT_COLOR, temp);
+            rpr_material_node textureNode = outNode;
+            int status = rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_NORMAL_MAP, &outNode);
+            if (status == RPR_SUCCESS) {
+                material->materialNodes.push_back(outNode);
+                status = rprMaterialNodeSetInputNByKey(outNode, RPR_MATERIAL_INPUT_COLOR, textureNode);
+            }
         }
 
-        rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outTexture);
+        rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outNode);
     }
 
     if (emissionColorNode) {
