@@ -566,6 +566,88 @@ public:
         return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
     }
 
+    RprApiObjectPtr CreateCylinderLightMesh(float radius, float length) {
+        constexpr int numPointsAtCap = 36;
+
+        VtVec3fArray points;
+        VtVec3fArray normals;
+        VtIntArray pointIndices;
+        VtIntArray normalIndices;
+        VtIntArray vpf;
+
+        points.reserve(numPointsAtCap * 2 + 2);
+        normals.reserve(numPointsAtCap + 2);
+        vpf.reserve(numPointsAtCap * 3);
+        pointIndices.reserve(numPointsAtCap * 4 + 2 * (numPointsAtCap * 3));
+        normalIndices.reserve(numPointsAtCap * 4 + 2 * (numPointsAtCap * 3));
+
+        const float halfLength = 0.5f * length;
+
+        for (int i = 0; i < numPointsAtCap * 2; ++i) {
+            float angle = 2.0f * M_PI * float(i % numPointsAtCap) / numPointsAtCap;
+            bool top = i < numPointsAtCap;
+            auto point = GfVec3f(top ? halfLength : -halfLength, radius * cos(angle), radius * sin(angle));
+            points.push_back(point);
+        }
+
+        {
+            // Top cap faces
+            points.push_back(GfVec3f(halfLength, 0.0f, 0.0f));
+            normals.push_back(GfVec3f(1.0f, 0.0f, 0.0f));
+            const int topCapCenterPointIndex = points.size() - 1;
+            const int topCapNormalIndex = normals.size() - 1;
+            for (int i = 0; i < numPointsAtCap; ++i) {
+                pointIndices.push_back(i);
+                pointIndices.push_back((i + 1) % numPointsAtCap);
+                pointIndices.push_back(topCapCenterPointIndex);
+                normalIndices.push_back(topCapNormalIndex);
+                normalIndices.push_back(topCapNormalIndex);
+                normalIndices.push_back(topCapNormalIndex);
+                vpf.push_back(3);
+            }
+        }
+
+        const int botPointIndexOffset = numPointsAtCap;
+        {
+            // Bottom cap faces
+            points.push_back(GfVec3f(-halfLength, 0.0f, 0.0f));
+            normals.push_back(GfVec3f(-1.0f, 0.0f, 0.0f));
+            const int botCapCenterPointIndex = points.size() - 1;
+            const int botCapNormalIndex = normals.size() - 1;
+            for (int i = 0; i < numPointsAtCap; ++i) {
+                pointIndices.push_back(botCapCenterPointIndex);
+                pointIndices.push_back((i + 1) % numPointsAtCap + botPointIndexOffset);
+                pointIndices.push_back(i + botPointIndexOffset);
+                normalIndices.push_back(botCapNormalIndex);
+                normalIndices.push_back(botCapNormalIndex);
+                normalIndices.push_back(botCapNormalIndex);
+                vpf.push_back(3);
+            }
+        }
+
+        for (int i = 0; i < numPointsAtCap; ++i) {
+            float angle = 2.0f * M_PI * float(i % numPointsAtCap) / numPointsAtCap;
+            normals.push_back(GfVec3f(0.0f, cos(angle), sin(angle)));
+        }
+
+        const int normalIndexOffset = 2;
+        for (int i = 0; i < numPointsAtCap; ++i) {
+            pointIndices.push_back(i);
+            pointIndices.push_back(i + botPointIndexOffset);
+            pointIndices.push_back((i + 1) % numPointsAtCap + botPointIndexOffset);
+            pointIndices.push_back((i + 1) % numPointsAtCap);
+            normalIndices.push_back(i + normalIndexOffset);
+            normalIndices.push_back(i + normalIndexOffset);
+            normalIndices.push_back((i + 1) % numPointsAtCap + normalIndexOffset);
+            normalIndices.push_back((i + 1) % numPointsAtCap + normalIndexOffset);
+            vpf.push_back(4);
+        }
+
+        m_isLightPresent = true;
+
+        return CreateMesh(points, pointIndices, normals, normalIndices, VtVec2fArray(), VtIntArray(), vpf);
+    }
+
     void SetLightTransform(rpr_light light, GfMatrix4f const& transform) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
         if (!RPR_ERROR_CHECK(rprLightSetTransform(light, false, transform.GetArray()), "Fail set light transformation")) {
@@ -1633,6 +1715,10 @@ RprApiObjectPtr HdRprApi::CreateRectLightMesh(float width, float height) {
 
 RprApiObjectPtr HdRprApi::CreateSphereLightMesh(float radius) {
     return m_impl->CreateSphereLightMesh(radius);
+}
+
+RprApiObjectPtr HdRprApi::CreateCylinderLightMesh(float radius, float length) {
+    return m_impl->CreateCylinderLightMesh(radius, length);
 }
 
 RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float width, float height, const GfVec3f& emmisionColor) {

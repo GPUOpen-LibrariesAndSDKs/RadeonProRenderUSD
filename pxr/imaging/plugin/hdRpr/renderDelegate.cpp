@@ -8,6 +8,7 @@
 #include "instancer.h"
 #include "domeLight.h"
 #include "sphereLight.h"
+#include "cylinderLight.h"
 #include "rectLight.h"
 #include "material.h"
 #include "renderBuffer.h"
@@ -42,7 +43,8 @@ const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES =
 	HdPrimTypeTokens->camera,
 	HdPrimTypeTokens->material,
 	HdPrimTypeTokens->rectLight,
-	HdPrimTypeTokens->sphereLight,
+    HdPrimTypeTokens->sphereLight,
+    HdPrimTypeTokens->cylinderLight,
 	HdPrimTypeTokens->domeLight,
 };
 
@@ -183,6 +185,9 @@ HdRprDelegate::CreateSprim(TfToken const& typeId,
 	{
 		return new HdRprSphereLight(sprimId, m_rprApiSharedPtr);
 	}
+    else if (typeId == HdPrimTypeTokens->cylinderLight) {
+        return new HdRprCylinderLight(sprimId, m_rprApiSharedPtr);
+    }
 	else if (typeId == HdPrimTypeTokens->material)
 	{
 		return new HdRprMaterial(sprimId, m_rprApiSharedPtr);
@@ -215,6 +220,10 @@ HdRprDelegate::CreateFallbackSprim(TfToken const& typeId)
 	{
 		return new HdRprSphereLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
 	}
+    else if (typeId == HdPrimTypeTokens->cylinderLight)
+    {
+        return new HdRprCylinderLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+    }
 	else if (typeId == HdPrimTypeTokens->material)
 	{
 		return new HdRprMaterial(SdfPath::EmptyPath(), m_rprApiSharedPtr);
