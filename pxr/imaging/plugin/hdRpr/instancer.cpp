@@ -108,7 +108,7 @@ VtMatrix4dArray HdRprInstancer::ComputeTransforms(SdfPath const& prototypeId)
 			transform = m_transform[idx];
 		}
 
-		transforms.push_back( instancerTransform * transform * scaleMat * rotateMat * translateMat);
+		transforms.push_back(transform * scaleMat * rotateMat * translateMat * instancerTransform);
 	}
 
 	HdRprInstancer * parentInstancer = static_cast<HdRprInstancer *>( GetDelegate()->GetRenderIndex().GetInstancer(GetParentId()));
@@ -117,7 +117,7 @@ VtMatrix4dArray HdRprInstancer::ComputeTransforms(SdfPath const& prototypeId)
 	}
 
 	VtMatrix4dArray wordTransform;
-	for (const GfMatrix4d & parentTransform : parentInstancer->ComputeTransforms(prototypeId))
+	for (const GfMatrix4d & parentTransform : parentInstancer->ComputeTransforms(GetId()))
 	{
 		for (const GfMatrix4d & localTransform : transforms)
 		{
