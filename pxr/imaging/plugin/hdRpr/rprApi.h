@@ -74,6 +74,7 @@ public:
     RprApiObjectPtr CreateEnvironmentLight(GfVec3f color, float intensity);
     RprApiObjectPtr CreateRectLightMesh(float width, float height);
     RprApiObjectPtr CreateSphereLightMesh(float radius);
+    RprApiObjectPtr CreateCylinderLightMesh(float radius, float length);
     RprApiObjectPtr CreateDiskLightMesh(float width, float height, const GfVec3f& color);
     void SetLightTransform(RprApiObject* light, GfMatrix4d const& transform);
 
