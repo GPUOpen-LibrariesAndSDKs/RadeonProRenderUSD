@@ -351,7 +351,7 @@ void HdRprMesh::Sync(
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh.get(), m_refineLevel);
+                rprApi->SetMeshRefineLevel(rprMesh.get(), m_enableSubdiv ? m_refineLevel : 0);
             }
         }
 
