@@ -1847,7 +1847,11 @@ std::string HdRprApi::GetAppDataPath() {
         }
 
 #elif defined(__APPLE__)
-        return "/Library/Application Support/hdRPR";
+        if (auto homeEnv = getenv("HOME")) {
+            if (homeEnv[0] == '/') {
+                return homeEnv + std::string("/Library/Application Support/hdRPR");
+            }
+        }
 #else
 #warning "Unknown platform"
 #endif
