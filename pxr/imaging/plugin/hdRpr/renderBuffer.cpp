@@ -26,35 +26,18 @@ HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprAp
     m_isConverged.store(false);
 
     auto& idName = id.GetName();
-    if (idName == _tokens->aov_color)
-    {
+    if (idName == _tokens->aov_color) {
         m_aovName = HdRprAovTokens->color;
-        m_format = HdFormat::HdFormatUNorm8Vec4;
-    }
-    else if (idName == _tokens->aov_normal)
-    {
+    } else if (idName == _tokens->aov_normal) {
         m_aovName = HdRprAovTokens->normal;
-        m_format = HdFormat::HdFormatFloat32Vec3;
-    }
-    else if (idName == _tokens->aov_depth)
-    {
+    } else if (idName == _tokens->aov_depth) {
         m_aovName = HdRprAovTokens->depth;
-        m_format = HdFormat::HdFormatFloat32;
-    }
-    else if (idName == _tokens->aov_linear_depth)
-    {
+    } else if (idName == _tokens->aov_linear_depth) {
         m_aovName = HdRprAovTokens->linearDepth;
-        m_format = HdFormat::HdFormatFloat32;
-    }
-    else if (idName == _tokens->aov_primId)
-    {
+    } else if (idName == _tokens->aov_primId) {
         m_aovName = HdRprAovTokens->primId;
-        m_format = HdFormat::HdFormatUNorm8Vec4;
-    }
-    else if (idName == _tokens->aov_primvars_st)
-    {
+    } else if (idName == _tokens->aov_primvars_st) {
         m_aovName = HdRprAovTokens->primvarsSt;
-        m_format = HdFormat::HdFormatFloat32Vec3;
     }
 }
 
@@ -71,9 +54,17 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
     }
 
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        if (rprApi->EnableAov(m_aovName, dimensions[0], dimensions[1], m_format)) {
+        auto requestedFormat = format;
+
+        // XXX: RPR does not support integer images
+        if (format == HdFormatInt32) {
+            format = HdFormatUNorm8Vec4;
+        }
+
+        if (rprApi->EnableAov(m_aovName, dimensions[0], dimensions[1], format)) {
             m_width = dimensions[0];
             m_height = dimensions[1];
+            m_format = requestedFormat;
             return true;
         }
     } else {
@@ -108,9 +99,6 @@ unsigned int HdRprRenderBuffer::GetDepth() const {
 }
 
 HdFormat HdRprRenderBuffer::GetFormat() const {
-    if (m_aovName == HdRprAovTokens->primId) {
-        return HdFormatInt32;
-    }
     return m_format;
 }
 

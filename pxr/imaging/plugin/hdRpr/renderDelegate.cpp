@@ -292,7 +292,7 @@ HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) cons
         clearColorValue = name == HdAovTokens->linearDepth ? 0.0f : 1.0f;
         format = HdFormatFloat32;
     } else if (name == HdAovTokens->color) {
-        format = HdFormatUNorm8Vec4;
+        format = HdFormatFloat32Vec4;
     } else if (name == HdAovTokens->primId) {
         format = HdFormatInt32;
     } else {

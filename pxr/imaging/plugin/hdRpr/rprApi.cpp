@@ -79,7 +79,6 @@ public:
         InitRif();
         InitMaterialSystem();
         CreateScene();
-        CreatePosteffects();
         CreateCamera();
     }
 
@@ -749,23 +748,6 @@ public:
         heteroVolume->AttachDependency(std::move(transparentMaterial));
 
         return heteroVolume;
-    }
-
-    void CreatePosteffects() {
-        if (!m_rprContext) {
-            return;
-        }
-
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::TAHOE) {
-            rpr_post_effect tonemap;
-            if (RPR_ERROR_CHECK(rprContextCreatePostEffect(m_rprContext->GetHandle(), RPR_POST_EFFECT_TONE_MAP, &tonemap), "Fail to create post effect")) return;
-            m_tonemap = RprApiObject::Wrap(tonemap);
-
-            if (RPR_ERROR_CHECK(rprContextAttachPostEffect(m_rprContext->GetHandle(), tonemap), "Fail to attach posteffect")) return;
-            m_tonemap->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* tonemap) {
-                rprContextDetachPostEffect(m_rprContext->GetHandle(), tonemap);
-            });
-        }
     }
 
     void SetCameraViewMatrix(const GfMatrix4d& m) {
@@ -1597,7 +1579,6 @@ private:
     std::unique_ptr<ImageCache> m_imageCache;
     RprApiObjectPtr m_scene;
     RprApiObjectPtr m_camera;
-    RprApiObjectPtr m_tonemap;
     RprApiObjectPtr m_matsys;
     std::unique_ptr<RprMaterialFactory> m_rprMaterialFactory;
 
