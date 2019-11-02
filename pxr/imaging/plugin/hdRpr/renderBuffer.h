@@ -54,8 +54,7 @@ private:
     uint32_t m_height = 0u;
     HdFormat m_format = HdFormat::HdFormatInvalid;
 
-    std::unique_ptr<uint8_t[]> m_buffer;
-    size_t m_bufferSize = 0u;
+    std::vector<uint8_t> m_mappedBuffer;
     std::atomic<int> m_numMappers;
     std::atomic<bool> m_isConverged;
 };

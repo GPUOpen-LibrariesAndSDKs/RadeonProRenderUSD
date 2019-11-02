@@ -67,15 +67,6 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
             m_width = dimensions[0];
             m_height = dimensions[1];
             m_format = requestedFormat;
-
-            auto newBufferSize = m_width * m_height * HdDataSizeOfFormat(m_format);
-            // Avoid reallocation if new size a little bit smaller than bufferSize
-            if (newBufferSize < (m_bufferSize * 0.9) ||
-                newBufferSize > m_bufferSize) {
-                m_buffer = std::unique_ptr<uint8_t[]>(new uint8_t[newBufferSize]);
-                m_bufferSize = newBufferSize;
-            }
-
             return true;
         }
     } else {
@@ -119,21 +110,15 @@ bool HdRprRenderBuffer::IsMultiSampled() const {
 
 void* HdRprRenderBuffer::Map() {
     ++m_numMappers;
-    // XXX: RPR does not support framebuffer mapping, so here is at least correct mapping for reading
-    return m_buffer.get();
-}
 
-void HdRprRenderBuffer::Unmap() {
-    --m_numMappers;
-}
+    size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
+    m_mappedBuffer.resize(dataByteSize);
+    if (!dataByteSize) {
+        return nullptr;
+    }
 
-bool HdRprRenderBuffer::IsMapped() const {
-    return m_numMappers.load() != 0;
-}
-
-void HdRprRenderBuffer::Resolve() {
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        if (rprApi->GetAovData(m_aovName, m_buffer.get(), m_bufferSize)) {
+        if (rprApi->GetAovData(m_aovName, m_mappedBuffer.data(), dataByteSize)) {
             if (m_aovName == HdRprAovTokens->primId) {
                 // RPR store integer ID values to RGB images using such formula:
                 // c[i].x = i;
@@ -141,7 +126,7 @@ void HdRprRenderBuffer::Resolve() {
                 // c[i].z = i/(256*256);
                 // i.e. saving little endian int24 to uchar3
                 // That's why we interpret the value as int and filling the alpha channel with zeros
-                auto primIdData = reinterpret_cast<int*>(m_buffer.get());
+                auto primIdData = reinterpret_cast<int*>(m_mappedBuffer.data());
                 for (uint32_t y = 0; y < m_height; ++y) {
                     uint32_t yOffset = y * m_width;
                     for (uint32_t x = 0; x < m_width; ++x) {
@@ -151,6 +136,24 @@ void HdRprRenderBuffer::Resolve() {
             }
         }
     }
+
+    return m_mappedBuffer.data();
+}
+
+void HdRprRenderBuffer::Unmap() {
+    // XXX We could consider clearing _mappedBuffer here to free RAM.
+    //     For now we assume that Map() will be called frequently so we prefer
+    //     to avoid the cost of clearing the buffer over memory savings.
+    // m_mappedBuffer.clear();
+    --m_numMappers;
+}
+
+bool HdRprRenderBuffer::IsMapped() const {
+    return m_numMappers.load() != 0;
+}
+
+void HdRprRenderBuffer::Resolve() {
+    // no-op
 }
 
 bool HdRprRenderBuffer::IsConverged() const {

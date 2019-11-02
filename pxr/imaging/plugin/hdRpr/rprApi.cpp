@@ -975,8 +975,8 @@ public:
             return readRifImage(m_denoiseFilterPtr->GetOutput());
         } else {
             auto& aovFrameBuffer = it->second;
-            if (!aovFrameBuffer.postprocessFilters.empty()) {
-                return readRifImage(aovFrameBuffer.postprocessFilters.back()->GetOutput());
+            if (aovFrameBuffer.postprocessFilter) {
+                return readRifImage(aovFrameBuffer.postprocessFilter->GetOutput());
             } else {
                 auto resolvedFb = aovFrameBuffer.resolved.get();
                 if (!resolvedFb) {
