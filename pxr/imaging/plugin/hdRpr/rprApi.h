@@ -75,7 +75,7 @@ public:
     RprApiObjectPtr CreateRectLightMesh(float width, float height);
     RprApiObjectPtr CreateSphereLightMesh(float radius);
     RprApiObjectPtr CreateCylinderLightMesh(float radius, float length);
-    RprApiObjectPtr CreateDiskLightMesh(float width, float height, const GfVec3f& color);
+    RprApiObjectPtr CreateDiskLightMesh(float radius);
     void SetLightTransform(RprApiObject* light, GfMatrix4d const& transform);
 
     RprApiObjectPtr CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize);

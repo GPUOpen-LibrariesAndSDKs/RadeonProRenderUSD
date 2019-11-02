@@ -41,8 +41,6 @@ TF_DEFINE_PRIVATE_TOKENS(RprApiObjectActionTokens, RPR_API_OBJECT_ACTION_TOKENS)
 namespace
 {
 
-const uint32_t k_diskVertexCount = 32;
-
 using RecursiveLockGuard = std::lock_guard<std::recursive_mutex>;
 std::recursive_mutex g_rprAccessMutex;
 
@@ -489,44 +487,37 @@ public:
         return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
     }
 
-    RprApiObjectPtr CreateDiskLightMesh(float width, float height, const GfVec3f& color) {
-        VtVec3fArray positions;
+    RprApiObjectPtr CreateDiskLightMesh(float radius) {
+        constexpr uint32_t k_diskVertexCount = 32;
+
+        VtVec3fArray points;
         VtVec3fArray normals;
-        VtVec2fArray uv; // empty
-        VtIntArray idx;
-        VtIntArray vpf;
+        VtIntArray pointIndices;
+        VtIntArray normalIndices(k_diskVertexCount * 3, 0);
+        VtIntArray vpf(k_diskVertexCount, 3);
 
-        const float step = M_PI * 2 / k_diskVertexCount;
+        points.reserve(k_diskVertexCount + 1);
+        pointIndices.reserve(k_diskVertexCount * 3);
+
+        const double step = M_PI * 2.0 / k_diskVertexCount;
         for (int i = 0; i < k_diskVertexCount; ++i) {
-            positions.push_back(GfVec3f(width * sin(step * i), height * cos(step * i), 0.f));
-            positions.push_back(GfVec3f(width * sin(step * (i + 1)), height * cos(step * (i + 1)), 0.f));
-            positions.push_back(GfVec3f(0., 0., 0.f));
+            double angle = step * i;
+            points.push_back(GfVec3f(radius * cos(angle), radius * sin(angle), 0.0f));
+        }
+        const int centerPointIndex = points.size();
+        points.push_back(GfVec3f(0.0f));
 
-            normals.push_back(GfVec3f(0.f, 0.f, -1.f));
-            normals.push_back(GfVec3f(0.f, 0.f, -1.f));
-            normals.push_back(GfVec3f(0.f, 0.f, -1.f));
+        normals.push_back(GfVec3f(0.0f, 0.0f, -1.0f));
 
-            idx.push_back(i * 3);
-            idx.push_back(i * 3 + 1);
-            idx.push_back(i * 3 + 2);
-
-            vpf.push_back(3);
+        for (int i = 0; i < k_diskVertexCount; ++i) {
+            pointIndices.push_back(i);
+            pointIndices.push_back((i + 1) % k_diskVertexCount);
+            pointIndices.push_back(centerPointIndex);
         }
 
-        /*
-        rpr_material_node material = nullptr;
-        {
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
+        m_isLightPresent = true;
 
-            if (RPR_ERROR_CHECK(rprMaterialSystemCreateNode(m_matsys, RPR_MATERIAL_NODE_EMISSIVE, &material), "Fail create emmisive material")) return nullptr;
-            m_rprObjectsToRelease.push_back(material);
-            if (RPR_ERROR_CHECK(rprMaterialNodeSetInputF(material, "color", color[0], color[1], color[2], 0.0f),"Fail set material color")) return nullptr;
-
-            m_isLightPresent = true;
-        }
-        */
-
-        return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
+        return CreateMesh(points, pointIndices, normals, normalIndices, VtVec2fArray(), VtIntArray(), vpf);
     }
 
     RprApiObjectPtr CreateSphereLightMesh(float radius) {
@@ -1721,8 +1712,8 @@ RprApiObjectPtr HdRprApi::CreateCylinderLightMesh(float radius, float length) {
     return m_impl->CreateCylinderLightMesh(radius, length);
 }
 
-RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float width, float height, const GfVec3f& emmisionColor) {
-    return m_impl->CreateDiskLightMesh(width, height, emmisionColor);
+RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float radius) {
+    return m_impl->CreateDiskLightMesh(radius);
 }
 
 void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4d const& transform) {

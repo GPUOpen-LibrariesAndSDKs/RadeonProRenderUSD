@@ -116,6 +116,7 @@ pxr_plugin(hdRpr
 		rectLight
         sphereLight
         cylinderLight
+        diskLight
         renderBuffer
 		basisCurves
         imageCache

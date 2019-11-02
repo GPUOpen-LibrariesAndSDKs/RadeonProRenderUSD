@@ -10,6 +10,7 @@
 #include "sphereLight.h"
 #include "cylinderLight.h"
 #include "rectLight.h"
+#include "diskLight.h"
 #include "material.h"
 #include "renderBuffer.h"
 #include "basisCurves.h"
@@ -45,7 +46,8 @@ const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES =
 	HdPrimTypeTokens->rectLight,
     HdPrimTypeTokens->sphereLight,
     HdPrimTypeTokens->cylinderLight,
-	HdPrimTypeTokens->domeLight,
+    HdPrimTypeTokens->domeLight,
+    HdPrimTypeTokens->diskLight,
 };
 
 const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES =
@@ -188,6 +190,9 @@ HdRprDelegate::CreateSprim(TfToken const& typeId,
     else if (typeId == HdPrimTypeTokens->cylinderLight) {
         return new HdRprCylinderLight(sprimId, m_rprApiSharedPtr);
     }
+    else if (typeId == HdPrimTypeTokens->diskLight) {
+        return new HdRprDiskLight(sprimId, m_rprApiSharedPtr);
+    }
 	else if (typeId == HdPrimTypeTokens->material)
 	{
 		return new HdRprMaterial(sprimId, m_rprApiSharedPtr);
@@ -223,6 +228,9 @@ HdRprDelegate::CreateFallbackSprim(TfToken const& typeId)
     else if (typeId == HdPrimTypeTokens->cylinderLight)
     {
         return new HdRprCylinderLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+    }
+    else if (typeId == HdPrimTypeTokens->diskLight) {
+        return new HdRprDiskLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
     }
 	else if (typeId == HdPrimTypeTokens->material)
 	{
