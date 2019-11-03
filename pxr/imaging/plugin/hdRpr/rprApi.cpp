@@ -1753,11 +1753,16 @@ void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4d const& transfor
     m_impl->SetLightTransform(light->GetHandle(), transformF);
 }
 
-RprApiObjectPtr HdRprApi::CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-	const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
-	const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-	const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow){
-    return m_impl->CreateVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues, gridSize, voxelSize, gridBBLow);
+RprApiObjectPtr HdRprApi::CreateVolume(
+    const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+    const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+    const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
+    const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
+    return m_impl->CreateVolume(
+        densityGridOnIndices, densityGridOnValueIndices, densityGridValues,
+        colorGridOnIndices, colorGridOnValueIndices, colorGridValues,
+        emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues,
+        gridSize, voxelSize, gridBBLow);
 }
 
 RprApiObjectPtr HdRprApi::CreateMaterial(MaterialAdapter& materialAdapter) {

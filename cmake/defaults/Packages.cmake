@@ -81,6 +81,7 @@ endif()
 find_package(TBB REQUIRED COMPONENTS tbb)
 add_definitions(${TBB_DEFINITIONS})
 
+find_package(OpenEXR REQUIRED COMPONENTS Half)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 

@@ -86,9 +86,9 @@ pxr_plugin(hdRpr
         ${GLEW_LIBRARY}
 		${OPENGL_LIBRARIES}
 		${PYTHON_LIBRARIES}
-		
+		${OPENEXR_LIBRARIES}
+
 		${OptLibs}
-        Half
 
 	INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
@@ -97,6 +97,7 @@ pxr_plugin(hdRpr
         ${TBB_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIR}
         ${CMAKE_CURRENT_BINARY_DIR}
+        ${OPENEXR_INCLUDE_DIRS}
 		
 		${OptIncludeDir}
 
@@ -137,6 +138,7 @@ pxr_plugin(hdRpr
 
 add_subdirectory(rprcpp)
 add_subdirectory(rifcpp)
+add_subdirectory(houdini)
 
 # LINUX is not listed in default system variables (https://cmake.org/cmake/help/3.15/manual/cmake-variables.7.html)
 if(NOT DEFINED LINUX)
