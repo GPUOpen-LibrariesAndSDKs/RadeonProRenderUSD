@@ -1,8 +1,8 @@
 #include "rprContext.h"
 #include "rprError.h"
 
-#include "../RprTools/RprTools.h"
-#include "../RprTools/RprTools.cpp"
+#include "../rprTools/RprTools.h"
+#include "../rprTools/RprTools.cpp"
 
 #include "pxr/imaging/glf/glew.h"
 #include "pxr/base/arch/env.h"
@@ -12,6 +12,8 @@
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
 #include <dlfcn.h>
+#elif defined(__linux__)
+#include <link.h>
 #endif // __APPLE__
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -22,6 +24,8 @@ namespace {
 
 #if defined __APPLE__
 const char* k_RadeonProRenderLibName = "libRadeonProRender64.dylib";
+#elif defined(__linux__)
+const char* k_RadeonProRenderLibName = "libRadeonProRender64.so";
 #endif
 
 std::string GetRprSdkPath() {
@@ -49,6 +53,23 @@ std::string GetRprSdkPath() {
     }
 
     TF_CODING_ERROR("Path to RPR SDK with %s not found", k_RadeonProRenderLibName);
+#elif defined(__linux__)
+    if (auto handle = dlopen(nullptr, RTLD_NOW)) {
+        link_map* map = nullptr;
+        if (dlinfo(handle, RTLD_DI_LINKMAP, &map)) {
+            const char* errorStr = "unknown reason";
+            if (auto error = dlerror()) {
+                errorStr = error;
+            }
+            TF_RUNTIME_ERROR("Failed to query RPR SDK path: %s", errorStr);
+        } else {
+            for (auto head = map; head != nullptr; head = head->l_next) {
+                if (auto dlpath = std::strstr(head->l_name, k_RadeonProRenderLibName)) {
+                    return std::string(head->l_name, dlpath - head->l_name);
+                }
+            }
+        }
+    }
 #endif // __APPLE__
 
     return std::string();

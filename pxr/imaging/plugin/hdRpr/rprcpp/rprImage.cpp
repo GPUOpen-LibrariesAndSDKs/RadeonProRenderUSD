@@ -6,6 +6,7 @@
 #include <PXL/PXL_Raster.h>
 #endif
 
+#include <cstring>
 #include <vector>
 #include <array>
 
