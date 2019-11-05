@@ -121,6 +121,14 @@ render_setting_categories = [
                 'defaultValue': 0.0,
                 'minValue': 0.0,
                 'maxValue': 1e6
+            },
+            {
+                'name': 'interactiveMaxRayDepth',
+                'ui_name': 'Interactive Max Ray Depth',
+                'help': 'Controls value of \'Max Ray Depth\' in interactive mode.',
+                'defaultValue': 2,
+                'minValue': 1,
+                'maxValue': 50
             }
         ]
     }
@@ -169,6 +177,7 @@ public:
         DirtyRenderDevice = 1 << 0,
         DirtyPlugin = 1 << 1,
         DirtyHybridQuality = 1 << 2,
+        DirtyInteractiveMode = 1 << 3,
 {rs_category_dirty_flags}
     }};
 
@@ -186,6 +195,9 @@ public:
     void SetPlugin(rpr::PluginType plugin);
     rpr::PluginType GetPlugin();
 
+    void SetInteractiveMode(bool enable);
+    bool GetInteractiveMode() const;
+
 {rs_get_set_method_declarations}
     bool IsDirty(ChangeTracker dirtyFlag) const;
     void CleanDirtyFlag(ChangeTracker dirtyFlag);
@@ -198,6 +210,7 @@ private:
         rpr::RenderDeviceType renderDevice;
         rpr::PluginType plugin;
         HdRprHybridQuality hybridQuality;
+        bool enableInteractive;
 
 {rs_variables_declaration}
 
@@ -234,6 +247,9 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PUBLIC_TOKENS(HdRprRenderQualityTokens, HDRPR_RENDER_QUALITY_TOKENS);
 TF_DEFINE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    ((houdiniInteractive, "houdini:interactive"))
+);
 
 namespace {{
 
@@ -266,6 +282,9 @@ void HdRprConfig::Sync(HdRenderDelegate* renderDelegate) {{
             }}
             return defaultValue;
         }};
+
+        auto interactiveMode = renderDelegate->GetRenderSetting<std::string>(_tokens->houdiniInteractive, "");
+        SetInteractiveMode(interactiveMode != "normal");
 
 {rs_sync}
     }}
@@ -311,6 +330,18 @@ void HdRprConfig::SetPlugin(rpr::PluginType plugin) {{
 
 rpr::PluginType HdRprConfig::GetPlugin() {{
     return m_prefData.plugin;
+}}
+
+void HdRprConfig::SetInteractiveMode(bool enable) {{
+    if (m_prefData.enableInteractive != enable) {{
+        m_prefData.enableInteractive = enable;
+        m_prefData.Save();
+        m_dirtyFlags |= DirtyInteractiveMode;
+    }}
+}}
+
+bool HdRprConfig::GetInteractiveMode() const {{
+    return m_prefData.enableInteractive;
 }}
 
 {rs_get_set_method_definitions}
@@ -368,6 +399,7 @@ void HdRprConfig::PrefData::SetDefault() {{
     renderDevice = rpr::RenderDeviceType::GPU;
     plugin = rpr::PluginType::TAHOE;
     hybridQuality = HdRprHybridQuality::HIGH;
+    enableInteractive = false;
 
 {rs_set_default_values}
 }}
@@ -397,7 +429,7 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
 ''').strip()
 
-    dirty_flags_offset = 3
+    dirty_flags_offset = 4
 
     rs_tokens_declaration = '#define HDRPR_RENDER_SETTINGS_TOKENS \\\n'
     rs_category_dirty_flags = ''

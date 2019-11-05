@@ -1156,6 +1156,13 @@ public:
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode)) {
+            auto maxRayDepth = preferences.GetInteractiveMode() ? preferences.GetInteractiveMaxRayDepth() : preferences.GetMaxRayDepth();
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
     }
 
     void UpdateCamera() {
