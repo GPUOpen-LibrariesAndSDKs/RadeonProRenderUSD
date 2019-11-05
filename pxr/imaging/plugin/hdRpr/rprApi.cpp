@@ -1356,8 +1356,7 @@ private:
             return;
         }
 
-        // XXX: such unsafe define names are going to be fixed in next RIF release but until hold yourself, time will come
-        auto rifVersionString = std::to_string(VERSION_MAJOR) + "." + std::to_string(VERSION_MINOR) + "." + std::to_string(VERSION_REVISION);
+        auto rifVersionString = std::to_string(RIF_VERSION_MAJOR) + "." + std::to_string(RIF_VERSION_MINOR) + "." + std::to_string(RIF_VERSION_REVISION);
 
         std::string modelsDir("RIF_models");
 #ifdef BUILD_AS_HOUDINI_PLUGIN
