@@ -1301,6 +1301,10 @@ public:
         }
     }
 
+    int GetNumCompletedSamples() const {
+        return m_iter;
+    }
+
     void DeleteMesh(void* mesh) {
         if (!mesh) {
             return;
@@ -1820,6 +1824,10 @@ void HdRprApi::Render() {
 
 bool HdRprApi::IsConverged() {
     return m_impl->IsConverged();
+}
+
+int HdRprApi::GetNumCompletedSamples() const {
+    return m_impl->GetNumCompletedSamples();
 }
 
 bool HdRprApi::IsGlInteropEnabled() const {

@@ -24,7 +24,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
 	(openvdbAsset) \
-	(rpr)
+	(rpr) \
+	(percentDone)
 );
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES =
@@ -304,6 +305,14 @@ HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) cons
 
 HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const {
     return m_settingDescriptors;
+}
+
+VtDictionary HdRprDelegate::GetRenderStats() const {
+    VtDictionary stats;
+    int numCompletedSamples = m_rprApiSharedPtr->GetNumCompletedSamples();
+    stats[HdPerfTokens->numCompletedSamples.GetString()] = numCompletedSamples;
+    stats[_tokens->percentDone.GetString()] = 100.0 * double(numCompletedSamples) / HdRprConfig::GetInstance().GetMaxSamples();
+    return stats;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

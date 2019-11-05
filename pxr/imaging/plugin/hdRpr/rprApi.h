@@ -112,6 +112,7 @@ public:
 
     void Render();
     bool IsConverged();
+    int GetNumCompletedSamples() const;
 
     bool IsGlInteropEnabled() const;
 
