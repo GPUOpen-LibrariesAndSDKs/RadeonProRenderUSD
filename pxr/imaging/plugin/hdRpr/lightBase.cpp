@@ -100,7 +100,7 @@ void HdRprLightBase::Sync(HdSceneDelegate *sceneDelegate,
 
 		const bool isNormalize = sceneDelegate->GetLightParamValue(id, HdLightTokens->normalize).Get<bool>();
 		const GfVec3f illumColor = color * illuminationIntensity;
-		const GfVec3f emissionColor = (isNormalize) ? NormalizeLightColor(m_transform, params, illumColor) : illumColor;
+		const GfVec3f emissionColor = (isNormalize) ? NormalizeLightColor(m_transform, illumColor) : illumColor;
 
 		if (!m_lightMaterial || IsDirtyMaterial(emissionColor))
 		{

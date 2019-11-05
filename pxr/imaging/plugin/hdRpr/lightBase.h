@@ -51,7 +51,7 @@ protected:
 	virtual RprApiObjectPtr CreateLightMaterial(const GfVec3f& illumColor);
 
 	// Normalize Light Color with surface area
-	virtual GfVec3f NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & emmisionColor) = 0;
+	virtual GfVec3f NormalizeLightColor(const GfMatrix4d & transform, const GfVec3f & emmisionColor) = 0;
 
 	HdRprApiWeakPtr m_rprApiWeakPtr;
 

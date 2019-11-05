@@ -17,8 +17,8 @@ bool HdRprRectLight::IsDirtyGeomParam(std::map<TfToken, float>& params) {
 		return false;
 	}
 
-	float width = params[HdLightTokens->width];
-	float height = params[HdLightTokens->height];
+	float width = std::abs(params[HdLightTokens->width]);
+	float height = std::abs(params[HdLightTokens->height]);
 
 	bool isDirty = (width != m_width || m_height != height);
 
@@ -37,12 +37,9 @@ RprApiObjectPtr HdRprRectLight::CreateLightMesh(std::map<TfToken, float>& params
 	return rprApi->CreateRectLightMesh(params[HdLightTokens->width], params[HdLightTokens->height]);
 }
 
-GfVec3f HdRprRectLight::NormalizeLightColor(const GfMatrix4d& transform, std::map<TfToken, float>& params, const GfVec3f& inColor) {
-	const double width = static_cast<double>(params[HdLightTokens->width]);
-	const double height = static_cast<double>(params[HdLightTokens->height]);
-
-	const GfVec4d ox(width, 0., 0., 0.);
-	const GfVec4d oy(0., height, 0., 0.);
+GfVec3f HdRprRectLight::NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& inColor) {
+	const GfVec4d ox(m_width, 0., 0., 0.);
+	const GfVec4d oy(0., m_height, 0., 0.);
 
 	const GfVec4d oxTrans = ox * transform;
 	const GfVec4d oyTrans = oy * transform;

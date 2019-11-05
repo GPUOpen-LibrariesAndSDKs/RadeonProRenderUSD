@@ -20,8 +20,8 @@ bool HdRprCylinderLight::IsDirtyGeomParam(std::map<TfToken, float>& params) {
         return false;
     }
 
-    float radius = radiusParamIter->second;
-    float length = lengthParamIter->second;
+    float radius = std::abs(radiusParamIter->second);
+    float length = std::abs(lengthParamIter->second);
 
     bool isDirty = radius != m_radius || length != m_length;
 
@@ -46,20 +46,10 @@ RprApiObjectPtr HdRprCylinderLight::CreateLightMesh(std::map<TfToken, float>& pa
     return rprApi->CreateCylinderLightMesh(params[HdLightTokens->radius], params[HdLightTokens->length]);
 }
 
-GfVec3f HdRprCylinderLight::NormalizeLightColor(const GfMatrix4d& transform, std::map<TfToken, float>& params, const GfVec3f& inColor) {
-    float radius = params[HdLightTokens->radius];
-    if (radius <= 0.0f) {
-        radius = 1.0f;
-    }
-
-    float length = params[HdLightTokens->length];
-    if (length <= 0.0f) {
-        length = 1.0f;
-    }
-
-    const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * radius;
-    const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * radius;
-    const double sz = GfVec3d(transform[0][2], transform[1][2], transform[2][2]).GetLength() * length;
+GfVec3f HdRprCylinderLight::NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& inColor) {
+    const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * m_radius;
+    const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * m_radius;
+    const double sz = GfVec3d(transform[0][2], transform[1][2], transform[2][2]).GetLength() * m_length;
 
     if (sx == 0. && sy == 0. && sz == 0.) {
         return inColor;
