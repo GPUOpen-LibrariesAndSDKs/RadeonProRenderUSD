@@ -13,7 +13,7 @@ bool HdRprDiskLight::IsDirtyGeomParam(std::map<TfToken, float>& params) {
         return false;
     }
 
-    float radius = radiusParamIter->second;
+    float radius = std::abs(radiusParamIter->second);
 
     bool isDirty = radius != m_radius;
 
@@ -36,14 +36,9 @@ RprApiObjectPtr HdRprDiskLight::CreateLightMesh(std::map<TfToken, float>& params
     return rprApi->CreateDiskLightMesh(params[HdLightTokens->radius]);
 }
 
-GfVec3f HdRprDiskLight::NormalizeLightColor(const GfMatrix4d& transform, std::map<TfToken, float>& params, const GfVec3f& inColor) {
-    float radius = params[HdLightTokens->radius];
-    if (radius <= 0.0f) {
-        radius = 1.0f;
-    }
-
-    const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * radius;
-    const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * radius;
+GfVec3f HdRprDiskLight::NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& inColor) {
+    const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * m_radius;
+    const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * m_radius;
 
     if (sx == 0. && sy == 0.) {
         return inColor;

@@ -16,7 +16,7 @@ bool HdRprSphereLight::IsDirtyGeomParam(std::map<TfToken, float> & params)
 		return false;
 	}
 
-	float radius = params[HdLightTokens->radius];
+	float radius = std::abs(params[HdLightTokens->radius]);
 
 	bool isDirty = radius != m_radius;
 
@@ -43,15 +43,10 @@ RprApiObjectPtr HdRprSphereLight::CreateLightMesh(std::map<TfToken, float>& para
 	return rprApi->CreateSphereLightMesh(params[HdLightTokens->radius]);
 }
 
-GfVec3f HdRprSphereLight::NormalizeLightColor(const GfMatrix4d& transform, std::map<TfToken, float>& params, const GfVec3f& inColor) {
-	float radius = params[HdLightTokens->radius];
-	if (radius <= 0.0f) {
-		radius = 1.0f;
-	}
-
-	const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * radius;
-	const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * radius;
-	const double sz = GfVec3d(transform[0][2], transform[1][2], transform[2][2]).GetLength() * radius;
+GfVec3f HdRprSphereLight::NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& inColor) {
+	const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * m_radius;
+	const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * m_radius;
+	const double sz = GfVec3d(transform[0][2], transform[1][2], transform[2][2]).GetLength() * m_radius;
 
 	if (sx == 0. && sy == 0. && sz == 0.)
 	{

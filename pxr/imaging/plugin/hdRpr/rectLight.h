@@ -22,7 +22,7 @@ protected:
     RprApiObjectPtr CreateLightMesh(std::map<TfToken, float>& params) override;
 
 	// Normalize Light Color with surface area
-	virtual GfVec3f NormalizeLightColor(const GfMatrix4d & transform, std::map<TfToken, float> & params, const GfVec3f & emmisionColor) override;
+	virtual GfVec3f NormalizeLightColor(const GfMatrix4d & transform, const GfVec3f & emmisionColor) override;
 
 private:
 	float m_width = std::numeric_limits<float>::quiet_NaN();
