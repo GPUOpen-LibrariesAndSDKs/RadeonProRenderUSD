@@ -137,6 +137,7 @@ HdRprDelegate::CreateInstancer(HdSceneDelegate *delegate,
 void
 HdRprDelegate::DestroyInstancer(HdInstancer *instancer)
 {
+    delete instancer;
 }
 
 HdRprim *
