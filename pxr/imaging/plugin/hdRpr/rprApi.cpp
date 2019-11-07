@@ -11,6 +11,7 @@
 #include "materialFactory.h"
 #include "materialAdapter.h"
 
+#include "pxr/base/gf/math.h"
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/base/arch/fileSystem.h"
@@ -391,6 +392,42 @@ public:
         });
 
         return curveObject;
+    }
+
+    RprApiObjectPtr CreateDirectionalLight() {
+        if (!m_rprContext) {
+            return nullptr;
+        }
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        rpr_light light;
+        if (RPR_ERROR_CHECK(rprContextCreateDirectionalLight(m_rprContext->GetHandle(), &light), "Failed to create directional light")) {
+            return nullptr;
+        }
+        auto lightObject = RprApiObject::Wrap(light);
+
+        if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene->GetHandle(), light), "Failed to attach directional light to scene")) {
+            return nullptr;
+        }
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+        lightObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* light) {
+            if (!RPR_ERROR_CHECK(rprSceneDetachLight(m_scene->GetHandle(), light), "Failed to detach directional light from scene")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+        });
+
+        m_isLightPresent = true;
+
+        return lightObject;
+    }
+
+    void SetDirectionalLightAttributes(rpr_light light, GfVec3f const& color, float shadowSoftness) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+
+        RPR_ERROR_CHECK(rprDirectionalLightSetRadiantPower3f(light, color[0], color[1], color[2]), "Failed to set directional light color");
+        RPR_ERROR_CHECK(rprDirectionalLightSetShadowSoftness(light, GfClamp(shadowSoftness, 0.0f, 1.0f)), "Failed to set directional light color");
     }
 
     RprApiObjectPtr CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
@@ -1272,7 +1309,7 @@ public:
         m_iter++;
     }
 
-    bool IsConverged() { 
+    bool IsConverged() {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         // return Converged if max samples is reached
@@ -1716,9 +1753,16 @@ RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float radius) {
     return m_impl->CreateDiskLightMesh(radius);
 }
 
-void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4d const& transform) {
-    GfMatrix4f transformF(transform);
-    m_impl->SetLightTransform(light->GetHandle(), transformF);
+void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4f const& transform) {
+    m_impl->SetLightTransform(light->GetHandle(), transform);
+}
+
+RprApiObjectPtr HdRprApi::CreateDirectionalLight() {
+    return m_impl->CreateDirectionalLight();
+}
+
+void HdRprApi::SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftness) {
+    m_impl->SetDirectionalLightAttributes(directionalLight->GetHandle(), color, shadowSoftness);
 }
 
 RprApiObjectPtr HdRprApi::CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& gridSize, const GfVec3f& voxelSize) {
