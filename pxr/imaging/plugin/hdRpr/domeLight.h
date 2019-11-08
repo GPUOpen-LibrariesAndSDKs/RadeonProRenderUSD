@@ -3,6 +3,7 @@
 
 #include "pxr/pxr.h"
 
+#include "pxr/base/gf/matrix4f.h"
 #include "pxr/imaging/hd/sprim.h"
 #include "pxr/usd/sdf/path.h"
 
@@ -37,7 +38,7 @@ public:
 protected:
 	HdRprApiWeakPtr m_rprApiWeakPtr;
 	RprApiObjectPtr m_rprLight;
-    GfMatrix4d m_transform;
+    GfMatrix4f m_transform;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

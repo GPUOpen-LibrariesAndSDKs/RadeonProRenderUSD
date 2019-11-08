@@ -43,9 +43,9 @@ void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
 	HdDirtyBits bits = *dirtyBits;
 
     if (bits & HdLight::DirtyTransform) {
-        m_transform = sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>();
+        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>());
         // XXX: Required to match orientation with Houdini's Karma
-        m_transform *= GfMatrix4d(1.0).SetScale(GfVec3d(-1.0f, 1.0f, 1.0f));
+        m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(-1.0f, 1.0f, 1.0f));
     }
 
     bool newLight = false;
