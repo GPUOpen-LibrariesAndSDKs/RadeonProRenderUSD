@@ -39,25 +39,64 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
         rprApi->SetCameraProjectionMatrix(proj);
     }
 
+    auto& aovBindings = renderPassState->GetAovBindings();
+    if (aovBindings.empty() &&
+        (rprApi->GetActiveAov().IsEmpty() || !rprApi->GetAovInfo(rprApi->GetActiveAov(), nullptr, nullptr, nullptr))) {
+
+        auto& vp = renderPassState->GetViewport();
+        auto& aovToEnable = rprApi->GetActiveAov().IsEmpty() ? HdRprAovTokens->color : rprApi->GetActiveAov();
+        rprApi->EnableAov(aovToEnable, vp[2], vp[3], HdFormatFloat32Vec4);
+    }
+
     rprApi->Render();
     m_isConverged = rprApi->IsConverged();
 
-    auto& aovBindings = renderPassState->GetAovBindings();
     if (aovBindings.empty()) {
         auto& activeAov = rprApi->GetActiveAov();
-        if (auto colorBuffer = rprApi->GetAovData(activeAov)) {
-            auto aovSize = rprApi->GetAovSize(activeAov);
-            auto& vp = renderPassState->GetViewport();
+        int aovWidth;
+        int aovHeight;
+        HdFormat aovFormat;
+        if (rprApi->GetAovInfo(activeAov, &aovWidth, &aovHeight, &aovFormat)) {
+            std::vector<uint8_t> buffer;
+            buffer.reserve(aovWidth * aovHeight * HdDataSizeOfFormat(aovFormat));
+            if (rprApi->GetAovData(activeAov, buffer.data(), buffer.capacity())) {
+                float currentZoomX;
+                float currentZoomY;
+                glGetFloatv(GL_ZOOM_X, &currentZoomX);
+                glGetFloatv(GL_ZOOM_Y, &currentZoomY);
 
-            float currentZoomX;
-            float currentZoomY;
-            glGetFloatv(GL_ZOOM_X, &currentZoomX);
-            glGetFloatv(GL_ZOOM_Y, &currentZoomY);
+                if (aovFormat == HdFormatInt32) {
+                    aovFormat = HdFormatUNorm8Vec4;
+                }
+                auto componentFormat = HdGetComponentFormat(aovFormat);
+                auto componentCount = HdGetComponentCount(aovFormat);
 
-            // Viewport size is not required to be of the same size as AOV framebuffer
-            glPixelZoom(float(vp[2]) / aovSize[0], float(vp[3]) / aovSize[1]);
-            glDrawPixels(aovSize[0], aovSize[1], GL_RGBA, GL_FLOAT, colorBuffer.get());
-            glPixelZoom(currentZoomX, currentZoomY);
+                GLenum format;
+                if (componentCount == 4) {
+                    format = GL_RGBA;
+                } else if (componentCount == 3) {
+                    format = GL_RGB;
+                } else if (componentCount == 2) {
+                    format = GL_RG;
+                } else {
+                    format = GL_R;
+                }
+
+                GLenum type;
+                if (componentFormat == HdFormatUNorm8) {
+                    type = GL_UNSIGNED_BYTE;
+                } else if (componentFormat == HdFormatFloat16) {
+                    type = GL_HALF_FLOAT;
+                } else if (componentFormat == HdFormatFloat32) {
+                    type = GL_FLOAT;
+                }
+
+                // Viewport size is not required to be of the same size as AOV framebuffer
+                auto& vp = renderPassState->GetViewport();
+                glPixelZoom(float(vp[2]) / aovWidth, float(vp[3]) / aovHeight);
+                glDrawPixels(aovWidth, aovHeight, format, type, buffer.data());
+                glPixelZoom(currentZoomX, currentZoomY);
+            }
         }
     } else {
         for (auto& aovBinding : aovBindings) {

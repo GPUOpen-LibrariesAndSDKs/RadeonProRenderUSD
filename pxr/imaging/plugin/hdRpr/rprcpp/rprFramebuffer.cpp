@@ -80,29 +80,17 @@ bool FrameBuffer::Resize(rpr_uint width, rpr_uint height) {
     return true;
 }
 
-std::shared_ptr<char> FrameBuffer::GetData(std::shared_ptr<char> buffer, size_t* bufferSize) {
+bool FrameBuffer::GetData(void* dstBuffer, size_t dstBufferSize) {
     if (m_width == 0 || m_height == 0 || !m_rprObjectHandle) {
-        return nullptr;
+        return false;
     }
 
     auto size = GetSize();
-    if (!buffer) {
-        buffer = std::shared_ptr<char>(new char[size]);
-        if (bufferSize) {
-            *bufferSize = size;
-        }
-    } else if (bufferSize) {
-        if (*bufferSize != size) {
-            buffer = std::shared_ptr<char>(new char[size]);
-            *bufferSize = size;
-        }
+    if (size > dstBufferSize) {
+        return false;
     }
 
-    if (RPR_ERROR_CHECK(rprFrameBufferGetInfo(GetHandle(), RPR_FRAMEBUFFER_DATA, size, buffer.get(), nullptr), "Failed to get framebuffer data", m_context)) {
-        return nullptr;
-    }
-
-    return buffer;
+    return !RPR_ERROR_CHECK(rprFrameBufferGetInfo(GetHandle(), RPR_FRAMEBUFFER_DATA, size, dstBuffer, nullptr), "Failed to get framebuffer data", m_context);
 }
 
 rpr_uint FrameBuffer::GetSize() const {

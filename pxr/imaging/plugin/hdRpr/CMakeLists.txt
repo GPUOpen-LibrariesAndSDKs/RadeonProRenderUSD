@@ -124,6 +124,7 @@ pxr_plugin(hdRpr
 		lightBase
 		domeLight
 		rectLight
+        distantLight
         sphereLight
         cylinderLight
         diskLight

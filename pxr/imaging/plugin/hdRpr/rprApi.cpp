@@ -11,6 +11,7 @@
 #include "materialFactory.h"
 #include "materialAdapter.h"
 
+#include "pxr/base/gf/math.h"
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/base/arch/fileSystem.h"
@@ -80,7 +81,6 @@ public:
         InitRif();
         InitMaterialSystem();
         CreateScene();
-        CreatePosteffects();
         CreateCamera();
     }
 
@@ -394,6 +394,42 @@ public:
         });
 
         return curveObject;
+    }
+
+    RprApiObjectPtr CreateDirectionalLight() {
+        if (!m_rprContext) {
+            return nullptr;
+        }
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        rpr_light light;
+        if (RPR_ERROR_CHECK(rprContextCreateDirectionalLight(m_rprContext->GetHandle(), &light), "Failed to create directional light")) {
+            return nullptr;
+        }
+        auto lightObject = RprApiObject::Wrap(light);
+
+        if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene->GetHandle(), light), "Failed to attach directional light to scene")) {
+            return nullptr;
+        }
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+        lightObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* light) {
+            if (!RPR_ERROR_CHECK(rprSceneDetachLight(m_scene->GetHandle(), light), "Failed to detach directional light from scene")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+        });
+
+        m_isLightPresent = true;
+
+        return lightObject;
+    }
+
+    void SetDirectionalLightAttributes(rpr_light light, GfVec3f const& color, float shadowSoftness) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+
+        RPR_ERROR_CHECK(rprDirectionalLightSetRadiantPower3f(light, color[0], color[1], color[2]), "Failed to set directional light color");
+        RPR_ERROR_CHECK(rprDirectionalLightSetShadowSoftness(light, GfClamp(shadowSoftness, 0.0f, 1.0f)), "Failed to set directional light color");
     }
 
     RprApiObjectPtr CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
@@ -745,23 +781,6 @@ public:
         return heteroVolume;
     }
 
-    void CreatePosteffects() {
-        if (!m_rprContext) {
-            return;
-        }
-
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::TAHOE) {
-            rpr_post_effect tonemap;
-            if (RPR_ERROR_CHECK(rprContextCreatePostEffect(m_rprContext->GetHandle(), RPR_POST_EFFECT_TONE_MAP, &tonemap), "Fail to create post effect")) return;
-            m_tonemap = RprApiObject::Wrap(tonemap);
-
-            if (RPR_ERROR_CHECK(rprContextAttachPostEffect(m_rprContext->GetHandle(), tonemap), "Fail to attach posteffect")) return;
-            m_tonemap->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* tonemap) {
-                rprContextDetachPostEffect(m_rprContext->GetHandle(), tonemap);
-            });
-        }
-    }
-
     void SetCameraViewMatrix(const GfMatrix4d& m) {
         if (!m_camera) {
             return;
@@ -792,9 +811,10 @@ public:
         return m_cameraProjectionMatrix;
     }
 
-    bool EnableAov(TfToken const& aovName, int width, int height, HdFormat format = HdFormatInvalid, bool setAsActive = false) {
+    bool EnableAov(TfToken const& aovName, int width, int height, HdFormat format = HdFormatFloat32Vec4, bool setAsActive = false) {
         if (!m_rprContext ||
-            width < 1 || height < 1) {
+            width < 1 || height < 1 ||
+            format == HdFormatInvalid || HdDataSizeOfFormat(format) == 0) {
             return false;
         }
 
@@ -906,75 +926,82 @@ public:
         }
     }
 
-    GfVec2i GetAovSize(TfToken const& aovName) const {
+    bool GetAovInfo(TfToken const& aovName, int* width, int* height, HdFormat* format) const {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         auto it = m_aovFrameBuffers.find(aovName);
         if (it == m_aovFrameBuffers.end()) {
-            return GfVec2i(-1, -1);
+            return false;
         }
 
-        auto desc = it->second.aov->GetDesc();
-        return GfVec2i(desc.fb_width, desc.fb_height);
+        if (width || height) {
+            auto desc = it->second.aov->GetDesc();
+            if (width) {
+                *width = desc.fb_width;
+            }
+            if (height) {
+                *height = desc.fb_height;
+            }
+        }
+
+        if (format) {
+            *format = it->second.format;
+        }
+
+        return true;
     }
 
-    std::shared_ptr<char> GetAovData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize) {
+    bool GetAovData(TfToken const& aovName, void* dstBuffer, size_t dstBufferSize) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         auto it = m_aovFrameBuffers.find(aovName);
         if (it == m_aovFrameBuffers.end()) {
-            return nullptr;
+            return false;
         }
 
-        auto readRifImage = [](rif_image image, size_t* bufferSize) -> std::shared_ptr<char> {
+        auto readRifImage = [&dstBuffer, &dstBufferSize](rif_image image) -> bool {
             size_t size;
             size_t dummy;
             auto rifStatus = rifImageGetInfo(image, RIF_IMAGE_DATA_SIZEBYTE, sizeof(size), &size, &dummy);
-            if (rifStatus != RIF_SUCCESS) {
-                return nullptr;
+            if (rifStatus != RIF_SUCCESS || dstBufferSize < size) {
+                return false;
             }
 
             void* data = nullptr;
             rifStatus = rifImageMap(image, RIF_IMAGE_MAP_READ, &data);
             if (rifStatus != RIF_SUCCESS) {
-                return nullptr;
+                return false;
             }
 
             auto buffer = std::shared_ptr<char>(new char[size]);
-            std::memcpy(buffer.get(), data, size);
+            std::memcpy(dstBuffer, data, size);
 
             rifStatus = rifImageUnmap(image, data);
             if (rifStatus != RIF_SUCCESS) {
                 TF_WARN("Failed to unmap rif image");
             }
 
-            if (bufferSize) {
-                *bufferSize = size;
-            }
-            return buffer;
+            return true;
         };
 
         if (aovName == HdRprAovTokens->color && m_denoiseFilterPtr) {
-            buffer = readRifImage(m_denoiseFilterPtr->GetOutput(), bufferSize);
+            return readRifImage(m_denoiseFilterPtr->GetOutput());
         } else {
             auto& aovFrameBuffer = it->second;
             if (aovFrameBuffer.postprocessFilter) {
-                buffer = readRifImage(aovFrameBuffer.postprocessFilter->GetOutput(), bufferSize);
+                return readRifImage(aovFrameBuffer.postprocessFilter->GetOutput());
             } else {
                 auto resolvedFb = aovFrameBuffer.resolved.get();
                 if (!resolvedFb) {
                     resolvedFb = aovFrameBuffer.aov.get();
                 }
                 if (!resolvedFb) {
-                    assert(false);
-                    return nullptr;
+                    return false;
                 }
 
-                buffer = resolvedFb->GetData(buffer, bufferSize);
+                return resolvedFb->GetData(dstBuffer, dstBufferSize);
             }
         }
-
-        return buffer;
     }
 
     rif_image_desc GetRifImageDesc(uint32_t width, uint32_t height, HdFormat format) {
@@ -1280,7 +1307,7 @@ public:
         m_iter++;
     }
 
-    bool IsConverged() { 
+    bool IsConverged() {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         // return Converged if max samples is reached
@@ -1371,6 +1398,7 @@ private:
         PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
         auto modelsPath = PlugFindPluginResource(plugin, "rif_models", false);
         if (!ValidateRifModels(modelsPath)) {
+
             modelsPath = "";
             TF_RUNTIME_ERROR("RIF version and AI models version mismatch");
         }
@@ -1583,7 +1611,6 @@ private:
     std::unique_ptr<ImageCache> m_imageCache;
     RprApiObjectPtr m_scene;
     RprApiObjectPtr m_camera;
-    RprApiObjectPtr m_tonemap;
     RprApiObjectPtr m_matsys;
     std::unique_ptr<RprMaterialFactory> m_rprMaterialFactory;
 
@@ -1711,9 +1738,16 @@ RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float radius) {
     return m_impl->CreateDiskLightMesh(radius);
 }
 
-void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4d const& transform) {
-    GfMatrix4f transformF(transform);
-    m_impl->SetLightTransform(light->GetHandle(), transformF);
+void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4f const& transform) {
+    m_impl->SetLightTransform(light->GetHandle(), transform);
+}
+
+RprApiObjectPtr HdRprApi::CreateDirectionalLight() {
+    return m_impl->CreateDirectionalLight();
+}
+
+void HdRprApi::SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftness) {
+    m_impl->SetDirectionalLightAttributes(directionalLight->GetHandle(), color, shadowSoftness);
 }
 
 RprApiObjectPtr HdRprApi::CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& gridSize, const GfVec3f& voxelSize) {
@@ -1792,12 +1826,12 @@ bool HdRprApi::IsAovEnabled(TfToken const& aovName) {
     return m_impl->IsAovEnabled(aovName);
 }
 
-GfVec2i HdRprApi::GetAovSize(TfToken const& aovName) const {
-    return m_impl->GetAovSize(aovName);
+bool HdRprApi::GetAovInfo(TfToken const& aovName, int* width, int* height, HdFormat* format) const {
+    return m_impl->GetAovInfo(aovName, width, height, format);
 }
 
-std::shared_ptr<char> HdRprApi::GetAovData(TfToken const& aovName, std::shared_ptr<char> buffer, size_t* bufferSize) {
-    return m_impl->GetAovData(aovName, buffer, bufferSize);
+bool HdRprApi::GetAovData(TfToken const& aovName, void* dstBuffer, size_t dstBufferSize) {
+    return m_impl->GetAovData(aovName, dstBuffer, dstBufferSize);
 }
 
 void HdRprApi::Render() {

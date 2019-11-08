@@ -76,7 +76,10 @@ public:
     RprApiObjectPtr CreateSphereLightMesh(float radius);
     RprApiObjectPtr CreateCylinderLightMesh(float radius, float length);
     RprApiObjectPtr CreateDiskLightMesh(float radius);
-    void SetLightTransform(RprApiObject* light, GfMatrix4d const& transform);
+    void SetLightTransform(RprApiObject* light, GfMatrix4f const& transform);
+
+    RprApiObjectPtr CreateDirectionalLight();
+    void SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftness);
 
     RprApiObjectPtr CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize);
 
@@ -102,8 +105,8 @@ public:
     bool EnableAov(TfToken const& aovName, int width, int height, HdFormat format = HdFormatCount);
     void DisableAov(TfToken const& aovName);
     bool IsAovEnabled(TfToken const& aovName);
-    GfVec2i GetAovSize(TfToken const& aovName) const;
-    std::shared_ptr<char> GetAovData(TfToken const& aovName, std::shared_ptr<char> buffer = nullptr, size_t* bufferSize = nullptr);
+    bool GetAovInfo(TfToken const& aovName, int* width, int* height, HdFormat* format) const;
+    bool GetAovData(TfToken const& aovName, void* dstBuffer, size_t dstBufferSize);
 
     // This function exist for only one particular reason:
     //   for explicit bliting to GL framebuffer when there are no aovBindings in renderPass::_Execute
