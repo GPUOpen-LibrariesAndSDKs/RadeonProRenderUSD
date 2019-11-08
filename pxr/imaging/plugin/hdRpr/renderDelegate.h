@@ -56,6 +56,11 @@ public:
     HdAovDescriptor GetDefaultAovDescriptor(TfToken const& name) const override;
 
     HdRenderSettingDescriptorList GetRenderSettingDescriptors() const override;
+
+    ///
+    /// Returns an open-format dictionary of render statistics
+    ///
+    VtDictionary GetRenderStats() const override;
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
