@@ -207,6 +207,11 @@ public:
     /// not be exhaustive, but can be used for populating application settings
     /// UI.
     HdRenderSettingDescriptorList GetRenderSettingDescriptors() const override;
+
+    ///
+    /// Returns an open-format dictionary of render statistics
+    ///
+    VtDictionary GetRenderStats() const override;
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
