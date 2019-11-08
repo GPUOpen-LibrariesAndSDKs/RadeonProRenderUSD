@@ -6,7 +6,7 @@
 #include "pxr/base/gf/vec2i.h"
 #include "pxr/base/gf/vec3f.h"
 #include "pxr/base/vt/array.h"
-#include "pxr/base/gf/matrix4d.h"
+#include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/quaternion.h"
 #include "pxr/imaging/hd/types.h"
 #include "pxr/base/tf/staticTokens.h"
@@ -89,7 +89,7 @@ public:
 
     RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding);
     RprApiObjectPtr CreateMeshInstance(RprApiObject* prototypeMesh);
-    void SetMeshTransform(RprApiObject* mesh, const GfMatrix4d& transform);
+    void SetMeshTransform(RprApiObject* mesh, const GfMatrix4f& transform);
     void SetMeshRefineLevel(RprApiObject* mesh, int level);
     void SetMeshVertexInterpolationRule(RprApiObject* mesh, TfToken boundaryInterpolation);
     void SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material);

@@ -1,4 +1,5 @@
 #include "sphereLight.h"
+#include "rprApi.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 
 #include <cmath>
@@ -15,17 +16,11 @@ bool HdRprSphereLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath co
     return isDirty;
 }
 
-RprApiObjectPtr HdRprSphereLight::CreateLightMesh() {
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        return nullptr;
-    }
-
+RprApiObjectPtr HdRprSphereLight::CreateLightMesh(HdRprApi* rprApi) {
     return rprApi->CreateSphereLightMesh(m_radius);
 }
 
-GfVec3f HdRprSphereLight::NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& inColor) {
+GfVec3f HdRprSphereLight::NormalizeLightColor(const GfMatrix4f& transform, const GfVec3f& inColor) {
     const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * m_radius;
     const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * m_radius;
     const double sz = GfVec3d(transform[0][2], transform[1][2], transform[2][2]).GetLength() * m_radius;

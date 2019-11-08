@@ -5,18 +5,19 @@
 #include "pxr/imaging/hd/vertexAdjacency.h"
 #include "pxr/base/vt/array.h"
 #include "pxr/base/gf/vec2f.h"
-
-#include "rprApi.h"
+#include "pxr/base/gf/matrix4f.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprParam;
+class RprApiObject;
+using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
 
 class HdRprMesh final : public HdMesh {
 public:
     HF_MALLOC_TAG_NEW("new HdRprMesh");
 
-    HdRprMesh(SdfPath const& id, HdRprApiSharedPtr rprApi, SdfPath const& instancerId = SdfPath());
+    HdRprMesh(SdfPath const& id, SdfPath const& instancerId = SdfPath());
     ~HdRprMesh() override = default;
 
     void Sync(HdSceneDelegate* sceneDelegate,
@@ -40,12 +41,11 @@ private:
                         VtIntArray& out_indices);
 
 private:
-    HdRprApiWeakPtr m_rprApiWeakPtr;
     std::vector<RprApiObjectPtr> m_rprMeshes;
     std::vector<std::vector<RprApiObjectPtr>> m_rprMeshInstances;
     RprApiObjectPtr m_fallbackMaterial;
     RprApiObject const* m_cachedMaterial;
-    GfMatrix4d m_transform;
+    GfMatrix4f m_transform;
 
     HdMeshTopology m_topology;
     VtVec3fArray m_points;

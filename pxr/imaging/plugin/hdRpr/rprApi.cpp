@@ -1819,9 +1819,8 @@ RprApiObjectPtr HdRprApi::CreateMaterial(MaterialAdapter& materialAdapter) {
     return m_impl->CreateMaterial(materialAdapter);
 }
 
-void HdRprApi::SetMeshTransform(RprApiObject* mesh, const GfMatrix4d& transform) {
-    GfMatrix4f transformF(transform);
-    m_impl->SetMeshTransform(mesh->GetHandle(), transformF);
+void HdRprApi::SetMeshTransform(RprApiObject* mesh, const GfMatrix4f& transform) {
+    m_impl->SetMeshTransform(mesh->GetHandle(), transform);
 }
 
 void HdRprApi::SetMeshRefineLevel(RprApiObject* mesh, int level) {

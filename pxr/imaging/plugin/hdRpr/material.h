@@ -3,13 +3,14 @@
 
 #include "pxr/imaging/hd/material.h"
 
-#include "rprApi.h"
-
 PXR_NAMESPACE_OPEN_SCOPE
+
+class RprApiObject;
+using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
 
 class HdRprMaterial final : public HdMaterial {
 public:
-    HdRprMaterial(SdfPath const& id, HdRprApiSharedPtr rprApi);
+    HdRprMaterial(SdfPath const& id);
 
     ~HdRprMaterial() override = default;
 
@@ -26,7 +27,6 @@ public:
     const RprApiObject* GetRprMaterialObject() const;
 
 private:
-    HdRprApiWeakPtr m_rprApiWeakPtr;
     RprApiObjectPtr m_rprMaterial;
 };
 

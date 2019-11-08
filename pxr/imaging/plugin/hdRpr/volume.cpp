@@ -1,4 +1,6 @@
 #include "volume.h"
+#include "rprApi.h"
+#include "renderParam.h"
 
 #include "houdini/openvdb.h"
 
@@ -71,9 +73,8 @@ struct GridData {
     }
 };
 
-HdRprVolume::HdRprVolume(SdfPath const& id, HdRprApiSharedPtr rprApi)
-    : HdVolume(id)
-    , m_rprApiWeakPtr(rprApi) {
+HdRprVolume::HdRprVolume(SdfPath const& id)
+    : HdVolume(id) {
 
 }
 
@@ -82,12 +83,9 @@ void HdRprVolume::Sync(
     HdRenderParam* renderParam,
     HdDirtyBits* dirtyBits,
     TfToken const& reprName) {
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        *dirtyBits = HdChangeTracker::Clean;
-        return;
-    }
+
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     auto& id = GetId();
 

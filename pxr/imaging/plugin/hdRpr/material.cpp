@@ -2,6 +2,9 @@
 #include "materialFactory.h"
 #include "materialAdapter.h"
 
+#include "renderParam.h"
+#include "rprApi.h"
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(
@@ -32,20 +35,16 @@ static const bool GetMaterial(const HdMaterialNetworkMap& networkMap, EMaterialT
     return false;
 }
 
-HdRprMaterial::HdRprMaterial(SdfPath const& id, HdRprApiSharedPtr rprApi) : HdMaterial(id) {
-    m_rprApiWeakPtr = rprApi;
+HdRprMaterial::HdRprMaterial(SdfPath const& id) : HdMaterial(id) {
+
 }
 
 void HdRprMaterial::Sync(HdSceneDelegate* sceneDelegate,
                          HdRenderParam* renderParam,
                          HdDirtyBits* dirtyBits) {
 
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        *dirtyBits = Clean;
-        return;
-    }
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     if (*dirtyBits & HdMaterial::DirtyResource) {
         VtValue vtMat = sceneDelegate->GetMaterialResource(GetId());

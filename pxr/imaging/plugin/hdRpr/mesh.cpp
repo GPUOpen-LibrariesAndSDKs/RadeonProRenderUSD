@@ -1,7 +1,9 @@
 #include "mesh.h"
 #include "instancer.h"
+#include "renderParam.h"
 #include "material.h"
 #include "materialFactory.h"
+#include "rprApi.h"
 
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/imaging/pxOsd/subdivTags.h"
@@ -17,9 +19,8 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprMesh::HdRprMesh(SdfPath const& id, HdRprApiSharedPtr rprApiShared, SdfPath const& instancerId)
-    : HdMesh(id, instancerId)
-    , m_rprApiWeakPtr(rprApiShared) {
+HdRprMesh::HdRprMesh(SdfPath const& id, SdfPath const& instancerId)
+    : HdMesh(id, instancerId) {
 
 }
 
@@ -92,12 +93,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     HD_TRACE_FUNCTION();
     HF_MALLOC_TAG_FUNCTION();
 
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        *dirtyBits = HdChangeTracker::Clean;
-        return;
-    }
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     SdfPath const& id = GetId();
 
@@ -188,7 +185,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     bool updateTransform = newMesh;
     if (*dirtyBits & HdChangeTracker::DirtyTransform) {
-        m_transform = sceneDelegate->GetTransform(id);
+        m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
         updateTransform = true;
     }
 
@@ -374,8 +371,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     }
                 } else {
                     updateTransform = false;
+                    GfMatrix4d meshTransform(m_transform);
                     for (auto& instanceTransform : transforms) {
-                        instanceTransform = m_transform * instanceTransform;
+                        instanceTransform = meshTransform * instanceTransform;
                     }
 
                     m_rprMeshInstances.resize(m_rprMeshes.size());
@@ -392,7 +390,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         }
 
                         for (int j = 0; j < transforms.size(); ++j) {
-                            rprApi->SetMeshTransform(meshInstances[j].get(), transforms[j]);
+                            rprApi->SetMeshTransform(meshInstances[j].get(), GfMatrix4f(transforms[j]));
                         }
 
                         // Hide prototype

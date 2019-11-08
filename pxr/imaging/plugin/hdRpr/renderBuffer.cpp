@@ -1,4 +1,5 @@
 #include "renderBuffer.h"
+#include "rprApi.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
 
@@ -15,17 +16,11 @@ TF_DEFINE_PRIVATE_TOKENS(
 );
 
 HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id,
-                                     HdRprApiSharedPtr rprApi)
+                                     HdRprApi* rprApi)
     : HdRenderBuffer(id)
-    , m_numMappers(0) {
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        return;
-    }
-
-    m_rprApiWeakPrt = rprApi;
-    m_isConverged.store(false);
-
+    , m_rprApi(rprApi)
+    , m_numMappers(0)
+    , m_isConverged(false) {
     auto& idName = id.GetName();
     if (idName == _tokens->aov_color) {
         m_aovName = HdRprAovTokens->color;
@@ -42,10 +37,6 @@ HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id,
     }
 }
 
-HdDirtyBits HdRprRenderBuffer::GetInitialDirtyBitsMask() const {
-    return AllDirty;
-}
-
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
                                  HdFormat format,
                                  bool multiSampled) {
@@ -58,32 +49,25 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
 
     _Deallocate();
 
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
+    // XXX: RPR does not support int32 images
+    auto requestedFormat = format;
+    if (requestedFormat == HdFormatInt32) {
+        format = HdFormatUNorm8Vec4;
+    }
 
-        // XXX: RPR does not support int32 images
-        auto requestedFormat = format;
-        if (requestedFormat == HdFormatInt32) {
-            format = HdFormatUNorm8Vec4;
-        }
-
-        if (rprApi->EnableAov(m_aovName, dimensions[0], dimensions[1], format)) {
-            m_width = dimensions[0];
-            m_height = dimensions[1];
-            m_format = requestedFormat;
-            return true;
-        }
-    } else {
-        TF_CODING_ERROR("RprApi is expired");
+    if (m_rprApi->EnableAov(m_aovName, dimensions[0], dimensions[1], format)) {
+        m_width = dimensions[0];
+        m_height = dimensions[1];
+        m_format = requestedFormat;
+        return true;
     }
 
     return false;
 }
 
 void HdRprRenderBuffer::_Deallocate() {
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        if (!m_aovName.IsEmpty()) {
-            rprApi->DisableAov(m_aovName);
-        }
+    if (!m_aovName.IsEmpty()) {
+        m_rprApi->DisableAov(m_aovName);
     }
 
     m_format = HdFormatInvalid;
@@ -100,21 +84,19 @@ void* HdRprRenderBuffer::Map() {
         return nullptr;
     }
 
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        if (rprApi->GetAovData(m_aovName, m_mappedBuffer.data(), dataByteSize)) {
-            if (m_aovName == HdRprAovTokens->primId) {
-                // RPR store integer ID values to RGB images using such formula:
-                // c[i].x = i;
-                // c[i].y = i/256;
-                // c[i].z = i/(256*256);
-                // i.e. saving little endian int24 to uchar3
-                // That's why we interpret the value as int and filling the alpha channel with zeros
-                auto primIdData = reinterpret_cast<int*>(m_mappedBuffer.data());
-                for (uint32_t y = 0; y < m_height; ++y) {
-                    uint32_t yOffset = y * m_width;
-                    for (uint32_t x = 0; x < m_width; ++x) {
-                        primIdData[x + yOffset] &= 0xFFFFFF;
-                    }
+    if (m_rprApi->GetAovData(m_aovName, m_mappedBuffer.data(), dataByteSize)) {
+        if (m_aovName == HdRprAovTokens->primId) {
+            // RPR store integer ID values to RGB images using such formula:
+            // c[i].x = i;
+            // c[i].y = i/256;
+            // c[i].z = i/(256*256);
+            // i.e. saving little endian int24 to uchar3
+            // That's why we interpret the value as int and filling the alpha channel with zeros
+            auto primIdData = reinterpret_cast<int*>(m_mappedBuffer.data());
+            for (uint32_t y = 0; y < m_height; ++y) {
+                uint32_t yOffset = y * m_width;
+                for (uint32_t x = 0; x < m_width; ++x) {
+                    primIdData[x + yOffset] &= 0xFFFFFF;
                 }
             }
         }

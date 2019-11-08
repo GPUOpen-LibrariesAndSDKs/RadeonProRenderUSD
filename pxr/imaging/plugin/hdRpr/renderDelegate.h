@@ -1,19 +1,20 @@
 #ifndef HDRPR_RENDER_DELEGATE_H
 #define HDRPR_RENDER_DELEGATE_H
 
-#include "pxr/pxr.h"
 #include "pxr/imaging/hd/renderDelegate.h"
 
 #include "api.h"
-#include "rprApi.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+class HdRprRenderParam;
+class HdRprApi;
 
 class HdRprDelegate final : public HdRenderDelegate {
 public:
 
     HdRprDelegate();
-    ~HdRprDelegate() override;
+    ~HdRprDelegate() override = default;
 
     HdRprDelegate(const HdRprDelegate&) = delete;
     HdRprDelegate& operator =(const HdRprDelegate&) = delete;
@@ -66,7 +67,8 @@ private:
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
     static const TfTokenVector SUPPORTED_BPRIM_TYPES;
 
-    HdRprApiSharedPtr m_rprApiSharedPtr;
+    std::unique_ptr<HdRprApi> m_rprApi;
+    std::unique_ptr<HdRprRenderParam> m_renderParam;
     HdRenderSettingDescriptorList m_settingDescriptors;
 };
 

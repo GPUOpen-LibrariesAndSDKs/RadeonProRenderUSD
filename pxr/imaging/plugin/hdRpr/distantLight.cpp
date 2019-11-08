@@ -1,4 +1,5 @@
 #include "distantLight.h"
+#include "renderParam.h"
 
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
@@ -15,11 +16,8 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
                              HdRenderParam* renderParam,
                              HdDirtyBits* dirtyBits) {
 
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        return;
-    }
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     HdDirtyBits bits = *dirtyBits;
     auto& id = GetId();

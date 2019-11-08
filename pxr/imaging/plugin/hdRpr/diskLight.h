@@ -8,18 +8,18 @@ PXR_NAMESPACE_OPEN_SCOPE
 class HdRprDiskLight : public HdRprLightBase {
     
 public:
-    HdRprDiskLight(SdfPath const & id, HdRprApiSharedPtr rprApi)
-        : HdRprLightBase(id, rprApi) {}
+    HdRprDiskLight(SdfPath const & id)
+        : HdRprLightBase(id) {}
 
 protected:
 
     bool SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) override;
 
     // Create mesh with emmisive material
-    RprApiObjectPtr CreateLightMesh() override;
+    RprApiObjectPtr CreateLightMesh(HdRprApi* rprApi) override;
 
     // Normalize Light Color with surface area
-    GfVec3f NormalizeLightColor(const GfMatrix4d & transform, const GfVec3f & emmisionColor) override;
+    GfVec3f NormalizeLightColor(const GfMatrix4f& transform, const GfVec3f& emmisionColor) override;
 
 private:
     float m_radius = std::numeric_limits<float>::quiet_NaN();

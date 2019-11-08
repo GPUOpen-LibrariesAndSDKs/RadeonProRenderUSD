@@ -7,11 +7,13 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprRenderParam;
+
 class HdRprRenderPass final : public HdRenderPass {
 public:
     HdRprRenderPass(HdRenderIndex* index,
                     HdRprimCollection const& collection,
-                    HdRprApiSharedPtr rprApiShader);
+                    HdRprRenderParam* renderParam);
 
     ~HdRprRenderPass() override = default;
 
@@ -21,7 +23,7 @@ public:
                   TfTokenVector const& renderTags) override;
 
 private:
-    HdRprApiWeakPtr m_rprApiWeakPtr;
+    HdRprRenderParam* m_renderParam;
 
     int m_lastSettingsVersion;
     bool m_isConverged = false;
