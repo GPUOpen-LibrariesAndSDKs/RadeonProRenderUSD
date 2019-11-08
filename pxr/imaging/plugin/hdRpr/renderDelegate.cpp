@@ -311,7 +311,15 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     VtDictionary stats;
     int numCompletedSamples = m_rprApiSharedPtr->GetNumCompletedSamples();
     stats[HdPerfTokens->numCompletedSamples.GetString()] = numCompletedSamples;
-    stats[_tokens->percentDone.GetString()] = 100.0 * double(numCompletedSamples) / HdRprConfig::GetInstance().GetMaxSamples();
+
+    double percentDone = double(numCompletedSamples) / HdRprConfig::GetInstance().GetMaxSamples();
+    int numActivePixels = m_rprApiSharedPtr->GetNumActivePixels();
+    if (numActivePixels != -1) {
+        auto aovSize = m_rprApiSharedPtr->GetAovSize(m_rprApiSharedPtr->GetActiveAov());
+        int numPixels = aovSize[0] * aovSize[1];
+        percentDone = std::min(percentDone, double(numPixels - numActivePixels) / numPixels);
+    }
+    stats[_tokens->percentDone.GetString()] = 100.0 * percentDone;
     return stats;
 }
 

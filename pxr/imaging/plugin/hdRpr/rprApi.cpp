@@ -1305,6 +1305,22 @@ public:
         return m_iter;
     }
 
+    int GetNumActivePixels() const {
+        if (!m_rprContext) {
+            return -1;
+        }
+
+        auto& preferences = HdRprConfig::GetInstance();
+        if (preferences.GetVarianceThreshold() > 0.0f) {
+            int activePixels = 0;
+            RecursiveLockGuard rprLock(g_rprAccessMutex);
+            if (!RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(activePixels), &activePixels, NULL), "Failed to query active pixels")) {
+                return activePixels;
+            }
+        }
+        return -1;
+    }
+
     void DeleteMesh(void* mesh) {
         if (!mesh) {
             return;
@@ -1828,6 +1844,10 @@ bool HdRprApi::IsConverged() {
 
 int HdRprApi::GetNumCompletedSamples() const {
     return m_impl->GetNumCompletedSamples();
+}
+
+int HdRprApi::GetNumActivePixels() const {
+    return m_impl->GetNumActivePixels();
 }
 
 bool HdRprApi::IsGlInteropEnabled() const {

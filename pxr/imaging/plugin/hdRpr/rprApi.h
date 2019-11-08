@@ -113,6 +113,8 @@ public:
     void Render();
     bool IsConverged();
     int GetNumCompletedSamples() const;
+    // returns -1 if adaptive sampling is not used
+    int GetNumActivePixels() const;
 
     bool IsGlInteropEnabled() const;
 
