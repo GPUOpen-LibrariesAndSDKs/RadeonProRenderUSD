@@ -57,6 +57,7 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
     _Deallocate();
 
     if (auto rprApi = m_rprApiWeakPrt.lock()) {
+
         // XXX: RPR does not support int32 images
         auto requestedFormat = format;
         if (requestedFormat == HdFormatInt32) {
