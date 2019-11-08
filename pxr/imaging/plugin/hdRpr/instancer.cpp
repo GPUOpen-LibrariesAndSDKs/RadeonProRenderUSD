@@ -1,5 +1,6 @@
 #include "instancer.h"
 
+#include "pxr/base/gf/quatd.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -35,39 +36,38 @@ void HdRprInstancer::Sync()
 		return;
 	}
 
-	HdPrimvarDescriptorVector primvars = GetDelegate()->GetPrimvarDescriptors(instancerId, HdInterpolationInstance);
-	TF_FOR_ALL(primvarIt, primvars) {
-		if (!HdChangeTracker::IsPrimvarDirty(dirtyBits, instancerId, primvarIt->name))
-		{
-			continue;
-		}
+    HdPrimvarDescriptorVector primvarDescs = GetDelegate()->GetPrimvarDescriptors(instancerId, HdInterpolationInstance);
+    for (auto& desc : primvarDescs) {
+        if (!HdChangeTracker::IsPrimvarDirty(dirtyBits, instancerId, desc.name)) {
+            continue;
+        }
 
-		VtValue value = GetDelegate()->Get(instancerId, primvarIt->name);
-		if (value.IsEmpty())
-		{
-			continue;
-		}
+        VtValue value = GetDelegate()->Get(instancerId, desc.name);
+        if (value.IsEmpty()) {
+            continue;
+        }
 
-		if (primvarIt->name == _tokens->translate)
-		{
-			m_translate = value.UncheckedGet<VtVec3fArray>();
-		}
-		else if (primvarIt->name == _tokens->rotate)
-		{
-			m_rotate = value.UncheckedGet<VtQuaternionArray>();
-		}
-		else if (primvarIt->name == _tokens->scale)
-		{
-			m_scale = value.UncheckedGet<VtVec3fArray>();
-		}
-		else if (primvarIt->name == _tokens->instanceTransform)
-		{
-			m_transform = value.UncheckedGet<VtMatrix4dArray>();
-		}
-	}
+        if (desc.name == _tokens->translate) {
+            if (value.IsHolding<VtVec3fArray>()) {
+                m_translate = value.UncheckedGet<VtVec3fArray>();
+            }
+        } else if (desc.name == _tokens->rotate) {
+            if (value.IsHolding<VtVec4fArray>()) {
+                m_rotate = value.UncheckedGet<VtVec4fArray>();
+            }
+        } else if (desc.name == _tokens->scale) {
+            if (value.IsHolding<VtVec3fArray>()) {
+                m_scale = value.UncheckedGet<VtVec3fArray>();
+            }
+        } else if (desc.name == _tokens->instanceTransform) {
+            if (value.IsHolding<VtMatrix4dArray>()) {
+                m_transform = value.UncheckedGet<VtMatrix4dArray>();
+            }
+        }
+    }
 
-	// Mark the instancer as clean
-	changeTracker.MarkInstancerClean(instancerId);
+    // Mark the instancer as clean
+    changeTracker.MarkInstancerClean(instancerId);
 }
 
 VtMatrix4dArray HdRprInstancer::ComputeTransforms(SdfPath const& prototypeId)
@@ -91,21 +91,21 @@ VtMatrix4dArray HdRprInstancer::ComputeTransforms(SdfPath const& prototypeId)
 
 		if (!m_translate.empty())
 		{
-			translateMat.SetTranslate(GfVec3d(m_translate[idx]));
+			translateMat.SetTranslate(GfVec3d(m_translate.cdata()[idx]));
 		}
 
-		if (!m_rotate.empty())
-		{
-			rotateMat.SetRotate(m_rotate[idx]);
-		}
+        if (!m_rotate.empty()) {
+            auto& v = m_rotate.cdata()[idx];
+            rotateMat.SetRotate(GfQuatd(v[0], GfVec3d(v[1], v[2], v[3])));
+        }
 
 		if (!m_scale.empty())
 		{
-			scaleMat.SetScale(GfVec3d(m_scale[idx]));
+			scaleMat.SetScale(GfVec3d(m_scale.cdata()[idx]));
 		}
 		if (!m_transform.empty())
 		{
-			transform = m_transform[idx];
+			transform = m_transform.cdata()[idx];
 		}
 
 		transforms.push_back(transform * scaleMat * rotateMat * translateMat * instancerTransform);

@@ -14,10 +14,8 @@ TF_DEFINE_PRIVATE_TOKENS(
     (aov_primvars_st)
 );
 
-HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprApi) : HdRenderBuffer(id), m_numMappers(0)
-{
-    if (!rprApi)
-    {
+HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprApi) : HdRenderBuffer(id), m_numMappers(0) {
+    if (!rprApi) {
         TF_CODING_ERROR("RprApi is expired");
         return;
     }
@@ -49,15 +47,20 @@ HdDirtyBits HdRprRenderBuffer::GetInitialDirtyBitsMask() const
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
                       HdFormat format,
                       bool multiSampled) {
+    TF_VERIFY(!IsMapped());
+    TF_UNUSED(multiSampled);
+
     if (m_aovName.IsEmpty()) {
         return false;
     }
 
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        auto requestedFormat = format;
+    _Deallocate();
 
-        // XXX: RPR does not support integer images
-        if (format == HdFormatInt32) {
+    if (auto rprApi = m_rprApiWeakPrt.lock()) {
+
+        // XXX: RPR does not support int32 images
+        auto requestedFormat = format;
+        if (requestedFormat == HdFormatInt32) {
             format = HdFormatUNorm8Vec4;
         }
 
@@ -108,14 +111,42 @@ bool HdRprRenderBuffer::IsMultiSampled() const {
 
 void* HdRprRenderBuffer::Map() {
     ++m_numMappers;
-    // XXX: RPR does not support framebuffer mapping, so here is at least correct mapping for reading
-    return m_dataCache.get();
+
+    size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
+    m_mappedBuffer.resize(dataByteSize);
+    if (!dataByteSize) {
+        return nullptr;
+    }
+
+    if (auto rprApi = m_rprApiWeakPrt.lock()) {
+        if (rprApi->GetAovData(m_aovName, m_mappedBuffer.data(), dataByteSize)) {
+            if (m_aovName == HdRprAovTokens->primId) {
+                // RPR store integer ID values to RGB images using such formula:
+                // c[i].x = i;
+                // c[i].y = i/256;
+                // c[i].z = i/(256*256);
+                // i.e. saving little endian int24 to uchar3
+                // That's why we interpret the value as int and filling the alpha channel with zeros
+                auto primIdData = reinterpret_cast<int*>(m_mappedBuffer.data());
+                for (uint32_t y = 0; y < m_height; ++y) {
+                    uint32_t yOffset = y * m_width;
+                    for (uint32_t x = 0; x < m_width; ++x) {
+                        primIdData[x + yOffset] &= 0xFFFFFF;
+                    }
+                }
+            }
+        }
+    }
+
+    return m_mappedBuffer.data();
 }
 
 void HdRprRenderBuffer::Unmap() {
-    if (m_numMappers > 0) {
-        --m_numMappers;
-    }
+    // XXX We could consider clearing _mappedBuffer here to free RAM.
+    //     For now we assume that Map() will be called frequently so we prefer
+    //     to avoid the cost of clearing the buffer over memory savings.
+    // m_mappedBuffer.clear();
+    --m_numMappers;
 }
 
 bool HdRprRenderBuffer::IsMapped() const {
@@ -123,24 +154,7 @@ bool HdRprRenderBuffer::IsMapped() const {
 }
 
 void HdRprRenderBuffer::Resolve() {
-    if (auto rprApi = m_rprApiWeakPrt.lock()) {
-        m_dataCache = rprApi->GetAovData(m_aovName, m_dataCache, &m_dataCacheSize);
-        if (m_aovName == HdRprAovTokens->primId) {
-            // RPR store integer ID values to RGB images using such formula:
-            // c[i].x = i;
-            // c[i].y = i/256;
-            // c[i].z = i/(256*256);
-            // i.e. saving little endian int24 to uchar3
-            // That's why we interpret the value as int and filling the alpha channel with zeros
-            auto primIdData = reinterpret_cast<int*>(m_dataCache.get());
-            for (uint32_t y = 0; y < m_height; ++y) {
-                uint32_t yOffset = y * m_width;
-                for (uint32_t x = 0; x < m_width; ++x) {
-                    primIdData[x + yOffset] &= 0xFFFFFF;
-                }
-            }
-        }
-    }
+    // no-op
 }
 
 bool HdRprRenderBuffer::IsConverged() const {

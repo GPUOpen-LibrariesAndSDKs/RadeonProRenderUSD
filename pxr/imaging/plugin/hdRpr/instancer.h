@@ -7,8 +7,6 @@
 #include "pxr/base/gf/vec3f.h"
 #include "pxr/base/gf/vec4f.h"
 #include "pxr/base/gf/matrix4d.h"
-#include "pxr/base/gf/rotation.h"
-#include "pxr/base/gf/quaternion.h"
 
 #include <mutex>
 
@@ -29,9 +27,8 @@ private:
 	void Sync();
 
 	VtMatrix4dArray m_transform;
-
 	VtVec3fArray m_translate;
-	VtQuaternionArray m_rotate;
+	VtVec4fArray m_rotate;
 	VtVec3fArray m_scale;
 
     std::mutex m_syncMutex;
