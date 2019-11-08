@@ -76,6 +76,16 @@ add_custom_command(
     OUTPUT ${GENERATED_FILES}
     COMMENT "Generating RenderSetting files")
 
+set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
+file(GLOB_RECURSE RIF_MODEL_FILES "${RIF_MODELS_DIR}/*")
+foreach(file ${RIF_MODEL_FILES})
+    file(RELATIVE_PATH rel_file ${RIF_MODELS_DIR} ${file})
+    list(APPEND RIF_MODEL_RESOURCE_FILES "${file}${_sep}rif_models/${rel_file}")
+endforeach()
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
+list(APPEND RIF_MODEL_RESOURCE_FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
+
 pxr_plugin(hdRpr
    LIBRARIES
         ${USD_LIBRARIES}
@@ -132,6 +142,7 @@ pxr_plugin(hdRpr
 
     RESOURCE_FILES
         plugInfo.json
+        ${RIF_MODEL_RESOURCE_FILES}
 
     CPPFILES
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
@@ -157,13 +168,6 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
         FILES ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Viewport.ds
         DESTINATION "houdini/soho/parameters")
-
-    set(RIF_MODELS_INSTALL_DIR "houdini/RIF_models")
-    set(RIF_MODELS_VERSIONING_FILE ${CMAKE_CURRENT_BINARY_DIR}/${RIF_VERSION_STRING}.version)
-    file(TOUCH ${RIF_MODELS_VERSIONING_FILE})
-    install(
-        FILES ${RIF_MODELS_VERSIONING_FILE}
-        DESTINATION ${RIF_MODELS_INSTALL_DIR})
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_install_dir(lib/python/rpr installPrefix)
 
@@ -183,15 +187,7 @@ else(RPR_BUILD_AS_HOUDINI_PLUGIN)
         \\\"Includes\\\": [ \\\"*/resources/\\\" ]
     }
         \")")
-
-    GetAppDataPath(APP_DATA_PATH)
-    set(HDRPR_DATA_PATH "${APP_DATA_PATH}/hdRpr")
-    set(RIF_MODELS_INSTALL_DIR "${HDRPR_DATA_PATH}/RIF_models_${RIF_VERSION_STRING}")
 endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
-
-install(
-    DIRECTORY "${RIF_MODELS_DIR}/"
-    DESTINATION ${RIF_MODELS_INSTALL_DIR})
 
 if(WIN32)
     install(

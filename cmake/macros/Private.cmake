@@ -224,10 +224,10 @@ function(_install_resource_files NAME pluginInstallPrefix pluginToLibraryPath)
     _get_resources_dir(${pluginInstallPrefix} ${NAME} resourcesPath)
 
     foreach(resourceFile ${ARGN})
-        # A resource file may be specified like <src file>:<dst file> to 
+        # A resource file may be specified like <src file>${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR}<dst file> to 
         # indicate that it should be installed to a different location in
         # the resources area. Check if this is the case.
-        string(REPLACE ":" ";" resourceFile "${resourceFile}")
+        string(REPLACE "${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR}" ";" resourceFile "${resourceFile}")
         list(LENGTH resourceFile n)
         if (n EQUAL 1)
            set(resourceDestFile ${resourceFile})

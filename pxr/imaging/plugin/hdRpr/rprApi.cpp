@@ -15,9 +15,12 @@
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/base/arch/fileSystem.h"
+#include "pxr/base/plug/plugin.h"
+#include "pxr/base/plug/thisPlugin.h"
 
 #include <RadeonProRender.h>
 #include <RadeonProRender_Baikal.h>
+#include <fstream>
 #include <vector>
 #include <mutex>
 
@@ -1221,6 +1224,11 @@ public:
             return;
         }
 
+        // Disable denoiser to prevent possible crashes due to incorrect AI models
+        if (m_rifContext->GetModelPath().empty()) {
+            return;
+        }
+
         if (!HdRprConfig::GetInstance().IsDirty(HdRprConfig::DirtyDenoise) &&
             !(m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers)) {
             return;
@@ -1369,43 +1377,32 @@ private:
         m_imageCache.reset(new ImageCache(m_rprContext.get()));
     }
 
+    bool ValidateRifModels(std::string const& modelsPath) {
+        // To ensure that current RIF implementation will use correct models we check for the file that points to models version
+        auto rifVersionString = std::to_string(RIF_VERSION_MAJOR) + "." + std::to_string(RIF_VERSION_MINOR) + "." + std::to_string(RIF_VERSION_REVISION);
+        std::ifstream versionFile(modelsPath + "/rif_models.version");
+        if (versionFile.is_open()) {
+            std::stringstream buffer;
+            buffer << versionFile.rdbuf();
+            return rifVersionString == buffer.str();
+        }
+
+        return false;
+    }
+
     void InitRif() {
         if (!m_rprContext) {
             return;
         }
 
-        auto rifVersionString = std::to_string(RIF_VERSION_MAJOR) + "." + std::to_string(RIF_VERSION_MINOR) + "." + std::to_string(RIF_VERSION_REVISION);
+        PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
+        auto modelsPath = PlugFindPluginResource(plugin, "rif_models", false);
+        if (!ValidateRifModels(modelsPath)) {
 
-        std::string modelsDir("RIF_models");
-#ifdef BUILD_AS_HOUDINI_PLUGIN
-        std::string modelsPath;
-        auto houdiniPath = std::getenv("HH");
-        if (houdiniPath) {
-            modelsPath = houdiniPath + ("/" + modelsDir);
-
-            // To ensure that current RIF implementation will use correct models we check for the file that points to models version
-            double dummy;
-            auto rifVersioningFilename = modelsPath + "/" + (rifVersionString + ".version");
-            if (!ArchGetModificationTime(rifVersioningFilename.c_str(), &dummy)) {
-                TF_RUNTIME_ERROR("RIF version mismatch");
-                modelsPath = "";
-            }
-        } else {
-            TF_RUNTIME_ERROR("Failed to query \"HH\" environment variable");
-        }
-#else
-        // In case of 'usdview' plugin build type we install models to AppData.
-        // For one user many versions of the plugin could be installed independently, the same situation for multiple users
-        // In the general case, we do not want to encounter issues caused by incorrect models version
-        // So that's why we install models in appropriate folder with versioning:
-        // $APPDATA/RIF_models_$RIF_VERSION_STRING
-        double dummy;
-        auto modelsPath = (HdRprApi::GetAppDataPath() + ARCH_PATH_SEP) + (modelsDir + "_" + rifVersionString);
-        if (!ArchGetModificationTime(modelsPath.c_str(), &dummy)) {
-            TF_RUNTIME_ERROR("Could not find required RIF models folder");
             modelsPath = "";
+            TF_RUNTIME_ERROR("RIF version and AI models version mismatch");
         }
-#endif
+
         m_rifContext = rif::Context::Create(m_rprContext->GetHandle(), modelsPath);
     }
 
