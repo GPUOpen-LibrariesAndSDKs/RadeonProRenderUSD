@@ -28,7 +28,7 @@ public:
     /// Return true if framebuffer was actually resized
     virtual bool Resize(rpr_uint width, rpr_uint height);
 
-    std::shared_ptr<char> GetData(std::shared_ptr<char> buffer = nullptr, size_t* bufferSize = nullptr);
+    bool GetData(void* dstBuffer, size_t dstBufferSize);
     rpr_uint GetSize() const;
     rpr_framebuffer_desc GetDesc() const;
 
