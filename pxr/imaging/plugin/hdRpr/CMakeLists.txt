@@ -9,19 +9,19 @@ set(OptClass${ARGN})
 
 if(RPR_ENABLE_OPENVDB_SUPPORT)
 
-	find_package_handle_standard_args(OpenVDB
+    find_package_handle_standard_args(OpenVDB
     REQUIRED_VARS
         OpenVDB_INCLUDE_DIR
-		OpenVDB_LIBRARY
-		OpenVDB_LIBRARY_DIR
-	)
+        OpenVDB_LIBRARY
+        OpenVDB_LIBRARY_DIR
+    )
 
-	add_definitions(-DUSE_VOLUME -DOPENVDB_DLL)
-	
-	set(OptLibs ${OptLibs} ${OpenVDB_LIBRARIES})
+    add_definitions(-DUSE_VOLUME -DOPENVDB_DLL)
+    
+    set(OptLibs ${OptLibs} ${OpenVDB_LIBRARIES})
     set(OptBin ${OptBin} ${OpenVDB_BINARIES})
-	set(OptIncludeDir ${OptIncludeDir} ${OpenVDB_INCLUDE_DIR})
-	set(OptClass ${OptClass} field volume)
+    set(OptIncludeDir ${OptIncludeDir} ${OpenVDB_INCLUDE_DIR})
+    set(OptClass ${OptClass} field volume)
 
 
 endif(RPR_ENABLE_OPENVDB_SUPPORT)
@@ -94,51 +94,49 @@ pxr_plugin(hdRpr
         ${Boost_LIBRARIES}
         ${TBB_tbb_LIBRARY}
         ${GLEW_LIBRARY}
-		${OPENGL_LIBRARIES}
-		${PYTHON_LIBRARIES}
-		${OPENEXR_LIBRARIES}
+        ${OPENGL_LIBRARIES}
+        ${PYTHON_LIBRARIES}
+        ${OPENEXR_LIBRARIES}
 
-		${OptLibs}
+        ${OptLibs}
 
-	INCLUDE_DIRS
+    INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
-	    ${RIF_LOCATION_INCLUDE}
+        ${RIF_LOCATION_INCLUDE}
         ${Boost_INCLUDE_DIRS}
         ${TBB_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIR}
         ${CMAKE_CURRENT_BINARY_DIR}
         ${OPENEXR_INCLUDE_DIRS}
-		
-		${OptIncludeDir}
+        
+        ${OptIncludeDir}
 
     PRIVATE_CLASSES
-		rendererPlugin
+        rendererPlugin
         renderDelegate
-		resourceRegistry
-		renderPass
-		rprApi
-		mesh
-		instancer
-		material
-		materialFactory
-		materialAdapter
-		lightBase
-		domeLight
-		rectLight
+        renderPass
+        rprApi
+        mesh
+        instancer
+        material
+        materialFactory
+        materialAdapter
+        lightBase
+        domeLight
+        rectLight
         distantLight
         sphereLight
         cylinderLight
         diskLight
         renderBuffer
-		basisCurves
+        basisCurves
         imageCache
-		
-		${OptClass}
+        
+        ${OptClass}
 
     PRIVATE_HEADERS
         boostIncludePath.h
         api.h
-        renderParam.h
         materialFactory.h
 
     RESOURCE_FILES
@@ -155,15 +153,15 @@ add_subdirectory(houdini)
 
 # LINUX is not listed in default system variables (https://cmake.org/cmake/help/3.15/manual/cmake-variables.7.html)
 if(NOT DEFINED LINUX)
-	if(UNIX AND NOT APPLE AND NOT CYGWIN)
-		set(LINUX TRUE)
-	else(UNIX AND NOT APPLE AND NOT CYGWIN)
-		SET(LINUX FALSE)
-	endif(UNIX AND NOT APPLE AND NOT CYGWIN)
+    if(UNIX AND NOT APPLE AND NOT CYGWIN)
+        set(LINUX TRUE)
+    else(UNIX AND NOT APPLE AND NOT CYGWIN)
+        SET(LINUX FALSE)
+    endif(UNIX AND NOT APPLE AND NOT CYGWIN)
 endif(NOT DEFINED LINUX)
 
 if(WIN32 OR LINUX)
-	add_definitions(-DUSE_GL_INTEROP)
+    add_definitions(-DUSE_GL_INTEROP)
 endif(WIN32 OR LINUX)
 
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)

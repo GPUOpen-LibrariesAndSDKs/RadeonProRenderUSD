@@ -26,14 +26,14 @@ const TfTokenVector& HdRprDiskLight::FetchLightGeometryParamNames() const {
     return k_requiredGeometryParam;
 }
 
-RprApiObjectPtr HdRprDiskLight::CreateLightMesh(std::map<TfToken, float>& params) {
+RprApiObjectPtr HdRprDiskLight::CreateLightMesh() {
     HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
     if (!rprApi) {
         TF_CODING_ERROR("RprApi is expired");
         return nullptr;
     }
 
-    return rprApi->CreateDiskLightMesh(params[HdLightTokens->radius]);
+    return rprApi->CreateDiskLightMesh(m_radius);
 }
 
 GfVec3f HdRprDiskLight::NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& inColor) {

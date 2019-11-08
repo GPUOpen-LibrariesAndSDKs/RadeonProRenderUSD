@@ -14,25 +14,16 @@ PXR_NAMESPACE_OPEN_SCOPE
 class HdRprDistantLight : public HdSprim {
 
 public:
-    HdRprDistantLight(SdfPath const & id, HdRprApiSharedPtr rprApi)
-            : HdSprim(id)
-            , m_rprApiWeakPtr(rprApi) {}
+    HdRprDistantLight(SdfPath const& id, HdRprApiSharedPtr rprApi)
+        : HdSprim(id)
+        , m_rprApiWeakPtr(rprApi) {
+    }
 
-    /// Synchronizes state from the delegate to this object.
-    /// @param[in, out]  dirtyBits: On input specifies which state is
-    ///                             is dirty and can be pulled from the scene
-    ///                             delegate.
-    ///                             On output specifies which bits are still
-    ///                             dirty and were not cleaned by the sync.
-    ///
-    virtual void Sync(HdSceneDelegate *sceneDelegate,
-                      HdRenderParam   *renderParam,
-                      HdDirtyBits     *dirtyBits) override;
+    void Sync(HdSceneDelegate* sceneDelegate,
+              HdRenderParam* renderParam,
+              HdDirtyBits* dirtyBits) override;
 
-    /// Returns the minimal set of dirty bits to place in the
-    /// change tracker for use in the first sync of this prim.
-    /// Typically this would be all dirty bits.
-    virtual HdDirtyBits GetInitialDirtyBitsMask() const override;
+    HdDirtyBits GetInitialDirtyBitsMask() const override;
 
 protected:
     HdRprApiWeakPtr m_rprApiWeakPtr;

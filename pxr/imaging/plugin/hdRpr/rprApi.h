@@ -53,21 +53,20 @@ private:
 using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
 
 #define HD_RPR_AOV_TOKENS \
-    (color)                                     \
-    (albedo)                                    \
-    (depth)                                     \
-    (linearDepth)                               \
-    (primId)                                    \
-    (instanceId)                                \
-    (elementId)                                 \
-    (normal)                                    \
-    (worldCoordinate)                           \
+    (color) \
+    (albedo) \
+    (depth) \
+    (linearDepth) \
+    (primId) \
+    (instanceId) \
+    (elementId) \
+    (normal) \
+    (worldCoordinate) \
     ((primvarsSt, "primvars:st"))
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_API, HD_RPR_AOV_TOKENS);
 
-class HdRprApi final
-{
+class HdRprApi final {
 public:
     HdRprApi();
     ~HdRprApi();
@@ -83,11 +82,10 @@ public:
     RprApiObjectPtr CreateDirectionalLight();
     void SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftness);
 
-    //RprApiObjectPtr CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize);
-	RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
-		const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-		const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow);
+    RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+                                 const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+                                 const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
+                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow);
 
     RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding);
     RprApiObjectPtr CreateMeshInstance(RprApiObject* prototypeMesh);

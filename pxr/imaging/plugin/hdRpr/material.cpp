@@ -1,93 +1,83 @@
 #include "material.h"
-
 #include "materialFactory.h"
 #include "materialAdapter.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(
-	HdRprMaterialTokens,
-	(bxdf)				\
-	(UsdPreviewSurface)
+    HdRprMaterialTokens,
+    (bxdf) \
+    (UsdPreviewSurface)
 );
 
+static const bool GetMaterial(const HdMaterialNetworkMap& networkMap, EMaterialType& out_materialType, HdMaterialNetwork& out_surface) {
+    for (const auto& networkIt : networkMap.map) {
+        const HdMaterialNetwork& network = networkIt.second;
 
-static const bool getMaterial(const HdMaterialNetworkMap & networkMap, EMaterialType & out_materialType, HdMaterialNetwork & out_surface)
-{
-	for (const auto & networkIt : networkMap.map)
-	{
-		const HdMaterialNetwork & network = networkIt.second;
+        if (network.nodes.empty()) {
+            continue;
+        }
 
-		if (network.nodes.empty())
-		{
-			continue;
-		}
+        for (const HdMaterialNode& node : network.nodes) {
+            if (node.identifier == HdRprMaterialTokens->UsdPreviewSurface) {
+                out_surface = network;
+                out_materialType = EMaterialType::USD_PREVIEW_SURFACE;
 
-		for (const HdMaterialNode & node : network.nodes)
-		{
-			if (node.identifier == HdRprMaterialTokens->UsdPreviewSurface)
-			{
-				out_surface = network;
-				out_materialType = EMaterialType::USD_PREVIEW_SURFACE;
+                return true;
+            }
+        }
+    }
 
-				return true;
-			}
-		}
-	}
-
-	out_materialType = EMaterialType::NONE;
-	return false;
+    out_materialType = EMaterialType::NONE;
+    return false;
 }
 
-HdRprMaterial::HdRprMaterial(SdfPath const & id, HdRprApiSharedPtr rprApi) : HdMaterial(id) 
-{
-	m_rprApiWeakPtr = rprApi;
+HdRprMaterial::HdRprMaterial(SdfPath const& id, HdRprApiSharedPtr rprApi) : HdMaterial(id) {
+    m_rprApiWeakPtr = rprApi;
 }
 
-void HdRprMaterial::Sync(HdSceneDelegate *sceneDelegate,
-	HdRenderParam   *renderParam,
-	HdDirtyBits     *dirtyBits)
-{
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
-	if (!rprApi)
-	{
-		TF_CODING_ERROR("RprApi is expired");
-		return;
-	}
+void HdRprMaterial::Sync(HdSceneDelegate* sceneDelegate,
+                         HdRenderParam* renderParam,
+                         HdDirtyBits* dirtyBits) {
 
-	if (*dirtyBits & HdMaterial::DirtyResource) {
-		VtValue vtMat = sceneDelegate->GetMaterialResource(GetId());
-		if (vtMat.IsHolding<HdMaterialNetworkMap>()) {
+    auto rprApi = m_rprApiWeakPtr.lock();
+    if (!rprApi) {
+        TF_CODING_ERROR("RprApi is expired");
+        *dirtyBits = Clean;
+        return;
+    }
 
-			HdMaterialNetworkMap networkMap = vtMat.UncheckedGet<HdMaterialNetworkMap>();
+    if (*dirtyBits & HdMaterial::DirtyResource) {
+        VtValue vtMat = sceneDelegate->GetMaterialResource(GetId());
+        if (vtMat.IsHolding<HdMaterialNetworkMap>()) {
 
-			EMaterialType materialType;
-			HdMaterialNetwork surface;
+            HdMaterialNetworkMap networkMap = vtMat.UncheckedGet<HdMaterialNetworkMap>();
 
-			if (getMaterial(networkMap, materialType, surface)) {
-				MaterialAdapter matAdapter = MaterialAdapter(materialType, surface);
-				m_rprMaterial = rprApi->CreateMaterial(matAdapter);
-			} else {
-				TF_CODING_WARNING("Material type not supported");
-			}
-		}
-	}
+            EMaterialType materialType;
+            HdMaterialNetwork surface;
 
-	*dirtyBits = Clean;
+            if (GetMaterial(networkMap, materialType, surface)) {
+                MaterialAdapter matAdapter = MaterialAdapter(materialType, surface);
+                m_rprMaterial = rprApi->CreateMaterial(matAdapter);
+            } else {
+                TF_CODING_WARNING("Material type not supported");
+            }
+        }
+    }
+
+    *dirtyBits = Clean;
 }
 
-HdDirtyBits HdRprMaterial::GetInitialDirtyBitsMask() const
-{
-	return AllDirty;
+HdDirtyBits HdRprMaterial::GetInitialDirtyBitsMask() const {
+    return HdMaterial::DirtyResource;
 }
 
-void HdRprMaterial::Reload()
-{
-	// no-op
+void HdRprMaterial::Reload() {
+    // no-op
 }
 
 RprApiObject const* HdRprMaterial::GetRprMaterialObject() const {
-	return m_rprMaterial.get();
+    return m_rprMaterial.get();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -13,23 +13,25 @@
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdSceneDelegate;
-class SdfPath;
 
 class HdRprInstancer : public HdInstancer {
 public:
-	HdRprInstancer(HdSceneDelegate* delegate, SdfPath const &id,
-		SdfPath const &parentInstancerId) :
-		HdInstancer(delegate, id, parentInstancerId) {}
+    HdRprInstancer(
+        HdSceneDelegate* delegate,
+        SdfPath const& id,
+        SdfPath const& parentInstancerId) :
+        HdInstancer(delegate, id, parentInstancerId) {
+    }
 
-	VtMatrix4dArray ComputeTransforms(SdfPath const& prototypeId);
+    VtMatrix4dArray ComputeTransforms(SdfPath const& prototypeId);
 
 private:
-	void Sync();
+    void Sync();
 
-	VtMatrix4dArray m_transform;
-	VtVec3fArray m_translate;
-	VtVec4fArray m_rotate;
-	VtVec3fArray m_scale;
+    VtMatrix4dArray m_transform;
+    VtVec3fArray m_translate;
+    VtVec4fArray m_rotate;
+    VtVec3fArray m_scale;
 
     std::mutex m_syncMutex;
 };

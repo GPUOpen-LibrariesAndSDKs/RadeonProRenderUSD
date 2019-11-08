@@ -1,8 +1,5 @@
 #include "domeLight.h"
 
-#include "rprApi.h"
-#include "renderParam.h"
-
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
@@ -11,36 +8,32 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-static void removeFirstSlash(std::string & string)
-{
-	// Don't need this for *nix/Mac
-	#ifdef _WIN32
-	if (string[0] == '/' || string[0] == '\\')
-	{
-		string.erase(0, 1);
-	}
-	#endif
+static void removeFirstSlash(std::string& string) {
+    // Don't need this for *nix/Mac
+#ifdef _WIN32
+    if (string[0] == '/' || string[0] == '\\') {
+        string.erase(0, 1);
+    }
+#endif
 }
 
-static float computeLightIntensity(float intensity, float exposure)
-{
-	return intensity * exp2(exposure);
+static float computeLightIntensity(float intensity, float exposure) {
+    return intensity * exp2(exposure);
 }
 
-void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
-	HdRenderParam   *renderParam,
-	HdDirtyBits     *dirtyBits)
-{
-	SdfPath const & id = GetId();
+void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
+                          HdRenderParam* renderParam,
+                          HdDirtyBits* dirtyBits) {
 
-	HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
-	if (!rprApi)
-	{
-		TF_CODING_ERROR("RprApi is expired");
-		return;
-	}
+    auto rprApi = m_rprApiWeakPtr.lock();
+    if (!rprApi) {
+        TF_CODING_ERROR("RprApi is expired");
+        *dirtyBits = HdLight::Clean;
+        return;
+    }
 
-	HdDirtyBits bits = *dirtyBits;
+    SdfPath const& id = GetId();
+    HdDirtyBits bits = *dirtyBits;
 
     if (bits & HdLight::DirtyTransform) {
         m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>());
@@ -91,16 +84,15 @@ void HdRprDomeLight::Sync(HdSceneDelegate *sceneDelegate,
         }
     }
 
-    if (newLight && (bits & HdLight::DirtyTransform)) {
+    if (newLight || ((bits & HdLight::DirtyTransform) && m_rprLight)) {
         rprApi->SetLightTransform(m_rprLight.get(), m_transform);
     }
 
     *dirtyBits = HdLight::Clean;
 }
 
-
 HdDirtyBits HdRprDomeLight::GetInitialDirtyBitsMask() const {
-		return HdLight::AllDirty;
+    return HdLight::AllDirty;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

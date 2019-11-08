@@ -4,69 +4,60 @@
 #include "materialFactory.h"
 
 #include "pxr/imaging/pxOsd/tokens.h"
+#include "pxr/imaging/pxOsd/subdivTags.h"
 
 #include "pxr/imaging/hd/meshUtil.h"
 #include "pxr/imaging/hd/sprim.h"
 #include "pxr/imaging/hd/smoothNormals.h"
 
 #include "pxr/base/gf/matrix4f.h"
-
 #include "pxr/base/gf/vec4f.h"
-
-#include "pxr/imaging/pxOsd/subdivTags.h"
 
 #include "pxr/usd/usdUtils/pipeline.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprMesh::HdRprMesh(SdfPath const & id, HdRprApiSharedPtr rprApiShared, SdfPath const & instancerId)
+HdRprMesh::HdRprMesh(SdfPath const& id, HdRprApiSharedPtr rprApiShared, SdfPath const& instancerId)
     : HdMesh(id, instancerId)
     , m_rprApiWeakPtr(rprApiShared) {
 
 }
 
-HdDirtyBits
-HdRprMesh::_PropagateDirtyBits(HdDirtyBits bits) const
-{
-	return bits;
+HdDirtyBits HdRprMesh::_PropagateDirtyBits(HdDirtyBits bits) const {
+    return bits;
 }
 
-HdDirtyBits
-HdRprMesh::GetInitialDirtyBitsMask() const
-{
-	// The initial dirty bits control what data is available on the first
-	// run through _PopulateMesh(), so it should list every data item
-	// that _PopluateMesh requests.
-	int mask = HdChangeTracker::Clean
-		| HdChangeTracker::DirtyPoints
-		| HdChangeTracker::DirtyTopology
-		| HdChangeTracker::DirtyTransform
-		| HdChangeTracker::DirtyPrimvar
-		| HdChangeTracker::DirtyNormals
-		| HdChangeTracker::DirtyInstanceIndex
-		| HdChangeTracker::AllDirty
-		;
+HdDirtyBits HdRprMesh::GetInitialDirtyBitsMask() const {
+    // The initial dirty bits control what data is available on the first
+    // run through _PopulateMesh(), so it should list every data item
+    // that _PopluateMesh requests.
+    int mask = HdChangeTracker::Clean
+        | HdChangeTracker::DirtyPoints
+        | HdChangeTracker::DirtyTopology
+        | HdChangeTracker::DirtyTransform
+        | HdChangeTracker::DirtyPrimvar
+        | HdChangeTracker::DirtyNormals
+        | HdChangeTracker::DirtyInstanceIndex
+        | HdChangeTracker::AllDirty
+        ;
 
-	return (HdDirtyBits)mask;
+    return (HdDirtyBits)mask;
 }
 
-void
-HdRprMesh::_InitRepr(TfToken const &reprName,
-	HdDirtyBits *dirtyBits)
-{
-	TF_UNUSED(reprName);
-	TF_UNUSED(dirtyBits);
+void HdRprMesh::_InitRepr(TfToken const& reprName,
+                          HdDirtyBits* dirtyBits) {
+    TF_UNUSED(reprName);
+    TF_UNUSED(dirtyBits);
 
-	// No-op
+    // No-op
 }
 
 template <typename T>
-bool HdRprMesh::GetPrimvarData(
-    TfToken const& name,
-    HdSceneDelegate* sceneDelegate,
-    std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation,
-    VtArray<T>& out_data,
-    VtIntArray& out_indices) {
+bool HdRprMesh::GetPrimvarData(TfToken const& name,
+                               HdSceneDelegate* sceneDelegate,
+                               std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation,
+                               VtArray<T>& out_data,
+                               VtIntArray& out_indices) {
     out_data.clear();
     out_indices.clear();
 
@@ -91,20 +82,20 @@ bool HdRprMesh::GetPrimvarData(
 
     return false;
 }
-template bool HdRprMesh::GetPrimvarData<GfVec2f>(TfToken const& name, HdSceneDelegate* sceneDelegate, std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation, VtArray<GfVec2f>& out_data, VtIntArray& out_indices);
-template bool HdRprMesh::GetPrimvarData<GfVec3f>(TfToken const& name, HdSceneDelegate* sceneDelegate, std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation, VtArray<GfVec3f>& out_data, VtIntArray& out_indices);
+template bool HdRprMesh::GetPrimvarData<GfVec2f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec2f>&, VtIntArray&);
+template bool HdRprMesh::GetPrimvarData<GfVec3f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec3f>&, VtIntArray&);
 
-void HdRprMesh::Sync(
-    HdSceneDelegate * sceneDelegate
-    , HdRenderParam * renderParam
-    , HdDirtyBits * dirtyBits
-    , TfToken const & reprName) {
+void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
+                     HdRenderParam* renderParam,
+                     HdDirtyBits* dirtyBits,
+                     TfToken const& reprName) {
     HD_TRACE_FUNCTION();
     HF_MALLOC_TAG_FUNCTION();
 
-    HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
+    auto rprApi = m_rprApiWeakPtr.lock();
     if (!rprApi) {
         TF_CODING_ERROR("RprApi is expired");
+        *dirtyBits = HdChangeTracker::Clean;
         return;
     }
 

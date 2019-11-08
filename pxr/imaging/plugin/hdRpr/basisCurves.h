@@ -12,30 +12,30 @@ class HdRprMaterial;
 class HdRprBasisCurves : public HdBasisCurves {
 
 public:
-	HdRprBasisCurves(SdfPath const& id, HdRprApiSharedPtr rprApi,
-		SdfPath const& instancerId = SdfPath());
+    HdRprBasisCurves(SdfPath const& id,
+                     HdRprApiSharedPtr rprApi,
+                     SdfPath const& instancerId);
 
     ~HdRprBasisCurves() override = default;
 
-	virtual void Sync(HdSceneDelegate      *delegate,
-		HdRenderParam        *renderParam,
-		HdDirtyBits          *dirtyBits,
-		TfToken const &reprSelector) override;
+    void Sync(HdSceneDelegate* delegate,
+              HdRenderParam* renderParam,
+              HdDirtyBits* dirtyBits,
+              TfToken const& reprSelector) override;
 
 protected:
 
-	virtual HdDirtyBits GetInitialDirtyBitsMask() const override;
+    HdDirtyBits GetInitialDirtyBitsMask() const override;
 
-	virtual HdDirtyBits _PropagateDirtyBits(HdDirtyBits bits) const override;
+    HdDirtyBits _PropagateDirtyBits(HdDirtyBits bits) const override;
 
-	virtual void _InitRepr(TfToken const &reprName,
-		HdDirtyBits *dirtyBits) override;
+    void _InitRepr(TfToken const& reprName,
+                   HdDirtyBits* dirtyBits) override;
 
 private:
     HdRprApiWeakPtr m_rprApiWeakPtr;
     RprApiObjectPtr m_rprCurve;
     RprApiObjectPtr m_fallbackMaterial;
-
     HdRprMaterial const* m_cachedMaterial;
 };
 

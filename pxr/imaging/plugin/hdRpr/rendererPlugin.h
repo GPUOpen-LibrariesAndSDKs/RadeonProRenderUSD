@@ -1,38 +1,23 @@
 #ifndef HDRPR_RENDERER_PLUGIN_H
 #define HDRPR_RENDERER_PLUGIN_H
 
-#include "pxr/pxr.h"
 #include "pxr/imaging/hd/rendererPlugin.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-///
-/// \class HdRprPlugin
-///
 class HdRprPlugin final : public HdRendererPlugin {
 public:
     HdRprPlugin() = default;
-    virtual ~HdRprPlugin() = default;
+    ~HdRprPlugin() override = default;
 
-    /// Construct a new render delegate of type HdProRenderRenderDelegate.
-    virtual HdRenderDelegate *CreateRenderDelegate() override;
+    HdRprPlugin(const HdRprPlugin&) = delete;
+    HdRprPlugin& operator =(const HdRprPlugin&) = delete;
 
-    /// Destroy a render delegate created by this class's CreateRenderDelegate.
-    ///   \param renderDelegate The render delegate to delete.
-    virtual void DeleteRenderDelegate(
-        HdRenderDelegate *renderDelegate) override;
+    HdRenderDelegate* CreateRenderDelegate() override;
 
-	virtual bool IsSupported() const override
-	{
-		return true;
-	}
+    void DeleteRenderDelegate(HdRenderDelegate* renderDelegate) override;
 
-private:
-    // This class does not support copying.
-    HdRprPlugin(const HdRprPlugin&) 
-        = delete;
-    HdRprPlugin &operator =(const HdRprPlugin&) 
-        = delete;
+    bool IsSupported() const override { return true; }
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

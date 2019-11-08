@@ -21,30 +21,26 @@
 #include "field.h"
 #endif
 
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
-	(openvdbAsset) \
-	(rpr)
+    (openvdbAsset) \
+    (rpr)
 );
 
-const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES =
-{
-	HdPrimTypeTokens->mesh,
-	HdPrimTypeTokens->basisCurves,
+const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES = {
+    HdPrimTypeTokens->mesh,
+    HdPrimTypeTokens->basisCurves,
 
 #ifdef USE_VOLUME
-	HdPrimTypeTokens->volume,
+    HdPrimTypeTokens->volume,
 #endif
-
 };
 
-const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES =
-{
-	HdPrimTypeTokens->camera,
-	HdPrimTypeTokens->material,
-	HdPrimTypeTokens->rectLight,
+const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES = {
+    HdPrimTypeTokens->camera,
+    HdPrimTypeTokens->material,
+    HdPrimTypeTokens->rectLight,
     HdPrimTypeTokens->sphereLight,
     HdPrimTypeTokens->cylinderLight,
     HdPrimTypeTokens->domeLight,
@@ -52,14 +48,12 @@ const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES =
     HdPrimTypeTokens->distantLight
 };
 
-const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES =
-{
+const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
 #ifdef USE_VOLUME
     _tokens->openvdbAsset,
 #endif
     HdPrimTypeTokens->renderBuffer
 };
-
 
 HdRprDelegate::HdRprDelegate() {
     m_rprApiSharedPtr = std::shared_ptr<HdRprApi>(new HdRprApi);
@@ -74,219 +68,147 @@ HdRprDelegate::~HdRprDelegate() {
     }
 }
 
-HdRenderParam*
-HdRprDelegate::GetRenderParam() const
-{
-	//return _renderParam.get();
-	return nullptr;
+HdRenderParam* HdRprDelegate::GetRenderParam() const {
+    return nullptr;
 }
 
-void
-HdRprDelegate::CommitResources(HdChangeTracker *tracker)
-{
+void HdRprDelegate::CommitResources(HdChangeTracker* tracker) {
     // CommitResources() is called after prim sync has finished, but before any
     // tasks (such as draw tasks) have run.
 
 }
 
-TfToken
-HdRprDelegate::GetMaterialNetworkSelector() const {
-	return _tokens->rpr;
+TfToken HdRprDelegate::GetMaterialNetworkSelector() const {
+    return _tokens->rpr;
 }
 
-TfTokenVector const&
-HdRprDelegate::GetSupportedRprimTypes() const
-{
+TfTokenVector const& HdRprDelegate::GetSupportedRprimTypes() const {
     return SUPPORTED_RPRIM_TYPES;
 }
 
-TfTokenVector const&
-HdRprDelegate::GetSupportedSprimTypes() const
-{
+TfTokenVector const& HdRprDelegate::GetSupportedSprimTypes() const {
     return SUPPORTED_SPRIM_TYPES;
 }
 
-TfTokenVector const&
-HdRprDelegate::GetSupportedBprimTypes() const
-{
+TfTokenVector const& HdRprDelegate::GetSupportedBprimTypes() const {
     return SUPPORTED_BPRIM_TYPES;
 }
 
-HdResourceRegistrySharedPtr
-HdRprDelegate::GetResourceRegistry() const
-{
-	//return _resourceRegistry;
-	return HdResourceRegistrySharedPtr(new HdResourceRegistry());
+HdResourceRegistrySharedPtr HdRprDelegate::GetResourceRegistry() const {
+    return HdResourceRegistrySharedPtr(new HdResourceRegistry());
 }
 
-HdRenderPassSharedPtr
-HdRprDelegate::CreateRenderPass(HdRenderIndex *index,
-                            HdRprimCollection const& collection)
-{
-	//HdRprParam * param = (HdRprParam * ) GetRenderParam();
-	return HdRenderPassSharedPtr(
-		new HdRprRenderPass(index, collection, m_rprApiSharedPtr));
+HdRenderPassSharedPtr HdRprDelegate::CreateRenderPass(HdRenderIndex* index,
+                                                      HdRprimCollection const& collection) {
+    return HdRenderPassSharedPtr(new HdRprRenderPass(index, collection, m_rprApiSharedPtr));
 }
 
-HdInstancer *
-HdRprDelegate::CreateInstancer(HdSceneDelegate *delegate,
-                                        SdfPath const& id,
-                                        SdfPath const& instancerId)
-{
-	return new HdRprInstancer(delegate, id, instancerId);
+HdInstancer* HdRprDelegate::CreateInstancer(HdSceneDelegate* delegate,
+                                            SdfPath const& id,
+                                            SdfPath const& instancerId) {
+    return new HdRprInstancer(delegate, id, instancerId);
 }
 
-void
-HdRprDelegate::DestroyInstancer(HdInstancer *instancer)
-{
+void HdRprDelegate::DestroyInstancer(HdInstancer* instancer) {
     delete instancer;
 }
 
-HdRprim *
-HdRprDelegate::CreateRprim(TfToken const& typeId,
+HdRprim* HdRprDelegate::CreateRprim(TfToken const& typeId,
                                     SdfPath const& rprimId,
-                                    SdfPath const& instancerId)
-{
-	if (typeId == HdPrimTypeTokens->mesh) {
-		return new HdRprMesh(rprimId, m_rprApiSharedPtr, instancerId);
-	}
-	else if (typeId == HdPrimTypeTokens->basisCurves) {
-		return new HdRprBasisCurves(rprimId, m_rprApiSharedPtr, instancerId);
-	}
+                                    SdfPath const& instancerId) {
+    if (typeId == HdPrimTypeTokens->mesh) {
+        return new HdRprMesh(rprimId, m_rprApiSharedPtr, instancerId);
+    } else if (typeId == HdPrimTypeTokens->basisCurves) {
+        return new HdRprBasisCurves(rprimId, m_rprApiSharedPtr, instancerId);
+    }
 #ifdef USE_VOLUME
-	else if (typeId == HdPrimTypeTokens->volume)
-	{
-		return new HdRprVolume(rprimId, m_rprApiSharedPtr);
-	}
+    else if (typeId == HdPrimTypeTokens->volume) {
+        return new HdRprVolume(rprimId, m_rprApiSharedPtr);
+    }
 #endif
-	else {
-		TF_CODING_ERROR("Unknown Rprim Type %s", typeId.GetText());
-	}
-	return nullptr;
+
+    TF_CODING_ERROR("Unknown Rprim Type %s", typeId.GetText());
+    return nullptr;
 }
 
-void
-HdRprDelegate::DestroyRprim(HdRprim *rPrim)
-{
-	delete rPrim;
+void HdRprDelegate::DestroyRprim(HdRprim* rPrim) {
+    delete rPrim;
 }
 
-HdSprim *
-HdRprDelegate::CreateSprim(TfToken const& typeId,
-                                    SdfPath const& sprimId)
-{
-	if (typeId == HdPrimTypeTokens->camera) {
-		return new HdCamera(sprimId);
-	}
-	else if (typeId == HdPrimTypeTokens->domeLight)
-	{
-		return new HdRprDomeLight(sprimId, m_rprApiSharedPtr);
-	}
-	else if (typeId == HdPrimTypeTokens->rectLight)
-	{
-		return new HdRprRectLight(sprimId, m_rprApiSharedPtr);
-	}
-	else if (typeId == HdPrimTypeTokens->sphereLight)
-	{
-		return new HdRprSphereLight(sprimId, m_rprApiSharedPtr);
-	}
-    else if (typeId == HdPrimTypeTokens->cylinderLight) {
+HdSprim* HdRprDelegate::CreateSprim(TfToken const& typeId,
+                                    SdfPath const& sprimId) {
+    if (typeId == HdPrimTypeTokens->camera) {
+        return new HdCamera(sprimId);
+    } else if (typeId == HdPrimTypeTokens->domeLight) {
+        return new HdRprDomeLight(sprimId, m_rprApiSharedPtr);
+    } else if (typeId == HdPrimTypeTokens->rectLight) {
+        return new HdRprRectLight(sprimId, m_rprApiSharedPtr);
+    } else if (typeId == HdPrimTypeTokens->sphereLight) {
+        return new HdRprSphereLight(sprimId, m_rprApiSharedPtr);
+    } else if (typeId == HdPrimTypeTokens->cylinderLight) {
         return new HdRprCylinderLight(sprimId, m_rprApiSharedPtr);
-    }
-    else if (typeId == HdPrimTypeTokens->distantLight) {
+    } else if (typeId == HdPrimTypeTokens->distantLight) {
         return new HdRprDistantLight(sprimId, m_rprApiSharedPtr);
-    }
-    else if (typeId == HdPrimTypeTokens->diskLight) {
+    } else if (typeId == HdPrimTypeTokens->diskLight) {
         return new HdRprDiskLight(sprimId, m_rprApiSharedPtr);
+    } else if (typeId == HdPrimTypeTokens->material) {
+        return new HdRprMaterial(sprimId, m_rprApiSharedPtr);
     }
-	else if (typeId == HdPrimTypeTokens->material)
-	{
-		return new HdRprMaterial(sprimId, m_rprApiSharedPtr);
-	}
-	else {
-		TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
-	}
 
-	return nullptr;
+    TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
+    return nullptr;
 }
 
-HdSprim *
-HdRprDelegate::CreateFallbackSprim(TfToken const& typeId)
-{
-
-	// For fallback sprims, create objects with an empty scene path.
-	// They'll use default values and won't be updated by a scene delegate.
-	if (typeId == HdPrimTypeTokens->camera) {
-		return new HdCamera(SdfPath::EmptyPath());
-	}
-	else if (typeId == HdPrimTypeTokens->domeLight)
-	{
-		return new HdRprDomeLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
-	}
-	else if (typeId == HdPrimTypeTokens->rectLight)
-	{
-		return new HdRprRectLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
-	}
-	else if (typeId == HdPrimTypeTokens->sphereLight)
-	{
-		return new HdRprSphereLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
-	}
-    else if (typeId == HdPrimTypeTokens->cylinderLight)
-    {
+HdSprim* HdRprDelegate::CreateFallbackSprim(TfToken const& typeId) {
+    // For fallback sprims, create objects with an empty scene path.
+    // They'll use default values and won't be updated by a scene delegate.
+    if (typeId == HdPrimTypeTokens->camera) {
+        return new HdCamera(SdfPath::EmptyPath());
+    } else if (typeId == HdPrimTypeTokens->domeLight) {
+        return new HdRprDomeLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+    } else if (typeId == HdPrimTypeTokens->rectLight) {
+        return new HdRprRectLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+    } else if (typeId == HdPrimTypeTokens->sphereLight) {
+        return new HdRprSphereLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+    } else if (typeId == HdPrimTypeTokens->cylinderLight) {
         return new HdRprCylinderLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
-    }
-    else if (typeId == HdPrimTypeTokens->diskLight) {
+    } else if (typeId == HdPrimTypeTokens->diskLight) {
         return new HdRprDiskLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
-    }
-    else if (typeId == HdPrimTypeTokens->distantLight) {
+    } else if (typeId == HdPrimTypeTokens->distantLight) {
         return new HdRprDistantLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+    } else if (typeId == HdPrimTypeTokens->material) {
+        return new HdRprMaterial(SdfPath::EmptyPath(), m_rprApiSharedPtr);
     }
-	else if (typeId == HdPrimTypeTokens->material)
-	{
-		return new HdRprMaterial(SdfPath::EmptyPath(), m_rprApiSharedPtr);
-	}
-	else {
-		TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
-	}
-	return nullptr;
+
+    TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
+    return nullptr;
 }
 
-void
-HdRprDelegate::DestroySprim(HdSprim *sPrim)
-{
-	delete sPrim;
+void HdRprDelegate::DestroySprim(HdSprim* sPrim) {
+    delete sPrim;
 }
 
-HdBprim *
-HdRprDelegate::CreateBprim(TfToken const& typeId,
-                                    SdfPath const& bprimId)
-{
-	if(typeId == HdPrimTypeTokens->renderBuffer)
-    {
+HdBprim* HdRprDelegate::CreateBprim(TfToken const& typeId,
+                                    SdfPath const& bprimId) {
+    if (typeId == HdPrimTypeTokens->renderBuffer) {
         return new HdRprRenderBuffer(bprimId, m_rprApiSharedPtr);
     }
-
 #ifdef USE_VOLUME
-	if (typeId == _tokens->openvdbAsset)
-	{
-		return new HdRprField(bprimId, m_rprApiSharedPtr);
-	}
+    else if (typeId == _tokens->openvdbAsset) {
+        return new HdRprField(bprimId, m_rprApiSharedPtr);
+    }
 #endif
 
-	TF_CODING_ERROR("Unknown Bprim Type %s", typeId.GetText());
+    TF_CODING_ERROR("Unknown Bprim Type %s", typeId.GetText());
     return nullptr;
 }
 
-HdBprim *
-HdRprDelegate::CreateFallbackBprim(TfToken const& typeId)
-{
+HdBprim* HdRprDelegate::CreateFallbackBprim(TfToken const& typeId) {
     return nullptr;
 }
 
-void
-HdRprDelegate::DestroyBprim(HdBprim *bPrim)
-{
-	delete bPrim;
+void HdRprDelegate::DestroyBprim(HdBprim* bPrim) {
+    delete bPrim;
 }
 
 HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) const {

@@ -36,14 +36,12 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PUBLIC_TOKENS(HdRprAovTokens, HD_RPR_AOV_TOKENS);
 
-#define RPR_API_OBJECT_ACTION_TOKENS \
-    (attach)                         \
+TF_DEFINE_PRIVATE_TOKENS(RprApiObjectActionTokens,
+    (attach) \
     (contextSetScene)
+);
 
-TF_DEFINE_PRIVATE_TOKENS(RprApiObjectActionTokens, RPR_API_OBJECT_ACTION_TOKENS);
-
-namespace
-{
+namespace {
 
 using RecursiveLockGuard = std::lock_guard<std::recursive_mutex>;
 std::recursive_mutex g_rprAccessMutex;
@@ -84,9 +82,6 @@ public:
         CreateCamera();
     }
 
-    int m_iter = 0;
-    int m_maxSamples = 0;
-
     void CreateScene() {
         if (!m_rprContext) {
             return;
@@ -123,7 +118,10 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    RprApiObjectPtr CreateMesh(const VtVec3fArray & points, const VtIntArray & pointIndexes, const VtVec3fArray & normals, const VtIntArray & normalIndexes, const VtVec2fArray & uvs, const VtIntArray & uvIndexes, const VtIntArray & vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
+    RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes,
+                               const VtVec3fArray& normals, const VtIntArray& normalIndexes,
+                               const VtVec2fArray& uvs, const VtIntArray& uvIndexes,
+                               const VtIntArray& vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -157,15 +155,15 @@ public:
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         rpr_shape mesh = nullptr;
-        if (RPR_ERROR_CHECK(rprContextCreateMesh(m_rprContext->GetHandle(),
+        if (RPR_ERROR_CHECK(rprContextCreateMesh(
+            m_rprContext->GetHandle(),
             (rpr_float const*)points.data(), points.size(), sizeof(GfVec3f),
             (rpr_float const*)(normals.data()), normals.size(), sizeof(GfVec3f),
             (rpr_float const*)(uvs.data()), uvs.size(), sizeof(GfVec2f),
             newIndexes.data(), sizeof(rpr_int),
             normalIndicesData, sizeof(rpr_int),
             uvIndicesData, sizeof(rpr_int),
-            newVpf.data(), newVpf.size(), &mesh)
-        , "Fail create mesh")) {
+            newVpf.data(), newVpf.size(), &mesh), "Fail create mesh")) {
             return nullptr;
         }
         auto meshObject = RprApiObject::Wrap(mesh);
@@ -368,16 +366,11 @@ public:
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         rpr_curve curve = nullptr;
-        if (RPR_ERROR_CHECK(rprContextCreateCurve(m_rprContext->GetHandle(),
-            &curve
-            , newPoints.size()
-            , (float*)newPoints.data()
-            , sizeof(GfVec3f)
-            , newIndexes.size()
-            , 1
-            , (const rpr_uint*)newIndexes.data()
-            , &width, nullptr
-            , segmentsPerCurve.data()), "Fail to create curve")) {
+        if (RPR_ERROR_CHECK(rprContextCreateCurve(
+            m_rprContext->GetHandle(), &curve
+            , newPoints.size(), (float*)newPoints.data(), sizeof(GfVec3f)
+            , newIndexes.size(), 1, (const rpr_uint*)newIndexes.data()
+            , &width, nullptr, segmentsPerCurve.data()), "Fail to create curve")) {
             return nullptr;
         }
         auto curveObject = RprApiObject::Wrap(curve);
@@ -426,7 +419,6 @@ public:
 
     void SetDirectionalLightAttributes(rpr_light light, GfVec3f const& color, float shadowSoftness) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
-
 
         RPR_ERROR_CHECK(rprDirectionalLightSetRadiantPower3f(light, color[0], color[1], color[2]), "Failed to set directional light color");
         RPR_ERROR_CHECK(rprDirectionalLightSetShadowSoftness(light, GfClamp(shadowSoftness, 0.0f, 1.0f)), "Failed to set directional light color");
@@ -509,7 +501,7 @@ public:
         positions[3] = GfVec3f(width * -0.5f, height * 0.5f, 0.f);
 
         // All normals -z
-        VtVec3fArray normals(rectVertexCount, GfVec3f(0.f,0.f,-1.f));
+        VtVec3fArray normals(rectVertexCount, GfVec3f(0.f, 0.f, -1.f));
 
         VtIntArray idx(rectVertexCount);
         idx[0] = 0;
@@ -574,15 +566,15 @@ public:
             for (int i = 0; i < nx; i++) {
                 float t = i / (float)nx * M_PI;
                 float p = j / (float)ny * 2.f * M_PI;
-                positions.push_back(d * GfVec3f(sin(t)*cos(p), cos(t), sin(t)*sin(p)));
-                normals.push_back(GfVec3f(sin(t)*cos(p), cos(t), sin(t)*sin(p)));
+                positions.push_back(d * GfVec3f(sin(t) * cos(p), cos(t), sin(t) * sin(p)));
+                normals.push_back(GfVec3f(sin(t) * cos(p), cos(t), sin(t) * sin(p)));
             }
         }
 
         for (int j = 0; j < ny; j++) {
             for (int i = 0; i < nx - 1; i++) {
-                int o0 = j*nx;
-                int o1 = ((j + 1) % ny)*nx;
+                int o0 = j * nx;
+                int o1 = ((j + 1) % ny) * nx;
                 idx.push_back(o0 + i);
                 idx.push_back(o0 + i + 1);
                 idx.push_back(o1 + i + 1);
@@ -698,10 +690,10 @@ public:
         });
     }
 
-	RprApiObjectPtr CreateHeteroVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
-		const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-		const GfVec3i& gridSize) {
+    RprApiObjectPtr CreateHeteroVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+                                       const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+                                       const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
+                                       const GfVec3i& gridSize) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -711,7 +703,8 @@ public:
         auto heteroVolumeObject = RprApiObject::Wrap(heteroVolume);
 
         rpr_grid rprGridDensity;
-        if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridDensity
+        if (RPR_ERROR_CHECK(rprContextCreateGrid(
+            m_rprContext->GetHandle(), &rprGridDensity
             , gridSize[0], gridSize[1], gridSize[2], &densityGridOnIndices[0]
             , densityGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
             , &densityGridOnValueIndices[0], densityGridOnValueIndices.size() * sizeof(densityGridOnValueIndices[0])
@@ -720,7 +713,8 @@ public:
         heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridDensity));
 
         rpr_grid rprGridAlbedo;
-        if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridAlbedo
+        if (RPR_ERROR_CHECK(rprContextCreateGrid(
+            m_rprContext->GetHandle(), &rprGridAlbedo
             , gridSize[0], gridSize[1], gridSize[2], &colorGridOnIndices[0]
             , colorGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
             , &colorGridOnValueIndices[0], colorGridOnValueIndices.size() * sizeof(colorGridOnValueIndices[0])
@@ -728,21 +722,22 @@ public:
             , "Fail create albedo grid")) return nullptr;
         heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridAlbedo));
 
-		rpr_grid rprGridEmission;
-		if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridEmission
-			, gridSize[0], gridSize[1], gridSize[2], &emissiveGridOnIndices[0]
-			, emissiveGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
-			, &emissiveGridOnValueIndices[0], emissiveGridOnValueIndices.size() * sizeof(emissiveGridOnValueIndices[0])
-			, 0)
-			, "Fail create emission grid")) return nullptr;
-		heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridEmission));
+        rpr_grid rprGridEmission;
+        if (RPR_ERROR_CHECK(rprContextCreateGrid(
+            m_rprContext->GetHandle(), &rprGridEmission
+            , gridSize[0], gridSize[1], gridSize[2], &emissiveGridOnIndices[0]
+            , emissiveGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
+            , &emissiveGridOnValueIndices[0], emissiveGridOnValueIndices.size() * sizeof(emissiveGridOnValueIndices[0])
+            , 0)
+            , "Fail create emission grid")) return nullptr;
+        heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridEmission));
 
         if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityGrid(heteroVolume, rprGridDensity), "Fail to set density hetero volume")) return nullptr;
-		if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityLookup(heteroVolume, &densityGridValues[0], densityGridValues.size() / 3), "Fail to set density volume lookup")) return nullptr;
-		if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoGrid(heteroVolume, rprGridAlbedo), "Fail to set albedo hetero volume")) return nullptr;
-		if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoLookup(heteroVolume, &colorGridValues[0], colorGridValues.size() / 3), "Fail to set albedo volume lookup")) return nullptr;
-		if (RPR_ERROR_CHECK(rprHeteroVolumeSetEmissionGrid(heteroVolume, rprGridEmission), "Fail to set emission hetero volume")) return nullptr;
-		if (RPR_ERROR_CHECK(rprHeteroVolumeSetEmissionLookup(heteroVolume, &emissiveGridValues[0], emissiveGridValues.size() / 3), "Fail to set emission volume lookup")) return nullptr;
+        if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityLookup(heteroVolume, &densityGridValues[0], densityGridValues.size() / 3), "Fail to set density volume lookup")) return nullptr;
+        if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoGrid(heteroVolume, rprGridAlbedo), "Fail to set albedo hetero volume")) return nullptr;
+        if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoLookup(heteroVolume, &colorGridValues[0], colorGridValues.size() / 3), "Fail to set albedo volume lookup")) return nullptr;
+        if (RPR_ERROR_CHECK(rprHeteroVolumeSetEmissionGrid(heteroVolume, rprGridEmission), "Fail to set emission hetero volume")) return nullptr;
+        if (RPR_ERROR_CHECK(rprHeteroVolumeSetEmissionLookup(heteroVolume, &emissiveGridValues[0], emissiveGridValues.size() / 3), "Fail to set emission volume lookup")) return nullptr;
 
         if (RPR_ERROR_CHECK(rprSceneAttachHeteroVolume(m_scene->GetHandle(), heteroVolume), "Fail attach hetero volume to scene")) return nullptr;
         m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -760,10 +755,10 @@ public:
         RPR_ERROR_CHECK(rprHeteroVolumeSetTransform(heteroVolume, false, m.GetArray()), "Fail to set hetero volume transform");
     }
 
-	RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
-		const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-		const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
+    RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+                                 const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+                                 const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
+                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         auto heteroVolume = CreateHeteroVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues, gridSize);
@@ -776,9 +771,8 @@ public:
             return nullptr;
         }
 
-        MaterialAdapter matAdapter = MaterialAdapter(EMaterialType::TRANSPERENT,
-             MaterialParams{ { TfToken("color"), VtValue(GfVec4f(1.0f, 1.0f, 1.0f, 1.0f))
-        } }); // TODO: use token
+        MaterialAdapter matAdapter(EMaterialType::TRANSPERENT,
+                                   MaterialParams{{HdPrimvarRoleTokens->color, VtValue(GfVec4f(1.0f, 1.0f, 1.0f, 1.0f))}});
 
         auto transparentMaterial = CreateMaterial(matAdapter);
         if (!transparentMaterial) {
@@ -786,9 +780,9 @@ public:
         }
 
         GfMatrix4f meshTransform(1.0f);
-		GfVec3f volumeSize = GfVec3f(voxelSize[0] * gridSize[0], voxelSize[1] * gridSize[1], voxelSize[2] * gridSize[2]);
-		meshTransform.SetScale(volumeSize);
-		meshTransform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
+        GfVec3f volumeSize = GfVec3f(voxelSize[0] * gridSize[0], voxelSize[1] * gridSize[1], voxelSize[2] * gridSize[2]);
+        meshTransform.SetScale(volumeSize);
+        meshTransform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
 
         SetMeshMaterial(cubeMesh->GetHandle(), static_cast<RprApiMaterial*>(transparentMaterial->GetHandle()));
         SetMeshHeteroVolume(cubeMesh->GetHandle(), heteroVolume->GetHandle());
@@ -1028,18 +1022,18 @@ public:
         rif_image_desc imageDesc = {};
         imageDesc.num_components = HdGetComponentCount(format);
         switch (HdGetComponentFormat(format)) {
-        case HdFormatUNorm8:
-            imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
-            break;
-        case HdFormatFloat16:
-            imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
-            break;
-        case HdFormatFloat32:
-            imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
-            break;
-        default:
-            imageDesc.type = 0;
-            break;
+            case HdFormatUNorm8:
+                imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
+                break;
+            case HdFormatFloat16:
+                imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
+                break;
+            case HdFormatFloat32:
+                imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
+                break;
+            default:
+                imageDesc.type = 0;
+                break;
         }
         imageDesc.image_width = width;
         imageDesc.image_height = height;
@@ -1153,8 +1147,7 @@ public:
                     aovFrameBuffer.second.postprocessFilter->Update();
                 }
             }
-        }
-        catch (std::runtime_error& e) {
+        } catch (std::runtime_error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
         }
 
@@ -1279,34 +1272,36 @@ public:
         m_denoiseFilterPtr = rif::Filter::Create(filterType, m_rifContext.get(), fbDesc.fb_width, fbDesc.fb_height);
 
         switch (filterType) {
-        case rif::FilterType::AIDenoise: {
-            EnableAov(HdRprAovTokens->albedo, fbDesc.fb_width, fbDesc.fb_height);
-            EnableAov(HdRprAovTokens->linearDepth, fbDesc.fb_width, fbDesc.fb_height);
-            EnableAov(HdRprAovTokens->normal, fbDesc.fb_width, fbDesc.fb_height);
+            case rif::FilterType::AIDenoise:
+            {
+                EnableAov(HdRprAovTokens->albedo, fbDesc.fb_width, fbDesc.fb_height);
+                EnableAov(HdRprAovTokens->linearDepth, fbDesc.fb_width, fbDesc.fb_height);
+                EnableAov(HdRprAovTokens->normal, fbDesc.fb_width, fbDesc.fb_height);
 
-            m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get(), 1.0f);
-            m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
-            m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
-            m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
-            break;
-        }
-        case rif::FilterType::EawDenoise: {
-            EnableAov(HdRprAovTokens->albedo, fbDesc.fb_width, fbDesc.fb_height);
-            EnableAov(HdRprAovTokens->linearDepth, fbDesc.fb_width, fbDesc.fb_height);
-            EnableAov(HdRprAovTokens->normal, fbDesc.fb_width, fbDesc.fb_height);
-            EnableAov(HdRprAovTokens->primId, fbDesc.fb_width, fbDesc.fb_height);
-            EnableAov(HdRprAovTokens->worldCoordinate, fbDesc.fb_width, fbDesc.fb_height);
+                m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
+                break;
+            }
+            case rif::FilterType::EawDenoise:
+            {
+                EnableAov(HdRprAovTokens->albedo, fbDesc.fb_width, fbDesc.fb_height);
+                EnableAov(HdRprAovTokens->linearDepth, fbDesc.fb_width, fbDesc.fb_height);
+                EnableAov(HdRprAovTokens->normal, fbDesc.fb_width, fbDesc.fb_height);
+                EnableAov(HdRprAovTokens->primId, fbDesc.fb_width, fbDesc.fb_height);
+                EnableAov(HdRprAovTokens->worldCoordinate, fbDesc.fb_width, fbDesc.fb_height);
 
-            m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get(), 1.0f);
-            m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
-            m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
-            m_denoiseFilterPtr->SetInput(rif::ObjectId, m_aovFrameBuffers[HdRprAovTokens->primId].resolved.get(), 1.0f);
-            m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
-            m_denoiseFilterPtr->SetInput(rif::WorldCoordinate, m_aovFrameBuffers[HdRprAovTokens->worldCoordinate].resolved.get(), 1.0f);
-            break;
-        }
-        default:
-            break;
+                m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::ObjectId, m_aovFrameBuffers[HdRprAovTokens->primId].resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::WorldCoordinate, m_aovFrameBuffers[HdRprAovTokens->worldCoordinate].resolved.get(), 1.0f);
+                break;
+            }
+            default:
+                break;
         }
 
         m_denoiseFilterPtr->SetOutput(GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, colorAovFb.format));
@@ -1408,11 +1403,11 @@ private:
 
     bool ValidateRifModels(std::string const& modelsPath) {
         // To ensure that current RIF implementation will use correct models we check for the file that points to models version
-        auto rifVersionString = std::to_string(RIF_VERSION_MAJOR) + "." + std::to_string(RIF_VERSION_MINOR) + "." + std::to_string(RIF_VERSION_REVISION);
         std::ifstream versionFile(modelsPath + "/rif_models.version");
         if (versionFile.is_open()) {
             std::stringstream buffer;
             buffer << versionFile.rdbuf();
+            auto rifVersionString = std::to_string(RIF_VERSION_MAJOR) + "." + std::to_string(RIF_VERSION_MINOR) + "." + std::to_string(RIF_VERSION_REVISION);
             return rifVersionString == buffer.str();
         }
 
@@ -1427,7 +1422,6 @@ private:
         PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
         auto modelsPath = PlugFindPluginResource(plugin, "rif_models", false);
         if (!ValidateRifModels(modelsPath)) {
-
             modelsPath = "";
             TF_RUNTIME_ERROR("RIF version and AI models version mismatch");
         }
@@ -1441,12 +1435,12 @@ private:
         }
 
         rpr_material_system matsys;
-        if (RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_rprContext->GetHandle(), 0, & matsys), "Fail create Material System resolve")) return;
+        if (RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_rprContext->GetHandle(), 0, &matsys), "Fail create Material System resolve")) return;
         m_matsys = RprApiObject::Wrap(matsys);
         m_rprMaterialFactory.reset(new RprMaterialFactory(matsys, m_imageCache.get()));
     }
 
-    void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes, VtIntArray & out_newVpf) {
+    void SplitPolygons(const VtIntArray& indexes, const VtIntArray& vpf, VtIntArray& out_newIndexes, VtIntArray& out_newVpf) {
         out_newIndexes.clear();
         out_newVpf.clear();
 
@@ -1475,7 +1469,7 @@ private:
         }
     }
 
-    void SplitPolygons(const VtIntArray & indexes, const VtIntArray & vpf, VtIntArray & out_newIndexes) {
+    void SplitPolygons(const VtIntArray& indexes, const VtIntArray& vpf, VtIntArray& out_newIndexes) {
         out_newIndexes.clear();
         out_newIndexes.reserve(indexes.size());
 
@@ -1628,6 +1622,8 @@ private:
         m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
     }
 
+private:
+
     enum ChangeTracker : uint32_t {
         Clean = 0,
         AllDirty = ~0u,
@@ -1663,6 +1659,9 @@ private:
     RprApiObjectPtr m_defaultLightObject;
 
     std::unique_ptr<rif::Filter> m_denoiseFilterPtr;
+
+    int m_iter = 0;
+    int m_maxSamples = 0;
 };
 
 std::unique_ptr<RprApiObject> RprApiObject::Wrap(void* handle) {
