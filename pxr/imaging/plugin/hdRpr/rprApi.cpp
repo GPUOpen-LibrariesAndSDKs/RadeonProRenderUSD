@@ -698,35 +698,51 @@ public:
         });
     }
 
-    RprApiObjectPtr CreateHeterVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize) {
+	RprApiObjectPtr CreateHeteroVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+		const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
+		const GfVec3i& gridSize) {
         if (!m_rprContext) {
             return nullptr;
         }
 
         rpr_hetero_volume heteroVolume = nullptr;
-        if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume(m_rprContext->GetHandle(), &heteroVolume), "Fail create hetero dencity volume")) return nullptr;
+        if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume(m_rprContext->GetHandle(), &heteroVolume), "Fail create hetero density volume")) return nullptr;
         auto heteroVolumeObject = RprApiObject::Wrap(heteroVolume);
 
-        rpr_grid rprGridDencity;
-        if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridDencity
-            , grigSize[0], grigSize[1], grigSize[2], &indexesDencity[0]
-            , indexesDencity.size(), RPR_GRID_INDICES_TOPOLOGY_I_U64
-            , &gridDencityData[0], gridDencityData.size() * sizeof(gridDencityData[0])
+        rpr_grid rprGridDensity;
+        if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridDensity
+            , gridSize[0], gridSize[1], gridSize[2], &densityGridOnIndices[0]
+            , densityGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
+            , &densityGridOnValueIndices[0], densityGridOnValueIndices.size() * sizeof(densityGridOnValueIndices[0])
             , 0)
-            , "Fail create dencity grid")) return nullptr;
-        heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridDencity));
+            , "Fail create density grid")) return nullptr;
+        heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridDensity));
 
         rpr_grid rprGridAlbedo;
         if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridAlbedo
-            , grigSize[0], grigSize[1], grigSize[2], &indexesAlbedo[0]
-            , indexesAlbedo.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
-            , &gridAlbedoData[0], gridAlbedoData.size() * sizeof(gridAlbedoData[0])
+            , gridSize[0], gridSize[1], gridSize[2], &colorGridOnIndices[0]
+            , colorGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
+            , &colorGridOnValueIndices[0], colorGridOnValueIndices.size() * sizeof(colorGridOnValueIndices[0])
             , 0)
             , "Fail create albedo grid")) return nullptr;
         heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridAlbedo));
 
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityGrid(heteroVolume, rprGridDencity), "Fail to set density hetero volume")) return nullptr;
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoGrid(heteroVolume, rprGridAlbedo), "Fail to set albedo hetero volume")) return nullptr;
+		rpr_grid rprGridEmission;
+		if (RPR_ERROR_CHECK(rprContextCreateGrid(m_rprContext->GetHandle(), &rprGridEmission
+			, gridSize[0], gridSize[1], gridSize[2], &emissiveGridOnIndices[0]
+			, emissiveGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
+			, &emissiveGridOnValueIndices[0], emissiveGridOnValueIndices.size() * sizeof(emissiveGridOnValueIndices[0])
+			, 0)
+			, "Fail create emission grid")) return nullptr;
+		heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridEmission));
+
+        if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityGrid(heteroVolume, rprGridDensity), "Fail to set density hetero volume")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityLookup(heteroVolume, &densityGridValues[0], densityGridValues.size() / 3), "Fail to set density volume lookup")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoGrid(heteroVolume, rprGridAlbedo), "Fail to set albedo hetero volume")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoLookup(heteroVolume, &colorGridValues[0], colorGridValues.size() / 3), "Fail to set albedo volume lookup")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetEmissionGrid(heteroVolume, rprGridEmission), "Fail to set emission hetero volume")) return nullptr;
+		if (RPR_ERROR_CHECK(rprHeteroVolumeSetEmissionLookup(heteroVolume, &emissiveGridValues[0], emissiveGridValues.size() / 3), "Fail to set emission volume lookup")) return nullptr;
 
         if (RPR_ERROR_CHECK(rprSceneAttachHeteroVolume(m_scene->GetHandle(), heteroVolume), "Fail attach hetero volume to scene")) return nullptr;
         m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -744,15 +760,18 @@ public:
         RPR_ERROR_CHECK(rprHeteroVolumeSetTransform(heteroVolume, false, m.GetArray()), "Fail to set hetero volume transform");
     }
 
-    RprApiObjectPtr CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& grigSize, const GfVec3f& voxelSize) {
+	RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+		const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+		const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
+		const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        auto heteroVolume = CreateHeterVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, grigSize);
+        auto heteroVolume = CreateHeteroVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues, gridSize);
         if (!heteroVolume) {
             return nullptr;
         }
 
-        auto cubeMesh = CreateCubeMesh(0.5f, 0.5f, 0.5f);
+        auto cubeMesh = CreateCubeMesh(1.0f, 1.0f, 1.0f);
         if (!cubeMesh) {
             return nullptr;
         }
@@ -767,8 +786,9 @@ public:
         }
 
         GfMatrix4f meshTransform(1.0f);
-        GfVec3f volumeSize = GfVec3f(voxelSize[0] * grigSize[0], voxelSize[1] * grigSize[1], voxelSize[2] * grigSize[2]);
-        meshTransform.SetScale(volumeSize);
+		GfVec3f volumeSize = GfVec3f(voxelSize[0] * gridSize[0], voxelSize[1] * gridSize[1], voxelSize[2] * gridSize[2]);
+		meshTransform.SetScale(volumeSize);
+		meshTransform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
 
         SetMeshMaterial(cubeMesh->GetHandle(), static_cast<RprApiMaterial*>(transparentMaterial->GetHandle()));
         SetMeshHeteroVolume(cubeMesh->GetHandle(), heteroVolume->GetHandle());
@@ -1483,41 +1503,45 @@ private:
         }
     }
 
-    RprApiObjectPtr CreateCubeMesh(const float & width, const float & height, const float & depth) {
+    RprApiObjectPtr CreateCubeMesh(float width, float height, float depth) {
         constexpr const size_t cubeVertexCount = 24;
         constexpr const size_t cubeNormalCount = 24;
         constexpr const size_t cubeVpfCount = 12;
 
+        const float halfWidth = width * 0.5f;
+        const float halfHeight = height * 0.5f;
+        const float halfDepth = depth * 0.5f;
+
         VtVec3fArray position(cubeVertexCount);
-        position[0] = GfVec3f(-width, height, -depth);
-        position[1] = GfVec3f(width, height, -depth);
-        position[2] = GfVec3f(width, height, depth);
-        position[3] = GfVec3f(-width, height, depth);
+        position[0] = GfVec3f(-halfWidth, halfHeight, -halfDepth);
+        position[1] = GfVec3f(halfWidth, halfHeight, -halfDepth);
+        position[2] = GfVec3f(halfWidth, halfHeight, halfDepth);
+        position[3] = GfVec3f(-halfWidth, halfHeight, halfDepth);
 
-        position[4] = GfVec3f(-width, -height, -depth);
-        position[5] = GfVec3f(width, -height, -depth);
-        position[6] = GfVec3f(width, -height, depth);
-        position[7] = GfVec3f(-width, -height, depth);
+        position[4] = GfVec3f(-halfWidth, -halfHeight, -halfDepth);
+        position[5] = GfVec3f(halfWidth, -halfHeight, -halfDepth);
+        position[6] = GfVec3f(halfWidth, -halfHeight, halfDepth);
+        position[7] = GfVec3f(-halfWidth, -halfHeight, halfDepth);
 
-        position[8] = GfVec3f(-width, -height, depth);
-        position[9] = GfVec3f(-width, -height, -depth);
-        position[10] = GfVec3f(-width, height, -depth);
-        position[11] = GfVec3f(-width, height, depth);
+        position[8] = GfVec3f(-halfWidth, -halfHeight, halfDepth);
+        position[9] = GfVec3f(-halfWidth, -halfHeight, -halfDepth);
+        position[10] = GfVec3f(-halfWidth, halfHeight, -halfDepth);
+        position[11] = GfVec3f(-halfWidth, halfHeight, halfDepth);
 
-        position[12] = GfVec3f(width, -height, depth);
-        position[13] = GfVec3f(width, -height, -depth);
-        position[14] = GfVec3f(width, height, -depth);
-        position[15] = GfVec3f(width, height, depth);
+        position[12] = GfVec3f(halfWidth, -halfHeight, halfDepth);
+        position[13] = GfVec3f(halfWidth, -halfHeight, -halfDepth);
+        position[14] = GfVec3f(halfWidth, halfHeight, -halfDepth);
+        position[15] = GfVec3f(halfWidth, halfHeight, halfDepth);
 
-        position[16] = GfVec3f(-width, -height, -depth);
-        position[17] = GfVec3f(width, -height, -depth);
-        position[18] = GfVec3f(width, height, -depth);
-        position[19] = GfVec3f(-width, height, -depth);
+        position[16] = GfVec3f(-halfWidth, -halfHeight, -halfDepth);
+        position[17] = GfVec3f(halfWidth, -halfHeight, -halfDepth);
+        position[18] = GfVec3f(halfWidth, halfHeight, -halfDepth);
+        position[19] = GfVec3f(-halfWidth, halfHeight, -halfDepth);
 
-        position[20] = GfVec3f(-width, -height, depth);
-        position[21] = GfVec3f(width, -height, depth);
-        position[22] = GfVec3f(width, height, depth);
-        position[23] = GfVec3f(-width, height, depth);
+        position[20] = GfVec3f(-halfWidth, -halfHeight, halfDepth);
+        position[21] = GfVec3f(halfWidth, -halfHeight, halfDepth);
+        position[22] = GfVec3f(halfWidth, halfHeight, halfDepth);
+        position[23] = GfVec3f(-halfWidth, halfHeight, halfDepth);
 
         VtVec3fArray normals(cubeNormalCount);
         normals[0] = GfVec3f(0.f, 1.f, 0.f);
@@ -1571,9 +1595,8 @@ private:
         };
 
         VtIntArray vpf(cubeVpfCount, 3);
-        VtVec2fArray uv; // empty
 
-        return CreateMesh(position, indexes, normals, VtIntArray(), uv, VtIntArray(), vpf);
+        return CreateMesh(position, indexes, normals, VtIntArray(), VtVec2fArray(), VtIntArray(), vpf);
     }
 
     void ResizeAov(TfToken const& aovName, int width, int height) {
@@ -1750,8 +1773,16 @@ void HdRprApi::SetDirectionalLightAttributes(RprApiObject* directionalLight, GfV
     m_impl->SetDirectionalLightAttributes(directionalLight->GetHandle(), color, shadowSoftness);
 }
 
-RprApiObjectPtr HdRprApi::CreateVolume(const VtArray<float>& gridDencityData, const VtArray<size_t>& indexesDencity, const VtArray<float>& gridAlbedoData, const VtArray<unsigned int>& indexesAlbedo, const GfVec3i& gridSize, const GfVec3f& voxelSize) {
-    return m_impl->CreateVolume(gridDencityData, indexesDencity, gridAlbedoData, indexesAlbedo, gridSize, voxelSize);
+RprApiObjectPtr HdRprApi::CreateVolume(
+    const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+    const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+    const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
+    const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
+    return m_impl->CreateVolume(
+        densityGridOnIndices, densityGridOnValueIndices, densityGridValues,
+        colorGridOnIndices, colorGridOnValueIndices, colorGridValues,
+        emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues,
+        gridSize, voxelSize, gridBBLow);
 }
 
 RprApiObjectPtr HdRprApi::CreateMaterial(MaterialAdapter& materialAdapter) {

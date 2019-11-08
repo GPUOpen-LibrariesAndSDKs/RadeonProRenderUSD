@@ -4,35 +4,34 @@
 #include "rprApi.h"
 
 #include "pxr/imaging/hd/volume.h"
+#include "pxr/base/gf/matrix4f.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprVolume : public HdVolume {
 public:
-    HD_API
-	HdRprVolume(SdfPath const& id, HdRprApiSharedPtr rprApi);
+    HdRprVolume(SdfPath const& id, HdRprApiSharedPtr rprApi);
+    ~HdRprVolume() override = default;
 
-    HD_API
-    virtual ~HdRprVolume();
-
-	virtual void Sync(
-		HdSceneDelegate* sceneDelegate,
-		HdRenderParam*   renderParam,
-		HdDirtyBits*     dirtyBits,
-		TfToken const&   reprName
-	) override;
+    void Sync(
+        HdSceneDelegate* sceneDelegate,
+        HdRenderParam* renderParam,
+        HdDirtyBits* dirtyBits,
+        TfToken const& reprName
+    ) override;
 
 protected:
+    HdDirtyBits GetInitialDirtyBitsMask() const override;
 
-	virtual HdDirtyBits GetInitialDirtyBitsMask() const override;
+    HdDirtyBits _PropagateDirtyBits(HdDirtyBits bits) const override;
 
-	virtual HdDirtyBits _PropagateDirtyBits(HdDirtyBits bits) const override;
+    void _InitRepr(TfToken const& reprName,
+                   HdDirtyBits* dirtyBits) override;
 
-	virtual void _InitRepr(TfToken const &reprName,
-		HdDirtyBits *dirtyBits) override;
-
-	HdRprApiWeakPtr m_rprApiWeakPtr;
-	RprApiObjectPtr m_rprHeteroVolume;
+private:
+    HdRprApiWeakPtr m_rprApiWeakPtr;
+    RprApiObjectPtr m_rprHeteroVolume;
+    GfMatrix4f m_transform;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
