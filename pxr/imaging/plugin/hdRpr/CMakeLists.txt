@@ -174,7 +174,7 @@ endif(WIN32 OR LINUX)
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
         FILES ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Viewport.ds
-        DESTINATION "houdini/soho/parameters")
+        DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/soho/parameters")
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_install_dir(lib/python/rpr installPrefix)
 
@@ -210,3 +210,5 @@ else(WIN32)
         FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY}
         DESTINATION ${installPrefix})
 endif(WIN32)
+
+add_subdirectory(package)
