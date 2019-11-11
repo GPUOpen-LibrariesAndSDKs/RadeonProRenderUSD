@@ -9,6 +9,8 @@
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/quaternion.h"
 #include "pxr/imaging/hd/types.h"
+#include "pxr/imaging/hd/renderThread.h"
+#include "pxr/imaging/hd/renderPassState.h"
 #include "pxr/base/tf/staticTokens.h"
 
 #include "rprcpp/rprObject.h"
@@ -103,26 +105,21 @@ public:
 
     const GfMatrix4d& GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;
-    void SetCameraViewMatrix(const GfMatrix4d& m );
+    void SetCameraViewMatrix(const GfMatrix4d& m);
     void SetCameraProjectionMatrix(const GfMatrix4d& m);
 
-    bool EnableAov(TfToken const& aovName, int width, int height, HdFormat format = HdFormatCount);
-    void DisableAov(TfToken const& aovName);
-    bool IsAovEnabled(TfToken const& aovName);
-    bool GetAovInfo(TfToken const& aovName, int* width, int* height, HdFormat* format) const;
-    bool GetAovData(TfToken const& aovName, void* dstBuffer, size_t dstBufferSize);
+    GfVec2i GetViewportSize() const;
+    void SetViewportSize(GfVec2i const& size);
 
-    // This function exist for only one particular reason:
-    //   for explicit bliting to GL framebuffer when there are no aovBindings in renderPass::_Execute
-    //   we need to know the latest enabled AOV so we can draw it
-    TfToken const& GetActiveAov() const;
+    void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings);
+    HdRenderPassAovBindingVector GetAovBindings() const;
 
-    void Render();
-    bool IsConverged();
     int GetNumCompletedSamples() const;
     // returns -1 if adaptive sampling is not used
     int GetNumActivePixels() const;
 
+    void Render(HdRenderThread* renderThread);
+    bool IsChanged() const;
     bool IsGlInteropEnabled() const;
 
     static std::string GetAppDataPath();
@@ -131,9 +128,6 @@ public:
 private:
     HdRprApiImpl* m_impl = nullptr;
 };
-
-typedef std::shared_ptr<HdRprApi> HdRprApiSharedPtr;
-typedef std::weak_ptr<HdRprApi> HdRprApiWeakPtr;
 
 PXR_NAMESPACE_CLOSE_SCOPE
 

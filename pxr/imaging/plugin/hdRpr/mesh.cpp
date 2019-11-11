@@ -143,15 +143,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
-        m_cachedMaterial = nullptr;
-
-        auto materialId = sceneDelegate->GetMaterialId(id);
-        if (!materialId.IsEmpty()) {
-            auto hdMaterial = sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId);
-            if (hdMaterial) {
-                m_cachedMaterial = static_cast<const HdRprMaterial*>(hdMaterial)->GetRprMaterialObject();
-            }
-        }
+        m_cachedMaterialId = sceneDelegate->GetMaterialId(id);
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -194,7 +186,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     if (newMesh) {
         auto numFaces = m_faceVertexCounts.size();
-        auto hdMaterialId = sceneDelegate->GetMaterialId(id);
 
         auto geomSubsets = m_topology.GetGeomSubsets();
         // If the geometry has been partitioned into subsets, add an
@@ -217,7 +208,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 HdGeomSubset& unusedSubset = geomSubsets.back();
                 unusedSubset.type = HdGeomSubset::TypeFaceSet;
                 unusedSubset.id = id;
-                unusedSubset.materialId = hdMaterialId;
+                unusedSubset.materialId = m_cachedMaterialId;
                 unusedSubset.indices.resize(numUnusedFaces);
                 size_t count = 0;
                 for (size_t i = 0; i < faceIsUnused.size() && count < numUnusedFaces; ++i) {
@@ -262,7 +253,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (geomSubsets.empty() || geomSubsets.size() == 1) {
             if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
-                setMeshMaterial(rprMesh, geomSubsets.empty() ? hdMaterialId : geomSubsets[0].materialId);
+                setMeshMaterial(rprMesh, geomSubsets.empty() ? m_cachedMaterialId : geomSubsets[0].materialId);
                 m_rprMeshes.push_back(std::move(rprMesh));
             }
         } else {
@@ -410,14 +401,26 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (!newMesh && (*dirtyBits & HdChangeTracker::DirtyMaterialId)) {
             // when geometry subsetting enabled, the material comes from each particular HdGeomSubset
             if (m_topology.GetGeomSubsets().empty()) {
+                RprApiObject const* rprMaterial = nullptr;
+                auto hdMaterial = sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_cachedMaterialId);
+                if (hdMaterial) {
+                    rprMaterial = static_cast<HdRprMaterial const*>(hdMaterial)->GetRprMaterialObject();
+                }
                 for (auto& mesh : m_rprMeshes) {
-                    rprApi->SetMeshMaterial(mesh.get(), m_cachedMaterial);
+                    rprApi->SetMeshMaterial(mesh.get(), rprMaterial);
                 }
             }
         }
     }
 
     *dirtyBits = HdChangeTracker::Clean;
+}
+
+void HdRprMesh::Finalize(HdRenderParam* renderParam) {
+    // Stop render thread to safely release resources
+    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+
+    HdMesh::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

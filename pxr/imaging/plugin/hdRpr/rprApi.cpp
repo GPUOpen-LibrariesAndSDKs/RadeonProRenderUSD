@@ -10,6 +10,7 @@
 #include "material.h"
 #include "materialFactory.h"
 #include "materialAdapter.h"
+#include "renderBuffer.h"
 
 #include "pxr/base/gf/math.h"
 #include "pxr/base/gf/vec2f.h"
@@ -825,7 +826,18 @@ public:
         return m_cameraProjectionMatrix;
     }
 
-    bool EnableAov(TfToken const& aovName, int width, int height, HdFormat format = HdFormatFloat32Vec4, bool setAsActive = false) {
+    GfVec2i GetViewportSize() const {
+        return m_viewportSize;
+    }
+
+    void SetViewportSize(GfVec2i const& size) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        m_viewportSize = size;
+        m_dirtyFlags |= ChangeTracker::DirtyViewport;
+    }
+
+    bool EnableAov(TfToken const& aovName, int width, int height, HdFormat format = HdFormatFloat32Vec4) {
         if (!m_rprContext ||
             width < 1 || height < 1 ||
             format == HdFormatInvalid || HdDataSizeOfFormat(format) == 0) {
@@ -838,6 +850,12 @@ public:
             return false;
         }
 
+        if (format == HdFormatInt32) {
+            // Emulate integer images using 4 component unsigned char images
+            // Conversion from UNorm8Vec4 to Int32 is done in GetAovData
+            format = HdFormatUNorm8Vec4;
+        }
+
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         if (IsAovEnabled(aovName)) {
@@ -847,19 +865,6 @@ public:
             }
 
             ResizeAov(aovName, width, height);
-
-            // While usdview does not have correct AOV system
-            // we have ambiguity in currently selected AOV that we can't distinguish
-            if (aovName == HdRprAovTokens->depth) {
-                return true;
-            }
-
-            if (setAsActive) {
-                if (m_activeAov != aovName) {
-                    m_dirtyFlags |= ChangeTracker::DirtyActiveAOV;
-                }
-                m_activeAov = aovName;
-            }
             return true;
         }
 
@@ -887,10 +892,6 @@ public:
 
             m_aovFrameBuffers.emplace(aovName, std::move(aovFrameBuffer));
             m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
-
-            if (setAsActive) {
-                m_activeAov = aovName;
-            }
         } catch (rpr::Error const& e) {
             TF_CODING_ERROR("Failed to enable %s AOV: %s", aovName.GetText(), e.what());
             return false;
@@ -922,99 +923,57 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
     }
 
+    void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        for (auto& oldBinding : m_aovBindings) {
+            auto iter = std::find_if(aovBindings.begin(), aovBindings.end(), [&oldBinding](HdRenderPassAovBinding const& newBinding) {
+                return newBinding.aovName == oldBinding.aovName;
+            });
+            if (iter == aovBindings.end()) {
+                DisableAov(oldBinding.aovName);
+            }
+        }
+        for (auto& newBinding : aovBindings) {
+            auto iter = std::find_if(m_aovBindings.begin(), m_aovBindings.end(), [&newBinding](HdRenderPassAovBinding const& oldBinding) {
+                return newBinding.aovName == oldBinding.aovName;
+            });
+            if (iter == m_aovBindings.end()) {
+                if (newBinding.renderBuffer) {
+                    auto rb = newBinding.renderBuffer;
+                    EnableAov(newBinding.aovName, rb->GetWidth(), rb->GetHeight(), rb->GetFormat());
+                }
+            }
+        }
+        m_aovBindings = aovBindings;
+    }
+
+    HdRenderPassAovBindingVector const& GetAovBindings() const {
+        return m_aovBindings;
+    }
+
     bool IsAovEnabled(TfToken const& aovName) {
         return m_aovFrameBuffers.count(aovName) != 0;
     }
 
-    void ResolveFramebuffers() {
-        for (auto& aovFb : m_aovFrameBuffers) {
-            if (!aovFb.second.aov) {
-                continue;
-            }
-
-            try {
+    void ResolveFramebuffers(std::vector<std::pair<void*, size_t>> const& outputRenderBuffers) {
+        try {
+            for (auto& aovFb : m_aovFrameBuffers) {
+                if (!aovFb.second.aov) {
+                    continue;
+                }
                 aovFb.second.aov->Resolve(aovFb.second.resolved.get());
-            } catch (rpr::Error const& e) {
-                TF_CODING_ERROR("Failed to resolve framebuffer: %s", e.what());
-            }
-        }
-    }
-
-    bool GetAovInfo(TfToken const& aovName, int* width, int* height, HdFormat* format) const {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        auto it = m_aovFrameBuffers.find(aovName);
-        if (it == m_aovFrameBuffers.end()) {
-            return false;
-        }
-
-        if (width || height) {
-            auto desc = it->second.aov->GetDesc();
-            if (width) {
-                *width = desc.fb_width;
-            }
-            if (height) {
-                *height = desc.fb_height;
-            }
-        }
-
-        if (format) {
-            *format = it->second.format;
-        }
-
-        return true;
-    }
-
-    bool GetAovData(TfToken const& aovName, void* dstBuffer, size_t dstBufferSize) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        auto it = m_aovFrameBuffers.find(aovName);
-        if (it == m_aovFrameBuffers.end()) {
-            return false;
-        }
-
-        auto readRifImage = [&dstBuffer, &dstBufferSize](rif_image image) -> bool {
-            size_t size;
-            size_t dummy;
-            auto rifStatus = rifImageGetInfo(image, RIF_IMAGE_DATA_SIZEBYTE, sizeof(size), &size, &dummy);
-            if (rifStatus != RIF_SUCCESS || dstBufferSize < size) {
-                return false;
             }
 
-            void* data = nullptr;
-            rifStatus = rifImageMap(image, RIF_IMAGE_MAP_READ, &data);
-            if (rifStatus != RIF_SUCCESS) {
-                return false;
-            }
+            m_rifContext->ExecuteCommandQueue();
 
-            auto buffer = std::shared_ptr<char>(new char[size]);
-            std::memcpy(dstBuffer, data, size);
-
-            rifStatus = rifImageUnmap(image, data);
-            if (rifStatus != RIF_SUCCESS) {
-                TF_WARN("Failed to unmap rif image");
-            }
-
-            return true;
-        };
-
-        if (aovName == HdRprAovTokens->color && m_denoiseFilterPtr) {
-            return readRifImage(m_denoiseFilterPtr->GetOutput());
-        } else {
-            auto& aovFrameBuffer = it->second;
-            if (aovFrameBuffer.postprocessFilter) {
-                return readRifImage(aovFrameBuffer.postprocessFilter->GetOutput());
-            } else {
-                auto resolvedFb = aovFrameBuffer.resolved.get();
-                if (!resolvedFb) {
-                    resolvedFb = aovFrameBuffer.aov.get();
+            for (int i = 0; i < m_aovBindings.size(); ++i) {
+                if (outputRenderBuffers[i].first) {
+                    GetAovData(m_aovBindings[i].aovName, outputRenderBuffers[i].first, outputRenderBuffers[i].second);
                 }
-                if (!resolvedFb) {
-                    return false;
-                }
-
-                return resolvedFb->GetData(dstBuffer, dstBufferSize);
             }
+        } catch (rpr::Error const& e) {
+            TF_RUNTIME_ERROR("Failed to resolve framebuffers: %s", e.what());
         }
     }
 
@@ -1045,6 +1004,8 @@ public:
     }
 
     void Update() {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
         m_imageCache->GarbageCollectIfNeeded();
 
         auto& preferences = HdRprConfig::GetInstance();
@@ -1058,6 +1019,12 @@ public:
         if (!m_isLightPresent) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
             m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
+        }
+
+        if (m_dirtyFlags & ChangeTracker::DirtyViewport) {
+            for (auto& aovFb : m_aovFrameBuffers) {
+                ResizeAov(aovFb.first, m_viewportSize[0], m_viewportSize[1]);
+            }
         }
 
         UpdateCamera();
@@ -1172,7 +1139,8 @@ public:
         if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
             preferences.CleanDirtyFlag(HdRprConfig::DirtyAdaptiveSampling);
 
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, preferences.GetVarianceThreshold()), "Failed to set as.threshold");
+            m_varianceThreshold = preferences.GetVarianceThreshold();
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, m_varianceThreshold), "Failed to set as.threshold");
             RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinAdaptiveSamples()), "Failed to set as.minspp");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -1309,47 +1277,79 @@ public:
         m_denoiseFilterPtr->SetOutput(GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, colorAovFb.format));
     }
 
-    void Render() {
+    void Render(HdRenderThread* renderThread) {
         if (!m_rprContext || m_aovFrameBuffers.empty()) {
             return;
         }
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         Update();
-        if (IsConverged()) {
-            return;
-        }
 
-        if (RPR_ERROR_CHECK(rprContextRender(m_rprContext->GetHandle()), "Fail contex render framebuffer")) return;
-
-        ResolveFramebuffers();
-
-        try {
-            m_rifContext->ExecuteCommandQueue();
-        } catch (std::runtime_error& e) {
-            TF_RUNTIME_ERROR("%s", e.what());
-        }
-
-        m_iter++;
-    }
-
-    bool IsConverged() {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        // return Converged if max samples is reached
-        if (m_iter >= m_maxSamples) {
-            return true;
-        } else {
-            // if not max samples check if all pixels converged to threshold
-            auto& preferences = HdRprConfig::GetInstance();
-
-            float varianceSetting = preferences.GetVarianceThreshold();
-            if (varianceSetting > 0.0f) {
-                int activePixels = 0;
-                if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(activePixels), &activePixels, NULL), "Failed to query active pixels")) return false;
-                return activePixels == 0;
+        std::vector<std::pair<void*, size_t>> outputRenderBuffers;
+        for (auto& aovBinding : m_aovBindings) {
+            if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
+                if (rb->GetWidth() != m_viewportSize[0] || rb->GetHeight() != m_viewportSize[1]) {
+                    TF_RUNTIME_ERROR("%s renderBuffer has inconsistent render buffer size: %ux%u. Expected: %dx%d",
+                                     aovBinding.aovName.GetText(), rb->GetWidth(), rb->GetHeight(), m_viewportSize[0], m_viewportSize[1]);
+                    outputRenderBuffers.emplace_back(nullptr, 0u);
+                } else {
+                    size_t size = rb->GetWidth() * rb->GetHeight() * HdDataSizeOfFormat(rb->GetFormat());
+                    outputRenderBuffers.emplace_back(rb->Map(), size);
+                }
             }
-            return false;
+        }
+
+        m_iter = 0;
+        m_activePixels = -1;
+
+        bool stopRequested = false;
+        while (!IsConverged() || stopRequested) {
+            // XXX: We wait in infinite loop until user unpause renderThread.
+            // Ideally, it would be a conditional wait, but current HdRenderThread API do not allow this.
+            // We have two potential ways to solve it:
+            // 1. implement render thread from scratch and use it
+            // 2. modify existing HdRenderThread and pray for PR to USD to be accepted
+            while (renderThread->IsPauseRequested()) {
+                if (renderThread->IsStopRequested()) {
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            // XXX: We break from the loop in case of requested stop, but ideally, renderThread should have
+            // some sort of stop callback to allow renderers to use ability to abort current frame rendering process
+            stopRequested = renderThread->IsStopRequested();
+            if (stopRequested) {
+                break;
+            }
+
+            if (RPR_ERROR_CHECK(rprContextRender(m_rprContext->GetHandle()), "Fail contex render framebuffer")) {
+                break;
+            }
+
+            m_iter++;
+            if (m_varianceThreshold > 0.0f) {
+                if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
+                    m_activePixels = -1;
+                }
+            }
+
+            if (!IsConverged()) {
+                // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
+                // We do not resolve framebuffers in case user requested render stop
+                ResolveFramebuffers(outputRenderBuffers);
+            }
+
+            stopRequested = renderThread->IsStopRequested();
+        }
+
+        if (!stopRequested) {
+            ResolveFramebuffers(outputRenderBuffers);
+        }
+
+        for (auto& aovBinding : m_aovBindings) {
+            if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
+                rb->Unmap();
+                rb->SetConverged(true);
+            }
         }
     }
 
@@ -1358,19 +1358,15 @@ public:
     }
 
     int GetNumActivePixels() const {
-        if (!m_rprContext) {
-            return -1;
-        }
+        return m_activePixels;
+    }
 
-        auto& preferences = HdRprConfig::GetInstance();
-        if (preferences.GetVarianceThreshold() > 0.0f) {
-            int activePixels = 0;
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
-            if (!RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(activePixels), &activePixels, NULL), "Failed to query active pixels")) {
-                return activePixels;
-            }
-        }
-        return -1;
+    bool IsChanged() const {
+        return m_dirtyFlags != ChangeTracker::Clean;
+    }
+
+    bool IsConverged() const {
+        return m_iter >= m_maxSamples || m_activePixels == 0;
     }
 
     void DeleteMesh(void* mesh) {
@@ -1393,10 +1389,6 @@ public:
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
         rprObjectDelete(instance);
-    }
-
-    TfToken const& GetActiveAov() const {
-        return m_activeAov;
     }
 
     bool IsGlInteropEnabled() const {
@@ -1624,24 +1616,104 @@ private:
         return CreateMesh(position, indexes, normals, VtIntArray(), VtVec2fArray(), VtIntArray(), vpf);
     }
 
-    void ResizeAov(TfToken const& aovName, int width, int height) {
+    bool ResizeAov(TfToken const& aovName, int width, int height) {
         if (aovName == HdRprAovTokens->depth) {
-            ResizeAov(HdRprAovTokens->worldCoordinate, width, height);
-            m_aovFrameBuffers[aovName].isDirty = true;
-            return;
+            bool resized = ResizeAov(HdRprAovTokens->worldCoordinate, width, height);
+            if (resized) {
+                m_aovFrameBuffers[aovName].isDirty = true;
+            }
+            return resized;
         }
 
         auto& aovFramebuffer = m_aovFrameBuffers.at(aovName);
 
+        bool resized = false;
+
         if (aovFramebuffer.aov && aovFramebuffer.aov->Resize(width, height)) {
             aovFramebuffer.isDirty = true;
+            resized = true;
         }
 
         if (aovFramebuffer.resolved && aovFramebuffer.resolved->Resize(width, height)) {
             aovFramebuffer.isDirty = true;
+            resized = true;
         }
 
-        m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
+        if (resized) {
+            m_dirtyFlags |= ChangeTracker::DirtyAOVFramebuffers;
+        }
+        return resized;
+    }
+
+    bool GetAovDataImpl(TfToken const& aovName, void* dstBuffer, size_t dstBufferSize) {
+        auto it = m_aovFrameBuffers.find(aovName);
+        if (it == m_aovFrameBuffers.end()) {
+            return false;
+        }
+
+        auto readRifImage = [&dstBuffer, &dstBufferSize](rif_image image) -> bool {
+            size_t size;
+            size_t dummy;
+            auto rifStatus = rifImageGetInfo(image, RIF_IMAGE_DATA_SIZEBYTE, sizeof(size), &size, &dummy);
+            if (rifStatus != RIF_SUCCESS || dstBufferSize < size) {
+                return false;
+            }
+
+            void* data = nullptr;
+            rifStatus = rifImageMap(image, RIF_IMAGE_MAP_READ, &data);
+            if (rifStatus != RIF_SUCCESS) {
+                return false;
+            }
+
+            auto buffer = std::shared_ptr<char>(new char[size]);
+            std::memcpy(dstBuffer, data, size);
+
+            rifStatus = rifImageUnmap(image, data);
+            if (rifStatus != RIF_SUCCESS) {
+                TF_WARN("Failed to unmap rif image");
+            }
+
+            return true;
+        };
+
+        if (aovName == HdRprAovTokens->color && m_denoiseFilterPtr) {
+            return readRifImage(m_denoiseFilterPtr->GetOutput());
+        } else {
+            auto& aovFrameBuffer = it->second;
+            if (aovFrameBuffer.postprocessFilter) {
+                return readRifImage(aovFrameBuffer.postprocessFilter->GetOutput());
+            } else {
+                auto resolvedFb = aovFrameBuffer.resolved.get();
+                if (!resolvedFb) {
+                    resolvedFb = aovFrameBuffer.aov.get();
+                }
+                if (!resolvedFb) {
+                    return false;
+                }
+
+                return resolvedFb->GetData(dstBuffer, dstBufferSize);
+            }
+        }
+    }
+
+    bool GetAovData(TfToken const& aovName, void* dstBuffer, size_t dstBufferSize) {
+        if (GetAovDataImpl(aovName, dstBuffer, dstBufferSize)) {
+            if (m_aovFrameBuffers[aovName].format == HdFormatInt32) {
+                // RPR store integer ID values to RGB images using such formula:
+                // c[i].x = i;
+                // c[i].y = i/256;
+                // c[i].z = i/(256*256);
+                // i.e. saving little endian int24 to uchar3
+                // That's why we interpret the value as int and filling the alpha channel with zeros
+                auto primIdData = reinterpret_cast<int*>(dstBuffer);
+                for (size_t i = 0; i < dstBufferSize / sizeof(int); ++i) {
+                    primIdData[i] &= 0xFFFFFF;
+                }
+            }
+            return true;
+        }
+
+        return false;
     }
 
 private:
@@ -1650,9 +1722,9 @@ private:
         Clean = 0,
         AllDirty = ~0u,
         DirtyScene = 1 << 0,
-        DirtyActiveAOV = 1 << 1,
-        DirtyAOVFramebuffers = 1 << 2,
-        DirtyCamera = 1 << 3
+        DirtyAOVFramebuffers = 1 << 1,
+        DirtyCamera = 1 << 2,
+        DirtyViewport = 1 << 3,
     };
     uint32_t m_dirtyFlags = ChangeTracker::AllDirty;
 
@@ -1672,7 +1744,8 @@ private:
         bool isDirty = true;
     };
     std::map<TfToken, AovFrameBuffer> m_aovFrameBuffers;
-    TfToken m_activeAov;
+    HdRenderPassAovBindingVector m_aovBindings;
+    GfVec2i m_viewportSize;
 
     GfMatrix4d m_cameraViewMatrix = GfMatrix4d(1.f);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
@@ -1683,7 +1756,9 @@ private:
     std::unique_ptr<rif::Filter> m_denoiseFilterPtr;
 
     int m_iter = 0;
+    int m_activePixels = -1;
     int m_maxSamples = 0;
+    float m_varianceThreshold = 0.0f;
 };
 
 std::unique_ptr<RprApiObject> RprApiObject::Wrap(void* handle) {
@@ -1749,10 +1824,6 @@ HdRprApi::HdRprApi() : m_impl(new HdRprApiImpl) {
 
 HdRprApi::~HdRprApi() {
     delete m_impl;
-}
-
-TfToken const& HdRprApi::GetActiveAov() const {
-    return m_impl->GetActiveAov();
 }
 
 RprApiObjectPtr HdRprApi::CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding) {
@@ -1874,32 +1945,28 @@ void HdRprApi::SetCameraProjectionMatrix(const GfMatrix4d& m) {
     m_impl->SetCameraProjectionMatrix(m);
 }
 
-bool HdRprApi::EnableAov(TfToken const& aovName, int width, int height, HdFormat format) {
-    return m_impl->EnableAov(aovName, width, height, format, true);
+GfVec2i HdRprApi::GetViewportSize() const {
+    return m_impl->GetViewportSize();
 }
 
-void HdRprApi::DisableAov(TfToken const& aovName) {
-    m_impl->DisableAov(aovName);
+void HdRprApi::SetViewportSize(GfVec2i const& size) {
+    m_impl->SetViewportSize(size);
 }
 
-bool HdRprApi::IsAovEnabled(TfToken const& aovName) {
-    return m_impl->IsAovEnabled(aovName);
+void HdRprApi::SetAovBindings(HdRenderPassAovBindingVector const& aovBindings) {
+    m_impl->SetAovBindings(aovBindings);
 }
 
-bool HdRprApi::GetAovInfo(TfToken const& aovName, int* width, int* height, HdFormat* format) const {
-    return m_impl->GetAovInfo(aovName, width, height, format);
+HdRenderPassAovBindingVector HdRprApi::GetAovBindings() const {
+    return m_impl->GetAovBindings();
 }
 
-bool HdRprApi::GetAovData(TfToken const& aovName, void* dstBuffer, size_t dstBufferSize) {
-    return m_impl->GetAovData(aovName, dstBuffer, dstBufferSize);
+void HdRprApi::Render(HdRenderThread* renderThread) {
+    m_impl->Render(renderThread);
 }
 
-void HdRprApi::Render() {
-    m_impl->Render();
-}
-
-bool HdRprApi::IsConverged() {
-    return m_impl->IsConverged();
+bool HdRprApi::IsChanged() const {
+    return m_impl->IsChanged();
 }
 
 int HdRprApi::GetNumCompletedSamples() const {

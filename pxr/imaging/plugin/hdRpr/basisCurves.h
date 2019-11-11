@@ -22,6 +22,8 @@ public:
               HdDirtyBits* dirtyBits,
               TfToken const& reprSelector) override;
 
+    void Finalize(HdRenderParam* renderParam) override;
+
 protected:
 
     HdDirtyBits GetInitialDirtyBitsMask() const override;

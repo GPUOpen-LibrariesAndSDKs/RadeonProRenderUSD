@@ -75,6 +75,13 @@ void HdRprMaterial::Reload() {
     // no-op
 }
 
+void HdRprMaterial::Finalize(HdRenderParam* renderParam) {
+    // Stop render thread to safely release resources
+    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+
+    HdMaterial::Finalize(renderParam);
+}
+
 RprApiObject const* HdRprMaterial::GetRprMaterialObject() const {
     return m_rprMaterial.get();
 }

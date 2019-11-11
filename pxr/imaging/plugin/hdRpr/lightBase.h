@@ -28,6 +28,8 @@ public:
 
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
+    void Finalize(HdRenderParam* renderParam) override;
+
 protected:
     virtual bool SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) = 0;
 

@@ -25,6 +25,8 @@ public:
               HdDirtyBits* dirtyBits,
               TfToken const& reprName) override;
 
+    void Finalize(HdRenderParam* renderParam) override;
+
 protected:
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
@@ -44,7 +46,7 @@ private:
     std::vector<RprApiObjectPtr> m_rprMeshes;
     std::vector<std::vector<RprApiObjectPtr>> m_rprMeshInstances;
     RprApiObjectPtr m_fallbackMaterial;
-    RprApiObject const* m_cachedMaterial;
+    SdfPath m_cachedMaterialId;
     GfMatrix4f m_transform;
 
     HdMeshTopology m_topology;

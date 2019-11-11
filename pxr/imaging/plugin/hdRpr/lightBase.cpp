@@ -97,4 +97,11 @@ HdDirtyBits HdRprLightBase::GetInitialDirtyBitsMask() const {
         | DirtyBits::DirtyParams;
 }
 
+void HdRprLightBase::Finalize(HdRenderParam* renderParam) {
+    // Stop render thread to safely release resources
+    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+
+    HdLight::Finalize(renderParam);
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE

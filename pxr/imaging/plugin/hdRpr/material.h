@@ -21,6 +21,7 @@ public:
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
     void Reload() override;
+    void Finalize(HdRenderParam* renderParam) override;
 
     /// Get pointer to RPR material
     /// In case material сreation failure return nullptr

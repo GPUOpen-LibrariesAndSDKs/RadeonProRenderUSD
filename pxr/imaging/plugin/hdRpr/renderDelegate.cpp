@@ -59,10 +59,15 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
 
 HdRprDelegate::HdRprDelegate() {
     m_rprApi.reset(new HdRprApi);
-    m_renderParam.reset(new HdRprRenderParam(m_rprApi.get()));
+    m_renderParam.reset(new HdRprRenderParam(m_rprApi.get(), &m_renderThread));
 
     m_settingDescriptors = HdRprConfig::GetRenderSettingDescriptors();
     _PopulateDefaultSettings(m_settingDescriptors);
+
+    m_renderThread.SetRenderCallback([this]() {
+        m_rprApi->Render(&m_renderThread);
+    });
+    m_renderThread.StartThread();
 }
 
 HdRenderParam* HdRprDelegate::GetRenderParam() const {
@@ -188,7 +193,7 @@ void HdRprDelegate::DestroySprim(HdSprim* sPrim) {
 HdBprim* HdRprDelegate::CreateBprim(TfToken const& typeId,
                                     SdfPath const& bprimId) {
     if (typeId == HdPrimTypeTokens->renderBuffer) {
-        return new HdRprRenderBuffer(bprimId, m_rprApi.get());
+        return new HdRprRenderBuffer(bprimId);
     }
 #ifdef USE_VOLUME
     else if (typeId == _tokens->openvdbAsset) {
@@ -250,14 +255,26 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     double percentDone = double(numCompletedSamples) / HdRprConfig::GetInstance().GetMaxSamples();
     int numActivePixels = m_rprApi->GetNumActivePixels();
     if (numActivePixels != -1) {
-        int width, height;
-        if (m_rprApi->GetAovInfo(m_rprApi->GetActiveAov(), &width, &height, nullptr)) {
-            int numPixels = width * height;
-            percentDone = std::max(percentDone, double(numPixels - numActivePixels) / numPixels);
-        }
+        auto size = m_rprApi->GetViewportSize();
+        int numPixels = size[0] * size[1];
+        percentDone = std::max(percentDone, double(numPixels - numActivePixels) / numPixels);
     }
     stats[_tokens->percentDone.GetString()] = 100.0 * percentDone;
     return stats;
+}
+
+bool HdRprDelegate::IsPauseSupported() const {
+    return true;
+}
+
+bool HdRprDelegate::Pause() {
+    m_renderThread.PauseRender();
+    return true;
+}
+
+bool HdRprDelegate::Resume() {
+    m_renderThread.ResumeRender();
+    return true;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

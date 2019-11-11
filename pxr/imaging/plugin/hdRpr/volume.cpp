@@ -292,13 +292,19 @@ HdDirtyBits HdRprVolume::_PropagateDirtyBits(HdDirtyBits bits) const {
     return bits;
 }
 
-void
-HdRprVolume::_InitRepr(TfToken const& reprName,
+void HdRprVolume::_InitRepr(TfToken const& reprName,
                        HdDirtyBits* dirtyBits) {
     TF_UNUSED(reprName);
     TF_UNUSED(dirtyBits);
 
     // No-op
+}
+
+void HdRprVolume::Finalize(HdRenderParam* renderParam) {
+    // Stop render thread to safely release resources
+    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+
+    HdVolume::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

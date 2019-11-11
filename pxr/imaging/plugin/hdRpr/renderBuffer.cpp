@@ -1,4 +1,5 @@
 #include "renderBuffer.h"
+#include "renderParam.h"
 #include "rprApi.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
@@ -15,26 +16,31 @@ TF_DEFINE_PRIVATE_TOKENS(
     (aov_primvars_st)
 );
 
-HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id,
-                                     HdRprApi* rprApi)
+HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id)
     : HdRenderBuffer(id)
-    , m_rprApi(rprApi)
     , m_numMappers(0)
     , m_isConverged(false) {
-    auto& idName = id.GetName();
-    if (idName == _tokens->aov_color) {
-        m_aovName = HdRprAovTokens->color;
-    } else if (idName == _tokens->aov_normal) {
-        m_aovName = HdRprAovTokens->normal;
-    } else if (idName == _tokens->aov_depth) {
-        m_aovName = HdRprAovTokens->depth;
-    } else if (idName == _tokens->aov_linear_depth) {
-        m_aovName = HdRprAovTokens->linearDepth;
-    } else if (idName == _tokens->aov_primId) {
-        m_aovName = HdRprAovTokens->primId;
-    } else if (idName == _tokens->aov_primvars_st) {
-        m_aovName = HdRprAovTokens->primvarsSt;
+
+}
+
+void HdRprRenderBuffer::Sync(HdSceneDelegate* sceneDelegate,
+                             HdRenderParam* renderParam,
+                             HdDirtyBits* dirtyBits) {
+    if (*dirtyBits & DirtyDescription) {
+        // hdRpr has the background thread write directly into render buffers,
+        // so we need to stop the render thread before reallocating them.
+        static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
     }
+
+    HdRenderBuffer::Sync(sceneDelegate, renderParam, dirtyBits);
+}
+
+void HdRprRenderBuffer::Finalize(HdRenderParam* renderParam) {
+    // hdRpr has the background thread write directly into render buffers,
+    // so we need to stop the render thread before reallocating them.
+    static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
+
+    HdRenderBuffer::Finalize(renderParam);
 }
 
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
@@ -43,65 +49,35 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
     TF_VERIFY(!IsMapped());
     TF_UNUSED(multiSampled);
 
-    if (m_aovName.IsEmpty()) {
+    if (dimensions[2] != 1) {
+        TF_WARN("HdRprRenderBuffer supports 2D buffers only");
         return false;
     }
 
     _Deallocate();
 
-    // XXX: RPR does not support int32 images
-    auto requestedFormat = format;
-    if (requestedFormat == HdFormatInt32) {
-        format = HdFormatUNorm8Vec4;
-    }
-
-    if (m_rprApi->EnableAov(m_aovName, dimensions[0], dimensions[1], format)) {
-        m_width = dimensions[0];
-        m_height = dimensions[1];
-        m_format = requestedFormat;
-        return true;
-    }
+    m_width = dimensions[0];
+    m_height = dimensions[1];
+    m_format = format;
+    size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
+    m_mappedBuffer.resize(dataByteSize, 0);
 
     return false;
 }
 
 void HdRprRenderBuffer::_Deallocate() {
-    if (!m_aovName.IsEmpty()) {
-        m_rprApi->DisableAov(m_aovName);
-    }
+    TF_VERIFY(!IsMapped());
 
-    m_format = HdFormatInvalid;
     m_width = 0u;
     m_height = 0u;
+    m_format = HdFormatInvalid;
+    m_isConverged.store(false);
+    m_numMappers.store(0);
+    m_mappedBuffer.resize(0);
 }
 
 void* HdRprRenderBuffer::Map() {
     ++m_numMappers;
-
-    size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
-    m_mappedBuffer.resize(dataByteSize);
-    if (!dataByteSize) {
-        return nullptr;
-    }
-
-    if (m_rprApi->GetAovData(m_aovName, m_mappedBuffer.data(), dataByteSize)) {
-        if (m_aovName == HdRprAovTokens->primId) {
-            // RPR store integer ID values to RGB images using such formula:
-            // c[i].x = i;
-            // c[i].y = i/256;
-            // c[i].z = i/(256*256);
-            // i.e. saving little endian int24 to uchar3
-            // That's why we interpret the value as int and filling the alpha channel with zeros
-            auto primIdData = reinterpret_cast<int*>(m_mappedBuffer.data());
-            for (uint32_t y = 0; y < m_height; ++y) {
-                uint32_t yOffset = y * m_width;
-                for (uint32_t x = 0; x < m_width; ++x) {
-                    primIdData[x + yOffset] &= 0xFFFFFF;
-                }
-            }
-        }
-    }
-
     return m_mappedBuffer.data();
 }
 
@@ -110,6 +86,7 @@ void HdRprRenderBuffer::Unmap() {
     //     For now we assume that Map() will be called frequently so we prefer
     //     to avoid the cost of clearing the buffer over memory savings.
     // m_mappedBuffer.clear();
+    // m_mappedBuffer.shrink_to_fit();
     --m_numMappers;
 }
 

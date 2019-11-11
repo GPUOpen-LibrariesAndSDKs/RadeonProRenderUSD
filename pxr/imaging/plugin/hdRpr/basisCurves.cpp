@@ -123,4 +123,11 @@ HdDirtyBits HdRprBasisCurves::GetInitialDirtyBitsMask() const {
         | HdChangeTracker::DirtyMaterialId;
 }
 
+void HdRprBasisCurves::Finalize(HdRenderParam* renderParam) {
+    // Stop render thread to safely release resources
+    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+
+    HdBasisCurves::Finalize(renderParam);
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE

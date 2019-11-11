@@ -2,6 +2,7 @@
 #define HDRPR_RENDER_DELEGATE_H
 
 #include "pxr/imaging/hd/renderDelegate.h"
+#include "pxr/imaging/hd/renderThread.h"
 
 #include "api.h"
 
@@ -58,10 +59,11 @@ public:
 
     HdRenderSettingDescriptorList GetRenderSettingDescriptors() const override;
 
-    ///
-    /// Returns an open-format dictionary of render statistics
-    ///
     VtDictionary GetRenderStats() const override;
+
+    bool IsPauseSupported() const override;
+    bool Pause() override;
+    bool Resume() override;
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
@@ -70,6 +72,7 @@ private:
     std::unique_ptr<HdRprApi> m_rprApi;
     std::unique_ptr<HdRprRenderParam> m_renderParam;
     HdRenderSettingDescriptorList m_settingDescriptors;
+    HdRenderThread m_renderThread;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

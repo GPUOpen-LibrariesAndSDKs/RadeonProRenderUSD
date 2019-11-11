@@ -25,6 +25,8 @@ public:
 
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
+    void Finalize(HdRenderParam* renderParam) override;
+
 protected:
     RprApiObjectPtr m_rprLight;
     GfMatrix4f m_transform;

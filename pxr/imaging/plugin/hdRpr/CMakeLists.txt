@@ -115,6 +115,7 @@ pxr_plugin(hdRpr
         rendererPlugin
         renderDelegate
         renderPass
+        renderThread
         rprApi
         mesh
         instancer

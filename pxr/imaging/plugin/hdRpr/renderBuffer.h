@@ -5,12 +5,16 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-class HdRprApi;
-
 class HdRprRenderBuffer final : public HdRenderBuffer {
 public:
-    HdRprRenderBuffer(SdfPath const& id, HdRprApi* rprApi);
+    HdRprRenderBuffer(SdfPath const& id);
     ~HdRprRenderBuffer() override = default;
+
+    void Sync(HdSceneDelegate* sceneDelegate,
+              HdRenderParam* renderParam,
+              HdDirtyBits* dirtyBits) override;
+
+    void Finalize(HdRenderParam* renderParam) override;
 
     bool Allocate(GfVec3i const& dimensions,
                   HdFormat format,
@@ -42,8 +46,6 @@ protected:
     void _Deallocate() override;
 
 private:
-    HdRprApi* m_rprApi;
-    TfToken m_aovName;
     uint32_t m_width = 0u;
     uint32_t m_height = 0u;
     HdFormat m_format = HdFormat::HdFormatInvalid;

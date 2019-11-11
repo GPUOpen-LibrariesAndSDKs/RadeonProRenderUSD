@@ -17,16 +17,13 @@ public:
 
     ~HdRprRenderPass() override = default;
 
-    bool IsConverged() const override { return m_isConverged; }
+    bool IsConverged() const override;
 
     void _Execute(HdRenderPassStateSharedPtr const& renderPassState,
                   TfTokenVector const& renderTags) override;
 
 private:
     HdRprRenderParam* m_renderParam;
-
-    int m_lastSettingsVersion;
-    bool m_isConverged = false;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

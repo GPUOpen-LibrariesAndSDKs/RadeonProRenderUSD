@@ -2,6 +2,7 @@
 #define HDRPR_RENDER_PARAM_H
 
 #include "pxr/imaging/hd/renderDelegate.h"
+#include "pxr/imaging/hd/renderThread.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -9,24 +10,24 @@ class HdRprApi;
 
 class HdRprRenderParam final : public HdRenderParam {
 public:
-    HdRprRenderParam(HdRprApi* rprApi)
-        : m_rprApi(rprApi) {
+    HdRprRenderParam(HdRprApi* rprApi, HdRenderThread* renderThread)
+        : m_rprApi(rprApi)
+        , m_renderThread(renderThread) {
 
     }
     ~HdRprRenderParam() override = default;
 
     HdRprApi const* GetRprApi() const { return m_rprApi; }
     HdRprApi* AcquireRprApiForEdit() {
-        m_sceneEdited.store(true);
+        m_renderThread->StopRender();
         return m_rprApi;
     }
 
-    bool IsSceneEdited() const { return m_sceneEdited.load(); }
-    void ResetSceneEdited() { m_sceneEdited.store(false); }
+    HdRenderThread* GetRenderThread() { return m_renderThread;  }
 
 private:
     HdRprApi* m_rprApi;
-    std::atomic<bool> m_sceneEdited;
+    HdRenderThread* m_renderThread;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
