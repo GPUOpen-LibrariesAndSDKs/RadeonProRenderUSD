@@ -1,28 +1,18 @@
 #include "sphereLight.h"
+#include "pxr/imaging/hd/sceneDelegate.h"
+
 #include <cmath>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-const TfTokenVector k_requiredGeometryParam = {
-    HdLightTokens->radius,
-};
-
-bool HdRprSphereLight::IsDirtyGeomParam(std::map<TfToken, float>& params) {
-    if (params.find(HdLightTokens->radius) == params.end()) {
-        return false;
-    }
-
-    float radius = std::abs(params[HdLightTokens->radius]);
+bool HdRprSphereLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) {
+    float radius = std::abs(sceneDelegate->GetLightParamValue(id, HdLightTokens->radius).Get<float>());
 
     bool isDirty = radius != m_radius;
 
     m_radius = radius;
 
     return isDirty;
-}
-
-const TfTokenVector& HdRprSphereLight::FetchLightGeometryParamNames() const {
-    return k_requiredGeometryParam;
 }
 
 RprApiObjectPtr HdRprSphereLight::CreateLightMesh() {

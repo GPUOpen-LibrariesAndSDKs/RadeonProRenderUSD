@@ -67,14 +67,7 @@ void HdRprLightBase::Sync(HdSceneDelegate* sceneDelegate,
         // Compute
         const float illuminationIntensity = computeLightIntensity(intensity, exposure);
 
-        const TfTokenVector& paramNames = FetchLightGeometryParamNames();
-
-        std::map<TfToken, float> params;
-        for (const TfToken& paramName : paramNames) {
-            params[paramName] = sceneDelegate->GetLightParamValue(id, paramName).Get<float>();
-        }
-
-        if (!m_lightMesh || this->IsDirtyGeomParam(params)) {
+        if (SyncGeomParams(sceneDelegate, id) || !m_lightMesh) {
             m_lightMesh = CreateLightMesh();
         }
 

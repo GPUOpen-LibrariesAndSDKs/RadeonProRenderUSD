@@ -1,4 +1,6 @@
 #include "diskLight.h"
+#include "pxr/imaging/hd/sceneDelegate.h"
+
 #include <cmath>
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -7,23 +9,14 @@ const TfTokenVector k_requiredGeometryParam = {
     HdLightTokens->radius,
 };
 
-bool HdRprDiskLight::IsDirtyGeomParam(std::map<TfToken, float>& params) {
-    auto radiusParamIter = params.find(HdLightTokens->radius);
-    if (radiusParamIter == params.end()) {
-        return false;
-    }
-
-    float radius = std::abs(radiusParamIter->second);
+bool HdRprDiskLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) {
+    float radius = std::abs(sceneDelegate->GetLightParamValue(id, HdLightTokens->radius).Get<float>());
 
     bool isDirty = radius != m_radius;
 
     m_radius = radius;
 
     return isDirty;
-}
-
-const TfTokenVector& HdRprDiskLight::FetchLightGeometryParamNames() const {
-    return k_requiredGeometryParam;
 }
 
 RprApiObjectPtr HdRprDiskLight::CreateLightMesh() {

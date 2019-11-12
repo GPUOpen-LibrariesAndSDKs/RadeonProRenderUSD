@@ -25,10 +25,7 @@ public:
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
 protected:
-    virtual bool IsDirtyGeomParam(std::map<TfToken, float>& params) = 0;
-
-    // Fetch required params for geometry
-    virtual const TfTokenVector& FetchLightGeometryParamNames() const = 0;
+    virtual bool SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) = 0;
 
     virtual RprApiObjectPtr CreateLightMesh() = 0;
 

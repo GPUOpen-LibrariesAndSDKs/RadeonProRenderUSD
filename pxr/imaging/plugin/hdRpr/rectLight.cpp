@@ -1,24 +1,11 @@
 #include "rectLight.h"
+#include "pxr/imaging/hd/sceneDelegate.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-const TfTokenVector k_requiredGeometryParam = {
-    HdLightTokens->width,
-    HdLightTokens->height,
-};
-
-const TfTokenVector& HdRprRectLight::FetchLightGeometryParamNames() const {
-    return k_requiredGeometryParam;
-}
-
-bool HdRprRectLight::IsDirtyGeomParam(std::map<TfToken, float>& params) {
-    if (params.find(HdLightTokens->width) == params.end() ||
-        params.find(HdLightTokens->height) == params.end()) {
-        return false;
-    }
-
-    float width = std::abs(params[HdLightTokens->width]);
-    float height = std::abs(params[HdLightTokens->height]);
+bool HdRprRectLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) {
+    float width = std::abs(sceneDelegate->GetLightParamValue(id, HdLightTokens->width).Get<float>());
+    float height = std::abs(sceneDelegate->GetLightParamValue(id, HdLightTokens->height).Get<float>());
 
     bool isDirty = (width != m_width || m_height != height);
 

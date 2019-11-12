@@ -13,10 +13,7 @@ public:
 
 protected:
 
-    bool IsDirtyGeomParam(std::map<TfToken, float> & params) override;
-
-    // Fetch required params for geometry
-    const TfTokenVector & FetchLightGeometryParamNames() const override;
+    bool SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) override;
 
     // Create mesh with emmisive material
     RprApiObjectPtr CreateLightMesh() override;
