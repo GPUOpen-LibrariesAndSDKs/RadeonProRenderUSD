@@ -1362,7 +1362,7 @@ public:
     }
 
     bool IsChanged() const {
-        return m_dirtyFlags != ChangeTracker::Clean;
+        return m_dirtyFlags != ChangeTracker::Clean || HdRprConfig::GetInstance().IsDirty(HdRprConfig::DirtyAll);
     }
 
     bool IsConverged() const {
