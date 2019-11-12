@@ -77,6 +77,7 @@ private:
     std::vector<RprApiObjectPtr> m_rprMeshes;
     std::vector<std::vector<RprApiObjectPtr>> m_rprMeshInstances;
     RprApiObjectPtr m_fallbackMaterial;
+    RprApiObject const* m_cachedMaterial;
     GfMatrix4d m_transform;
 
     HdMeshTopology m_topology;
