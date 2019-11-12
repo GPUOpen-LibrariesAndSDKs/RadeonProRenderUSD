@@ -1,46 +1,41 @@
 #ifndef HDRPR_RENDER_BUFFER_H
 #define HDRPR_RENDER_BUFFER_H
 
-#include "pxr/pxr.h"
 #include "pxr/imaging/hd/renderBuffer.h"
 
 #include "rprApi.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-/// The HdRprRenderBuffer does not actually render buffet
-/// It is a stub to be able retrieve AOV Name, to define which RPR render mode to use
-
-
 class HdRprRenderBuffer final : public HdRenderBuffer {
 public:
-	HdRprRenderBuffer(SdfPath const& id, HdRprApiSharedPtr rprApi);
+    HdRprRenderBuffer(SdfPath const& id, HdRprApiSharedPtr rprApi);
 
     virtual HdDirtyBits GetInitialDirtyBitsMask() const override;
 
-    virtual bool Allocate(GfVec3i const& dimensions,
-                          HdFormat format,
-                          bool multiSampled) override;
+    bool Allocate(GfVec3i const& dimensions,
+                  HdFormat format,
+                  bool multiSampled) override;
 
-    virtual unsigned int GetWidth() const override;
+    unsigned int GetWidth() const override { return m_width; }
 
-    virtual unsigned int GetHeight() const override;
+    unsigned int GetHeight() const override { return m_height; }
 
-    virtual unsigned int GetDepth() const override;
+    unsigned int GetDepth() const override { return 1u; }
 
-    virtual HdFormat GetFormat() const override;
+    HdFormat GetFormat() const override { return m_format; }
 
-    virtual bool IsMultiSampled() const override;
+    bool IsMultiSampled() const override { return false; }
 
-    virtual void* Map() override;
+    void* Map() override;
 
-    virtual void Unmap() override;
+    void Unmap() override;
 
-    virtual bool IsMapped() const override;
+    bool IsMapped() const override;
 
-    virtual void Resolve() override;
+    void Resolve() override;
 
-    virtual bool IsConverged() const override;
+    bool IsConverged() const override;
 
     void SetConverged(bool converged);
 

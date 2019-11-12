@@ -13,17 +13,15 @@ public:
 
 protected:
 
-    virtual bool IsDirtyGeomParam(std::map<TfToken, float> & params) override;
-
-    // Ferch required params for geometry
-    virtual const TfTokenVector & FetchLightGeometryParamNames() const override;
+    bool SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) override;
 
     // Create mesh with emmisive material
-    virtual RprApiObjectPtr CreateLightMesh(std::map<TfToken, float> & params) override;
+    RprApiObjectPtr CreateLightMesh() override;
 
     // Normalize Light Color with surface area
-    virtual GfVec3f NormalizeLightColor(const GfMatrix4d & transform, const GfVec3f & emmisionColor) override;
+    GfVec3f NormalizeLightColor(const GfMatrix4d & transform, const GfVec3f & emmisionColor) override;
 
+private:
     float m_radius = std::numeric_limits<float>::quiet_NaN();
 };
 

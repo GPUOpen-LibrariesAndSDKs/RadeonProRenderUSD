@@ -14,7 +14,10 @@ TF_DEFINE_PRIVATE_TOKENS(
     (aov_primvars_st)
 );
 
-HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprApi) : HdRenderBuffer(id), m_numMappers(0) {
+HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id,
+                                     HdRprApiSharedPtr rprApi)
+    : HdRenderBuffer(id)
+    , m_numMappers(0) {
     if (!rprApi) {
         TF_CODING_ERROR("RprApi is expired");
         return;
@@ -39,14 +42,13 @@ HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const & id, HdRprApiSharedPtr rprAp
     }
 }
 
-HdDirtyBits HdRprRenderBuffer::GetInitialDirtyBitsMask() const
-{
-	return AllDirty;
+HdDirtyBits HdRprRenderBuffer::GetInitialDirtyBitsMask() const {
+    return AllDirty;
 }
 
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
-                      HdFormat format,
-                      bool multiSampled) {
+                                 HdFormat format,
+                                 bool multiSampled) {
     TF_VERIFY(!IsMapped());
     TF_UNUSED(multiSampled);
 
@@ -87,26 +89,6 @@ void HdRprRenderBuffer::_Deallocate() {
     m_format = HdFormatInvalid;
     m_width = 0u;
     m_height = 0u;
-}
-
-unsigned int HdRprRenderBuffer::GetWidth() const {
-    return m_width;
-}
-
-unsigned int HdRprRenderBuffer::GetHeight() const {
-    return m_height;
-}
-
-unsigned int HdRprRenderBuffer::GetDepth() const {
-    return 1u;
-}
-
-HdFormat HdRprRenderBuffer::GetFormat() const {
-    return m_format;
-}
-
-bool HdRprRenderBuffer::IsMultiSampled() const {
-    return false;
 }
 
 void* HdRprRenderBuffer::Map() {

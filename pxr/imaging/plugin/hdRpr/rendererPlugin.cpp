@@ -21,28 +21,22 @@
 // KIND, either express or implied. See the Apache License for the specific
 // language governing permissions and limitations under the Apache License.
 //
-#include "pxr/imaging/hd/rendererPluginRegistry.h"
-#include "renderDelegate.h"
 #include "rendererPlugin.h"
+#include "renderDelegate.h"
+
+#include "pxr/imaging/hd/rendererPluginRegistry.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-
-TF_REGISTRY_FUNCTION(TfType)
-{
+TF_REGISTRY_FUNCTION(TfType) {
     HdRendererPluginRegistry::Define<HdRprPlugin>();
 }
 
-HdRenderDelegate*
-HdRprPlugin::CreateRenderDelegate()
-{
-	return new HdRprDelegate();
+HdRenderDelegate* HdRprPlugin::CreateRenderDelegate() {
+    return new HdRprDelegate();
 }
 
-void
-HdRprPlugin::DeleteRenderDelegate(
-    HdRenderDelegate *renderDelegate)
-{
+void HdRprPlugin::DeleteRenderDelegate(HdRenderDelegate* renderDelegate) {
     delete renderDelegate;
 }
 

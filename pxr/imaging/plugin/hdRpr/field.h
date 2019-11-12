@@ -1,8 +1,5 @@
-
 #ifndef HDRPR_FIELD_H
 #define HDRPR_FIELD_H
-
-#include "pxr/pxr.h"
 
 #include "pxr/imaging/hd/field.h"
 
@@ -12,20 +9,20 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprField : public HdField {
 public:
-	HdRprField(SdfPath const& id, HdRprApiSharedPtr rprApi);
-    HD_API
-    virtual ~HdRprField();
+    HdRprField(SdfPath const& id, HdRprApiSharedPtr rprApi);
+    ~HdRprField() override = default;
 
-	virtual void Sync(HdSceneDelegate *sceneDelegate,
-		HdRenderParam   *renderParam,
-		HdDirtyBits     *dirtyBits) override;
+    void Sync(HdSceneDelegate* sceneDelegate,
+              HdRenderParam* renderParam,
+              HdDirtyBits* dirtyBits) override;
 
 protected:
-	virtual HdDirtyBits GetInitialDirtyBitsMask() const override;
+    HdDirtyBits GetInitialDirtyBitsMask() const override;
 
-	HdRprApiWeakPtr m_rprApiWeakPtr;
+private:
+    HdRprApiWeakPtr m_rprApiWeakPtr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-#endif  // HDRPR_FIELD_H
+#endif // HDRPR_FIELD_H

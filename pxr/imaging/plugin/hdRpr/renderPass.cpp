@@ -10,16 +10,16 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprRenderPass::HdRprRenderPass(HdRenderIndex* index
-    , HdRprimCollection const& collection
-    , HdRprApiSharedPtr rprApi)
+HdRprRenderPass::HdRprRenderPass(HdRenderIndex* index,
+                                 HdRprimCollection const& collection,
+                                 HdRprApiSharedPtr rprApi)
     : HdRenderPass(index, collection)
     , m_lastSettingsVersion(0) {
     m_rprApiWeakPtr = rprApi;
 }
 
 void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState, TfTokenVector const& renderTags) {
-    HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
+    auto rprApi = m_rprApiWeakPtr.lock();
     if (!rprApi) {
         TF_CODING_ERROR("RprApi is expired");
         return;

@@ -2,11 +2,10 @@
 #define HDRPR_MATERIAL_FACTORY_H
 
 #include "pxr/pxr.h"
-
-#include <RadeonProRender.h>
-
 #include "materialAdapter.h"
 #include "imageCache.h"
+
+#include <RadeonProRender.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -17,16 +16,15 @@ struct RprApiMaterial {
     std::vector<rpr_material_node> materialNodes;
 };
 
-class RprMaterialFactory
-{
+class RprMaterialFactory {
 public:
     RprMaterialFactory(rpr_material_system matSys, ImageCache* imageCache);
 
-	RprApiMaterial* CreateMaterial(EMaterialType type, const MaterialAdapter & materialAdapter);
+    RprApiMaterial* CreateMaterial(EMaterialType type, const MaterialAdapter& materialAdapter);
 
-	void DeleteMaterial(RprApiMaterial * rprmaterial);
+    void DeleteMaterial(RprApiMaterial* rprmaterial);
 
-	void AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial* material);
+    void AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial* material);
 
     void AttachMaterialToCurve(rpr_shape mesh, const RprApiMaterial* material);
 

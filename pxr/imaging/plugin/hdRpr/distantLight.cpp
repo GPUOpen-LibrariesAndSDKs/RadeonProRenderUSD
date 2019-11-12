@@ -1,8 +1,5 @@
 #include "distantLight.h"
 
-#include "rprApi.h"
-#include "renderParam.h"
-
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/usdLux/blackbody.h"
@@ -14,9 +11,9 @@ static float computeLightIntensity(float intensity, float exposure) {
     return intensity * exp2(exposure);
 }
 
-void HdRprDistantLight::Sync(HdSceneDelegate *sceneDelegate,
-    HdRenderParam   *renderParam,
-    HdDirtyBits     *dirtyBits) {
+void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
+                             HdRenderParam* renderParam,
+                             HdDirtyBits* dirtyBits) {
 
     auto rprApi = m_rprApiWeakPtr.lock();
     if (!rprApi) {
@@ -59,7 +56,7 @@ void HdRprDistantLight::Sync(HdSceneDelegate *sceneDelegate,
         rprApi->SetDirectionalLightAttributes(m_rprLight.get(), color * computedIntensity, shadowSoftness);
     }
 
-    if (newLight || (m_rprLight && (bits & HdLight::DirtyTransform))) {
+    if (newLight || ((bits & HdLight::DirtyTransform) && m_rprLight)) {
         rprApi->SetLightTransform(m_rprLight.get(), m_transform);
     }
 
@@ -68,7 +65,7 @@ void HdRprDistantLight::Sync(HdSceneDelegate *sceneDelegate,
 
 
 HdDirtyBits HdRprDistantLight::GetInitialDirtyBitsMask() const {
-        return HdLight::AllDirty;
+    return HdLight::AllDirty;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -1,27 +1,13 @@
 #include "cylinderLight.h"
+#include "pxr/imaging/hd/sceneDelegate.h"
+
 #include <cmath>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-const TfTokenVector k_requiredGeometryParam =
-{
-    HdLightTokens->radius,
-    HdLightTokens->length,
-};
-
-
-bool HdRprCylinderLight::IsDirtyGeomParam(std::map<TfToken, float>& params) {
-    auto radiusParamIter = params.find(HdLightTokens->radius);
-    if (radiusParamIter == params.end()) {
-        return false;
-    }
-    auto lengthParamIter = params.find(HdLightTokens->length);
-    if (lengthParamIter == params.end()) {
-        return false;
-    }
-
-    float radius = std::abs(radiusParamIter->second);
-    float length = std::abs(lengthParamIter->second);
+bool HdRprCylinderLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) {
+    float radius = std::abs(sceneDelegate->GetLightParamValue(id, HdLightTokens->radius).Get<float>());
+    float length = std::abs(sceneDelegate->GetLightParamValue(id, HdLightTokens->length).Get<float>());
 
     bool isDirty = radius != m_radius || length != m_length;
 
@@ -31,19 +17,14 @@ bool HdRprCylinderLight::IsDirtyGeomParam(std::map<TfToken, float>& params) {
     return isDirty;
 }
 
-const TfTokenVector& HdRprCylinderLight::FetchLightGeometryParamNames() const {
-    return k_requiredGeometryParam;
-}
-
-RprApiObjectPtr HdRprCylinderLight::CreateLightMesh(std::map<TfToken, float>& params) {
-
-    HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
+RprApiObjectPtr HdRprCylinderLight::CreateLightMesh() {
+    auto rprApi = m_rprApiWeakPtr.lock();
     if (!rprApi) {
         TF_CODING_ERROR("RprApi is expired");
         return nullptr;
     }
 
-    return rprApi->CreateCylinderLightMesh(params[HdLightTokens->radius], params[HdLightTokens->length]);
+    return rprApi->CreateCylinderLightMesh(m_radius, m_length);
 }
 
 GfVec3f HdRprCylinderLight::NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& inColor) {
