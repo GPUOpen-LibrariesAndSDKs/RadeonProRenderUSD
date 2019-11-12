@@ -145,7 +145,17 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         newMesh = true;
     }
 
-    // TODO: Check materialId dirtiness
+    if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
+        m_cachedMaterial = nullptr;
+
+        auto materialId = sceneDelegate->GetMaterialId(id);
+        if (!materialId.IsEmpty()) {
+            auto hdMaterial = sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId);
+            if (hdMaterial) {
+                m_cachedMaterial = static_cast<const HdRprMaterial*>(hdMaterial)->GetRprMaterialObject();
+            }
+        }
+    }
 
     ////////////////////////////////////////////////////////////////////////
     // 2. Resolve drawstyles
@@ -395,6 +405,16 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (updateTransform) {
             for (auto& rprMesh : m_rprMeshes) {
                 rprApi->SetMeshTransform(rprMesh.get(), m_transform);
+            }
+        }
+
+        // if the mesh was created from scratch material is already set
+        if (!newMesh && (*dirtyBits & HdChangeTracker::DirtyMaterialId)) {
+            // when geometry subsetting enabled, the material comes from each particular HdGeomSubset
+            if (m_topology.GetGeomSubsets().empty()) {
+                for (auto& mesh : m_rprMeshes) {
+                    rprApi->SetMeshMaterial(mesh.get(), m_cachedMaterial);
+                }
             }
         }
     }
