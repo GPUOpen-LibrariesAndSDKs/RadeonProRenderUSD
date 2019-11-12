@@ -272,6 +272,10 @@ void RprMaterialFactory::DeleteMaterial(RprApiMaterial* material)
         return;
     }
 
+    if (!material->materialImages.empty()) {
+        m_imageCache->RequireGarbageCollection();
+    }
+
     SAFE_DELETE_RPR_OBJECT(material->rootMaterial);
     SAFE_DELETE_RPR_OBJECT(material->displacementMaterial);
     for (auto node : material->materialNodes)
