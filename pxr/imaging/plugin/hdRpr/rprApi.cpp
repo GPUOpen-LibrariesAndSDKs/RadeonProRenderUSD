@@ -1045,6 +1045,8 @@ public:
     }
 
     void Update() {
+        m_imageCache->GarbageCollectIfNeeded();
+
         auto& preferences = HdRprConfig::GetInstance();
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
             if (preferences.IsDirty(HdRprConfig::DirtyHybridQuality)) {
