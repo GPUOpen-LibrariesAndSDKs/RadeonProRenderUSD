@@ -1277,7 +1277,7 @@ public:
         m_denoiseFilterPtr->SetOutput(GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, colorAovFb.format));
     }
 
-    void Render(HdRenderThread* renderThread) {
+    void Render(HdRprRenderThread* renderThread) {
         if (!m_rprContext || m_aovFrameBuffers.empty()) {
             return;
         }
@@ -1303,25 +1303,19 @@ public:
 
         bool stopRequested = false;
         while (!IsConverged() || stopRequested) {
-            // XXX: We wait in infinite loop until user unpause renderThread.
-            // Ideally, it would be a conditional wait, but current HdRenderThread API do not allow this.
-            // We have two potential ways to solve it:
-            // 1. implement render thread from scratch and use it
-            // 2. modify existing HdRenderThread and pray for PR to USD to be accepted
-            while (renderThread->IsPauseRequested()) {
-                if (renderThread->IsStopRequested()) {
-                    break;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            }
-            // XXX: We break from the loop in case of requested stop, but ideally, renderThread should have
-            // some sort of stop callback to allow renderers to use ability to abort current frame rendering process
+            renderThread->WaitUntilPaused();
             stopRequested = renderThread->IsStopRequested();
             if (stopRequested) {
                 break;
             }
 
-            if (RPR_ERROR_CHECK(rprContextRender(m_rprContext->GetHandle()), "Fail contex render framebuffer")) {
+            m_rendering.store(true);
+            auto status = rprContextRender(m_rprContext->GetHandle());
+            m_rendering.store(false);
+
+            if (status == RPR_ERROR_ABORTED ||
+                RPR_ERROR_CHECK(status, "Fail contex render framebuffer")) {
+                stopRequested = true;
                 break;
             }
 
@@ -1350,6 +1344,12 @@ public:
                 rb->Unmap();
                 rb->SetConverged(true);
             }
+        }
+    }
+
+    void AbortRender() {
+        if (m_rprContext && m_rendering) {
+            RPR_ERROR_CHECK(rprContextAbortRender(m_rprContext->GetHandle()), "Failed to abort render");
         }
     }
 
@@ -1759,6 +1759,8 @@ private:
     int m_activePixels = -1;
     int m_maxSamples = 0;
     float m_varianceThreshold = 0.0f;
+
+    std::atomic<bool> m_rendering = false;
 };
 
 std::unique_ptr<RprApiObject> RprApiObject::Wrap(void* handle) {
@@ -1961,8 +1963,12 @@ HdRenderPassAovBindingVector HdRprApi::GetAovBindings() const {
     return m_impl->GetAovBindings();
 }
 
-void HdRprApi::Render(HdRenderThread* renderThread) {
+void HdRprApi::Render(HdRprRenderThread* renderThread) {
     m_impl->Render(renderThread);
+}
+
+void HdRprApi::AbortRender() {
+    m_impl->AbortRender();
 }
 
 bool HdRprApi::IsChanged() const {

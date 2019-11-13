@@ -2,6 +2,8 @@
 #define HDRPR_RPR_API_H
 
 #include "api.h"
+#include "renderThread.h"
+#include "rprcpp/rprObject.h"
 
 #include "pxr/base/gf/vec2i.h"
 #include "pxr/base/gf/vec3f.h"
@@ -9,11 +11,8 @@
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/quaternion.h"
 #include "pxr/imaging/hd/types.h"
-#include "pxr/imaging/hd/renderThread.h"
 #include "pxr/imaging/hd/renderPassState.h"
 #include "pxr/base/tf/staticTokens.h"
-
-#include "rprcpp/rprObject.h"
 
 #include <memory>
 #include <vector>
@@ -118,7 +117,9 @@ public:
     // returns -1 if adaptive sampling is not used
     int GetNumActivePixels() const;
 
-    void Render(HdRenderThread* renderThread);
+    void Render(HdRprRenderThread* renderThread);
+    void AbortRender();
+
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
 

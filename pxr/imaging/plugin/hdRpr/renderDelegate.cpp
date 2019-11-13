@@ -67,6 +67,9 @@ HdRprDelegate::HdRprDelegate() {
     m_renderThread.SetRenderCallback([this]() {
         m_rprApi->Render(&m_renderThread);
     });
+    m_renderThread.SetStopCallback([this]() {
+        m_rprApi->AbortRender();
+    });
     m_renderThread.StartThread();
 }
 

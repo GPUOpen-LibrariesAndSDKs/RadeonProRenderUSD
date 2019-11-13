@@ -1,10 +1,10 @@
 #ifndef HDRPR_RENDER_DELEGATE_H
 #define HDRPR_RENDER_DELEGATE_H
 
-#include "pxr/imaging/hd/renderDelegate.h"
-#include "pxr/imaging/hd/renderThread.h"
-
 #include "api.h"
+#include "renderThread.h"
+
+#include "pxr/imaging/hd/renderDelegate.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -72,7 +72,7 @@ private:
     std::unique_ptr<HdRprApi> m_rprApi;
     std::unique_ptr<HdRprRenderParam> m_renderParam;
     HdRenderSettingDescriptorList m_settingDescriptors;
-    HdRenderThread m_renderThread;
+    HdRprRenderThread m_renderThread;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
