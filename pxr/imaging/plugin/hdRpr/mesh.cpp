@@ -37,8 +37,12 @@ HdDirtyBits HdRprMesh::GetInitialDirtyBitsMask() const {
         | HdChangeTracker::DirtyTransform
         | HdChangeTracker::DirtyPrimvar
         | HdChangeTracker::DirtyNormals
+        | HdChangeTracker::DirtyMaterialId
+        | HdChangeTracker::DirtySubdivTags
+        | HdChangeTracker::DirtyDisplayStyle
+        | HdChangeTracker::DirtyVisibility
+        | HdChangeTracker::DirtyInstancer
         | HdChangeTracker::DirtyInstanceIndex
-        | HdChangeTracker::AllDirty
         ;
 
     return (HdDirtyBits)mask;
@@ -365,7 +369,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyInstancer)) {
             if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()))) {
-                auto transforms = instancer->ComputeTransforms(_sharedData.rprimID);
+                auto transforms = instancer->ComputeTransforms(id);
                 if (transforms.empty()) {
                     // Reset to state without instances
                     m_rprMeshInstances.clear();
