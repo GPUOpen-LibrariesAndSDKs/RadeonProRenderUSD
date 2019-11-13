@@ -1,6 +1,8 @@
 #include "lightBase.h"
+#include "renderParam.h"
 #include "material.h"
 #include "materialFactory.h"
+#include "rprApi.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/usdLux/blackbody.h"
@@ -17,32 +19,18 @@ bool HdRprLightBase::IsDirtyMaterial(const GfVec3f& emissionColor) {
     return isDirty;
 }
 
-RprApiObjectPtr HdRprLightBase::CreateLightMaterial(const GfVec3f& illumColor) {
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        return nullptr;
-    }
-
-    MaterialAdapter matAdapter(EMaterialType::EMISSIVE, MaterialParams{{HdLightTokens->color, VtValue(illumColor)}});
-    return rprApi->CreateMaterial(matAdapter);
-}
-
 void HdRprLightBase::Sync(HdSceneDelegate* sceneDelegate,
                           HdRenderParam* renderParam,
                           HdDirtyBits* dirtyBits) {
 
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        return;
-    }
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     SdfPath const& id = GetId();
     HdDirtyBits bits = *dirtyBits;
 
     if (bits & DirtyBits::DirtyTransform) {
-        m_transform = sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>();
+        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>());
     }
 
     bool newLight = false;
@@ -68,7 +56,7 @@ void HdRprLightBase::Sync(HdSceneDelegate* sceneDelegate,
         const float illuminationIntensity = computeLightIntensity(intensity, exposure);
 
         if (SyncGeomParams(sceneDelegate, id) || !m_lightMesh) {
-            m_lightMesh = CreateLightMesh();
+            m_lightMesh = CreateLightMesh(rprApi);
         }
 
         if (!m_lightMesh) {
@@ -82,7 +70,8 @@ void HdRprLightBase::Sync(HdSceneDelegate* sceneDelegate,
         const GfVec3f emissionColor = (isNormalize) ? NormalizeLightColor(m_transform, illumColor) : illumColor;
 
         if (!m_lightMaterial || IsDirtyMaterial(emissionColor)) {
-            m_lightMaterial = CreateLightMaterial(emissionColor);
+            MaterialAdapter matAdapter(EMaterialType::EMISSIVE, MaterialParams{{HdLightTokens->color, VtValue(emissionColor)}});
+            m_lightMaterial = rprApi->CreateMaterial(matAdapter);
         }
 
         if (!m_lightMaterial) {
@@ -106,6 +95,13 @@ void HdRprLightBase::Sync(HdSceneDelegate* sceneDelegate,
 HdDirtyBits HdRprLightBase::GetInitialDirtyBitsMask() const {
     return DirtyBits::DirtyTransform
         | DirtyBits::DirtyParams;
+}
+
+void HdRprLightBase::Finalize(HdRenderParam* renderParam) {
+    // Stop render thread to safely release resources
+    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+
+    HdLight::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

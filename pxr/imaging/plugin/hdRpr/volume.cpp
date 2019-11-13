@@ -1,4 +1,6 @@
 #include "volume.h"
+#include "rprApi.h"
+#include "renderParam.h"
 
 #include "houdini/openvdb.h"
 
@@ -71,9 +73,8 @@ struct GridData {
     }
 };
 
-HdRprVolume::HdRprVolume(SdfPath const& id, HdRprApiSharedPtr rprApi)
-    : HdVolume(id)
-    , m_rprApiWeakPtr(rprApi) {
+HdRprVolume::HdRprVolume(SdfPath const& id)
+    : HdVolume(id) {
 
 }
 
@@ -82,12 +83,9 @@ void HdRprVolume::Sync(
     HdRenderParam* renderParam,
     HdDirtyBits* dirtyBits,
     TfToken const& reprName) {
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        *dirtyBits = HdChangeTracker::Clean;
-        return;
-    }
+
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     auto& id = GetId();
 
@@ -294,13 +292,19 @@ HdDirtyBits HdRprVolume::_PropagateDirtyBits(HdDirtyBits bits) const {
     return bits;
 }
 
-void
-HdRprVolume::_InitRepr(TfToken const& reprName,
+void HdRprVolume::_InitRepr(TfToken const& reprName,
                        HdDirtyBits* dirtyBits) {
     TF_UNUSED(reprName);
     TF_UNUSED(dirtyBits);
 
     // No-op
+}
+
+void HdRprVolume::Finalize(HdRenderParam* renderParam) {
+    // Stop render thread to safely release resources
+    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+
+    HdVolume::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

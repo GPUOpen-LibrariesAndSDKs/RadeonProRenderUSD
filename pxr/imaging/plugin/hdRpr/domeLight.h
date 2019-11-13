@@ -5,16 +5,18 @@
 #include "pxr/imaging/hd/sprim.h"
 #include "pxr/usd/sdf/path.h"
 
-#include "rprApi.h"
-
 PXR_NAMESPACE_OPEN_SCOPE
+
+class HdRprApi;
+class RprApiObject;
+using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
 
 class HdRprDomeLight : public HdSprim {
 
 public:
-    HdRprDomeLight(SdfPath const& id, HdRprApiSharedPtr rprApi)
-        : HdSprim(id)
-        , m_rprApiWeakPtr(rprApi) {
+    HdRprDomeLight(SdfPath const& id)
+        : HdSprim(id) {
+
     }
 
     void Sync(HdSceneDelegate* sceneDelegate,
@@ -23,8 +25,9 @@ public:
 
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
+    void Finalize(HdRenderParam* renderParam) override;
+
 protected:
-    HdRprApiWeakPtr m_rprApiWeakPtr;
     RprApiObjectPtr m_rprLight;
     GfMatrix4f m_transform;
 };

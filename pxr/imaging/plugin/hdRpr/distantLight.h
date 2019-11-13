@@ -14,9 +14,9 @@ PXR_NAMESPACE_OPEN_SCOPE
 class HdRprDistantLight : public HdSprim {
 
 public:
-    HdRprDistantLight(SdfPath const& id, HdRprApiSharedPtr rprApi)
-        : HdSprim(id)
-        , m_rprApiWeakPtr(rprApi) {
+    HdRprDistantLight(SdfPath const& id)
+        : HdSprim(id) {
+
     }
 
     void Sync(HdSceneDelegate* sceneDelegate,
@@ -25,8 +25,9 @@ public:
 
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
+    void Finalize(HdRenderParam* renderParam) override;
+
 protected:
-    HdRprApiWeakPtr m_rprApiWeakPtr;
     RprApiObjectPtr m_rprLight;
     GfMatrix4f m_transform;
 };

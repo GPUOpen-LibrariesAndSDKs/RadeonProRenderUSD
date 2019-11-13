@@ -1,4 +1,5 @@
 #include "rectLight.h"
+#include "rprApi.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -15,21 +16,16 @@ bool HdRprRectLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath cons
     return isDirty;
 }
 
-RprApiObjectPtr HdRprRectLight::CreateLightMesh() {
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        return nullptr;
-    }
+RprApiObjectPtr HdRprRectLight::CreateLightMesh(HdRprApi* rprApi) {
     return rprApi->CreateRectLightMesh(m_width, m_height);
 }
 
-GfVec3f HdRprRectLight::NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& inColor) {
-    const GfVec4d ox(m_width, 0., 0., 0.);
-    const GfVec4d oy(0., m_height, 0., 0.);
+GfVec3f HdRprRectLight::NormalizeLightColor(const GfMatrix4f& transform, const GfVec3f& inColor) {
+    const GfVec4f ox(m_width, 0., 0., 0.);
+    const GfVec4f oy(0., m_height, 0., 0.);
 
-    const GfVec4d oxTrans = ox * transform;
-    const GfVec4d oyTrans = oy * transform;
+    const GfVec4f oxTrans = ox * transform;
+    const GfVec4f oyTrans = oy * transform;
 
     return static_cast<float>(1. / (oxTrans.GetLength() * oyTrans.GetLength())) * inColor;
 }

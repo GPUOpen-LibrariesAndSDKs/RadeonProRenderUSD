@@ -1,16 +1,17 @@
 #ifndef HDRPR_VOLUME_H
 #define HDRPR_VOLUME_H
 
-#include "rprApi.h"
-
 #include "pxr/imaging/hd/volume.h"
 #include "pxr/base/gf/matrix4f.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class RprApiObject;
+using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
+
 class HdRprVolume : public HdVolume {
 public:
-    HdRprVolume(SdfPath const& id, HdRprApiSharedPtr rprApi);
+    HdRprVolume(SdfPath const& id);
     ~HdRprVolume() override = default;
 
     void Sync(
@@ -19,6 +20,8 @@ public:
         HdDirtyBits* dirtyBits,
         TfToken const& reprName
     ) override;
+
+    void Finalize(HdRenderParam* renderParam) override;
 
 protected:
     HdDirtyBits GetInitialDirtyBitsMask() const override;
@@ -29,7 +32,6 @@ protected:
                    HdDirtyBits* dirtyBits) override;
 
 private:
-    HdRprApiWeakPtr m_rprApiWeakPtr;
     RprApiObjectPtr m_rprHeteroVolume;
     GfMatrix4f m_transform;
 };

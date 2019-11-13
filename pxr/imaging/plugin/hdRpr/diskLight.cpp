@@ -1,4 +1,5 @@
 #include "diskLight.h"
+#include "rprApi.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 
 #include <cmath>
@@ -19,17 +20,11 @@ bool HdRprDiskLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath cons
     return isDirty;
 }
 
-RprApiObjectPtr HdRprDiskLight::CreateLightMesh() {
-    HdRprApiSharedPtr rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        return nullptr;
-    }
-
+RprApiObjectPtr HdRprDiskLight::CreateLightMesh(HdRprApi* rprApi) {
     return rprApi->CreateDiskLightMesh(m_radius);
 }
 
-GfVec3f HdRprDiskLight::NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& inColor) {
+GfVec3f HdRprDiskLight::NormalizeLightColor(const GfMatrix4f& transform, const GfVec3f& inColor) {
     const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * m_radius;
     const double sy = GfVec3d(transform[0][1], transform[1][1], transform[2][1]).GetLength() * m_radius;
 

@@ -1,4 +1,6 @@
 #include "domeLight.h"
+#include "renderParam.h"
+#include "rprApi.h"
 
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/imaging/hd/light.h"
@@ -25,12 +27,8 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
                           HdRenderParam* renderParam,
                           HdDirtyBits* dirtyBits) {
 
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        *dirtyBits = HdLight::Clean;
-        return;
-    }
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     SdfPath const& id = GetId();
     HdDirtyBits bits = *dirtyBits;
@@ -93,6 +91,13 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
 
 HdDirtyBits HdRprDomeLight::GetInitialDirtyBitsMask() const {
     return HdLight::AllDirty;
+}
+
+void HdRprDomeLight::Finalize(HdRenderParam* renderParam) {
+    // Stop render thread to safely release resources
+    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+
+    HdSprim::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

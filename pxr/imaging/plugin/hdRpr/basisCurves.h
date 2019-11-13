@@ -3,17 +3,16 @@
 
 #include "pxr/imaging/hd/basisCurves.h"
 
-#include "rprApi.h"
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprMaterial;
+class RprApiObject;
+using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
 
 class HdRprBasisCurves : public HdBasisCurves {
 
 public:
     HdRprBasisCurves(SdfPath const& id,
-                     HdRprApiSharedPtr rprApi,
                      SdfPath const& instancerId);
 
     ~HdRprBasisCurves() override = default;
@@ -22,6 +21,8 @@ public:
               HdRenderParam* renderParam,
               HdDirtyBits* dirtyBits,
               TfToken const& reprSelector) override;
+
+    void Finalize(HdRenderParam* renderParam) override;
 
 protected:
 
@@ -33,7 +34,6 @@ protected:
                    HdDirtyBits* dirtyBits) override;
 
 private:
-    HdRprApiWeakPtr m_rprApiWeakPtr;
     RprApiObjectPtr m_rprCurve;
     RprApiObjectPtr m_fallbackMaterial;
     HdRprMaterial const* m_cachedMaterial;

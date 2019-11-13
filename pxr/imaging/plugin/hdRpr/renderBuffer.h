@@ -3,15 +3,18 @@
 
 #include "pxr/imaging/hd/renderBuffer.h"
 
-#include "rprApi.h"
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprRenderBuffer final : public HdRenderBuffer {
 public:
-    HdRprRenderBuffer(SdfPath const& id, HdRprApiSharedPtr rprApi);
+    HdRprRenderBuffer(SdfPath const& id);
+    ~HdRprRenderBuffer() override = default;
 
-    virtual HdDirtyBits GetInitialDirtyBitsMask() const override;
+    void Sync(HdSceneDelegate* sceneDelegate,
+              HdRenderParam* renderParam,
+              HdDirtyBits* dirtyBits) override;
+
+    void Finalize(HdRenderParam* renderParam) override;
 
     bool Allocate(GfVec3i const& dimensions,
                   HdFormat format,
@@ -40,11 +43,9 @@ public:
     void SetConverged(bool converged);
 
 protected:
-    virtual void _Deallocate() override;
+    void _Deallocate() override;
 
 private:
-    HdRprApiWeakPtr m_rprApiWeakPrt;
-    TfToken m_aovName;
     uint32_t m_width = 0u;
     uint32_t m_height = 0u;
     HdFormat m_format = HdFormat::HdFormatInvalid;

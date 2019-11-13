@@ -1,14 +1,15 @@
 #include "basisCurves.h"
 #include "materialFactory.h"
 #include "material.h"
+#include "renderParam.h"
+#include "rprApi.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id,
-                                   HdRprApiSharedPtr rprApi,
                                    SdfPath const& instancerId)
     : HdBasisCurves(id, instancerId) {
-    m_rprApiWeakPtr = rprApi;
+
 }
 
 HdDirtyBits HdRprBasisCurves::_PropagateDirtyBits(HdDirtyBits bits) const {
@@ -29,12 +30,8 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                             TfToken const& reprSelector) {
     TF_UNUSED(renderParam);
 
-    auto rprApi = m_rprApiWeakPtr.lock();
-    if (!rprApi) {
-        TF_CODING_ERROR("RprApi is expired");
-        *dirtyBits = HdChangeTracker::Clean;
-        return;
-    }
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     SdfPath const& id = GetId();
 
@@ -124,6 +121,13 @@ HdDirtyBits HdRprBasisCurves::GetInitialDirtyBitsMask() const {
         | HdChangeTracker::DirtyTransform
         | HdChangeTracker::DirtyVisibility
         | HdChangeTracker::DirtyMaterialId;
+}
+
+void HdRprBasisCurves::Finalize(HdRenderParam* renderParam) {
+    // Stop render thread to safely release resources
+    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+
+    HdBasisCurves::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

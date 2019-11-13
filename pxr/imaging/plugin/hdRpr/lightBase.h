@@ -1,19 +1,23 @@
 #ifndef HDRPR_LIGHT_BASE_H
 #define HDRPR_LIGHT_BASE_H
 
+#include "pxr/base/gf/vec3f.h"
+#include "pxr/base/gf/matrix4f.h"
 #include "pxr/imaging/hd/sprim.h"
 #include "pxr/imaging/hd/light.h"
 #include "pxr/usd/sdf/path.h"
 
-#include "rprApi.h"
-
 PXR_NAMESPACE_OPEN_SCOPE
+
+class HdRprApi;
+class RprApiObject;
+using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
 
 class HdRprLightBase : public HdLight {
 public:
-    HdRprLightBase(SdfPath const& id, HdRprApiSharedPtr rprApi)
-        : HdLight(id)
-        , m_rprApiWeakPtr(rprApi) {
+    HdRprLightBase(SdfPath const& id)
+        : HdLight(id) {
+
     }
 
     ~HdRprLightBase() override = default;
@@ -24,26 +28,24 @@ public:
 
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
+    void Finalize(HdRenderParam* renderParam) override;
+
 protected:
     virtual bool SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) = 0;
 
-    virtual RprApiObjectPtr CreateLightMesh() = 0;
+    virtual RprApiObjectPtr CreateLightMesh(HdRprApi* rprApi) = 0;
 
     // Normalize Light Color with surface area
-    virtual GfVec3f NormalizeLightColor(const GfMatrix4d& transform, const GfVec3f& emmisionColor) = 0;
-
-protected:
-    HdRprApiWeakPtr m_rprApiWeakPtr;
+    virtual GfVec3f NormalizeLightColor(const GfMatrix4f& transform, const GfVec3f& emmisionColor) = 0;
 
 private:
     bool IsDirtyMaterial(const GfVec3f& emmisionColor);
-    RprApiObjectPtr CreateLightMaterial(const GfVec3f& illumColor);
 
 private:
     RprApiObjectPtr m_lightMesh;
     RprApiObjectPtr m_lightMaterial;
     GfVec3f m_emmisionColor = GfVec3f(0.0f);
-    GfMatrix4d m_transform;
+    GfMatrix4f m_transform;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -4,6 +4,7 @@
 
 #include "config.h"
 #include "renderPass.h"
+#include "renderParam.h"
 #include "mesh.h"
 #include "instancer.h"
 #include "domeLight.h"
@@ -57,20 +58,23 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
 };
 
 HdRprDelegate::HdRprDelegate() {
-    m_rprApiSharedPtr = std::shared_ptr<HdRprApi>(new HdRprApi);
+    m_rprApi.reset(new HdRprApi);
+    m_renderParam.reset(new HdRprRenderParam(m_rprApi.get(), &m_renderThread));
 
     m_settingDescriptors = HdRprConfig::GetRenderSettingDescriptors();
     _PopulateDefaultSettings(m_settingDescriptors);
-}
 
-HdRprDelegate::~HdRprDelegate() {
-    if (m_rprApiSharedPtr.use_count() > 1) {
-        TF_CODING_ERROR("Leaked rprApi reference");
-    }
+    m_renderThread.SetRenderCallback([this]() {
+        m_rprApi->Render(&m_renderThread);
+    });
+    m_renderThread.SetStopCallback([this]() {
+        m_rprApi->AbortRender();
+    });
+    m_renderThread.StartThread();
 }
 
 HdRenderParam* HdRprDelegate::GetRenderParam() const {
-    return nullptr;
+    return m_renderParam.get();
 }
 
 void HdRprDelegate::CommitResources(HdChangeTracker* tracker) {
@@ -101,7 +105,7 @@ HdResourceRegistrySharedPtr HdRprDelegate::GetResourceRegistry() const {
 
 HdRenderPassSharedPtr HdRprDelegate::CreateRenderPass(HdRenderIndex* index,
                                                       HdRprimCollection const& collection) {
-    return HdRenderPassSharedPtr(new HdRprRenderPass(index, collection, m_rprApiSharedPtr));
+    return HdRenderPassSharedPtr(new HdRprRenderPass(index, collection, m_renderParam.get()));
 }
 
 HdInstancer* HdRprDelegate::CreateInstancer(HdSceneDelegate* delegate,
@@ -118,13 +122,13 @@ HdRprim* HdRprDelegate::CreateRprim(TfToken const& typeId,
                                     SdfPath const& rprimId,
                                     SdfPath const& instancerId) {
     if (typeId == HdPrimTypeTokens->mesh) {
-        return new HdRprMesh(rprimId, m_rprApiSharedPtr, instancerId);
+        return new HdRprMesh(rprimId, instancerId);
     } else if (typeId == HdPrimTypeTokens->basisCurves) {
-        return new HdRprBasisCurves(rprimId, m_rprApiSharedPtr, instancerId);
+        return new HdRprBasisCurves(rprimId, instancerId);
     }
 #ifdef USE_VOLUME
     else if (typeId == HdPrimTypeTokens->volume) {
-        return new HdRprVolume(rprimId, m_rprApiSharedPtr);
+        return new HdRprVolume(rprimId);
     }
 #endif
 
@@ -141,19 +145,19 @@ HdSprim* HdRprDelegate::CreateSprim(TfToken const& typeId,
     if (typeId == HdPrimTypeTokens->camera) {
         return new HdCamera(sprimId);
     } else if (typeId == HdPrimTypeTokens->domeLight) {
-        return new HdRprDomeLight(sprimId, m_rprApiSharedPtr);
+        return new HdRprDomeLight(sprimId);
     } else if (typeId == HdPrimTypeTokens->rectLight) {
-        return new HdRprRectLight(sprimId, m_rprApiSharedPtr);
+        return new HdRprRectLight(sprimId);
     } else if (typeId == HdPrimTypeTokens->sphereLight) {
-        return new HdRprSphereLight(sprimId, m_rprApiSharedPtr);
+        return new HdRprSphereLight(sprimId);
     } else if (typeId == HdPrimTypeTokens->cylinderLight) {
-        return new HdRprCylinderLight(sprimId, m_rprApiSharedPtr);
+        return new HdRprCylinderLight(sprimId);
     } else if (typeId == HdPrimTypeTokens->distantLight) {
-        return new HdRprDistantLight(sprimId, m_rprApiSharedPtr);
+        return new HdRprDistantLight(sprimId);
     } else if (typeId == HdPrimTypeTokens->diskLight) {
-        return new HdRprDiskLight(sprimId, m_rprApiSharedPtr);
+        return new HdRprDiskLight(sprimId);
     } else if (typeId == HdPrimTypeTokens->material) {
-        return new HdRprMaterial(sprimId, m_rprApiSharedPtr);
+        return new HdRprMaterial(sprimId);
     }
 
     TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
@@ -166,19 +170,19 @@ HdSprim* HdRprDelegate::CreateFallbackSprim(TfToken const& typeId) {
     if (typeId == HdPrimTypeTokens->camera) {
         return new HdCamera(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->domeLight) {
-        return new HdRprDomeLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+        return new HdRprDomeLight(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->rectLight) {
-        return new HdRprRectLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+        return new HdRprRectLight(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->sphereLight) {
-        return new HdRprSphereLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+        return new HdRprSphereLight(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->cylinderLight) {
-        return new HdRprCylinderLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+        return new HdRprCylinderLight(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->diskLight) {
-        return new HdRprDiskLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+        return new HdRprDiskLight(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->distantLight) {
-        return new HdRprDistantLight(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+        return new HdRprDistantLight(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->material) {
-        return new HdRprMaterial(SdfPath::EmptyPath(), m_rprApiSharedPtr);
+        return new HdRprMaterial(SdfPath::EmptyPath());
     }
 
     TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
@@ -192,11 +196,11 @@ void HdRprDelegate::DestroySprim(HdSprim* sPrim) {
 HdBprim* HdRprDelegate::CreateBprim(TfToken const& typeId,
                                     SdfPath const& bprimId) {
     if (typeId == HdPrimTypeTokens->renderBuffer) {
-        return new HdRprRenderBuffer(bprimId, m_rprApiSharedPtr);
+        return new HdRprRenderBuffer(bprimId);
     }
 #ifdef USE_VOLUME
     else if (typeId == _tokens->openvdbAsset) {
-        return new HdRprField(bprimId, m_rprApiSharedPtr);
+        return new HdRprField(bprimId);
     }
 #endif
 
@@ -248,20 +252,32 @@ HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const
 
 VtDictionary HdRprDelegate::GetRenderStats() const {
     VtDictionary stats;
-    int numCompletedSamples = m_rprApiSharedPtr->GetNumCompletedSamples();
+    int numCompletedSamples = m_rprApi->GetNumCompletedSamples();
     stats[HdPerfTokens->numCompletedSamples.GetString()] = numCompletedSamples;
 
     double percentDone = double(numCompletedSamples) / HdRprConfig::GetInstance().GetMaxSamples();
-    int numActivePixels = m_rprApiSharedPtr->GetNumActivePixels();
+    int numActivePixels = m_rprApi->GetNumActivePixels();
     if (numActivePixels != -1) {
-        int width, height;
-        if (m_rprApiSharedPtr->GetAovInfo(m_rprApiSharedPtr->GetActiveAov(), &width, &height, nullptr)) {
-            int numPixels = width * height;
-            percentDone = std::max(percentDone, double(numPixels - numActivePixels) / numPixels);
-        }
+        auto size = m_rprApi->GetViewportSize();
+        int numPixels = size[0] * size[1];
+        percentDone = std::max(percentDone, double(numPixels - numActivePixels) / numPixels);
     }
     stats[_tokens->percentDone.GetString()] = 100.0 * percentDone;
     return stats;
+}
+
+bool HdRprDelegate::IsPauseSupported() const {
+    return true;
+}
+
+bool HdRprDelegate::Pause() {
+    m_renderThread.PauseRender();
+    return true;
+}
+
+bool HdRprDelegate::Resume() {
+    m_renderThread.ResumeRender();
+    return true;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
