@@ -1348,9 +1348,10 @@ public:
     }
 
     void AbortRender() {
-        if (m_rprContext && m_rendering) {
+        // XXX: disable until FIR-1588 resolved
+        /*if (m_rprContext && m_rendering) {
             RPR_ERROR_CHECK(rprContextAbortRender(m_rprContext->GetHandle()), "Failed to abort render");
-        }
+        }*/
     }
 
     int GetNumCompletedSamples() const {
