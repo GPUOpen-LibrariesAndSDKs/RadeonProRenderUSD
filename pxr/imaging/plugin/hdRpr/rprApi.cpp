@@ -259,10 +259,17 @@ public:
         }
     }
 
-    void SetCurveMaterial(rpr_shape curve, const RprApiMaterial* material) {
+    void SetCurveMaterial(rpr_curve curve, const RprApiMaterial* material) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
         m_rprMaterialFactory->AttachMaterialToCurve(curve, material);
         m_dirtyFlags |= ChangeTracker::DirtyScene;
+    }
+
+    void SetCurveTransform(rpr_curve curve, GfMatrix4f const& transform) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        if (!RPR_ERROR_CHECK(rprCurveSetTransform(curve, false, transform.GetArray()), "Fail set curve transformation")) {
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
     }
 
 #if 0
@@ -1917,6 +1924,10 @@ void HdRprApi::SetMeshVisibility(RprApiObject* mesh, bool isVisible) {
 void HdRprApi::SetCurveMaterial(RprApiObject* curve, RprApiObject const* material) {
     auto materialHandle = material ? static_cast<RprApiMaterial*>(material->GetHandle()) : nullptr;
     m_impl->SetCurveMaterial(curve->GetHandle(), materialHandle);
+}
+
+void HdRprApi::SetCurveTransform(RprApiObject* curve, GfMatrix4f const& transform) {
+    m_impl->SetCurveTransform(curve->GetHandle(), transform);
 }
 
 void HdRprApi::SetCurveVisibility(RprApiObject* curve, bool isVisible) {
