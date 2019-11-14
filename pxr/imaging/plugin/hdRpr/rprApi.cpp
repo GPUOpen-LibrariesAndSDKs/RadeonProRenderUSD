@@ -4,6 +4,7 @@
 #include "rprcpp/rprImage.h"
 #include "rifcpp/rifFilter.h"
 #include "rifcpp/rifImage.h"
+#include "rifcpp/rifError.h"
 
 #include "config.h"
 #include "imageCache.h"
@@ -18,6 +19,7 @@
 #include "pxr/base/arch/fileSystem.h"
 #include "pxr/base/plug/plugin.h"
 #include "pxr/base/plug/thisPlugin.h"
+#include "pxr/imaging/glf/uvTextureData.h"
 
 #include <RadeonProRender.h>
 #include <RadeonProRender_Baikal.h>
@@ -75,7 +77,22 @@ static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
 
 class HdRprApiImpl {
 public:
-    HdRprApiImpl() {
+    HdRprApiImpl(HdRenderDelegate* delegate)
+        : m_delegate(delegate) {
+        // Postpone initialization as further as possible to allow Hydra user to set custom render settings before creating a context
+        //InitIfNeeded();
+    }
+
+    void InitIfNeeded() {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        if (m_state != kStateUninitialized) {
+            return;
+        }
+        m_state = kStateRender;
+
+        HdRprConfig::GetInstance().Sync(m_delegate);
+
         InitRpr();
         InitRif();
         InitMaterialSystem();
@@ -1009,9 +1026,11 @@ public:
         m_imageCache->GarbageCollectIfNeeded();
 
         auto& preferences = HdRprConfig::GetInstance();
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-            if (preferences.IsDirty(HdRprConfig::DirtyHybridQuality)) {
-                rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, int(preferences.GetHybridQuality()));
+        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID &&
+            preferences.IsDirty(HdRprConfig::DirtyRenderQuality)) {
+            auto quality = preferences.GetRenderQuality();
+            if (quality >= kRenderQualityLow && quality <= kRenderQualityHigh) {
+                rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, quality);
             }
         }
 
@@ -1048,7 +1067,7 @@ public:
                     auto& worldCoordinateAovFb = m_aovFrameBuffers[HdRprAovTokens->worldCoordinate];
 
                     auto inputRprFrameBuffer = (worldCoordinateAovFb.resolved ? worldCoordinateAovFb.resolved : worldCoordinateAovFb.aov).get();
-                    ndcDepthFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
+                    ndcDepthFilter->SetInput(rif::Color, inputRprFrameBuffer);
 
                     auto fbDesc = worldCoordinateAovFb.aov->GetDesc();
                     ndcDepthFilter->SetOutput(GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, aovFrameBuffer.format));
@@ -1063,7 +1082,7 @@ public:
                     auto remapFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, m_rifContext.get());
 
                     auto inputRprFrameBuffer = (aovFrameBuffer.resolved ? aovFrameBuffer.resolved : aovFrameBuffer.aov).get();
-                    remapFilter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
+                    remapFilter->SetInput(rif::Color, inputRprFrameBuffer);
 
                     auto fbDesc = aovFrameBuffer.aov->GetDesc();
                     remapFilter->SetOutput(GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, aovFrameBuffer.format));
@@ -1081,7 +1100,7 @@ public:
                     rif_image_desc imageDesc = GetRifImageDesc(fbDesc.fb_width, fbDesc.fb_height, aovFrameBuffer.format);
                     if (inputRprFrameBuffer && imageDesc.type != 0 && imageDesc.num_components != 0) {
                         auto converter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), fbDesc.fb_width, fbDesc.fb_height);
-                        converter->SetInput(rif::Color, inputRprFrameBuffer, 1.0f);
+                        converter->SetInput(rif::Color, inputRprFrameBuffer);
                         converter->SetOutput(imageDesc);
 
                         aovFrameBuffer.postprocessFilter = std::move(converter);
@@ -1169,6 +1188,28 @@ public:
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyDevice) ||
+            preferences.IsDirty(HdRprConfig::DirtyRenderQuality)) {
+            bool restartRequired = false;
+            if (preferences.IsDirty(HdRprConfig::DirtyDevice)) {
+                if (int(m_rprContext->GetActiveRenderDeviceType()) != preferences.GetRenderDevice()) {
+                    restartRequired = true;
+                }
+            }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality)) {
+                auto quality = preferences.GetRenderQuality();
+
+                auto activePlugin = m_rprContext->GetActivePluginType();
+                if ((activePlugin == rpr::PluginType::TAHOE && quality < kRenderQualityFull) ||
+                    (activePlugin == rpr::PluginType::HYBRID && quality == kRenderQualityFull)) {
+                    restartRequired = true;
+                }
+            }
+
+            m_state = restartRequired ? kStateRestartRequired : kStateRender;
+        }
     }
 
     void UpdateCamera() {
@@ -1248,10 +1289,10 @@ public:
                 EnableAov(HdRprAovTokens->linearDepth, fbDesc.fb_width, fbDesc.fb_height);
                 EnableAov(HdRprAovTokens->normal, fbDesc.fb_width, fbDesc.fb_height);
 
-                m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get(), 1.0f);
-                m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
-                m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
-                m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get());
+                m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get());
+                m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get());
+                m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get());
                 break;
             }
             case rif::FilterType::EawDenoise:
@@ -1262,12 +1303,12 @@ public:
                 EnableAov(HdRprAovTokens->primId, fbDesc.fb_width, fbDesc.fb_height);
                 EnableAov(HdRprAovTokens->worldCoordinate, fbDesc.fb_width, fbDesc.fb_height);
 
-                m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get(), 1.0f);
-                m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get(), 1.0f);
-                m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get(), 1.0f);
-                m_denoiseFilterPtr->SetInput(rif::ObjectId, m_aovFrameBuffers[HdRprAovTokens->primId].resolved.get(), 1.0f);
-                m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get(), 1.0f);
-                m_denoiseFilterPtr->SetInput(rif::WorldCoordinate, m_aovFrameBuffers[HdRprAovTokens->worldCoordinate].resolved.get(), 1.0f);
+                m_denoiseFilterPtr->SetInput(rif::Color, colorAovFb.resolved.get());
+                m_denoiseFilterPtr->SetInput(rif::Normal, m_aovFrameBuffers[HdRprAovTokens->normal].resolved.get());
+                m_denoiseFilterPtr->SetInput(rif::Depth, m_aovFrameBuffers[HdRprAovTokens->linearDepth].resolved.get());
+                m_denoiseFilterPtr->SetInput(rif::ObjectId, m_aovFrameBuffers[HdRprAovTokens->primId].resolved.get());
+                m_denoiseFilterPtr->SetInput(rif::Albedo, m_aovFrameBuffers[HdRprAovTokens->albedo].resolved.get());
+                m_denoiseFilterPtr->SetInput(rif::WorldCoordinate, m_aovFrameBuffers[HdRprAovTokens->worldCoordinate].resolved.get());
                 break;
             }
             default:
@@ -1298,45 +1339,52 @@ public:
             }
         }
 
-        m_iter = 0;
-        m_activePixels = -1;
+        if (m_state == kStateRender) {
+            m_iter = 0;
+            m_activePixels = -1;
 
-        bool stopRequested = false;
-        while (!IsConverged() || stopRequested) {
-            renderThread->WaitUntilPaused();
-            stopRequested = renderThread->IsStopRequested();
-            if (stopRequested) {
-                break;
-            }
-
-            m_rendering.store(true);
-            auto status = rprContextRender(m_rprContext->GetHandle());
-            m_rendering.store(false);
-
-            if (status == RPR_ERROR_ABORTED ||
-                RPR_ERROR_CHECK(status, "Fail contex render framebuffer")) {
-                stopRequested = true;
-                break;
-            }
-
-            m_iter++;
-            if (m_varianceThreshold > 0.0f) {
-                if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
-                    m_activePixels = -1;
+            bool stopRequested = false;
+            while (!IsConverged() || stopRequested) {
+                renderThread->WaitUntilPaused();
+                stopRequested = renderThread->IsStopRequested();
+                if (stopRequested) {
+                    break;
                 }
+
+                m_rendering.store(true);
+                auto status = rprContextRender(m_rprContext->GetHandle());
+                m_rendering.store(false);
+
+                if (status == RPR_ERROR_ABORTED ||
+                    RPR_ERROR_CHECK(status, "Fail contex render framebuffer")) {
+                    stopRequested = true;
+                    break;
+                }
+
+                m_iter++;
+                if (m_varianceThreshold > 0.0f) {
+                    if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
+                        m_activePixels = -1;
+                    }
+                }
+
+                if (!IsConverged()) {
+                    // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
+                    // We do not resolve framebuffers in case user requested render stop
+                    ResolveFramebuffers(outputRenderBuffers);
+                }
+
+                stopRequested = renderThread->IsStopRequested();
             }
 
-            if (!IsConverged()) {
-                // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
-                // We do not resolve framebuffers in case user requested render stop
+            if (!stopRequested) {
                 ResolveFramebuffers(outputRenderBuffers);
             }
-
-            stopRequested = renderThread->IsStopRequested();
-        }
-
-        if (!stopRequested) {
-            ResolveFramebuffers(outputRenderBuffers);
+        } else if (m_state == kStateRestartRequired) {
+            PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
+            auto imagesPath = PlugFindPluginResource(plugin, "images", false);
+            auto path = imagesPath + "/restartRequired.png";
+            RenderImage(path);
         }
 
         for (auto& aovBinding : m_aovBindings) {
@@ -1398,8 +1446,9 @@ public:
 
 private:
     void InitRpr() {
-        auto plugin = HdRprConfig::GetInstance().GetPlugin();
-        auto renderDevice = HdRprConfig::GetInstance().GetRenderDevice();
+        auto quality = HdRprConfig::GetInstance().GetRenderQuality();
+        auto plugin = quality == kRenderQualityFull ? rpr::PluginType::TAHOE : rpr::PluginType::HYBRID;
+        auto renderDevice = static_cast<rpr::RenderDeviceType>(HdRprConfig::GetInstance().GetRenderDevice());
         auto cachePath = HdRprApi::GetCachePath();
         m_rprContext = rpr::Context::Create(plugin, renderDevice, false, cachePath.c_str());
         if (!m_rprContext) {
@@ -1408,7 +1457,7 @@ private:
 
         RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_Y_FLIP, 0), "Fail to set context YFLIP parameter");
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, int(HdRprConfig::GetInstance().GetHybridQuality())), "Fail to set context hybrid render quality");
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, quality), "Fail to set context hybrid render quality");
         }
 
         UpdateSettings(true);
@@ -1717,7 +1766,84 @@ private:
         return false;
     }
 
+    void RenderImage(std::string const& path) {
+        auto colorAovBinding = std::find_if(m_aovBindings.begin(), m_aovBindings.end(), [](HdRenderPassAovBinding const& binding) {
+            return binding.aovName == HdRprAovTokens->color;
+        });
+        if (colorAovBinding == m_aovBindings.end() ||
+            !colorAovBinding->renderBuffer) {
+            return;
+        }
+
+        auto textureData = GlfUVTextureData::New(path, INT_MAX, 0, 0, 0, 0);
+        if (textureData && textureData->Read(0, false)) {
+            rif_image_desc imageDesc = {};
+            imageDesc.image_width = textureData->ResizedWidth();
+            imageDesc.image_height = textureData->ResizedHeight();
+            imageDesc.image_depth = 1;
+
+            int bytesPerChannel;
+            if (textureData->GLType() == GL_UNSIGNED_BYTE) {
+                imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
+                bytesPerChannel = 1;
+            } else if (textureData->GLType() == GL_HALF_FLOAT) {
+                imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
+                bytesPerChannel = 2;
+            } else if (textureData->GLType() == GL_FLOAT) {
+                imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
+                bytesPerChannel = 4;
+            } else {
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureData->GLType());
+                return;
+            }
+
+            if (textureData->GLFormat() == GL_RGBA) {
+                imageDesc.num_components = 4;
+            } else if (textureData->GLFormat() == GL_RGB) {
+                imageDesc.num_components = 3;
+            } else if (textureData->GLFormat() == GL_RED) {
+                imageDesc.num_components = 1;
+            } else {
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), textureData->GLFormat());
+                return;
+            }
+
+            imageDesc.image_row_pitch = bytesPerChannel * imageDesc.num_components * imageDesc.image_width;
+            imageDesc.image_slice_pitch = imageDesc.image_row_pitch * imageDesc.image_height;
+
+            auto rifImage = m_rifContext->CreateImage(imageDesc);
+
+            void* mappedData;
+            if (RIF_ERROR_CHECK(rifImageMap(rifImage->GetHandle(), RIF_IMAGE_MAP_WRITE, &mappedData), "Failed to map rif image") || !mappedData) {
+                return;
+            }
+            std::memcpy(mappedData, textureData->GetRawBuffer(), imageDesc.image_slice_pitch);
+            RIF_ERROR_CHECK(rifImageUnmap(rifImage->GetHandle(), mappedData), "Failed to unmap rif image");
+
+            auto colorRb = colorAovBinding->renderBuffer;
+
+            auto blitFilter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), colorRb->GetWidth(), colorRb->GetHeight());
+            blitFilter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_BICUBIC);
+            blitFilter->SetInput(rif::Color, rifImage->GetHandle());
+            blitFilter->SetOutput(GetRifImageDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorRb->GetFormat()));
+            blitFilter->Update();
+
+            m_rifContext->ExecuteCommandQueue();
+
+            if (RIF_ERROR_CHECK(rifImageMap(blitFilter->GetOutput(), RIF_IMAGE_MAP_READ, &mappedData), "Failed to map rif image") || !mappedData) {
+                return;
+            }
+            size_t size = HdDataSizeOfFormat(colorRb->GetFormat()) * colorRb->GetWidth() * colorRb->GetHeight();
+            std::memcpy(colorRb->Map(), mappedData, size);
+            colorRb->Unmap();
+        } else {
+            TF_RUNTIME_ERROR("Failed to load \"%s\" image", path.c_str());
+            return;
+        }
+    }
+
 private:
+    HdRenderDelegate* m_delegate;
 
     enum ChangeTracker : uint32_t {
         Clean = 0,
@@ -1762,6 +1888,13 @@ private:
     float m_varianceThreshold = 0.0f;
 
     std::atomic<bool> m_rendering = false;
+
+    enum State {
+        kStateUninitialized,
+        kStateRender,
+        kStateRestartRequired
+    };
+    State m_state = kStateUninitialized;
 };
 
 std::unique_ptr<RprApiObject> RprApiObject::Wrap(void* handle) {
@@ -1821,7 +1954,7 @@ void* RprApiObject::GetHandle() const {
     return m_handle;
 }
 
-HdRprApi::HdRprApi() : m_impl(new HdRprApiImpl) {
+HdRprApi::HdRprApi(HdRenderDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
 
 }
 
@@ -1830,38 +1963,47 @@ HdRprApi::~HdRprApi() {
 }
 
 RprApiObjectPtr HdRprApi::CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf, polygonWinding);
 }
 
 RprApiObjectPtr HdRprApi::CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, float width) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateCurve(points, indexes, width);
 }
 
 RprApiObjectPtr HdRprApi::CreateMeshInstance(RprApiObject* prototypeMesh) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateMeshInstance(prototypeMesh->GetHandle());
 }
 
 RprApiObjectPtr HdRprApi::CreateEnvironmentLight(GfVec3f color, float intensity) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateEnvironmentLight(color, intensity);
 }
 
 RprApiObjectPtr HdRprApi::CreateEnvironmentLight(const std::string& prthTotexture, float intensity) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateEnvironmentLight(prthTotexture, intensity);
 }
 
 RprApiObjectPtr HdRprApi::CreateRectLightMesh(float width, float height) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateRectLightMesh(width, height);
 }
 
 RprApiObjectPtr HdRprApi::CreateSphereLightMesh(float radius) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateSphereLightMesh(radius);
 }
 
 RprApiObjectPtr HdRprApi::CreateCylinderLightMesh(float radius, float length) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateCylinderLightMesh(radius, length);
 }
 
 RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float radius) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateDiskLightMesh(radius);
 }
 
@@ -1870,6 +2012,7 @@ void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4f const& transfor
 }
 
 RprApiObjectPtr HdRprApi::CreateDirectionalLight() {
+    m_impl->InitIfNeeded();
     return m_impl->CreateDirectionalLight();
 }
 
@@ -1882,6 +2025,7 @@ RprApiObjectPtr HdRprApi::CreateVolume(
     const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
     const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
     const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateVolume(
         densityGridOnIndices, densityGridOnValueIndices, densityGridValues,
         colorGridOnIndices, colorGridOnValueIndices, colorGridValues,
@@ -1890,6 +2034,7 @@ RprApiObjectPtr HdRprApi::CreateVolume(
 }
 
 RprApiObjectPtr HdRprApi::CreateMaterial(MaterialAdapter& materialAdapter) {
+    m_impl->InitIfNeeded();
     return m_impl->CreateMaterial(materialAdapter);
 }
 
@@ -1957,6 +2102,7 @@ void HdRprApi::SetViewportSize(GfVec2i const& size) {
 }
 
 void HdRprApi::SetAovBindings(HdRenderPassAovBindingVector const& aovBindings) {
+    m_impl->InitIfNeeded();
     m_impl->SetAovBindings(aovBindings);
 }
 

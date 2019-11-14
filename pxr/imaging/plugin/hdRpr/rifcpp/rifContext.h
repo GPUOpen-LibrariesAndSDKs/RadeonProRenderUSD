@@ -5,6 +5,7 @@
 
 #include <RadeonProRender.h>
 #include <string>
+#include <memory>
 
 PXR_NAMESPACE_OPEN_SCOPE
 

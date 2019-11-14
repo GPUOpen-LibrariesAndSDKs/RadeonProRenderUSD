@@ -45,6 +45,8 @@ set(USD_LIBRARIES
     usdUtils
     pxOsd)
 
+set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
+
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     set(USD_LIB_PREFIX pxr_)
     if(WIN32)
@@ -59,10 +61,13 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
     list(APPEND OptLibs Houdini)
     add_definitions(-DENABLE_RAT)
+    set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Houdini.png${_sep}images/restartRequired.png)
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     if(${USD_LIBRARY_MONOLITHIC})
         set(USD_LIBRARIES usd_ms)
     endif()
+    add_definitions(-DENABLE_PREFERENCES_FILE)
+    set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Usdview.png${_sep}images/restartRequired.png)
 endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
 set(GENERATED_FILES
@@ -76,7 +81,6 @@ add_custom_command(
     OUTPUT ${GENERATED_FILES}
     COMMENT "Generating RenderSetting files")
 
-set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
 file(GLOB_RECURSE RIF_MODEL_FILES "${RIF_MODELS_DIR}/*")
 foreach(file ${RIF_MODEL_FILES})
     file(RELATIVE_PATH rel_file ${RIF_MODELS_DIR} ${file})
@@ -142,6 +146,7 @@ pxr_plugin(hdRpr
 
     RESOURCE_FILES
         plugInfo.json
+        ${RESTART_REQUIRED_RESOURCE_FILE}
         ${RIF_MODEL_RESOURCE_FILES}
 
     CPPFILES

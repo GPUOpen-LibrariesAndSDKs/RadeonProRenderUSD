@@ -9,8 +9,15 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 namespace rif {
 
+class Context;
+
 class Object {
 public:
+    Object(void* objectHandle)
+        : m_rifObjectHandle(objectHandle) {
+
+    }
+
     Object() = default;
     Object(Object const&) = delete;
     Object& operator=(Object const&) = delete;

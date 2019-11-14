@@ -58,7 +58,7 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
 };
 
 HdRprDelegate::HdRprDelegate() {
-    m_rprApi.reset(new HdRprApi);
+    m_rprApi.reset(new HdRprApi(this));
     m_renderParam.reset(new HdRprRenderParam(m_rprApi.get(), &m_renderThread));
 
     m_settingDescriptors = HdRprConfig::GetRenderSettingDescriptors();
@@ -283,26 +283,9 @@ bool HdRprDelegate::Resume() {
 PXR_NAMESPACE_CLOSE_SCOPE
 
 void SetHdRprRenderDevice(int renderDevice) {
-    using namespace PXR_INTERNAL_NS;
-
-    if (renderDevice == 0) {
-        HdRprConfig::GetInstance().SetRenderDevice(rpr::RenderDeviceType::CPU);
-    } else if (renderDevice == 1) {
-        HdRprConfig::GetInstance().SetRenderDevice(rpr::RenderDeviceType::GPU);
-    } else {
-        TF_WARN("Invalid parameter: renderDevice = %d", renderDevice);
-    }
+    PXR_INTERNAL_NS::HdRprConfig::GetInstance().SetRenderDevice(renderDevice);
 }
 
 void SetHdRprRenderQuality(int quality) {
-    using namespace PXR_INTERNAL_NS;
-
-    if (quality >= 0 && quality <= 2) {
-        HdRprConfig::GetInstance().SetPlugin(rpr::PluginType::HYBRID);
-        HdRprConfig::GetInstance().SetHybridQuality(static_cast<HdRprHybridQuality>(quality));
-    } else if (quality == 3) {
-        HdRprConfig::GetInstance().SetPlugin(rpr::PluginType::TAHOE);
-    } else {
-        TF_WARN("Invalid parameter: quality = %d", quality);
-    }
+    PXR_INTERNAL_NS::HdRprConfig::GetInstance().SetRenderQuality(quality);
 }

@@ -131,7 +131,40 @@ render_setting_categories = [
                 'maxValue': 50
             }
         ]
-    }
+    },
+    {
+        'name': 'RenderQuality',
+        'settings': [
+            {
+                'name': 'renderQuality',
+                'ui_name': 'Render Quality',
+                'help': 'Render restart might be required',
+                'defaultValue': 3,
+                'values': [
+                    "Low",
+                    "Medium",
+                    "High",
+                    "Full"
+                ]
+            }
+        ]
+    },
+    {
+        'name': 'Device',
+        'settings': [
+            {
+                'name': 'renderDevice',
+                'ui_name': 'Render Device',
+                'help': 'Restart required.',
+                'defaultValue': 1,
+                'values': [
+                    "CPU",
+                    "GPU",
+                    # "CPU+GPU"
+                ]
+            }
+        ]
+    },
 ]
 
 def camel_case_capitalize(w):
@@ -151,33 +184,14 @@ def generate_files(install_path):
 PXR_NAMESPACE_OPEN_SCOPE
 
 {rs_tokens_declaration}
-
-#define HDRPR_RENDER_QUALITY_TOKENS \\
-    (low)                           \\
-    (medium)                        \\
-    (high)                          \\
-    (full)
-
-TF_DECLARE_PUBLIC_TOKENS(HdRprRenderQualityTokens, HDRPR_RENDER_QUALITY_TOKENS);
-
-enum class HdRprHybridQuality {{
-    NONE = -1,
-    LOW = 0,
-    MEDIUM,
-    HIGH,
-    FIRST = LOW,
-    LAST = HIGH
-}};
+{rs_mapped_values_enum}
 
 class HdRprConfig {{
 public:
     enum ChangeTracker {{
         Clean = 0,
         DirtyAll = ~0u,
-        DirtyRenderDevice = 1 << 0,
-        DirtyPlugin = 1 << 1,
-        DirtyHybridQuality = 1 << 2,
-        DirtyInteractiveMode = 1 << 3,
+        DirtyInteractiveMode = 1 << 0,
 {rs_category_dirty_flags}
     }};
 
@@ -185,15 +199,6 @@ public:
     static HdRprConfig& GetInstance();
 
     void Sync(HdRenderDelegate* renderDelegate);
-
-    void SetRenderDevice(rpr::RenderDeviceType renderDevice);
-    rpr::RenderDeviceType GetRenderDevice() const;
-
-    void SetHybridQuality(HdRprHybridQuality quality);
-    HdRprHybridQuality GetHybridQuality() const;
-
-    void SetPlugin(rpr::PluginType plugin);
-    rpr::PluginType GetPlugin();
 
     void SetInteractiveMode(bool enable);
     bool GetInteractiveMode() const;
@@ -207,9 +212,6 @@ private:
     HdRprConfig() = default;
 
     struct PrefData {{
-        rpr::RenderDeviceType renderDevice;
-        rpr::PluginType plugin;
-        HdRprHybridQuality hybridQuality;
         bool enableInteractive;
 
 {rs_variables_declaration}
@@ -245,7 +247,6 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PUBLIC_TOKENS(HdRprRenderQualityTokens, HDRPR_RENDER_QUALITY_TOKENS);
 TF_DEFINE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     ((houdiniInteractive, "houdini:interactive"))
@@ -290,48 +291,6 @@ void HdRprConfig::Sync(HdRenderDelegate* renderDelegate) {{
     }}
 }}
 
-
-void HdRprConfig::SetRenderDevice(rpr::RenderDeviceType renderDevice) {{
-    if (m_prefData.renderDevice != renderDevice) {{
-        m_prefData.renderDevice = renderDevice;
-        m_prefData.Save();
-        m_dirtyFlags |= DirtyRenderDevice;
-    }}
-}}
-
-rpr::RenderDeviceType HdRprConfig::GetRenderDevice() const {{
-    return m_prefData.renderDevice;
-}}
-
-void HdRprConfig::SetHybridQuality(HdRprHybridQuality quality) {{
-    if (m_prefData.hybridQuality != quality) {{
-        m_prefData.hybridQuality = quality;
-        m_prefData.Save();
-        m_dirtyFlags |= DirtyHybridQuality;
-    }}
-}}
-
-HdRprHybridQuality HdRprConfig::GetHybridQuality() const {{
-    if (m_prefData.hybridQuality == HdRprHybridQuality::MEDIUM) {{
-        // temporarily disable until issues on hybrid side is not solved
-        //   otherwise driver crashes guaranteed
-        return HdRprHybridQuality::HIGH;
-    }}
-    return m_prefData.hybridQuality;
-}}
-
-void HdRprConfig::SetPlugin(rpr::PluginType plugin) {{
-    if (m_prefData.plugin != plugin) {{
-        m_prefData.plugin = plugin;
-        m_prefData.Save();
-        m_dirtyFlags |= DirtyPlugin;
-    }}
-}}
-
-rpr::PluginType HdRprConfig::GetPlugin() {{
-    return m_prefData.plugin;
-}}
-
 void HdRprConfig::SetInteractiveMode(bool enable) {{
     if (m_prefData.enableInteractive != enable) {{
         m_prefData.enableInteractive = enable;
@@ -359,6 +318,7 @@ void HdRprConfig::ResetDirty() {{
 }}
 
 bool HdRprConfig::PrefData::Load() {{
+#ifdef ENABLE_PREFERENCES_FILE
     std::string appDataDir = HdRprApi::GetAppDataPath();
     std::string rprPreferencePath = (appDataDir.empty()) ? k_rprPreferenceFilename : (appDataDir + ARCH_PATH_SEP) + k_rprPreferenceFilename;
 
@@ -369,11 +329,13 @@ bool HdRprConfig::PrefData::Load() {{
         fclose(f);
         return IsValid();
     }}
+#endif // ENABLE_PREFERENCES_FILE
 
     return false;
 }}
 
 void HdRprConfig::PrefData::Save() {{
+#ifdef ENABLE_PREFERENCES_FILE
     std::string appDataDir = HdRprApi::GetAppDataPath();
     std::string rprPreferencePath = (appDataDir.empty()) ? k_rprPreferenceFilename : (appDataDir + ARCH_PATH_SEP) + k_rprPreferenceFilename;
 
@@ -383,6 +345,7 @@ void HdRprConfig::PrefData::Save() {{
         }}
         fclose(f);
     }}
+#endif // ENABLE_PREFERENCES_FILE
 }}
 
 HdRprConfig::PrefData::PrefData() {{
@@ -396,17 +359,13 @@ HdRprConfig::PrefData::~PrefData() {{
 }}
 
 void HdRprConfig::PrefData::SetDefault() {{
-    renderDevice = rpr::RenderDeviceType::GPU;
-    plugin = rpr::PluginType::TAHOE;
-    hybridQuality = HdRprHybridQuality::HIGH;
     enableInteractive = false;
 
 {rs_set_default_values}
 }}
 
 bool HdRprConfig::PrefData::IsValid() {{
-    return renderDevice >= rpr::RenderDeviceType::FIRST && renderDevice <= rpr::RenderDeviceType::LAST &&
-           plugin >= rpr::PluginType::FIRST && plugin <= rpr::PluginType::LAST
+    return true
 {rs_validate_values};
 }}
 
@@ -429,12 +388,13 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
 ''').strip()
 
-    dirty_flags_offset = 4
+    dirty_flags_offset = 1
 
     rs_tokens_declaration = '#define HDRPR_RENDER_SETTINGS_TOKENS \\\n'
     rs_category_dirty_flags = ''
     rs_get_set_method_declarations = ''
     rs_variables_declaration = ''
+    rs_mapped_values_enum = ''
     rs_range_definitions = ''
     rs_list_initialization = ''
     rs_sync = ''
@@ -452,32 +412,44 @@ PXR_NAMESPACE_CLOSE_SCOPE
             name = setting['name']
             rs_tokens_declaration += '    ({}) \\\n'.format(name)
 
-            default_value = setting['defaultValue']
-            c_type_str = type(default_value).__name__
-
             name_title = camel_case_capitalize(name)
-            rs_get_set_method_declarations += '    void Set{}({} {});\n'.format(name_title, c_type_str, name)
-            rs_get_set_method_declarations += '    {} Get{}() const {{ return m_prefData.{}; }}\n\n'.format(c_type_str, name_title, name)
 
-            rs_variables_declaration += '        {} {};\n'.format(c_type_str, name)
+            default_value = setting['defaultValue']
+
+            c_type_str = type(default_value).__name__
+            type_str = c_type_str
+
+            if 'values' in setting:
+                setting['minValue'] = 0
+                setting['maxValue'] = len(setting['values']) - 1
+                rs_mapped_values_enum += 'enum {name_title}Type {{\n'.format(name_title=name_title)
+                for value in setting['values']:
+                    rs_mapped_values_enum += '    k{name_title}{value},\n'.format(name_title=name_title, value=value)
+                rs_mapped_values_enum += '};\n'
+                type_str = '{name_title}Type'.format(name_title=name_title)
+
+            rs_get_set_method_declarations += '    void Set{}({} {});\n'.format(name_title, c_type_str, name)
+            rs_get_set_method_declarations += '    {} Get{}() const {{ return m_prefData.{}; }}\n\n'.format(type_str, name_title, name)
+
+            rs_variables_declaration += '        {} {};\n'.format(type_str, name)
 
             value_str = str(default_value)
             if isinstance(default_value, bool):
                 value_str = value_str.lower()
                 rs_sync += '        Set{name_title}(getBoolSetting(HdRprRenderSettingsTokens->{name}, m_prefData.{name}));\n'.format(name_title=name_title, name=name)
             else:
-                rs_sync += '        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{name}, m_prefData.{name}));\n'.format(name_title=name_title, name=name)
+                rs_sync += '        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{name}, {type}(m_prefData.{name})));\n'.format(name_title=name_title, name=name, type=c_type_str)
 
-            rs_range_definitions += 'const {} k{}Default = {};\n'.format(c_type_str, name_title, value_str)
+            rs_range_definitions += 'const {type} k{name_title}Default = {type}({value});\n'.format(type=type_str, name_title=name_title, value=value_str)
             set_validation = ''
             if 'minValue' in setting or 'maxValue' in setting:
                 rs_validate_values += '           '
             if 'minValue' in setting:
-                rs_range_definitions += 'const {} k{}Min = {};\n'.format(c_type_str, name_title, setting['minValue'])
+                rs_range_definitions += 'const {type} k{name_title}Min = {type}({value});\n'.format(type=type_str, name_title=name_title, value=setting['minValue'])
                 set_validation += '    if ({name} < k{name_title}Min) {{ return; }}\n'.format(name=name, name_title=name_title)
                 rs_validate_values += '&& {name} < k{name_title}Min'.format(name=name, name_title=name_title)
             if 'maxValue' in setting:
-                rs_range_definitions += 'const {} k{}Max = {};\n'.format(c_type_str, name_title, setting['maxValue'])
+                rs_range_definitions += 'const {type} k{name_title}Max = {type}({value});\n'.format(type=type_str, name_title=name_title, value=setting['maxValue'])
                 set_validation += '    if ({name} > k{name_title}Max) {{ return; }}\n'.format(name=name, name_title=name_title)
                 rs_validate_values += '&& {name} > k{name_title}Max'.format(name=name, name_title=name_title)
             if 'minValue' in setting or 'maxValue' in setting:
@@ -488,15 +460,15 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
             rs_get_set_method_definitions += (
 '''
-void HdRprConfig::Set{name_title}({type} {name}) {{
+void HdRprConfig::Set{name_title}({c_type} {name}) {{
 {set_validation}
     if (m_prefData.{name} != {name}) {{
-        m_prefData.{name} = {name};
+        m_prefData.{name} = {type}({name});
         m_prefData.Save();
         m_dirtyFlags |= {dirty_flag};
     }}
 }}
-''').format(name_title=name_title, type=c_type_str, name=name, dirty_flag=dirty_flag, set_validation=set_validation)
+''').format(name_title=name_title, c_type=c_type_str, type=type_str, name=name, dirty_flag=dirty_flag, set_validation=set_validation)
 
             rs_set_default_values += '    {name} = k{name_title}Default;\n'.format(name=name, name_title=name_title)
 
@@ -505,6 +477,14 @@ void HdRprConfig::Set{name_title}({type} {name}) {{
             houdini_param += '    label "{}"\n'.format(setting['ui_name'])
             if isinstance(default_value, bool):
                 houdini_param += '    type toggle\n'
+            elif 'values' in setting:
+                houdini_param += '    type ordinal\n'
+                houdini_param += '    menu {\n'
+                index = 0
+                for value in setting['values']:
+                    houdini_param += '        "{}" "{}"\n'.format(index, value)
+                    index += 1
+                houdini_param += '    }\n'
             else:
                 houdini_param += '    type {}\n'.format(c_type_str)
             houdini_param += '    size 1\n'
@@ -518,7 +498,7 @@ void HdRprConfig::Set{name_title}({type} {name}) {{
                 houdini_param += '    default {{ {} }}\n'.format(1 if default_value else 0)
             else:
                 houdini_param += '    default {{ {} }}\n'.format(default_value)
-            if 'minValue' in setting and 'maxValue' in setting:
+            if 'minValue' in setting and 'maxValue' in setting and not 'values' in setting:
                 houdini_param += '    range {{ {}! {} }}\n'.format(setting['minValue'], setting['maxValue'])
             if 'help' in setting:
                 houdini_param += '    help "{}"\n'.format(setting['help'])
@@ -534,7 +514,8 @@ void HdRprConfig::Set{name_title}({type} {name}) {{
         rs_tokens_declaration=rs_tokens_declaration,
         rs_category_dirty_flags=rs_category_dirty_flags,
         rs_get_set_method_declarations=rs_get_set_method_declarations,
-        rs_variables_declaration=rs_variables_declaration))
+        rs_variables_declaration=rs_variables_declaration,
+        rs_mapped_values_enum=rs_mapped_values_enum))
 
     cpp_dst_path = os.path.join(install_path, 'config.cpp')
     cpp_file = open(cpp_dst_path, 'w')
