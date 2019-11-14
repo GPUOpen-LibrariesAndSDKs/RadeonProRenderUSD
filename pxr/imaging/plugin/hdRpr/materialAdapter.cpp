@@ -196,7 +196,7 @@ void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& ou
     }
 }
 
-MaterialAdapter::MaterialAdapter(const EMaterialType type, const MaterialParams& params) : m_type(type) {
+MaterialAdapter::MaterialAdapter(EMaterialType type, const MaterialParams& params) : m_type(type) {
     MaterialTextures materualTextures;
     switch (type) {
         case EMaterialType::COLOR:
@@ -216,7 +216,7 @@ MaterialAdapter::MaterialAdapter(const EMaterialType type, const MaterialParams&
     }
 }
 
-MaterialAdapter::MaterialAdapter(const EMaterialType type, const HdMaterialNetwork& materialNetwork) : m_type(type) {
+MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& materialNetwork) : m_type(type) {
     switch (type) {
         case EMaterialType::USD_PREVIEW_SURFACE: {
             HdMaterialNode previewNode;

@@ -467,7 +467,7 @@ public:
             auto image = make_unique<rpr::Image>(m_rprContext->GetHandle(), path.c_str());
             return CreateEnvironmentLight(std::move(image), intensity);
         } catch (rpr::Error const& error) {
-            TF_RUNTIME_ERROR(error.what());
+            TF_RUNTIME_ERROR("Failed to create environment light: %s", error.what());
         }
 
         return nullptr;
@@ -487,7 +487,7 @@ public:
             auto image = make_unique<rpr::Image>(m_rprContext->GetHandle(), imageSize, imageSize, format, imageData[0].data());
             return CreateEnvironmentLight(std::move(image), intensity);
         } catch (rpr::Error const& error) {
-            TF_RUNTIME_ERROR(error.what());
+            TF_RUNTIME_ERROR("Failed to create environment light: %s", error.what());
         }
 
         return nullptr;
@@ -1414,6 +1414,7 @@ private:
         UpdateSettings(true);
 
         m_imageCache.reset(new ImageCache(m_rprContext.get()));
+        m_rendering.store(false);
     }
 
     bool ValidateRifModels(std::string const& modelsPath) {
@@ -1761,7 +1762,7 @@ private:
     int m_maxSamples = 0;
     float m_varianceThreshold = 0.0f;
 
-    std::atomic<bool> m_rendering = false;
+    std::atomic<bool> m_rendering;
 };
 
 std::unique_ptr<RprApiObject> RprApiObject::Wrap(void* handle) {
