@@ -352,8 +352,10 @@ public:
     void SetMeshVisibility(rpr_shape mesh, bool isVisible) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        if (!RPR_ERROR_CHECK(rprShapeSetVisibility(mesh, isVisible), "Fail to set mesh visibility")) {
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        if (m_rprContext->GetActivePluginType() != rpr::PluginType::HYBRID) {
+            if (!RPR_ERROR_CHECK(rprShapeSetVisibility(mesh, isVisible), "Fail to set mesh visibility")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
         }
     }
 
