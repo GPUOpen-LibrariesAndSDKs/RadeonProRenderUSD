@@ -111,8 +111,10 @@ public:
 
         if (RPR_ERROR_CHECK(rprContextSetScene(m_rprContext->GetHandle(), scene), "Fail to set scene")) return;
         m_scene->AttachOnReleaseAction(RprApiObjectActionTokens->contextSetScene, [this](void* scene) {
-            if (!RPR_ERROR_CHECK(rprContextSetScene(m_rprContext->GetHandle(), nullptr), "Failed to unset scene")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            if (m_rprContext->GetActivePluginType() != rpr::PluginType::HYBRID) {
+                if (!RPR_ERROR_CHECK(rprContextSetScene(m_rprContext->GetHandle(), nullptr), "Failed to unset scene")) {
+                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+                }
             }
         });
     }
