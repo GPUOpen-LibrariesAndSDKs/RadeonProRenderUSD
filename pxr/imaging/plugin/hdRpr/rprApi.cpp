@@ -1518,7 +1518,7 @@ private:
             TF_RUNTIME_ERROR("RIF version and AI models version mismatch");
         }
 
-        m_rifContext = rif::Context::Create(m_rprContext->GetHandle(), modelsPath);
+        m_rifContext = rif::Context::Create(m_rprContext.get(), modelsPath);
     }
 
     void InitMaterialSystem() {
