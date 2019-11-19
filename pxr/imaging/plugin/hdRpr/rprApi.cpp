@@ -702,6 +702,9 @@ public:
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
         auto material = m_rprMaterialFactory->CreateMaterial(materialAdapter.GetType(), materialAdapter);
+        if (!material) {
+            return nullptr;
+        }
 
         return make_unique<RprApiObject>(material, [this](void* material) {
             m_rprMaterialFactory->DeleteMaterial(static_cast<RprApiMaterial*>(material));

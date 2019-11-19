@@ -76,8 +76,6 @@ void HdRprLightBase::Sync(HdSceneDelegate* sceneDelegate,
 
         if (!m_lightMaterial) {
             TF_CODING_ERROR("Light material was not created");
-            *dirtyBits = DirtyBits::Clean;
-            return;
         }
 
         rprApi->SetMeshMaterial(m_lightMesh.get(), m_lightMaterial.get());

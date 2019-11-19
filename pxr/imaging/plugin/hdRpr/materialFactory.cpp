@@ -75,8 +75,17 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             return nullptr;
     }
 
+    rpr_material_node rootMaterialNode = nullptr;
+    auto status = rprMaterialSystemCreateNode(m_matSys, materialType, &rootMaterialNode);
+    if (!rootMaterialNode) {
+        if (status != RPR_ERROR_UNSUPPORTED) {
+            RPR_ERROR_CHECK(status, "Failed to create material node");
+        }
+        return nullptr;
+    }
+
     auto material = new RprApiMaterial;
-    rprMaterialSystemCreateNode(m_matSys, materialType, &material->rootMaterial);
+    material->rootMaterial = rootMaterialNode;
 
     for (auto const& param : materialAdapter.GetVec4fRprParams()) {
         const uint32_t& paramId = param.first;
@@ -120,54 +129,69 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
         rpr_material_node materialNode = nullptr;
         rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_IMAGE_TEXTURE, &materialNode);
+        if (!materialNode) {
+            return nullptr;
+        }
+
         rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, rprImage);
         material->materialNodes.push_back(materialNode);
 
         if (matTex.isScaleEnabled || matTex.isBiasEnabled) {
             rpr_material_node uv_node = nullptr;
             status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &uv_node);
-            status = rprMaterialNodeSetInputUByKey(uv_node, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_UV);
-            material->materialNodes.push_back(uv_node);
+            if (uv_node) {
+                status = rprMaterialNodeSetInputUByKey(uv_node, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_UV);
 
-            rpr_material_node uv_scaled_node;
-            rpr_material_node uv_bias_node;
+                rpr_material_node uv_scaled_node = nullptr;
+                rpr_material_node uv_bias_node = nullptr;
 
+                if (matTex.isScaleEnabled) {
+                    const GfVec4f& scale = matTex.scale;
+                    status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_scaled_node);
+                    if (uv_scaled_node) {
+                        material->materialNodes.push_back(uv_scaled_node);
 
-            if (matTex.isScaleEnabled) {
-                const GfVec4f& scale = matTex.scale;
-                status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_scaled_node);
-                material->materialNodes.push_back(uv_scaled_node);
+                        status = rprMaterialNodeSetInputUByKey(uv_scaled_node, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
+                        status = rprMaterialNodeSetInputNByKey(uv_scaled_node, RPR_MATERIAL_INPUT_COLOR0, uv_node);
+                        status = rprMaterialNodeSetInputFByKey(uv_scaled_node, RPR_MATERIAL_INPUT_COLOR1, scale[0], scale[1], scale[2], 0);
+                    }
+                }
 
-                status = rprMaterialNodeSetInputUByKey(uv_scaled_node, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
-                status = rprMaterialNodeSetInputNByKey(uv_scaled_node, RPR_MATERIAL_INPUT_COLOR0, uv_node);
-                status = rprMaterialNodeSetInputFByKey(uv_scaled_node, RPR_MATERIAL_INPUT_COLOR1, scale[0], scale[1], scale[2], 0);
+                if (matTex.isBiasEnabled) {
+                    const GfVec4f& bias = matTex.bias;
+                    rpr_material_node& color0Input = uv_scaled_node ? uv_scaled_node : uv_node;
+
+                    status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_bias_node);
+                    if (uv_bias_node) {
+                        material->materialNodes.push_back(uv_bias_node);
+
+                        status = rprMaterialNodeSetInputUByKey(uv_bias_node, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
+                        status = rprMaterialNodeSetInputNByKey(uv_bias_node, RPR_MATERIAL_INPUT_COLOR0, color0Input);
+                        status = rprMaterialNodeSetInputFByKey(uv_bias_node, RPR_MATERIAL_INPUT_COLOR1, bias[0], bias[1], bias[2], 0);
+                    }
+                }
+
+                if (!uv_bias_node && !uv_scaled_node) {
+                    rprObjectDelete(uv_node);
+                } else {
+                    rpr_material_node uvIn = uv_bias_node ? uv_bias_node : uv_scaled_node;
+                    rprMaterialNodeSetInputNByKey(materialNode, RPR_MATERIAL_INPUT_UV, uvIn);
+                    material->materialNodes.push_back(uv_node);
+                }
             }
-
-            if (matTex.isBiasEnabled) {
-                const GfVec4f& bias = matTex.bias;
-                rpr_material_node& color0Input = (matTex.isScaleEnabled) ? uv_scaled_node : uv_node;
-
-                status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_bias_node);
-                material->materialNodes.push_back(uv_bias_node);
-
-                status = rprMaterialNodeSetInputUByKey(uv_bias_node, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
-                status = rprMaterialNodeSetInputNByKey(uv_bias_node, RPR_MATERIAL_INPUT_COLOR0, color0Input);
-                status = rprMaterialNodeSetInputFByKey(uv_bias_node, RPR_MATERIAL_INPUT_COLOR1, bias[0], bias[1], bias[2], 0);
-            }
-
-            rpr_material_node& uvIn = (matTex.isBiasEnabled) ? uv_bias_node : uv_scaled_node;
-            rprMaterialNodeSetInputNByKey(materialNode, RPR_MATERIAL_INPUT_UV, uvIn);
         }
 
         if (matTex.isOneMinusSrcColor) {
             rpr_material_node arithmetic = nullptr;
             status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
-            status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, 1.0, 1.0, 1.0, 1.0);
-            status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, materialNode);
-            status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_SUB);
-            material->materialNodes.push_back(arithmetic);
+            if (arithmetic) {
+                status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, 1.0, 1.0, 1.0, 1.0);
+                status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, materialNode);
+                status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_SUB);
+                material->materialNodes.push_back(arithmetic);
 
-            materialNode = arithmetic;
+                materialNode = arithmetic;
+            }
         }
 
         rpr_material_node outTexture = nullptr;
@@ -177,12 +201,14 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             if (GetSelectedChannel(matTex.channel, selectedChannel)) {
                 rpr_material_node arithmetic = nullptr;
                 status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
-                status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode);
-                status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, 0.0, 0.0, 0.0, 0.0);
-                status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, selectedChannel);
-                material->materialNodes.push_back(arithmetic);
+                if (arithmetic) {
+                    status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode);
+                    status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, 0.0, 0.0, 0.0, 0.0);
+                    status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, selectedChannel);
+                    material->materialNodes.push_back(arithmetic);
 
-                outTexture = arithmetic;
+                    outTexture = arithmetic;
+                }
             } else {
                 outTexture = materialNode;
             }
@@ -234,18 +260,24 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
     if (emissionColorNode) {
         rpr_material_node averageNode = nullptr;
         rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_ARITHMETIC, &averageNode);
-        material->materialNodes.push_back(averageNode);
-        rprMaterialNodeSetInputUByKey(averageNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_AVERAGE_XYZ);
-        rprMaterialNodeSetInputNByKey(averageNode, RPR_MATERIAL_INPUT_COLOR0, emissionColorNode);
+        if (averageNode) {
+            rprMaterialNodeSetInputUByKey(averageNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_AVERAGE_XYZ);
+            rprMaterialNodeSetInputNByKey(averageNode, RPR_MATERIAL_INPUT_COLOR0, emissionColorNode);
 
-        rpr_material_node isBlackColorNode = nullptr;
-        rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_ARITHMETIC, &isBlackColorNode);
-        material->materialNodes.push_back(isBlackColorNode);
-        rprMaterialNodeSetInputUByKey(isBlackColorNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_GREATER);
-        rprMaterialNodeSetInputNByKey(isBlackColorNode, RPR_MATERIAL_INPUT_COLOR0, averageNode);
-        rprMaterialNodeSetInputFByKey(isBlackColorNode, RPR_MATERIAL_INPUT_COLOR1, 0.0f, 0.0f, 0.0f, 0.0f);
+            rpr_material_node isBlackColorNode = nullptr;
+            rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_ARITHMETIC, &isBlackColorNode);
+            if (isBlackColorNode) {
+                material->materialNodes.push_back(averageNode);
+                material->materialNodes.push_back(isBlackColorNode);
+                rprMaterialNodeSetInputUByKey(isBlackColorNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_GREATER);
+                rprMaterialNodeSetInputNByKey(isBlackColorNode, RPR_MATERIAL_INPUT_COLOR0, averageNode);
+                rprMaterialNodeSetInputFByKey(isBlackColorNode, RPR_MATERIAL_INPUT_COLOR1, 0.0f, 0.0f, 0.0f, 0.0f);
 
-        rprMaterialNodeSetInputNByKey(material->rootMaterial, RPR_UBER_MATERIAL_INPUT_EMISSION_WEIGHT, isBlackColorNode);
+                rprMaterialNodeSetInputNByKey(material->rootMaterial, RPR_UBER_MATERIAL_INPUT_EMISSION_WEIGHT, isBlackColorNode);
+            } else {
+                rprObjectDelete(averageNode);
+            }
+        }
     }
 
     material->displacementMaterial = getTextureMaterialNode(m_imageCache, m_matSys, materialAdapter.GetDisplacementTexture());
