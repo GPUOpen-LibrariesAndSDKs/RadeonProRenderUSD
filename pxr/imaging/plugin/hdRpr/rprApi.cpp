@@ -1143,18 +1143,7 @@ public:
         preferences.ResetDirty();
     }
 
-    void UpdateSettings(bool force = false) {
-        auto& preferences = HdRprConfig::GetInstance();
-        if (preferences.IsDirty(HdRprConfig::DirtySampling) || force) {
-            preferences.CleanDirtyFlag(HdRprConfig::DirtySampling);
-
-            m_maxSamples = preferences.GetMaxSamples();
-            if (m_maxSamples < m_iter) {
-                // Force framebuffers clear to render required number of samples
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        }
-
+    void UpdateTahoeSettings(HdRprConfig& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
             preferences.CleanDirtyFlag(HdRprConfig::DirtyAdaptiveSampling);
 
@@ -1187,6 +1176,39 @@ public:
             RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_PREVIEW, int(is_interactive)), "Failed to set preview mode");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+    }
+
+    void UpdateHybridSettings(HdRprConfig& preferences, bool force) {
+        if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
+            auto quality = preferences.GetRenderQuality();
+            if (quality == kRenderQualityMedium) {
+                // XXX (Hybrid): temporarily disable until issues on hybrid side is not solved
+                // otherwise driver crashes guaranteed (Radeon VII)
+                quality = kRenderQualityHigh;
+            }
+            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, quality), "Fail to set context hybrid render quality");
+        }
+    }
+
+    void UpdateSettings(bool force = false) {
+        auto& preferences = HdRprConfig::GetInstance();
+        if (preferences.IsDirty(HdRprConfig::DirtySampling) || force) {
+            preferences.CleanDirtyFlag(HdRprConfig::DirtySampling);
+
+            m_maxSamples = preferences.GetMaxSamples();
+            if (m_maxSamples < m_iter) {
+                // Force framebuffers clear to render required number of samples
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+        }
+
+        m_currentRenderQuality = preferences.GetRenderQuality();
+
+        if (m_rprContext->GetActivePluginType() == rpr::PluginType::TAHOE) {
+            UpdateTahoeSettings(preferences, force);
+        } else if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+            UpdateHybridSettings(preferences, force);
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyDevice) ||
@@ -1415,6 +1437,10 @@ public:
     }
 
     bool IsConverged() const {
+        if (m_currentRenderQuality == kRenderQualityLow) {
+            return m_iter == 1;
+        }
+
         return m_iter >= m_maxSamples || m_activePixels == 0;
     }
 
@@ -1456,9 +1482,6 @@ private:
         }
 
         RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_Y_FLIP, 0), "Fail to set context YFLIP parameter");
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, quality), "Fail to set context hybrid render quality");
-        }
 
         UpdateSettings(true);
 
@@ -1886,6 +1909,7 @@ private:
     int m_activePixels = -1;
     int m_maxSamples = 0;
     float m_varianceThreshold = 0.0f;
+    RenderQualityType m_currentRenderQuality = kRenderQualityFull;
 
     std::atomic<bool> m_rendering = false;
 

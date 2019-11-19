@@ -4,20 +4,64 @@ dry_run = False
 
 render_setting_categories = [
     {
-        'name': 'Denoise',
+        'name': 'RenderQuality',
         'settings': [
             {
-                'name': 'enableDenoising',
-                'ui_name': 'Enable Denoising',
-                'defaultValue': False,
-                'custom_houdini_tags': [
-                    '"uiicon" VIEW_display_denoise'
+                'name': 'renderQuality',
+                'ui_name': 'Render Quality',
+                'help': 'Render restart might be required',
+                'defaultValue': 3,
+                'values': [
+                    "Low",
+                    "Medium",
+                    "High",
+                    "Full"
                 ]
             }
         ]
     },
     {
+        'name': 'Device',
+        'houdini': {
+            'hidewhen': 'renderQuality != 3'
+        },
+        'settings': [
+            {
+                'name': 'renderDevice',
+                'ui_name': 'Render Device',
+                'help': 'Restart required.',
+                'defaultValue': 1,
+                'values': [
+                    "CPU",
+                    "GPU",
+                    # "CPU+GPU"
+                ]
+            }
+        ]
+    },
+    {
+        'name': 'Denoise',
+        'houdini': {
+            'hidewhen': 'renderQuality < 3'
+        },
+        'settings': [
+            {
+                'name': 'enableDenoising',
+                'ui_name': 'Enable Denoising',
+                'defaultValue': False,
+                'houdini': {
+                    'custom_tags': [
+                        '"uiicon" VIEW_display_denoise'
+                    ]
+                }
+            }
+        ]
+    },
+    {
         'name': 'Sampling',
+        'houdini': {
+            'hidewhen': 'renderQuality == 0'
+        },
         'settings': [
             {
                 'name': 'maxSamples',
@@ -31,6 +75,9 @@ render_setting_categories = [
     },
     {
         'name': 'AdaptiveSampling',
+        'houdini': {
+            'hidewhen': 'renderQuality != 3'
+        },
         'settings': [
             {
                 'name': 'minAdaptiveSamples',
@@ -52,6 +99,9 @@ render_setting_categories = [
     },
     {
         'name': 'Quality',
+        'houdini': {
+            'hidewhen': 'renderQuality != 3'
+        },
         'settings': [
             {
                 'name': 'maxRayDepth',
@@ -129,39 +179,6 @@ render_setting_categories = [
                 'defaultValue': 2,
                 'minValue': 1,
                 'maxValue': 50
-            }
-        ]
-    },
-    {
-        'name': 'RenderQuality',
-        'settings': [
-            {
-                'name': 'renderQuality',
-                'ui_name': 'Render Quality',
-                'help': 'Render restart might be required',
-                'defaultValue': 3,
-                'values': [
-                    "Low",
-                    "Medium",
-                    "High",
-                    "Full"
-                ]
-            }
-        ]
-    },
-    {
-        'name': 'Device',
-        'settings': [
-            {
-                'name': 'renderDevice',
-                'ui_name': 'Render Device',
-                'help': 'Restart required.',
-                'defaultValue': 1,
-                'values': [
-                    "CPU",
-                    "GPU",
-                    # "CPU+GPU"
-                ]
             }
         ]
     },
@@ -408,6 +425,10 @@ PXR_NAMESPACE_CLOSE_SCOPE
         rs_category_dirty_flags += '        {} = 1 << {},\n'.format(dirty_flag, dirty_flags_offset)
         dirty_flags_offset += 1
 
+        category_hidewhen = None
+        if 'houdini' in category:
+            category_hidewhen = category['houdini'].get('hidewhen')
+
         for setting in category['settings']:
             name = setting['name']
             rs_tokens_declaration += '    ({}) \\\n'.format(name)
@@ -491,9 +512,15 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
             houdini_param += '    parmtag {{ "spare_category" "{}" }}\n'.format(category_name)
             houdini_param += '    parmtag { "uiscope" "viewport" }\n'
             houdini_param += '    parmtag {{ "usdvaluetype" "{}" }}\n'.format(c_type_str)
-            if 'custom_houdini_tags' in setting:
-                for custom_tag in setting['custom_houdini_tags']:
+
+            houdini_settings = setting.get('houdini', {})
+            if 'custom_tags' in houdini_settings:
+                for custom_tag in houdini_settings['custom_tags']:
                     houdini_param += '    parmtag {{ {} }}\n'.format(custom_tag)
+            if 'hidewhen' in houdini_settings or category_hidewhen:
+                condition = houdini_settings.get('hidewhen', category_hidewhen)
+                houdini_param += '    hidewhen "{{ {condition} }}"\n'.format(condition=condition)
+
             if isinstance(default_value, bool):
                 houdini_param += '    default {{ {} }}\n'.format(1 if default_value else 0)
             else:
