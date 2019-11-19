@@ -8,6 +8,37 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+#define HDRPR_MATERIAL_TOKENS \
+    (bxdf) \
+    (file) \
+    (scale) \
+    (bias) \
+    (wrapS) \
+    (wrapT) \
+    (black) \
+    (clamp) \
+    (repeat) \
+    (mirror) \
+    (UsdPreviewSurface) \
+    (UsdUVTexture) \
+    (color) \
+    (diffuseColor) \
+    (emissiveColor) \
+    (useSpecularWorkflow) \
+    (specularColor) \
+    (metallic) \
+    (roughness) \
+    (clearcoat) \
+    (clearcoatRoughness) \
+    (opacity) \
+    (opacityThreshold) \
+    (ior) \
+    (normal) \
+    (displacement) \
+    (transparency)
+
+TF_DECLARE_PUBLIC_TOKENS(HdRprMaterialTokens, HDRPR_MATERIAL_TOKENS);
+
 enum class EWrapMode {
     NONE = -1
     , BLACK

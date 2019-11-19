@@ -61,15 +61,13 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
     rpr_material_node_type materialType = 0;
 
     switch (type) {
-        case EMaterialType::COLOR:
-            materialType = RPR_MATERIAL_NODE_DIFFUSE;
-            break;
         case EMaterialType::EMISSIVE:
             materialType = RPR_MATERIAL_NODE_EMISSIVE;
             break;
         case EMaterialType::TRANSPERENT:
             materialType = RPR_MATERIAL_NODE_TRANSPARENT;
             break;
+        case EMaterialType::COLOR:
         case EMaterialType::USD_PREVIEW_SURFACE:
             materialType = RPR_MATERIAL_NODE_UBERV2;
             break;
