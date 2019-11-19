@@ -137,8 +137,8 @@ public:
     }
 
     RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes,
-                               const VtVec3fArray& normals, const VtIntArray& normalIndexes,
-                               const VtVec2fArray& uvs, const VtIntArray& uvIndexes,
+                               VtVec3fArray normals, const VtIntArray& normalIndexes,
+                               VtVec2fArray uvs, const VtIntArray& uvIndexes,
                                const VtIntArray& vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
         if (!m_rprContext) {
             return nullptr;
@@ -148,16 +148,59 @@ public:
         SplitPolygons(pointIndexes, vpf, newIndexes, newVpf);
         ConvertIndices(&newIndexes, newVpf, polygonWinding);
 
-        VtIntArray newUvIndexes;
-        if (!uvIndexes.empty()) {
-            SplitPolygons(uvIndexes, vpf, newUvIndexes);
-            ConvertIndices(&newUvIndexes, newVpf, polygonWinding);
+        VtIntArray newNormalIndexes;
+        if (normals.empty()) {
+            if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+                // XXX (Hybrid): we need to generate geometry normals by ourself
+                normals.reserve(newVpf.size());
+                newNormalIndexes.clear();
+                newNormalIndexes.reserve(newIndexes.size());
+
+                size_t indicesOffset = 0u;
+                for (auto numVerticesPerFace : newVpf) {
+                    for (int i = 0; i < numVerticesPerFace; ++i) {
+                        newNormalIndexes.push_back(normals.size());
+                    }
+
+                    auto indices = &newIndexes[indicesOffset];
+                    indicesOffset += numVerticesPerFace;
+
+                    auto p0 = points[indices[0]];
+                    auto p1 = points[indices[1]];
+                    auto p2 = points[indices[2]];
+
+                    auto e0 = p0 - p1;
+                    auto e1 = p2 - p1;
+
+                    auto normal = GfCross(e1, e0);
+                    GfNormalize(&normal);
+                    normals.push_back(normal);
+                }
+            }
+        } else {
+            if (!normalIndexes.empty()) {
+                SplitPolygons(normalIndexes, vpf, newNormalIndexes);
+                ConvertIndices(&newNormalIndexes, newVpf, polygonWinding);
+            } else if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+                // XXX: Hybrid should interpret normals w/o indices as vertex interpolated
+                newNormalIndexes = newIndexes;
+            }
         }
 
-        VtIntArray newNormalIndexes;
-        if (!normalIndexes.empty()) {
-            SplitPolygons(normalIndexes, vpf, newNormalIndexes);
-            ConvertIndices(&newNormalIndexes, newVpf, polygonWinding);
+        VtIntArray newUvIndexes;
+        if (uvs.empty()) {
+            if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+                newUvIndexes = newIndexes;
+                uvs = VtVec2fArray(points.size(), GfVec2f(0.0f));
+            }
+        } else {
+            if (!uvIndexes.empty()) {
+                SplitPolygons(uvIndexes, vpf, newUvIndexes);
+                ConvertIndices(&newUvIndexes, newVpf, polygonWinding);
+            } else if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+                // XXX: Hybrid should interpret uvs w/o indices as vertex interpolated
+                newUvIndexes = newIndexes;
+            }
         }
 
         auto normalIndicesData = !newNormalIndexes.empty() ? newNormalIndexes.data() : newIndexes.data();
