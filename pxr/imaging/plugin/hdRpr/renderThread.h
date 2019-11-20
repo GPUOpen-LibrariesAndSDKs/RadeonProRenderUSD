@@ -3,6 +3,8 @@
 
 #include "pxr/pxr.h"
 
+#include <condition_variable>
+#include <functional>
 #include <atomic>
 #include <thread>
 #include <mutex>

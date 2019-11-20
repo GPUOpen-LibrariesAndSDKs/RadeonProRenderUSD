@@ -2,6 +2,7 @@
 #define HDRPR_BASIS_CURVES_H
 
 #include "pxr/imaging/hd/basisCurves.h"
+#include "pxr/base/gf/matrix4f.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -37,6 +38,11 @@ private:
     RprApiObjectPtr m_rprCurve;
     RprApiObjectPtr m_fallbackMaterial;
     HdRprMaterial const* m_cachedMaterial;
+
+    HdBasisCurvesTopology m_topology;
+    GfMatrix4f m_transform;
+    VtFloatArray m_widths;
+    VtVec3fArray m_points;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

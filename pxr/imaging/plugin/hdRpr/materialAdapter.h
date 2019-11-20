@@ -91,11 +91,11 @@ enum class EMaterialType : int32_t {
 
 class MaterialAdapter {
 public:
-    MaterialAdapter(const EMaterialType type, const MaterialParams& params);
+    MaterialAdapter(EMaterialType type, const MaterialParams& params);
 
-    MaterialAdapter(const EMaterialType type, const HdMaterialNetwork& materialNetwork);
+    MaterialAdapter(EMaterialType type, const HdMaterialNetwork& materialNetwork);
 
-    const EMaterialType GetType() const {
+    EMaterialType GetType() const {
         return m_type;
     }
 
@@ -121,7 +121,7 @@ private:
     void PopulateTransparent(const MaterialParams& params);
     void PopulateUsdPreviewSurface(const MaterialParams& params, const MaterialTextures& textures);
 
-    const EMaterialType m_type;
+    EMaterialType m_type;
 
     MaterialRprParamsVec4f m_vec4fRprParams;
     MaterialRprParamsU m_uRprParams;

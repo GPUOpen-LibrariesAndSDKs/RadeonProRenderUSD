@@ -321,10 +321,17 @@ public:
         }
     }
 
-    void SetCurveMaterial(rpr_shape curve, const RprApiMaterial* material) {
+    void SetCurveMaterial(rpr_curve curve, const RprApiMaterial* material) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
         m_rprMaterialFactory->AttachMaterialToCurve(curve, material);
         m_dirtyFlags |= ChangeTracker::DirtyScene;
+    }
+
+    void SetCurveTransform(rpr_curve curve, GfMatrix4f const& transform) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        if (!RPR_ERROR_CHECK(rprCurveSetTransform(curve, false, transform.GetArray()), "Fail set curve transformation")) {
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
     }
 
 #if 0
@@ -531,7 +538,7 @@ public:
             auto image = make_unique<rpr::Image>(m_rprContext->GetHandle(), path.c_str());
             return CreateEnvironmentLight(std::move(image), intensity);
         } catch (rpr::Error const& error) {
-            TF_RUNTIME_ERROR(error.what());
+            TF_RUNTIME_ERROR("Failed to create environment light: %s", error.what());
         }
 
         return nullptr;
@@ -551,7 +558,7 @@ public:
             auto image = make_unique<rpr::Image>(m_rprContext->GetHandle(), imageSize, imageSize, format, imageData[0].data());
             return CreateEnvironmentLight(std::move(image), intensity);
         } catch (rpr::Error const& error) {
-            TF_RUNTIME_ERROR(error.what());
+            TF_RUNTIME_ERROR("Failed to create environment light: %s", error.what());
         }
 
         return nullptr;
@@ -1540,6 +1547,7 @@ private:
         UpdateSettings(true);
 
         m_imageCache.reset(new ImageCache(m_rprContext.get()));
+        m_rendering.store(false);
     }
 
     bool ValidateRifModels(std::string const& modelsPath) {
@@ -1965,7 +1973,7 @@ private:
     float m_varianceThreshold = 0.0f;
     RenderQualityType m_currentRenderQuality = kRenderQualityFull;
 
-    std::atomic<bool> m_rendering = false;
+    std::atomic<bool> m_rendering;
 
     enum State {
         kStateUninitialized,
@@ -2140,6 +2148,10 @@ void HdRprApi::SetMeshVisibility(RprApiObject* mesh, bool isVisible) {
 void HdRprApi::SetCurveMaterial(RprApiObject* curve, RprApiObject const* material) {
     auto materialHandle = material ? static_cast<RprApiMaterial*>(material->GetHandle()) : nullptr;
     m_impl->SetCurveMaterial(curve->GetHandle(), materialHandle);
+}
+
+void HdRprApi::SetCurveTransform(RprApiObject* curve, GfMatrix4f const& transform) {
+    m_impl->SetCurveTransform(curve->GetHandle(), transform);
 }
 
 void HdRprApi::SetCurveVisibility(RprApiObject* curve, bool isVisible) {

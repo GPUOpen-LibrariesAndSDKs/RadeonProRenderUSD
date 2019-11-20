@@ -100,6 +100,7 @@ public:
     RprApiObjectPtr CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, float width);
     void SetCurveMaterial(RprApiObject* curve, RprApiObject const* material);
     void SetCurveVisibility(RprApiObject* curve, bool isVisible);
+    void SetCurveTransform(RprApiObject* curve, GfMatrix4f const& transform);
 
     RprApiObjectPtr CreateMaterial(MaterialAdapter& materialAdapter);
 

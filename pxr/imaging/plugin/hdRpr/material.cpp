@@ -7,7 +7,7 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-static const bool GetMaterial(const HdMaterialNetworkMap& networkMap, EMaterialType& out_materialType, HdMaterialNetwork& out_surface) {
+static bool GetMaterial(const HdMaterialNetworkMap& networkMap, EMaterialType& out_materialType, HdMaterialNetwork& out_surface) {
     for (const auto& networkIt : networkMap.map) {
         const HdMaterialNetwork& network = networkIt.second;
 
