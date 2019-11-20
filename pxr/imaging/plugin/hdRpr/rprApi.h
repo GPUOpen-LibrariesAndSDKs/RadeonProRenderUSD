@@ -123,6 +123,7 @@ public:
 
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
+    int GetCurrentRenderQuality() const;
 
     static std::string GetAppDataPath();
     static std::string GetCachePath();

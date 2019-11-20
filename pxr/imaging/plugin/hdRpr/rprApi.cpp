@@ -1520,6 +1520,10 @@ public:
         return m_rprContext && m_rprContext->IsGlInteropEnabled();
     }
 
+    int GetCurrentRenderQuality() const {
+        return m_currentRenderQuality;
+    }
+
 private:
     void InitRpr() {
         auto quality = HdRprConfig::GetInstance().GetRenderQuality();
@@ -2206,6 +2210,10 @@ int HdRprApi::GetNumActivePixels() const {
 
 bool HdRprApi::IsGlInteropEnabled() const {
     return m_impl->IsGlInteropEnabled();
+}
+
+int HdRprApi::GetCurrentRenderQuality() const {
+    return m_impl->GetCurrentRenderQuality();
 }
 
 std::string HdRprApi::GetAppDataPath() {

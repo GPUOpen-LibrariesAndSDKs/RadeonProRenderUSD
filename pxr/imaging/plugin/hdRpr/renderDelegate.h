@@ -15,7 +15,7 @@ class HdRprDelegate final : public HdRenderDelegate {
 public:
 
     HdRprDelegate();
-    ~HdRprDelegate() override = default;
+    ~HdRprDelegate() override;
 
     HdRprDelegate(const HdRprDelegate&) = delete;
     HdRprDelegate& operator =(const HdRprDelegate&) = delete;
@@ -82,6 +82,8 @@ extern "C" {
 HDRPR_API void SetHdRprRenderDevice(int renderDevice);
 
 HDRPR_API void SetHdRprRenderQuality(int quality);
+
+HDRPR_API int GetHdRprRenderQuality();
 
 } // extern "C"
 

@@ -24,6 +24,8 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+static HdRprApi* g_rprApi = nullptr;
+
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
     (rpr) \
@@ -59,6 +61,8 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
 
 HdRprDelegate::HdRprDelegate() {
     m_rprApi.reset(new HdRprApi(this));
+    g_rprApi = m_rprApi.get();
+
     m_renderParam.reset(new HdRprRenderParam(m_rprApi.get(), &m_renderThread));
 
     m_settingDescriptors = HdRprConfig::GetRenderSettingDescriptors();
@@ -71,6 +75,10 @@ HdRprDelegate::HdRprDelegate() {
         m_rprApi->AbortRender();
     });
     m_renderThread.StartThread();
+}
+
+HdRprDelegate::~HdRprDelegate() {
+    g_rprApi = nullptr;
 }
 
 HdRenderParam* HdRprDelegate::GetRenderParam() const {
@@ -288,4 +296,11 @@ void SetHdRprRenderDevice(int renderDevice) {
 
 void SetHdRprRenderQuality(int quality) {
     PXR_INTERNAL_NS::HdRprConfig::GetInstance().SetRenderQuality(quality);
+}
+
+int GetHdRprRenderQuality() {
+    if (!PXR_INTERNAL_NS::g_rprApi) {
+        return -1;
+    }
+    return PXR_INTERNAL_NS::g_rprApi->GetCurrentRenderQuality();
 }

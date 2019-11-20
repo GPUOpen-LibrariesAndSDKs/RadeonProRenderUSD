@@ -2,7 +2,7 @@ from pxr import Tf
 from pxr.Plug import Registry
 from pxr.Usdviewq.plugin import PluginContainer
 
-from ctypes import cdll, c_char_p
+from ctypes import cdll, c_int
 from ctypes.util import find_library
 
 import os
@@ -32,8 +32,12 @@ def setRenderQuality(usdviewApi, quality):
     rprPath = getRprPath()
     if rprPath is not None:
         lib = cdll.LoadLibrary(rprPath)
+        lib.GetHdRprRenderQuality.restype = c_int
+        currentQuality = lib.GetHdRprRenderQuality()
         lib.SetHdRprRenderQuality(quality)
-        reemitStage(usdviewApi)
+        if (currentQuality == 3 and quality < 3) or \
+           (currentQuality < 3 and quality == 3):
+            reemitStage(usdviewApi)
 
 def renderDeviceCPU(usdviewApi):
     setRenderDevice(usdviewApi, 0)
@@ -49,7 +53,6 @@ def SetRenderHighQuality(usdviewApi):
     setRenderQuality(usdviewApi, 2)
 def SetRenderFullQuality(usdviewApi):
     setRenderQuality(usdviewApi, 3)
-
 
 class RprPluginContainer(PluginContainer):
 
@@ -80,6 +83,11 @@ class RprPluginContainer(PluginContainer):
             "Full",
             SetRenderFullQuality)
 
+        self.restartAction = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.restartAction",
+            "Restart",
+            reemitStage)
+
 
     def configureView(self, plugRegistry, plugUIBuilder):
 
@@ -94,5 +102,7 @@ class RprPluginContainer(PluginContainer):
         renderQualityMenu.addItem(self.setRenderMediumQuality)
         renderQualityMenu.addItem(self.setRenderHighQuality)
         renderQualityMenu.addItem(self.setRenderFullQuality)
+
+        rprMenu.addItem(self.restartAction)
 
 Tf.Type.Define(RprPluginContainer)
