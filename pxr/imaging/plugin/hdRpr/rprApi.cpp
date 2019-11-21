@@ -401,11 +401,39 @@ public:
         return meshInstanceObject;
     }
 
-    void SetMeshVisibility(rpr_shape mesh, bool isVisible) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+    void SetMeshVisibility(RprApiObject* mesh, bool isVisible) {
+        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+            // XXX (Hybrid): rprShapeSetVisibility not supported, emulate visibility using attach/detach
+            if (isVisible) {
+                if (mesh->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
+                    return;
+                }
 
-        if (m_rprContext->GetActivePluginType() != rpr::PluginType::HYBRID) {
-            if (!RPR_ERROR_CHECK(rprShapeSetVisibility(mesh, isVisible), "Fail to set mesh visibility")) {
+                RecursiveLockGuard rprLock(g_rprAccessMutex);
+                if (!RPR_ERROR_CHECK(rprSceneAttachShape(m_scene->GetHandle(), mesh->GetHandle()), "Failed to attach shape to scene")) {
+                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+
+                    mesh->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* mesh) {
+                        if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), mesh), "Failed to detach mesh from scene")) {
+                            m_dirtyFlags |= ChangeTracker::DirtyScene;
+                        }
+                    });
+                }
+            } else {
+                if (!mesh->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
+                    return;
+                }
+
+                RecursiveLockGuard rprLock(g_rprAccessMutex);
+                if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), mesh->GetHandle()), "Failed to detach mesh from scene")) {
+                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+
+                    mesh->DetachOnReleaseAction(RprApiObjectActionTokens->attach);
+                }
+            }
+        } else {
+            RecursiveLockGuard rprLock(g_rprAccessMutex);
+            if (!RPR_ERROR_CHECK(rprShapeSetVisibility(mesh->GetHandle(), isVisible), "Fail to set mesh visibility")) {
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         }
@@ -2142,7 +2170,7 @@ void HdRprApi::SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material)
 }
 
 void HdRprApi::SetMeshVisibility(RprApiObject* mesh, bool isVisible) {
-    m_impl->SetMeshVisibility(mesh->GetHandle(), isVisible);
+    m_impl->SetMeshVisibility(mesh, isVisible);
 }
 
 void HdRprApi::SetCurveMaterial(RprApiObject* curve, RprApiObject const* material) {
