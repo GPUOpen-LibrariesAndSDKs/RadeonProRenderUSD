@@ -5,6 +5,8 @@
 #include "RadeonImageFilters_cl.h"
 #include "RadeonImageFilters_gl.h"
 #include "RadeonImageFilters_metal.h"
+
+#include "rprcpp/rprContext.h"
 #include "rprcpp/rprFramebufferGL.h"
 
 #include <vector>
@@ -17,20 +19,20 @@ namespace rif {
 
 namespace {
 
-class ContextGPU final : public Context {
+class ContextOpenCL final : public Context {
 public:
-    explicit ContextGPU(rpr_context rprContext, std::string const& modelPath);
-    ~ContextGPU() override = default;
+    explicit ContextOpenCL(rpr_context rprContext, std::string const& modelPath);
+    ~ContextOpenCL() override = default;
 
     std::unique_ptr<Image> CreateImage(rpr::FrameBuffer* rprFrameBuffer) override;
 private:
     const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_OPENCL;
 };
 
-class ContextGPUMetal final : public Context {
+class ContextMetal final : public Context {
 public:
-    explicit ContextGPUMetal(rpr_context rprContext, std::string const& modelPath);
-    ~ContextGPUMetal() override = default;
+    explicit ContextMetal(rpr_context rprContext, std::string const& modelPath);
+    ~ContextMetal() override = default;
 
     std::unique_ptr<Image> CreateImage(rpr::FrameBuffer* rprFrameBuffer) override;
 private:
@@ -74,7 +76,7 @@ rif_image_desc GetRifImageDesc(rpr::FrameBuffer* rprFrameBuffer) {
     return imageDesc;
 }
 
-ContextGPU::ContextGPU(rpr_context rprContext, std::string const& modelPath)
+ContextOpenCL::ContextOpenCL(rpr_context rprContext, std::string const& modelPath)
     : Context(modelPath) {
     int deviceCount = 0;
     RIF_ERROR_CHECK_THROW(rifGetDeviceCount(rifBackendApiType, &deviceCount), "Failed to query device count");
@@ -98,7 +100,7 @@ ContextGPU::ContextGPU(rpr_context rprContext, std::string const& modelPath)
     #endif
 }
 
-std::unique_ptr<Image> ContextGPU::CreateImage(rpr::FrameBuffer* rprFrameBuffer) {
+std::unique_ptr<Image> ContextOpenCL::CreateImage(rpr::FrameBuffer* rprFrameBuffer) {
     if (!rprFrameBuffer) {
         return nullptr;
     }
@@ -183,8 +185,6 @@ void ContextCPU::UpdateInputImage(rpr::FrameBuffer* rprFrameBuffer, rif_image im
         throw rpr::Error("RPR denoiser failed to get data from frame buffer.", rprStatus);
 }
 
-#ifdef __APPLE__
-
 rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags) {
 
 #define GPU(x) RPR_CREATION_FLAGS_ENABLE_GPU##x
@@ -219,7 +219,7 @@ rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags) {
     return -1;
 }
 
-ContextGPUMetal::ContextGPUMetal(rpr_context rprContext, std::string const& modelPath)
+ContextMetal::ContextMetal(rpr_context rprContext, std::string const& modelPath)
     : Context(modelPath) {
     int deviceCount = 0;
     RIF_ERROR_CHECK_THROW(rifGetDeviceCount(rifBackendApiType, &deviceCount), "Failed to query device count");
@@ -237,7 +237,7 @@ ContextGPUMetal::ContextGPUMetal(rpr_context rprContext, std::string const& mode
     RIF_ERROR_CHECK_THROW(rifCreateContext(RIF_API_VERSION, rifBackendApiType, GpuDeviceIdUsed(contextFlags), path.data(), &m_context), "Failed to create RIF context");
 }
 
-std::unique_ptr<Image> ContextGPUMetal::CreateImage(rpr::FrameBuffer* rprFrameBuffer) {
+std::unique_ptr<Image> ContextMetal::CreateImage(rpr::FrameBuffer* rprFrameBuffer) {
     if (!rprFrameBuffer) {
         return nullptr;
     }
@@ -265,8 +265,6 @@ std::unique_ptr<Image> ContextGPUMetal::CreateImage(rpr::FrameBuffer* rprFrameBu
     return std::unique_ptr<Image>(new Image(rifImage));
 }
 
-#endif // __APPLE__
-
 bool HasGpuContext(rpr_creation_flags contextFlags) {
 
 #define GPU(x) RPR_CREATION_FLAGS_ENABLE_GPU##x
@@ -281,24 +279,22 @@ bool HasGpuContext(rpr_creation_flags contextFlags) {
 
 } // namespace anonymous
 
-std::unique_ptr<Context> Context::Create(rpr_context rprContext, std::string const& modelPath) {
+std::unique_ptr<Context> Context::Create(rpr::Context* rprContext, std::string const& modelPath) {
     if (!rprContext) {
         return nullptr;
     }
 
     rpr_creation_flags contextFlags = 0;
-    RPR_ERROR_CHECK_THROW(rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr), "Failed to query RPR context creation flags");
+    RPR_ERROR_CHECK_THROW(rprContextGetInfo(rprContext->GetHandle(), RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr), "Failed to query RPR context creation flags");
 
     std::unique_ptr<Context> rifContext;
-#ifdef __APPLE__
-    rifContext.reset(new ContextGPUMetal(rprContext, modelPath));
-#else // __APPLE__
-    if (HasGpuContext(contextFlags)) {
-        rifContext.reset(new ContextGPU(rprContext, modelPath));
+    if (contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL) {
+        rifContext.reset(new ContextMetal(rprContext->GetHandle(), modelPath));
+    } else if (HasGpuContext(contextFlags) && rprContext->GetActivePluginType() != rpr::PluginType::HYBRID) {
+        rifContext.reset(new ContextOpenCL(rprContext->GetHandle(), modelPath));
     } else {
-        rifContext.reset(new ContextCPU(rprContext, modelPath));
+        rifContext.reset(new ContextCPU(rprContext->GetHandle(), modelPath));
     }
-#endif
 
     RIF_ERROR_CHECK_THROW(rifContextCreateCommandQueue(rifContext->m_context, &rifContext->m_commandQueue), "Failed to create RIF command queue");
 

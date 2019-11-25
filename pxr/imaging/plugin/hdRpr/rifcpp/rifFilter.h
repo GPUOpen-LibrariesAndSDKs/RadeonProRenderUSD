@@ -47,8 +47,8 @@ public:
 
     virtual ~Filter();
 
-    void SetInput(FilterInputType inputType, rif_image rifImage, const float sigma);
-    void SetInput(FilterInputType inputType, rpr::FrameBuffer* rprFrameBuffer, const float sigma);
+    void SetInput(FilterInputType inputType, rif_image rifImage, float sigma = 1.0f);
+    void SetInput(FilterInputType inputType, rpr::FrameBuffer* rprFrameBuffer, float sigma = 1.0f);
     void SetOutput(rif_image rifImage);
     void SetOutput(rif_image_desc imageDesc);
     void SetOutput(rpr::FrameBuffer* rprFrameBuffer);

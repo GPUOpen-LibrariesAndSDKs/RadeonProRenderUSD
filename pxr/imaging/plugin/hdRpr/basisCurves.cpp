@@ -116,7 +116,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                         VtValue val = sceneDelegate->Get(id, HdPrimvarRoleTokens->color);
                         if (!val.IsEmpty()) {
                             VtArray<GfVec4f> color = val.Get<VtArray<GfVec4f>>();
-                            MaterialAdapter matAdapter(EMaterialType::COLOR, MaterialParams{{HdPrimvarRoleTokens->color, VtValue(color[0])}});
+                            MaterialAdapter matAdapter(EMaterialType::COLOR, MaterialParams{{HdRprMaterialTokens->color, VtValue(color[0])}});
                             m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
                         }
                     }

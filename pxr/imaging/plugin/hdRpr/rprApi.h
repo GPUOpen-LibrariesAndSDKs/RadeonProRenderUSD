@@ -12,6 +12,7 @@
 #include "pxr/base/gf/quaternion.h"
 #include "pxr/imaging/hd/types.h"
 #include "pxr/imaging/hd/renderPassState.h"
+#include "pxr/imaging/hd/renderDelegate.h"
 #include "pxr/base/tf/staticTokens.h"
 
 #include <memory>
@@ -69,7 +70,7 @@ TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_API, HD_RPR_AOV_TOKENS);
 
 class HdRprApi final {
 public:
-    HdRprApi();
+    HdRprApi(HdRenderDelegate* delegate);
     ~HdRprApi();
 
     RprApiObjectPtr CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
@@ -123,6 +124,7 @@ public:
 
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
+    int GetCurrentRenderQuality() const;
 
     static std::string GetAppDataPath();
     static std::string GetCachePath();

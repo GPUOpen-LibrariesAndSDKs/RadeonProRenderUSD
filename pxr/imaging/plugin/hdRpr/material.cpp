@@ -7,12 +7,6 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PRIVATE_TOKENS(
-    HdRprMaterialTokens,
-    (bxdf) \
-    (UsdPreviewSurface)
-);
-
 static bool GetMaterial(const HdMaterialNetworkMap& networkMap, EMaterialType& out_materialType, HdMaterialNetwork& out_surface) {
     for (const auto& networkIt : networkMap.map) {
         const HdMaterialNetwork& network = networkIt.second;

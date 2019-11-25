@@ -3,25 +3,15 @@
 
 #include "rifObject.h"
 
-#include <memory>
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 namespace rif {
 
 class Image : public Object {
 public:
-    explicit Image(rif_image imageHandle) {
-        SetHandle(imageHandle);
-    }
+    explicit Image(rif_image imageHandle);
 
-    rif_image GetHandle() {
-        return static_cast<rif_image>(m_rifObjectHandle);
-    }
-
-    void SetHandle(rif_image image) {
-        m_rifObjectHandle = image;
-    }
+    rif_image GetHandle() { return static_cast<rif_image>(m_rifObjectHandle); }
 };
 
 } // namespace rif

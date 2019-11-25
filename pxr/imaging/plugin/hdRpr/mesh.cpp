@@ -237,7 +237,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     if (val.IsHolding<VtVec3fArray>()) {
                         color = val.UncheckedGet<VtVec3fArray>()[0];
                     }
-                    auto matAdapter = MaterialAdapter(EMaterialType::COLOR, MaterialParams{{HdPrimvarRoleTokens->color, VtValue(color)}});
+                    auto matAdapter = MaterialAdapter(EMaterialType::COLOR, MaterialParams{{HdRprMaterialTokens->color, VtValue(color)}});
                     m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
                     break;
                 }

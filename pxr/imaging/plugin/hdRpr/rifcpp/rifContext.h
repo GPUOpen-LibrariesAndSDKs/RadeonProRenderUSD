@@ -5,11 +5,13 @@
 
 #include <RadeonProRender.h>
 #include <string>
+#include <memory>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 namespace rpr {
 
+class Context;
 class FrameBuffer;
 
 } // namespace rpr
@@ -18,7 +20,7 @@ namespace rif {
 
 class Context {
 public:
-    static std::unique_ptr<Context> Create(rpr_context rprContext, std::string const& modelPath);
+    static std::unique_ptr<Context> Create(rpr::Context* rprContext, std::string const& modelPath);
 
     virtual ~Context();
 
