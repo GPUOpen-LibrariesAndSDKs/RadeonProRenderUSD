@@ -69,7 +69,9 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
         }
 
         auto filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
-        filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
+        if (filter) {
+            filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
+        }
         return filter;
     }()) {
 
@@ -155,11 +157,10 @@ rpr::FrameBuffer* HdRprApiAov::GetResolvedFb() {
 }
 
 void HdRprApiAov::OnFormatChange(rif::Context* rifContext) {
-    if (m_format != HdFormatFloat32Vec4) {
+    m_filter = nullptr;
+    if (rifContext && m_format != HdFormatFloat32Vec4) {
         m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
         m_filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
-    } else {
-        m_filter = nullptr;
     }
 }
 
@@ -173,9 +174,7 @@ void HdRprApiAov::OnSizeChange(rif::Context* rifContext) {
     }
 }
 
-HdRprApiColorAov::HdRprApiColorAov(
-    int width, int height, HdFormat format,
-    rpr::Context* rprContext, rif::Context* rifContext)
+HdRprApiColorAov::HdRprApiColorAov(int width, int height, HdFormat format, rpr::Context* rprContext)
     : HdRprApiAov(RPR_AOV_COLOR, width, height, format, rprContext, nullptr) {
 
 }
@@ -249,6 +248,11 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     }
     if (m_isCurrentFilterDirty) {
         m_isCurrentFilterDirty = false;
+        if (!rifContext && m_currentFilter != rif::FilterType::None) {
+            TF_WARN("Can not enable %d filter: rifContext required", m_currentFilter);
+            m_currentFilter = rif::FilterType::None;
+        }
+
         switch (m_currentFilter) {
             case rif::FilterType::None:
                 m_filter = nullptr;
@@ -323,6 +327,10 @@ HdRprApiNormalAov::HdRprApiNormalAov(
     int width, int height, HdFormat format,
     rpr::Context* rprContext, rif::Context* rifContext)
     : HdRprApiAov(RPR_AOV_SHADING_NORMAL, width, height, format, rprContext, rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext)) {
+    if (!rifContext) {
+        RPR_THROW_ERROR_MSG("Can not create normal AOV: RIF context required");
+    }
+
     m_filter->SetParam("srcRangeAuto", 0);
     m_filter->SetParam("dstLo", -1.0f);
     m_filter->SetParam("dstHi", 1.0f);
@@ -344,6 +352,10 @@ HdRprApiDepthAov::HdRprApiDepthAov(
     std::shared_ptr<HdRprApiAov> worldCoordinateAov,
     rpr::Context* rprContext, rif::Context* rifContext)
     : m_retainedWorldCoordinateAov(worldCoordinateAov) {
+    if (!rifContext) {
+        RPR_THROW_ERROR_MSG("Can not create depth AOV: RIF context required");
+    }
+
     m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, rifContext);
     auto fbDesc = m_retainedWorldCoordinateAov->GetAovFb()->GetDesc();
     m_width = fbDesc.fb_width;

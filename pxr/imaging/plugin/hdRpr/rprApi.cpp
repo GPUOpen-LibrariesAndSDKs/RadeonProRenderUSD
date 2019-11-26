@@ -798,10 +798,6 @@ public:
                                        const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
                                        const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
                                        const GfVec3i& gridSize) {
-        if (!m_rprContext) {
-            return nullptr;
-        }
-
         rpr_hetero_volume heteroVolume = nullptr;
         if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume(m_rprContext->GetHandle(), &heteroVolume), "Fail create hetero density volume")) return nullptr;
         auto heteroVolumeObject = RprApiObject::Wrap(heteroVolume);
@@ -863,6 +859,10 @@ public:
                                  const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
                                  const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
                                  const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
+        if (!m_rprContext) {
+            return nullptr;
+        }
+
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         auto heteroVolume = CreateHeteroVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues, gridSize);
@@ -900,10 +900,6 @@ public:
     }
 
     void SetCameraViewMatrix(const GfMatrix4d& m) {
-        if (!m_camera) {
-            return;
-        }
-
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         m_cameraViewMatrix = m;
@@ -911,10 +907,6 @@ public:
     }
 
     void SetCameraProjectionMatrix(const GfMatrix4d& proj) {
-        if (!m_camera) {
-            return;
-        }
-
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         m_cameraProjectionMatrix = proj;
@@ -952,26 +944,24 @@ public:
     }
 
     void ResolveFramebuffers(std::vector<std::pair<void*, size_t>> const& outputRenderBuffers) {
-        try {
-            for (auto& aovEntry : m_aovRegistry) {
-                auto aov = aovEntry.second.lock();
-                if (TF_VERIFY(aov)) {
-                    aov->Resolve();
+        for (auto& aovEntry : m_aovRegistry) {
+            auto aov = aovEntry.second.lock();
+            if (TF_VERIFY(aov)) {
+                aov->Resolve();
+            }
+        }
+
+        if (m_rifContext) {
+            m_rifContext->ExecuteCommandQueue();            
+        }
+
+        for (int i = 0; i < m_aovBindings.size(); ++i) {
+            if (outputRenderBuffers[i].first) {
+                auto aovIter = m_boundAovs.find(m_aovBindings[i].aovName);
+                if (aovIter != m_boundAovs.end()) {
+                    aovIter->second->GetData(outputRenderBuffers[i].first, outputRenderBuffers[i].second);
                 }
             }
-
-            m_rifContext->ExecuteCommandQueue();
-
-            for (int i = 0; i < m_aovBindings.size(); ++i) {
-                if (outputRenderBuffers[i].first) {
-                    auto aovIter = m_boundAovs.find(m_aovBindings[i].aovName);
-                    if (aovIter != m_boundAovs.end()) {
-                        aovIter->second->GetData(outputRenderBuffers[i].first, outputRenderBuffers[i].second);
-                    }
-                }
-            }
-        } catch (std::runtime_error const& e) {
-            TF_RUNTIME_ERROR("Failed to resolve framebuffers: %s", e.what());
         }
     }
 
@@ -1191,7 +1181,7 @@ public:
 
     void UpdateDenoising(RenderSetting<bool> enableDenoise) {
         // Disable denoiser to prevent possible crashes due to incorrect AI models
-        if (m_rifContext->GetModelPath().empty()) {
+        if (!m_rifContext || m_rifContext->GetModelPath().empty()) {
             return;
         }
 
@@ -1234,12 +1224,62 @@ public:
         }
     }
 
+    void RenderImpl(HdRprRenderThread* renderThread, std::vector<std::pair<void*, size_t>> const& outputRenderBuffers) {
+        bool stopRequested = false;
+        while (!IsConverged() || stopRequested) {
+            renderThread->WaitUntilPaused();
+            stopRequested = renderThread->IsStopRequested();
+            if (stopRequested) {
+                break;
+            }
+
+            m_rendering.store(true);
+            auto status = rprContextRender(m_rprContext->GetHandle());
+            m_rendering.store(false);
+
+            if (status == RPR_ERROR_ABORTED ||
+                RPR_ERROR_CHECK(status, "Fail contex render framebuffer")) {
+                stopRequested = true;
+                break;
+            }
+
+            m_iter++;
+            if (m_varianceThreshold > 0.0f) {
+                if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
+                    m_activePixels = -1;
+                }
+            }
+
+            if (!IsConverged()) {
+                // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
+                // We do not resolve framebuffers in case user requested render stop
+                ResolveFramebuffers(outputRenderBuffers);
+            }
+
+            stopRequested = renderThread->IsStopRequested();
+        }
+
+        if (!stopRequested) {
+            ResolveFramebuffers(outputRenderBuffers);
+        }
+    }
+
     void Render(HdRprRenderThread* renderThread) {
-        if (!m_rprContext || m_aovRegistry.empty()) {
+        if (!m_rprContext) {
             return;
         }
 
-        Update();
+        try {
+            Update();
+        } catch (std::runtime_error const& e) {
+            TF_RUNTIME_ERROR("Failed to update: %s", e.what());
+            return;
+        }
+
+        if (m_aovRegistry.empty()) {
+            // Nothing to render
+            return;
+        }
 
         std::vector<std::pair<void*, size_t>> outputRenderBuffers;
         for (auto& aovBinding : m_aovBindings) {
@@ -1256,48 +1296,18 @@ public:
         }
 
         if (m_state == kStateRender) {
-            bool stopRequested = false;
-            while (!IsConverged() || stopRequested) {
-                renderThread->WaitUntilPaused();
-                stopRequested = renderThread->IsStopRequested();
-                if (stopRequested) {
-                    break;
-                }
-
-                m_rendering.store(true);
-                auto status = rprContextRender(m_rprContext->GetHandle());
-                m_rendering.store(false);
-
-                if (status == RPR_ERROR_ABORTED ||
-                    RPR_ERROR_CHECK(status, "Fail contex render framebuffer")) {
-                    stopRequested = true;
-                    break;
-                }
-
-                m_iter++;
-                if (m_varianceThreshold > 0.0f) {
-                    if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
-                        m_activePixels = -1;
-                    }
-                }
-
-                if (!IsConverged()) {
-                    // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
-                    // We do not resolve framebuffers in case user requested render stop
-                    ResolveFramebuffers(outputRenderBuffers);
-                }
-
-                stopRequested = renderThread->IsStopRequested();
-            }
-
-            if (!stopRequested) {
-                ResolveFramebuffers(outputRenderBuffers);
+            try {
+                RenderImpl(renderThread, outputRenderBuffers);
+            } catch (std::runtime_error const& e) {
+                TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
             }
         } else if (m_state == kStateRestartRequired) {
             PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
             auto imagesPath = PlugFindPluginResource(plugin, "images", false);
             auto path = imagesPath + "/restartRequired.png";
-            RenderImage(path);
+            if (!RenderImage(path)) {
+                fprintf(stderr, "Please restart render\n");
+            }
         }
 
         for (auto& aovBinding : m_aovBindings) {
@@ -1341,30 +1351,12 @@ public:
         return m_iter >= m_maxSamples || m_activePixels == 0;
     }
 
-    void DeleteMesh(void* mesh) {
-        if (!mesh) {
-            return;
-        }
-
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        RPR_ERROR_CHECK(rprShapeSetMaterial(mesh, nullptr), "Fail reset mesh material");
-        RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), mesh), "Fail detach mesh from scene");
-
-        rprObjectDelete(mesh);
-    }
-
-    void DeleteInstance(void* instance) {
-        if (!instance) {
-            return;
-        }
-
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        rprObjectDelete(instance);
-    }
-
     bool IsGlInteropEnabled() const {
         return m_rprContext && m_rprContext->IsGlInteropEnabled();
+    }
+
+    bool IsAovFormatConversionAvailable() const {
+        return m_rifContext != nullptr;
     }
 
     int GetCurrentRenderQuality() const {
@@ -1424,12 +1416,17 @@ private:
 
         PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
         auto modelsPath = PlugFindPluginResource(plugin, "rif_models", false);
-        if (!ValidateRifModels(modelsPath)) {
+        if (modelsPath.empty()) {
+            TF_RUNTIME_ERROR("Failed to find RIF models in plugin package");
+        } else if (!ValidateRifModels(modelsPath)) {
             modelsPath = "";
             TF_RUNTIME_ERROR("RIF version and AI models version mismatch");
         }
 
         m_rifContext = rif::Context::Create(m_rprContext.get(), modelsPath);
+        if (!m_rifContext) {
+            return;
+        }
 
         // We create separate AOVs needed for denoising ASAP
         // In such a way, when user enables denoising it will not require to rerender
@@ -1646,7 +1643,7 @@ private:
         try {
             if (!aov) {
                 if (aovName == HdRprAovTokens->color) {
-                    aov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get(), m_rifContext.get());
+                    aov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get());
                 } else if (aovName == HdRprAovTokens->normal) {
                     aov = std::make_shared<HdRprApiNormalAov>(width, height, format, m_rprContext.get(), m_rifContext.get());
                 } else if (aovName == HdRprAovTokens->depth) {
@@ -1674,13 +1671,17 @@ private:
         return aov;
     }
 
-    void RenderImage(std::string const& path) {
+    bool RenderImage(std::string const& path) {
+        if (!m_rifContext) {
+            return false;
+        }
+
         auto colorAovBinding = std::find_if(m_aovBindings.begin(), m_aovBindings.end(), [](HdRenderPassAovBinding const& binding) {
             return binding.aovName == HdRprAovTokens->color;
         });
         if (colorAovBinding == m_aovBindings.end() ||
             !colorAovBinding->renderBuffer) {
-            return;
+            return false;
         }
 
         auto textureData = GlfUVTextureData::New(path, INT_MAX, 0, 0, 0, 0);
@@ -1702,7 +1703,7 @@ private:
                 bytesPerChannel = 4;
             } else {
                 TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureData->GLType());
-                return;
+                return false;
             }
 
             if (textureData->GLFormat() == GL_RGBA) {
@@ -1713,7 +1714,7 @@ private:
                 imageDesc.num_components = 1;
             } else {
                 TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), textureData->GLFormat());
-                return;
+                return false;
             }
 
             imageDesc.image_row_pitch = bytesPerChannel * imageDesc.num_components * imageDesc.image_width;
@@ -1723,30 +1724,38 @@ private:
 
             void* mappedData;
             if (RIF_ERROR_CHECK(rifImageMap(rifImage->GetHandle(), RIF_IMAGE_MAP_WRITE, &mappedData), "Failed to map rif image") || !mappedData) {
-                return;
+                return false;
             }
             std::memcpy(mappedData, textureData->GetRawBuffer(), imageDesc.image_slice_pitch);
             RIF_ERROR_CHECK(rifImageUnmap(rifImage->GetHandle(), mappedData), "Failed to unmap rif image");
 
             auto colorRb = colorAovBinding->renderBuffer;
 
-            auto blitFilter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), colorRb->GetWidth(), colorRb->GetHeight());
-            blitFilter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_BICUBIC);
-            blitFilter->SetInput(rif::Color, rifImage->GetHandle());
-            blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorRb->GetFormat()));
-            blitFilter->Update();
+            try {
+                auto blitFilter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), colorRb->GetWidth(), colorRb->GetHeight());
+                blitFilter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_BICUBIC);
+                blitFilter->SetInput(rif::Color, rifImage->GetHandle());
+                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorRb->GetFormat()));
+                blitFilter->Update();
 
-            m_rifContext->ExecuteCommandQueue();
+                m_rifContext->ExecuteCommandQueue();
 
-            if (RIF_ERROR_CHECK(rifImageMap(blitFilter->GetOutput(), RIF_IMAGE_MAP_READ, &mappedData), "Failed to map rif image") || !mappedData) {
-                return;
+                if (RIF_ERROR_CHECK(rifImageMap(blitFilter->GetOutput(), RIF_IMAGE_MAP_READ, &mappedData), "Failed to map rif image") || !mappedData) {
+                    return false;
+                }
+                size_t size = HdDataSizeOfFormat(colorRb->GetFormat()) * colorRb->GetWidth() * colorRb->GetHeight();
+                std::memcpy(colorRb->Map(), mappedData, size);
+                colorRb->Unmap();
+
+                RIF_ERROR_CHECK(rifImageUnmap(blitFilter->GetOutput(), mappedData), "Failed to unmap rif image");
+                return true;
+            } catch (rif::Error const& e) {
+                TF_RUNTIME_ERROR("Failed to blit image: %s", e.what());
+                return false;
             }
-            size_t size = HdDataSizeOfFormat(colorRb->GetFormat()) * colorRb->GetWidth() * colorRb->GetHeight();
-            std::memcpy(colorRb->Map(), mappedData, size);
-            colorRb->Unmap();
         } else {
             TF_RUNTIME_ERROR("Failed to load \"%s\" image", path.c_str());
-            return;
+            return false;
         }
     }
 
@@ -2040,6 +2049,10 @@ int HdRprApi::GetNumActivePixels() const {
 
 bool HdRprApi::IsGlInteropEnabled() const {
     return m_impl->IsGlInteropEnabled();
+}
+
+bool HdRprApi::IsAovFormatConversionAvailable() const {
+    return m_impl->IsAovFormatConversionAvailable();
 }
 
 int HdRprApi::GetCurrentRenderQuality() const {

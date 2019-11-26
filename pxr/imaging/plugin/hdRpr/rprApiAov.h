@@ -58,8 +58,7 @@ private:
 
 class HdRprApiColorAov : public HdRprApiAov {
 public:
-    HdRprApiColorAov(int width, int height, HdFormat format,
-                     rpr::Context* rprContext, rif::Context* rifContext);
+    HdRprApiColorAov(int width, int height, HdFormat format, rpr::Context* rprContext);
     ~HdRprApiColorAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;

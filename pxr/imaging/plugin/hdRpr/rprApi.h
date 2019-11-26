@@ -129,6 +129,7 @@ public:
 
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
+    bool IsAovFormatConversionAvailable() const;
     int GetCurrentRenderQuality() const;
 
     static std::string GetAppDataPath();

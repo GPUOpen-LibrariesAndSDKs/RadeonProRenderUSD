@@ -236,6 +236,15 @@ HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) cons
         return HdAovDescriptor();
     }
 
+    if (!m_rprApi->IsAovFormatConversionAvailable()) {
+        if (name == HdAovTokens->primId) {
+            // Integer images required, no way to support it
+            return HdAovDescriptor();
+        }
+        // Only native RPR format can be used for AOVs when there is no support for AOV format conversion
+        return HdAovDescriptor(HdFormatFloat32Vec4, false, VtValue(GfVec4f(0.0f)));
+    }
+
     HdFormat format = HdFormatInvalid;
 
     float clearColorValue = 0.0f;
