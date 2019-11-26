@@ -91,8 +91,6 @@ public:
         }
         m_state = kStateRender;
 
-        HdRprConfig::GetInstance().Sync(m_delegate);
-
         InitRpr();
         InitRif();
         InitMaterialSystem();
@@ -1110,15 +1108,6 @@ public:
 
         m_imageCache->GarbageCollectIfNeeded();
 
-        auto& preferences = HdRprConfig::GetInstance();
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID &&
-            preferences.IsDirty(HdRprConfig::DirtyRenderQuality)) {
-            auto quality = preferences.GetRenderQuality();
-            if (quality >= kRenderQualityLow && quality <= kRenderQualityHigh) {
-                rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, quality);
-            }
-        }
-
         // In case there is no Lights in scene - create default
         if (!m_isLightPresent) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
@@ -1132,8 +1121,18 @@ public:
         }
 
         UpdateCamera();
-        UpdateSettings();
-        UpdateDenoiseFilter();
+        std::pair<bool, bool> denoiseSetting;
+        {
+            HdRprConfig* config;
+            auto configInstanceLock = HdRprConfig::GetInstance(&config);
+            UpdateSettings(*config);
+            denoiseSetting.first = config->IsDirty(HdRprConfig::DirtyDenoise);
+            if (denoiseSetting.first) {
+                denoiseSetting.second = config->GetEnableDenoising();
+            }
+            config->ResetDirty();
+        }
+        UpdateDenoiseFilter(denoiseSetting);
 
         for (auto& aovFrameBufferEntry : m_aovFrameBuffers) {
             auto& aovFrameBuffer = aovFrameBufferEntry.second;
@@ -1225,13 +1224,10 @@ public:
         }
 
         m_dirtyFlags = ChangeTracker::Clean;
-        preferences.ResetDirty();
     }
 
-    void UpdateTahoeSettings(HdRprConfig& preferences, bool force) {
+    void UpdateTahoeSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
-            preferences.CleanDirtyFlag(HdRprConfig::DirtyAdaptiveSampling);
-
             m_varianceThreshold = preferences.GetVarianceThreshold();
             RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, m_varianceThreshold), "Failed to set as.threshold");
             RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinAdaptiveSamples()), "Failed to set as.minspp");
@@ -1264,7 +1260,7 @@ public:
         }
     }
 
-    void UpdateHybridSettings(HdRprConfig& preferences, bool force) {
+    void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
             auto quality = preferences.GetRenderQuality();
             if (quality == kRenderQualityMedium) {
@@ -1276,11 +1272,8 @@ public:
         }
     }
 
-    void UpdateSettings(bool force = false) {
-        auto& preferences = HdRprConfig::GetInstance();
+    void UpdateSettings(HdRprConfig const& preferences, bool force = false) {
         if (preferences.IsDirty(HdRprConfig::DirtySampling) || force) {
-            preferences.CleanDirtyFlag(HdRprConfig::DirtySampling);
-
             m_maxSamples = preferences.GetMaxSamples();
             if (m_maxSamples < m_iter) {
                 // Force framebuffers clear to render required number of samples
@@ -1358,7 +1351,7 @@ public:
         }
     }
 
-    void UpdateDenoiseFilter() {
+    void UpdateDenoiseFilter(std::pair<bool, bool> denoiseSetting) {
         // XXX: RPR Hybrid context does not support filters. Discuss with Hybrid team possible workarounds
         if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
             return;
@@ -1369,12 +1362,12 @@ public:
             return;
         }
 
-        if (!HdRprConfig::GetInstance().IsDirty(HdRprConfig::DirtyDenoise) &&
+        if (!denoiseSetting.first &&
             !(m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers)) {
             return;
         }
 
-        if (!HdRprConfig::GetInstance().GetEnableDenoising() || !IsAovEnabled(HdRprAovTokens->color)) {
+        if (!denoiseSetting.second || !IsAovEnabled(HdRprAovTokens->color)) {
             m_denoiseFilterPtr.reset();
             return;
         }
@@ -1518,7 +1511,13 @@ public:
     }
 
     bool IsChanged() const {
-        return m_dirtyFlags != ChangeTracker::Clean || HdRprConfig::GetInstance().IsDirty(HdRprConfig::DirtyAll);
+        if (m_dirtyFlags != ChangeTracker::Clean) {
+            return true;
+        }
+
+        HdRprConfig* config;
+        auto configInstanceLock = HdRprConfig::GetInstance(&config);
+        return config->IsDirty(HdRprConfig::DirtyAll);
     }
 
     bool IsConverged() const {
@@ -1561,9 +1560,19 @@ public:
 
 private:
     void InitRpr() {
-        auto quality = HdRprConfig::GetInstance().GetRenderQuality();
-        auto plugin = quality == kRenderQualityFull ? rpr::PluginType::TAHOE : rpr::PluginType::HYBRID;
-        auto renderDevice = static_cast<rpr::RenderDeviceType>(HdRprConfig::GetInstance().GetRenderDevice());
+        RenderQualityType renderQuality;
+        rpr::RenderDeviceType renderDevice;
+        {
+            HdRprConfig* config;
+            auto configInstanceLock = HdRprConfig::GetInstance(&config);
+            // Force sync to catch up the latest render quality and render device
+            config->Sync(m_delegate);
+
+            renderQuality = config->GetRenderQuality();
+            renderDevice = static_cast<rpr::RenderDeviceType>(config->GetRenderDevice());
+        }
+
+        auto plugin = renderQuality == kRenderQualityFull ? rpr::PluginType::TAHOE : rpr::PluginType::HYBRID;
         auto cachePath = HdRprApi::GetCachePath();
         m_rprContext = rpr::Context::Create(plugin, renderDevice, false, cachePath.c_str());
         if (!m_rprContext) {
@@ -1572,7 +1581,11 @@ private:
 
         RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_Y_FLIP, 0), "Fail to set context YFLIP parameter");
 
-        UpdateSettings(true);
+        {
+            HdRprConfig* config;
+            auto configInstanceLock = HdRprConfig::GetInstance(&config);
+            UpdateSettings(*config, true);
+        }
 
         m_imageCache.reset(new ImageCache(m_rprContext.get()));
         m_rendering.store(false);
