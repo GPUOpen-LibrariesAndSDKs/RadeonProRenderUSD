@@ -42,7 +42,7 @@ render_setting_categories = [
     {
         'name': 'Denoise',
         'houdini': {
-            'hidewhen': 'renderQuality < 3'
+            'hidewhen': 'renderQuality < 2'
         },
         'settings': [
             {

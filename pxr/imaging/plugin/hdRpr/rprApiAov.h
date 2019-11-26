@@ -1,0 +1,115 @@
+#ifndef HDRPR_RPR_API_AOV_H
+#define HDRPR_RPR_API_AOV_H
+
+#include "rifcpp/rifFilter.h"
+#include "pxr/base/gf/matrix4f.h"
+#include "pxr/imaging/hd/types.h"
+
+#include <RadeonProRender.h>
+
+PXR_NAMESPACE_OPEN_SCOPE
+
+namespace rpr { class Context; class FrameBuffer; }
+
+class HdRprApi;
+
+class HdRprApiAov {
+public:
+    HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
+                rpr::Context* rprContext, std::unique_ptr<rif::Filter> filter);
+    HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
+                rpr::Context* rprContext, rif::Context* rifContext);
+    virtual ~HdRprApiAov() = default;
+
+    virtual void Resize(int width, int height, HdFormat format);
+    virtual void Update(HdRprApi const* rprApi, rif::Context* rifContext);
+
+    bool GetData(void* dstBuffer, size_t dstBufferSize);
+    void Resolve();
+    void Clear();
+
+    HdFormat GetFormat() const { return m_format; }
+    rpr::FrameBuffer* GetAovFb() { return m_aov.get(); };
+    rpr::FrameBuffer* GetResolvedFb();
+
+protected:
+    HdRprApiAov() = default;
+
+    virtual void OnFormatChange(rif::Context* rifContext);
+    virtual void OnSizeChange(rif::Context* rifContext);
+
+protected:
+    std::unique_ptr<rpr::FrameBuffer> m_aov;
+    std::unique_ptr<rpr::FrameBuffer> m_resolved;
+    std::unique_ptr<rif::Filter> m_filter;
+    HdFormat m_format = HdFormatInvalid;
+
+    enum ChangeTracker {
+        Clean = 0,
+        AllDirty = ~0u,
+        DirtySize = 1 << 0,
+        DirtyFormat = 1 << 1,
+    };
+    uint32_t m_dirtyBits = AllDirty;
+
+private:
+    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
+};
+
+class HdRprApiColorAov : public HdRprApiAov {
+public:
+    HdRprApiColorAov(int width, int height, HdFormat format,
+                     rpr::Context* rprContext, rif::Context* rifContext);
+    ~HdRprApiColorAov() override = default;
+
+    void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+
+    void EnableAIDenoise(std::shared_ptr<HdRprApiAov> albedo,
+                         std::shared_ptr<HdRprApiAov> normal,
+                         std::shared_ptr<HdRprApiAov> linearDepth);
+    void EnableEAWDenoise(std::shared_ptr<HdRprApiAov> albedo,
+                          std::shared_ptr<HdRprApiAov> normal,
+                          std::shared_ptr<HdRprApiAov> linearDepth,
+                          std::shared_ptr<HdRprApiAov> objectId,
+                          std::shared_ptr<HdRprApiAov> worldCoordinate);
+    void DisableDenoise(rif::Context* rifContext);
+
+protected:
+    void OnFormatChange(rif::Context* rifContext) override;
+    void OnSizeChange(rif::Context* rifContext) override;
+
+private:
+    std::shared_ptr<HdRprApiAov> m_retainedDenoiseInputs[rif::MaxInput];
+    rif::FilterType m_currentFilter = rif::FilterType::None;
+    bool m_isCurrentFilterDirty = true;
+};
+
+class HdRprApiNormalAov : public HdRprApiAov {
+public:
+    HdRprApiNormalAov(int width, int height, HdFormat format,
+                      rpr::Context* rprContext, rif::Context* rifContext);
+    ~HdRprApiNormalAov() override = default;
+protected:
+    void OnFormatChange(rif::Context* rifContext) override;
+    void OnSizeChange(rif::Context* rifContext) override;
+};
+
+class HdRprApiDepthAov : public HdRprApiAov {
+public:
+    HdRprApiDepthAov(HdFormat format,
+                     std::shared_ptr<HdRprApiAov> worldCoordinateAov,
+                     rpr::Context* rprContext, rif::Context* rifContext);
+    ~HdRprApiDepthAov() override = default;
+
+    void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+    void Resize(int width, int height, HdFormat format) override;
+
+private:
+    std::shared_ptr<HdRprApiAov> m_retainedWorldCoordinateAov;
+    int m_width;
+    int m_height;
+};
+
+PXR_NAMESPACE_CLOSE_SCOPE
+
+#endif // HDRPR_RPR_API_AOV_H

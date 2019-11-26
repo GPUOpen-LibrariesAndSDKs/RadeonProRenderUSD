@@ -121,6 +121,7 @@ pxr_plugin(hdRpr
         renderPass
         renderThread
         rprApi
+        rprApiAov
         mesh
         instancer
         material
