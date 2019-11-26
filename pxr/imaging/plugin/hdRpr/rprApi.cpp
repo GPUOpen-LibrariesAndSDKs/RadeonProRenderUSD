@@ -1204,6 +1204,7 @@ public:
             m_dirtyFlags & ChangeTracker::DirtyAOVFramebuffers ||
             m_dirtyFlags & ChangeTracker::DirtyCamera) {
             m_iter = 0;
+            m_activePixels = -1;
             for (auto& aovFb : m_aovFrameBuffers) {
                 if (aovFb.second.aov) {
                     aovFb.second.aov->Clear();
@@ -1447,9 +1448,6 @@ public:
         }
 
         if (m_state == kStateRender) {
-            m_iter = 0;
-            m_activePixels = -1;
-
             bool stopRequested = false;
             while (!IsConverged() || stopRequested) {
                 renderThread->WaitUntilPaused();
