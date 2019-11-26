@@ -21,10 +21,13 @@ HdRprRenderPass::HdRprRenderPass(HdRenderIndex* index,
 }
 
 void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState, TfTokenVector const& renderTags) {
-    auto& config = HdRprConfig::GetInstance();
-    config.Sync(GetRenderIndex()->GetRenderDelegate());
-    if (config.IsDirty(HdRprConfig::DirtyAll)) {
-        m_renderParam->GetRenderThread()->StopRender();
+    {
+        HdRprConfig* config;
+        auto configInstanceLock = HdRprConfig::GetInstance(&config);
+        config->Sync(GetRenderIndex()->GetRenderDelegate());
+        if (config->IsDirty(HdRprConfig::DirtyAll)) {
+            m_renderParam->GetRenderThread()->StopRender();
+        }
     }
 
     auto rprApiConst = m_renderParam->GetRprApi();

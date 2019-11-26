@@ -198,6 +198,8 @@ def generate_files(install_path):
 
 #include "rprcpp/rprContext.h"
 
+#include <mutex>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 {rs_tokens_declaration}
@@ -213,7 +215,7 @@ public:
     }};
 
     static HdRenderSettingDescriptorList GetRenderSettingDescriptors();
-    static HdRprConfig& GetInstance();
+    static std::unique_lock<std::mutex> GetInstance(HdRprConfig** instance);
 
     void Sync(HdRenderDelegate* renderDelegate);
 
@@ -281,9 +283,11 @@ HdRenderSettingDescriptorList HdRprConfig::GetRenderSettingDescriptors() {{
 }}
 
 
-HdRprConfig& HdRprConfig::GetInstance() {{
+std::unique_lock<std::mutex> HdRprConfig::GetInstance(HdRprConfig** instancePtr) {{
+    static std::mutex instanceMutex;
     static HdRprConfig instance;
-    return instance;
+    *instancePtr = &instance;
+    return std::unique_lock<std::mutex>(instanceMutex);
 }}
 
 void HdRprConfig::Sync(HdRenderDelegate* renderDelegate) {{
@@ -292,7 +296,7 @@ void HdRprConfig::Sync(HdRenderDelegate* renderDelegate) {{
         m_lastRenderSettingsVersion = currentSettingsVersion;
     
         auto getBoolSetting = [&renderDelegate](TfToken const& token, bool defaultValue) {{
-            auto boolValue = renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->enableDenoising);
+            auto boolValue = renderDelegate->GetRenderSetting(token);
             if (boolValue.IsHolding<int64_t>()) {{
                 return static_cast<bool>(boolValue.UncheckedGet<int64_t>());
             }} else if (boolValue.IsHolding<bool>()) {{
