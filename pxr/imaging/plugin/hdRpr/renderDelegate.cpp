@@ -263,7 +263,12 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     int numCompletedSamples = m_rprApi->GetNumCompletedSamples();
     stats[HdPerfTokens->numCompletedSamples.GetString()] = numCompletedSamples;
 
-    double percentDone = double(numCompletedSamples) / HdRprConfig::GetInstance().GetMaxSamples();
+    double percentDone = 0.0;
+    {
+        HdRprConfig* config;
+        auto configInstanceLock = HdRprConfig::GetInstance(&config);
+        percentDone = double(numCompletedSamples) / config->GetMaxSamples();
+    }
     int numActivePixels = m_rprApi->GetNumActivePixels();
     if (numActivePixels != -1) {
         auto size = m_rprApi->GetViewportSize();
@@ -291,11 +296,15 @@ bool HdRprDelegate::Resume() {
 PXR_NAMESPACE_CLOSE_SCOPE
 
 void SetHdRprRenderDevice(int renderDevice) {
-    PXR_INTERNAL_NS::HdRprConfig::GetInstance().SetRenderDevice(renderDevice);
+    PXR_INTERNAL_NS::HdRprConfig* config;
+    auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);
+    config->SetRenderDevice(renderDevice);
 }
 
 void SetHdRprRenderQuality(int quality) {
-    PXR_INTERNAL_NS::HdRprConfig::GetInstance().SetRenderQuality(quality);
+    PXR_INTERNAL_NS::HdRprConfig* config;
+    auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);
+    config->SetRenderQuality(quality);
 }
 
 int GetHdRprRenderQuality() {
