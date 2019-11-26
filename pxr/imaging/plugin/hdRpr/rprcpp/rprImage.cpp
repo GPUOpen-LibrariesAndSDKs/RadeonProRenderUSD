@@ -42,7 +42,7 @@ Image::Image(rpr_context context, const char* path) {
     if (dot && strcmp(dot, ".rat") == 0) {
         auto ratImage = std::unique_ptr<IMG_File>(IMG_File::open(path));
         if (!ratImage) {
-            throw rpr::Error((std::string("Failed to load image: ") + path).c_str());
+            RPR_THROW_ERROR_MSG("Failed to load image %s", path);
         }
 
         UT_Array<PXL_Raster*> images;
@@ -53,7 +53,7 @@ Image::Image(rpr_context context, const char* path) {
         });
         if (!ratImage->readImages(images) ||
             images.isEmpty()) {
-            throw rpr::Error((std::string("Failed to load image: ") + path).c_str());
+            RPR_THROW_ERROR_MSG("Failed to load image %s", path);
         }
 
         // XXX: use the only first image, find out what to do with other images
@@ -69,7 +69,7 @@ Image::Image(rpr_context context, const char* path) {
         } else if (image->getPacking() == PACK_RGBA) {
             format.num_components = 4;
         } else {
-            throw rpr::Error("Failed to create image: unsupported RAT format");
+            RPR_THROW_ERROR_MSG("Failed to load image %s: unsupported RAT packing", path);
         }
 
         if (image->getFormat() == PXL_INT8) {
@@ -79,13 +79,13 @@ Image::Image(rpr_context context, const char* path) {
         } else if (image->getFormat() == PXL_FLOAT32) {
             format.type = RPR_COMPONENT_TYPE_FLOAT32;
         } else {
-            throw rpr::Error("Failed to create image: unsupported RAT format");
+            RPR_THROW_ERROR_MSG("Failed to load image %s: unsupported RAT format", path);
         }
 
         rpr_image_desc desc = GetRprImageDesc(format, image->getXres(), image->getYres());
         if (desc.image_height < 1 ||
             desc.image_width < 1) {
-            throw rpr::Error("Failed to create image: incorrect dimensions");
+            RPR_THROW_ERROR_MSG("Failed to load image %s: incorrect dimensions", path);
         }
 
         // RAT image is flipped in Y axis

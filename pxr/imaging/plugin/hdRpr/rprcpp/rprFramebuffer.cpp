@@ -10,7 +10,7 @@ FrameBuffer::FrameBuffer(rpr_context context, rpr_uint width, rpr_uint height)
     , m_height(height)
     , m_aov(kAovNone) {
     if (!m_context) {
-        throw rpr::Error("Failed to create framebuffer", RPR_ERROR_INVALID_CONTEXT, nullptr);
+        throw rpr::Error(RPR_GET_ERROR_MESSAGE(RPR_ERROR_INVALID_CONTEXT, "Failed to create framebuffer"));
     }
     Create();
 }
@@ -50,7 +50,7 @@ void FrameBuffer::Clear() {
     if (m_width == 0 || m_height == 0) {
         return;
     }
-    RPR_ERROR_CHECK_THROW(rprFrameBufferClear(GetHandle()), "Failed to attach aov framebuffer", m_context);
+    RPR_ERROR_CHECK(rprFrameBufferClear(GetHandle()), "Failed to clear framebuffer", m_context);
 }
 
 void FrameBuffer::Resolve(FrameBuffer* dstFrameBuffer) {

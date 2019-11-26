@@ -36,7 +36,7 @@ public:
 
     void ExecuteCommandQueue();
 
-    std::string const& GetModelPath() const;
+    std::string const& GetModelPath() const { return m_modelPath; };
 
 protected:
     Context(std::string const& modelPath);

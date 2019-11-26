@@ -69,7 +69,7 @@ void FrameBufferGL::CreateGL() {
     if (status != RPR_SUCCESS) {
         glDeleteTextures(1, &m_textureId);
         m_textureId = 0;
-        throw rpr::Error("Failed to create framebuffer from GL texture", status, m_context);
+        throw rpr::Error(RPR_GET_ERROR_MESSAGE(RPR_ERROR_INVALID_CONTEXT, "Failed to create framebuffer from GL texture", m_context));
     }
     m_rprObjectHandle = fb;
 }
