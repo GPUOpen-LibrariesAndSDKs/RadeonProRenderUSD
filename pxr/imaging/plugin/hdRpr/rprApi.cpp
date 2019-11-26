@@ -1314,7 +1314,8 @@ public:
     }
 
     void UpdateCamera() {
-        if ((m_dirtyFlags & ChangeTracker::DirtyCamera) == 0) {
+        if ((m_dirtyFlags & ChangeTracker::DirtyCamera) == 0 &&
+            (m_dirtyFlags & ChangeTracker::DirtyViewport) == 0) {
             return;
         }
 
@@ -1340,8 +1341,7 @@ public:
             RPR_ERROR_CHECK(rprCameraSetOrthoWidth(camera, orthoWidth), "Failed to set camera ortho width");
             RPR_ERROR_CHECK(rprCameraSetOrthoHeight(camera, orthoHeight), "Failed to set camera ortho height");
         } else {
-            auto fbDesc = m_aovFrameBuffers.begin()->second.aov->GetDesc();
-            auto ratio = double(fbDesc.fb_width) / fbDesc.fb_height;
+            auto ratio = double(m_viewportSize[0]) / m_viewportSize[1];
             auto focalLength = m_cameraProjectionMatrix[1][1] / (2.0 * ratio);
             auto sensorWidth = 1.0f;
             auto sensorHeight = 1.0f / ratio;
