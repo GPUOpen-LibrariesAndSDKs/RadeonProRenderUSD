@@ -8,6 +8,7 @@
 #include BOOST_INCLUDE_PATH(variant.hpp)
 
 #include "pxr/base/gf/matrix4f.h"
+#include "pxr/base/gf/vec2i.h"
 
 #include <unordered_map>
 #include <vector>
@@ -20,7 +21,7 @@ enum FilterInputType
 {
     Color,
     Normal,
-    Depth,
+    LinearDepth,
     WorldCoordinate,
     ObjectId,
     Trans,
@@ -28,7 +29,7 @@ enum FilterInputType
     MaxInput
 };
 
-using FilterParam = BOOST_NS::variant<int, float, std::string, GfMatrix4f>;
+using FilterParam = BOOST_NS::variant<int, float, std::string, GfVec2i, GfMatrix4f>;
 
 enum class FilterType
 {
@@ -56,6 +57,7 @@ public:
 
     rif_image GetOutput();
 
+    virtual void Resize(std::uint32_t width, std::uint32_t height);
     void Update();
 
 protected:
@@ -72,12 +74,22 @@ protected:
 
     std::vector<rif_image_filter> m_auxFilters;
     std::vector<std::unique_ptr<Image>> m_auxImages;
-    std::vector<std::unique_ptr<rif::Image>> m_retainedImages;
+
+    std::unique_ptr<rif::Image> m_retainedOutputImage;
 
     struct InputTraits {
         rif_image rifImage;
         rpr::FrameBuffer* rprFrameBuffer;
         float sigma;
+
+        std::unique_ptr<rif::Image> retainedImage;
+
+        InputTraits() : rifImage(nullptr), rprFrameBuffer(nullptr), sigma(0.0f) {}
+        InputTraits(rif_image rifImage, float sigma) : rifImage(rifImage), rprFrameBuffer(nullptr), sigma(sigma) {}
+        InputTraits(rpr::FrameBuffer* rprFrameBuffer, Context* context, float sigma) : rprFrameBuffer(rprFrameBuffer), sigma(sigma) {
+            retainedImage = context->CreateImage(rprFrameBuffer);
+            rifImage = retainedImage->GetHandle();
+        }
     };
 
     std::unordered_map<FilterInputType, InputTraits, std::hash<std::underlying_type<FilterInputType>::type>> m_inputs;
