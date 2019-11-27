@@ -8,6 +8,12 @@ import zipfile
 
 from distutils import util
 
+# handle input for pyton 2 vs 3
+try: 
+    input = raw_input
+except NameError: 
+    input = input
+
 def windows():
     return platform.system() == "Windows"
 def linux():
@@ -20,7 +26,7 @@ def query_agreement(install_dir):
     print('Do you agree? [y/n]')
     while True:
         try:
-            return util.strtobool(raw_input())
+            return util.strtobool(input())
         except ValueError:
             print('yes or no')
 
@@ -34,7 +40,7 @@ def install_package(install_dir, package):
                 if not os.path.isdir(path):
                     print('-- Installing: ' + path)
             print('Successfully installed')
-        except Exception, e:
+        except Exception as e:
             print(e)
             print('Could not install package. Try running with root privileges')
 
@@ -137,7 +143,7 @@ else:
                 i += 1
             print('Enter number.')
             try:
-                i = int(raw_input())
+                i = int(input())
                 if i >= 0 and i < len(install_variants):
                     number = i
                     break
