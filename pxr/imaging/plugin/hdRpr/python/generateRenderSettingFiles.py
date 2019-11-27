@@ -1,10 +1,14 @@
-import sys, os, argparse
+import os
+import sys
+import argparse
+import platform
 
 dry_run = False
 
 render_setting_categories = [
     {
         'name': 'RenderQuality',
+        'disabled_platform': ['Darwin'],
         'settings': [
             {
                 'name': 'renderQuality',
@@ -424,6 +428,11 @@ PXR_NAMESPACE_CLOSE_SCOPE
     rs_validate_values = ''
     houdini_params = ''
     for category in render_setting_categories:
+        disabled_category = False
+        if 'disabled_platform' in category:
+            if platform.system() in category['disabled_platform']:
+                disabled_category = True
+
         category_name = category['name']
         dirty_flag = 'Dirty{}'.format(category_name)
         rs_category_dirty_flags += '        {} = 1 << {},\n'.format(dirty_flag, dirty_flags_offset)
@@ -483,7 +492,10 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
             rs_list_initialization += '    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title)
 
-            rs_get_set_method_definitions += (
+            if disabled_category:
+                rs_get_set_method_definitions += 'void HdRprConfig::Set{name_title}({c_type} {name}) {{ /* Platform no-op */ }}'.format(name_title=name_title, c_type=c_type_str, name=name)
+            else:
+                rs_get_set_method_definitions += (
 '''
 void HdRprConfig::Set{name_title}({c_type} {name}) {{
 {set_validation}
