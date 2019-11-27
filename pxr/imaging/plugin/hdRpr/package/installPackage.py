@@ -53,19 +53,18 @@ def get_package_from_path(path):
 
 script_description = (
 '''
-Script that allows to easily install hdRpr across Windows, Ubuntu and macOS.
+The script allows to easily install hdRpr across Windows, Ubuntu, and macOS.
 To install hdRpr into specific location pass install_dir.
 ''')
 
 parser = argparse.ArgumentParser(
-    prog='hdRpr installer',
     description=script_description,
     formatter_class=argparse.RawDescriptionHelpFormatter)
 
-parser.add_argument('install_dir', action='store_const', const=None,
+parser.add_argument('-i', '--install_dir', type=str,
                     help='Directory where hdRpr will be installed. Typically it\'s going to be Houdini installation directory')
-parser.add_argument('package_path', action='store_const', const=None,
-                    help='Path to hdRpr package. If not set, package will be automatically finded in script folder')
+parser.add_argument('-p', '--package_path', type=str,
+                    help='Path to hdRpr package. If not set, the package will be automatically found in a script folder')
 
 args = parser.parse_args()
 
@@ -86,11 +85,10 @@ else:
     if num_packages == 0:
         print('Could not find any packages to install')
         exit()
-    elif num_packages == 1:
-        package = packages[0]
     else:
-        print('not implemented')
-        exit()
+        if num_packages > 1:
+            print('Found few packages: {}'.format(packages))        
+        package = packages[0]
 
 print('Installing "{}"'.format(package[0]))
 
