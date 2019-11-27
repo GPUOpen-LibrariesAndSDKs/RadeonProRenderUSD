@@ -471,7 +471,7 @@ public:
             m_rprContext->GetHandle(), &curve
             , newPoints.size(), (float*)newPoints.data(), sizeof(GfVec3f)
             , newIndexes.size(), 1, (const rpr_uint*)newIndexes.data()
-            , &width, nullptr, segmentsPerCurve.data()), "Fail to create curve")) {
+            , &width, nullptr, segmentsPerCurve.data(), 0), "Fail to create curve")) {
             return nullptr;
         }
         auto curveObject = RprApiObject::Wrap(curve);

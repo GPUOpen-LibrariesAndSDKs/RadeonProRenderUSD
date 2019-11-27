@@ -45,7 +45,6 @@ if(WIN32)
 
     set(RPR_BINARIES
         ${RPR_BIN_LOCATION}/RadeonProRender64.dll
-        ${RPR_BIN_LOCATION}/RprLoadStore64.dll
         ${RPR_TAHOE_BINARY}
         ${RPR_HYBRID_BINARY})
 else()
