@@ -230,22 +230,22 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             continue;
         }
 
-        if (paramId == RPR_UBER_MATERIAL_INPUT_EMISSION_COLOR) {
+        if (paramId == RPR_MATERIAL_INPUT_UBER_EMISSION_COLOR) {
             emissionColorNode = outNode;
         }
 
         // SIGGRAPH HACK: Fix for models from Apple AR quick look gallery.
         //   Of all the available ways to load images, none of them gives the opportunity to
         //   get the gamma of the image and does not convert the image to linear space
-        if ((paramId == RPR_UBER_MATERIAL_INPUT_DIFFUSE_COLOR ||
-             paramId == RPR_UBER_MATERIAL_INPUT_REFLECTION_COLOR) &&
+        if ((paramId == RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR ||
+             paramId == RPR_MATERIAL_INPUT_UBER_REFLECTION_COLOR) &&
             ArGetResolver().GetExtension(matTex.path) == "png") {
             rprImageSetGamma(material->materialImages.back()->GetHandle(), 2.2f);
         }
 
         // normal map textures need to be passed through the normal map node
-        if (paramId == RPR_UBER_MATERIAL_INPUT_DIFFUSE_NORMAL ||
-            paramId == RPR_UBER_MATERIAL_INPUT_REFLECTION_NORMAL) {
+        if (paramId == RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL ||
+            paramId == RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL) {
             rpr_material_node textureNode = outNode;
             int status = rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_NORMAL_MAP, &outNode);
             if (status == RPR_SUCCESS) {
@@ -273,7 +273,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
                 rprMaterialNodeSetInputNByKey(isBlackColorNode, RPR_MATERIAL_INPUT_COLOR0, averageNode);
                 rprMaterialNodeSetInputFByKey(isBlackColorNode, RPR_MATERIAL_INPUT_COLOR1, 0.0f, 0.0f, 0.0f, 0.0f);
 
-                rprMaterialNodeSetInputNByKey(material->rootMaterial, RPR_UBER_MATERIAL_INPUT_EMISSION_WEIGHT, isBlackColorNode);
+                rprMaterialNodeSetInputNByKey(material->rootMaterial, RPR_MATERIAL_INPUT_UBER_EMISSION_WEIGHT, isBlackColorNode);
             } else {
                 rprObjectDelete(averageNode);
             }
