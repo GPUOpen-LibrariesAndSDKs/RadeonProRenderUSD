@@ -33,6 +33,7 @@ def get_package_path(build_dir):
                 package_path = match.group('package_path')
                 return package_path
 
+self_dir = os.path.abspath(self_path())
 hdrpr_root_path = os.path.abspath(os.path.join(self_path(), '../../../../..'))
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -66,7 +67,7 @@ if package_path:
             install_file.close()
 
         shutil.copyfile(package_path, package_basename)
-        shutil.copyfile('../install.py', 'install.py')
+        shutil.copyfile(self_dir + '/install.py', 'install.py')
         shutil.copyfile(hdrpr_root_path + '/INSTALL.md', 'INSTALL.md')
         shutil.copyfile(hdrpr_root_path + '/LICENSE.md', 'LICENSE.md')
 
