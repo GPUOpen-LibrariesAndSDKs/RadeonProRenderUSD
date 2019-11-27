@@ -29,6 +29,11 @@ def install_package(install_dir, package):
         try:
             zip_file = zipfile.ZipFile(package[0], 'r')
             zip_file.extractall(install_dir)
+            for file in zip_file.namelist():
+                path = '{install_dir}/{file}'.format(install_dir=install_dir, file=file)
+                if not os.path.isdir(path):
+                    print('-- Installing: ' + path)
+            print('Successfully installed')
         except Exception, e:
             print(e)
             print('Could not install package. Try running with root privileges')

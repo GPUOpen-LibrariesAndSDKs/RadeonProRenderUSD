@@ -1,10 +1,17 @@
 import os
 import re
+import sys
 import shutil
 import platform
 import argparse
 import subprocess
 import contextlib
+
+def self_path():
+    path = os.path.dirname(sys.argv[0])
+    if not path:
+        path = '.'
+    return path
 
 @contextlib.contextmanager
 def current_working_directory(dir):
@@ -26,8 +33,10 @@ def get_package_path(build_dir):
                 package_path = match.group('package_path')
                 return package_path
 
+hdrpr_root_path = os.path.abspath(os.path.join(self_path(), '../../../../..'))
+
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('-b', '--build_dir', type=str, default='../../../../../build')
+parser.add_argument('-b', '--build_dir', type=str, default='{}/build'.format(hdrpr_root_path))
 parser.add_argument('-o', '--output_package_path', type=str, default=None)
 args = parser.parse_args()
 
@@ -47,16 +56,19 @@ if package_path:
             installer_content = 'python install.py\n'
             if platform.system() == "Windows":
                 installer_ext = 'bat'
+                installer_content = 'pushd %~dp0\n' + installer_content
                 installer_content += 'pause\n'
             if platform.system() == "Darwin":
+                installer_content = 'cd $(dirname $0)\n' + installer_content
                 installer_ext = 'command'
             install_file = open('install.' + installer_ext, 'w')
             install_file.write(installer_content)
             install_file.close()
 
         shutil.copyfile(package_path, package_basename)
-        shutil.copyfile('../INSTALL.md', 'INSTALL.md')
         shutil.copyfile('../install.py', 'install.py')
+        shutil.copyfile(hdrpr_root_path + '/INSTALL.md', 'INSTALL.md')
+        shutil.copyfile(hdrpr_root_path + '/LICENSE.md', 'LICENSE.md')
 
     shutil.make_archive('tmp_package', 'zip', 'tmp_dir', './')
     shutil.copyfile('tmp_package.zip', output_package_path)
