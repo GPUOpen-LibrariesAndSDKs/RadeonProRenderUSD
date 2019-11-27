@@ -4,7 +4,7 @@ import re
 import glob
 import platform
 import argparse
-import subprocess
+import zipfile
 
 from distutils import util
 
@@ -26,8 +26,11 @@ def query_agreement(install_dir):
 
 def install_package(install_dir, package):
     if query_agreement(install_dir):
-        ret = subprocess.call(['sh', package[0], '--exclude-subdir', '--prefix={}'.format(install_dir)])
-        if ret != 0:
+        try:
+            zip_file = zipfile.ZipFile(package[0], 'r')
+            zip_file.extractall(install_dir)
+        except Exception, e:
+            print(e)
             print('Could not install package. Try running with root privileges')
 
 def install_to_houdini_dir(hfs, package):
@@ -35,9 +38,9 @@ def install_to_houdini_dir(hfs, package):
         hfs = os.path.dirname(hfs)
     install_package(hfs, package)
 
-valid_platforms = ['Linux', 'Darwin']
+valid_platforms = ['Linux', 'Darwin', 'win64']
 valid_targets = ['Houdini']
-package_pattern = re.compile(r'hdRpr-(?P<target>.*?)-.*-(?P<platform_>.*?).sh', re.VERBOSE)
+package_pattern = re.compile(r'hdRpr-(?P<target>.*?)-.*-(?P<platform_>.*?).zip', re.VERBOSE)
 def get_package_from_path(path):
     match = package_pattern.match(path)
     platform_ = match.group('platform_')
@@ -75,7 +78,7 @@ if args.package_path:
 else:
     packages = []
 
-    for path in glob.glob('hdRpr*.sh'):
+    for path in glob.glob('hdRpr*.zip'):
         if os.path.isfile(path):
             package = get_package_from_path(path)
             if package:
