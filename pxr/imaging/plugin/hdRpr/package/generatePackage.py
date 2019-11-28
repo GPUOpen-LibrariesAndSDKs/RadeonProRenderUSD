@@ -6,6 +6,17 @@ import platform
 import argparse
 import subprocess
 import contextlib
+import multiprocessing
+
+def get_cpu_count():
+    try:
+        return multiprocessing.cpu_count()
+    except NotImplementedError:
+        return 1
+
+def format_multi_procs(numJobs):
+    tag = '/M:' if platform.system() == 'Windows' else '-j'
+    return "{tag}{procs}".format(tag=tag, procs=numJobs)
 
 def self_path():
     path = os.path.dirname(sys.argv[0])
@@ -22,7 +33,7 @@ def current_working_directory(dir):
 
 def get_package_path(build_dir):
     with current_working_directory(build_dir):
-        subprocess.call(['cmake', '--build', '.', '--config', 'Release'])
+        subprocess.call(['cmake', '--build', '.', '--config', 'Release', '--', format_multi_procs(get_cpu_count())])
         output = subprocess.check_output(['cpack', '-C', 'Release'])
         print(output)
 
