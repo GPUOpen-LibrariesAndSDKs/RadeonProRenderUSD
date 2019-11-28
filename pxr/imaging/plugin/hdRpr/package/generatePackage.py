@@ -73,9 +73,13 @@ if package_path:
             if platform.system() == "Darwin":
                 installer_content = 'cd $(dirname $0)\n' + installer_content
                 installer_ext = 'command'
-            install_file = open('install.' + installer_ext, 'w')
+            install_file_path = 'install.' + installer_ext
+            install_file = open(install_file_path, 'w')
             install_file.write(installer_content)
             install_file.close()
+
+            if platform.system() == 'Darwin':
+                os.chmod(install_file_path, 0o755)
 
         shutil.copyfile(package_path, package_basename)
         shutil.copyfile(self_dir + '/install.py', 'install.py')
