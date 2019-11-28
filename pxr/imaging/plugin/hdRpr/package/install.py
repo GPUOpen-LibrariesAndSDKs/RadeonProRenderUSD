@@ -49,7 +49,7 @@ def install_to_houdini_dir(hfs, package):
         hfs = os.path.dirname(hfs)
     install_package(hfs, package)
 
-valid_platforms = ['Linux', 'Darwin', 'win64']
+valid_platforms = ['Linux', 'macOS', 'Windows']
 valid_targets = ['Houdini']
 package_pattern = re.compile(r'hdRpr-(?P<target>.*?)-.*-(?P<platform_>.*?).tar.gz', re.VERBOSE)
 def get_package_from_path(path):

@@ -16,4 +16,10 @@ set(CPACK_GENERATOR "TGZ")
 
 set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 
+if(APPLE)
+    set(CPACK_SYSTEM_NAME "macOS")
+elseif(WIN32)
+    set(CPACK_SYSTEM_NAME "Windows")
+endif()
+
 include(CPack)
