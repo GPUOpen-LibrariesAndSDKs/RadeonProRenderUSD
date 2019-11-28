@@ -4,7 +4,7 @@ import re
 import glob
 import platform
 import argparse
-import zipfile
+import tarfile
 
 from distutils import util
 
@@ -33,9 +33,9 @@ def query_agreement(install_dir):
 def install_package(install_dir, package):
     if query_agreement(install_dir):
         try:
-            zip_file = zipfile.ZipFile(package[0], 'r')
-            zip_file.extractall(install_dir)
-            for file in zip_file.namelist():
+            tar_file = tarfile.open(package[0], 'r:gz')
+            tar_file.extractall(install_dir)
+            for file in tar_file.getnames():
                 path = '{install_dir}/{file}'.format(install_dir=install_dir, file=file)
                 if not os.path.isdir(path):
                     print('-- Installing: ' + path)
@@ -51,7 +51,7 @@ def install_to_houdini_dir(hfs, package):
 
 valid_platforms = ['Linux', 'Darwin', 'win64']
 valid_targets = ['Houdini']
-package_pattern = re.compile(r'hdRpr-(?P<target>.*?)-.*-(?P<platform_>.*?).zip', re.VERBOSE)
+package_pattern = re.compile(r'hdRpr-(?P<target>.*?)-.*-(?P<platform_>.*?).tar.gz', re.VERBOSE)
 def get_package_from_path(path):
     match = package_pattern.match(path)
     platform_ = match.group('platform_')
@@ -89,7 +89,7 @@ if args.package_path:
 else:
     packages = []
 
-    for path in glob.glob('hdRpr*.zip'):
+    for path in glob.glob('hdRpr*.tar.gz'):
         if os.path.isfile(path):
             package = get_package_from_path(path)
             if package:

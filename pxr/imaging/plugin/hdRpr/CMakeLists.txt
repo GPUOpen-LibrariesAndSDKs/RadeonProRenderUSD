@@ -206,8 +206,24 @@ else(WIN32)
     else()
         _get_install_dir("lib" installPrefix)
     endif()
+
+    # install() does not follow symlinks, so we do it manually
+    set(RESOLVED_LIBRARIES "")
+    foreach (file ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY})
+        while(IS_SYMLINK ${file})
+            file(READ_SYMLINK ${file} symfile)
+            if(NOT IS_ABSOLUTE "${symfile}")
+                get_filename_component(dir "${file}" DIRECTORY)
+                set(symfile "${dir}/${symfile}")
+            endif()
+            list(APPEND RESOLVED_LIBRARIES ${file})
+            set(file "${symfile}")
+        endwhile()
+        list(APPEND RESOLVED_LIBRARIES ${file})
+    endforeach()
+
     install(
-        FILES ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY}
+        FILES ${RESOLVED_LIBRARIES}
         DESTINATION ${installPrefix})
 endif(WIN32)
 
