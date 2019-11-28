@@ -513,8 +513,6 @@ public:
             }
         });
 
-        m_isLightPresent = true;
-
         return lightObject;
     }
 
@@ -551,7 +549,6 @@ public:
             });
         }
 
-        m_isLightPresent = true;
         m_dirtyFlags |= ChangeTracker::DirtyScene;
 
         return lightObject;
@@ -614,8 +611,6 @@ public:
 
         VtVec2fArray uv; // empty
 
-        m_isLightPresent = true;
-
         return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
     }
 
@@ -646,8 +641,6 @@ public:
             pointIndices.push_back((i + 1) % k_diskVertexCount);
             pointIndices.push_back(centerPointIndex);
         }
-
-        m_isLightPresent = true;
 
         return CreateMesh(points, pointIndices, normals, normalIndices, VtVec2fArray(), VtIntArray(), vpf);
     }
@@ -683,8 +676,6 @@ public:
                 vpf.push_back(4);
             }
         }
-
-        m_isLightPresent = true;
 
         return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
     }
@@ -765,8 +756,6 @@ public:
             normalIndices.push_back((i + 1) % numPointsAtCap + normalIndexOffset);
             vpf.push_back(4);
         }
-
-        m_isLightPresent = true;
 
         return CreateMesh(points, pointIndices, normals, normalIndices, VtVec2fArray(), VtIntArray(), vpf);
     }
@@ -970,10 +959,16 @@ public:
 
         m_imageCache->GarbageCollectIfNeeded();
 
+        auto rprRenderParam = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam());
+
         // In case there is no Lights in scene - create default
-        if (!m_isLightPresent) {
-            const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
-            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
+        if (!rprRenderParam->HasLights()) {
+            if (!m_defaultLightObject) {
+                const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
+                m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
+            }
+        } else {
+            m_defaultLightObject = nullptr;
         }
 
         UpdateCamera();
@@ -991,7 +986,7 @@ public:
             UpdateSettings(*config);
             config->ResetDirty();
         }
-        UpdateAovs(enableDenoise);
+        UpdateAovs(rprRenderParam, enableDenoise);
 
         m_dirtyFlags = ChangeTracker::Clean;
     }
@@ -1121,7 +1116,7 @@ public:
         }
     }
 
-    void UpdateAovs(RenderSetting<bool> enableDenoise) {
+    void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise) {
         if (m_dirtyFlags & ChangeTracker::DirtyAOVBindings) {
             auto retainedBoundAovs = std::move(m_boundAovs);
             for (auto& aovBinding : m_aovBindings) {
@@ -1165,7 +1160,7 @@ public:
 
         UpdateDenoising(enableDenoise);
 
-        auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
+        auto rprApi = rprRenderParam->GetRprApi();
         for (auto it = m_aovRegistry.begin(); it != m_aovRegistry.end();) {
             if (auto aov = it->second.lock()) {
                 aov->Update(rprApi, m_rifContext.get());
@@ -1791,7 +1786,6 @@ private:
     GfMatrix4d m_cameraViewMatrix = GfMatrix4d(1.f);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
 
-    bool m_isLightPresent = false;
     RprApiObjectPtr m_defaultLightObject;
 
     int m_iter = 0;

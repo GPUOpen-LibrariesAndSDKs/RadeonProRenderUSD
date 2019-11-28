@@ -30,6 +30,7 @@ public:
 protected:
     RprApiObjectPtr m_rprLight;
     GfMatrix4f m_transform;
+    bool m_created = false;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

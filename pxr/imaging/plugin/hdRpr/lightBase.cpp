@@ -71,7 +71,11 @@ void HdRprLightBase::Sync(HdSceneDelegate* sceneDelegate,
 
         if (!m_lightMaterial || IsDirtyMaterial(emissionColor)) {
             MaterialAdapter matAdapter(EMaterialType::EMISSIVE, MaterialParams{{HdLightTokens->color, VtValue(emissionColor)}});
-            m_lightMaterial = rprApi->CreateMaterial(matAdapter);
+            auto lightMaterial = rprApi->CreateMaterial(matAdapter);
+            if (!m_lightMaterial && lightMaterial) {
+                rprRenderParam->AddLight();
+            }
+            m_lightMaterial = std::move(lightMaterial);
         }
 
         if (!m_lightMaterial) {
@@ -97,7 +101,9 @@ HdDirtyBits HdRprLightBase::GetInitialDirtyBitsMask() const {
 
 void HdRprLightBase::Finalize(HdRenderParam* renderParam) {
     // Stop render thread to safely release resources
-    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    rprRenderParam->GetRenderThread()->StopRender();
+    rprRenderParam->RemoveLight();
 
     HdLight::Finalize(renderParam);
 }

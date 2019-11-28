@@ -28,8 +28,6 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
 
     bool newLight = false;
     if (bits & HdLight::DirtyParams) {
-        m_rprLight = nullptr;
-
         float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
         float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
         float computedIntensity = computeLightIntensity(intensity, exposure);
@@ -44,7 +42,12 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
 
         if (!m_rprLight) {
             m_rprLight = rprApi->CreateDirectionalLight();
-            newLight = true;
+            if (!m_rprLight) {
+                TF_CODING_ERROR("Directional light was not created");
+                *dirtyBits = HdLight::Clean;
+                return;
+            }
+            rprRenderParam->AddLight();
         }
 
         float angle = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->angle).Get<float>();
@@ -52,6 +55,8 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
         float shadowSoftness = std::min(angle * (M_PI / 180.0) * M_PI, 1.0);
 
         rprApi->SetDirectionalLightAttributes(m_rprLight.get(), color * computedIntensity, shadowSoftness);
+
+        newLight = true;
     }
 
     if (newLight || ((bits & HdLight::DirtyTransform) && m_rprLight)) {
@@ -68,7 +73,9 @@ HdDirtyBits HdRprDistantLight::GetInitialDirtyBitsMask() const {
 
 void HdRprDistantLight::Finalize(HdRenderParam* renderParam) {
     // Stop render thread to safely release resources
-    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    rprRenderParam->GetRenderThread()->StopRender();
+    rprRenderParam->RemoveLight();
 
     HdSprim::Finalize(renderParam);
 }
