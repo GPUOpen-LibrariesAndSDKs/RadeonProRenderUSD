@@ -1,14 +1,16 @@
 ## Installation from a package
 
-### Windows
+### Automatic installation
+
+Installed [**Python**](https://www.python.org/downloads/) with PATH environment variable setup is required for automatic installation.
+
+> If you do not want to install python, but you have already installed Houdini with a working license, you can use hython from the Houdini package. Follow instructions under [Others](#others) subsection.
+
+#### Windows
 
 Run **install.bat**
 
-### macOS
-
-Run **install.command**
-
-### Others
+#### Others
 
 Use the installer script **install.py**.  From a terminal run:
 ```
@@ -16,7 +18,13 @@ python install.py
 ```
 And follow the instructions from the script
 
-> If you have no python installed, you can use hython from the Houdini package. (this would be extremely rare)
+### Manual
+
+Copy content of hdRpr*.tar.gz to houdini installation directory.
+Default destination path looks like:  
+* **Windows** `C:\Program Files\Side Effects Software\Houdini 18.0.287`  
+* **Ubuntu** `/opt/hfs18.0`  
+* **macOS** `/Applications/Houdini/Current/Frameworks/Houdini.framework/Versions/Current`
 
 ## Installation from sources
 
