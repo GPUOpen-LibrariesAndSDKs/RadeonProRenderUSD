@@ -1,4 +1,4 @@
-project(usdai)
+project(hdRpr)
 
 # >=3.1 is required for CMAKE_CXX_STANDARD
 if (WIN32)
