@@ -21,13 +21,24 @@ HdRprRenderPass::HdRprRenderPass(HdRenderIndex* index,
 }
 
 void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState, TfTokenVector const& renderTags) {
+    // To avoid potential deadlock:
+    //   main thread locks config instance and requests render stop and
+    //   in the same time render thread trying to lock config instance to update its settings.
+    // We should release config instance lock before requesting render thread to stop.
+    // It could be solved in another way by using shared_mutex and
+    // marking current write-lock as read-only after successful config->Sync
+    // in such a way main and render threads would have read-only-locks that could coexist
+    bool stopRender = false;
     {
         HdRprConfig* config;
         auto configInstanceLock = HdRprConfig::GetInstance(&config);
         config->Sync(GetRenderIndex()->GetRenderDelegate());
         if (config->IsDirty(HdRprConfig::DirtyAll)) {
-            m_renderParam->GetRenderThread()->StopRender();
+            stopRender = true;
         }
+    }
+    if (stopRender) {
+        m_renderParam->GetRenderThread()->StopRender();
     }
 
     auto rprApiConst = m_renderParam->GetRprApi();
