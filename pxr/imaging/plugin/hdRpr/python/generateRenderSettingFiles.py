@@ -533,6 +533,8 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
             if 'custom_tags' in houdini_settings:
                 for custom_tag in houdini_settings['custom_tags']:
                     houdini_param += '    parmtag {{ {} }}\n'.format(custom_tag)
+            if disabled_category:
+                houdini_param += '    invisible\n'
             if 'hidewhen' in houdini_settings or category_hidewhen:
                 condition = houdini_settings.get('hidewhen', category_hidewhen)
                 houdini_param += '    hidewhen "{{ {condition} }}"\n'.format(condition=condition)
