@@ -46,7 +46,7 @@ def install_package(install_dir, package):
 
 def install_to_houdini_dir(hfs, package):
     if macOS():
-        hfs = os.path.dirname(hfs)
+        hfs = os.path.abspath(os.path.join(hfs, os.pardir))
     install_package(hfs, package)
 
 valid_platforms = ['Linux', 'macOS', 'Windows']
