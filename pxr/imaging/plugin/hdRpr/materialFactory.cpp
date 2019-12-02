@@ -295,7 +295,6 @@ void RprMaterialFactory::DeleteMaterial(RprApiMaterial* material) {
     }
 
     SAFE_DELETE_RPR_OBJECT(material->rootMaterial);
-    SAFE_DELETE_RPR_OBJECT(material->displacementMaterial);
     for (auto node : material->materialNodes) {
         SAFE_DELETE_RPR_OBJECT(node);
     }
