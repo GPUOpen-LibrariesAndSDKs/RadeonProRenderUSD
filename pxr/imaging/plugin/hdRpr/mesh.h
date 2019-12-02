@@ -9,6 +9,7 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprApi;
 class HdRprParam;
 class RprApiObject;
 using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
@@ -42,6 +43,8 @@ private:
                         VtArray<T>& out_data,
                         VtIntArray& out_indices);
 
+    RprApiObject const* GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits);
+
 private:
     std::vector<RprApiObjectPtr> m_rprMeshes;
     std::vector<std::vector<RprApiObjectPtr>> m_rprMeshInstances;
@@ -50,6 +53,7 @@ private:
     GfMatrix4f m_transform;
 
     HdMeshTopology m_topology;
+    HdGeomSubsets m_geomSubsets;
     VtVec3fArray m_points;
     VtIntArray m_faceVertexCounts;
     VtIntArray m_faceVertexIndices;
