@@ -1,3 +1,8 @@
+if(RPR_ENABLE_OPENVDB_SUPPORT)
+    set(HOUDINI_OPENVDB_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/openvdb.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/openvdb.cpp)
+endif()
+
 target_sources(hdRpr PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/openvdb.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/openvdb.cpp)
+    ${HOUDINI_OPENVDB_SOURCES})
