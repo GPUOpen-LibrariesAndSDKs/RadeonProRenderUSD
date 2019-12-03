@@ -31,10 +31,10 @@ def current_working_directory(dir):
     try: yield
     finally: os.chdir(curdir)
 
-def get_package_path(build_dir):
+def get_package_path(build_dir, config):
     with current_working_directory(build_dir):
-        subprocess.call(['cmake', '--build', '.', '--config', 'Release', '--', format_multi_procs(get_cpu_count())])
-        output = subprocess.check_output(['cpack', '-C', 'Release'])
+        subprocess.call(['cmake', '--build', '.', '--config', config, '--', format_multi_procs(get_cpu_count())])
+        output = subprocess.check_output(['cpack', '-C', config])
         print(output)
 
         pattern = re.compile(r'CPack:\ -\ package:\ (?P<package_path>.*?)\ generated.', re.VERBOSE)
@@ -50,15 +50,19 @@ hdrpr_root_path = os.path.abspath(os.path.join(self_path(), '../../../../..'))
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('-b', '--build_dir', type=str, default='{}/build'.format(hdrpr_root_path))
 parser.add_argument('-o', '--output_package_path', type=str, default=None)
+parser.add_argument('-c', '--config', type=str, default='Release')
 args = parser.parse_args()
 
-package_path = get_package_path(args.build_dir)
+package_path = get_package_path(args.build_dir, args.config)
 if package_path:
     package_basename = os.path.basename(package_path)
 
     output_package_path = args.output_package_path
     if not output_package_path:
-        package_name = os.path.splitext(package_basename)[0]
+        package_name = package_basename
+        package_ext = '.tar.gz'
+        if package_basename.endswith(package_ext):
+            package_name = package_basename[:-len(package_ext)]
         output_package_path = '{}-package.zip'.format(package_name)
 
     if not os.path.exists('tmp_dir'):
