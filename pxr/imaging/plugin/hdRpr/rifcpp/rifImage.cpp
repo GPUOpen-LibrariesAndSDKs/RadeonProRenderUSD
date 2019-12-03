@@ -34,8 +34,8 @@ rif_image_desc Image::GetDesc(uint32_t width, uint32_t height, HdFormat format) 
     imageDesc.image_width = width;
     imageDesc.image_height = height;
     imageDesc.image_depth = 1;
-    imageDesc.image_row_pitch = width;
-    imageDesc.image_slice_pitch = width * height;
+    imageDesc.image_row_pitch = 0;
+    imageDesc.image_slice_pitch = 0;
 
     return imageDesc;
 }

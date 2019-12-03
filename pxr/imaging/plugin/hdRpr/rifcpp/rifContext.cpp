@@ -70,12 +70,12 @@ std::vector<rpr_char> GetRprCachePath(rpr_context rprContext) {
 rif_image_desc GetRifImageDesc(rpr::FrameBuffer* rprFrameBuffer) {
     auto rprDesc = rprFrameBuffer->GetDesc();
 
-    rif_image_desc imageDesc;
+    rif_image_desc imageDesc = {};
     imageDesc.image_width = rprDesc.fb_width;
     imageDesc.image_height = rprDesc.fb_height;
     imageDesc.image_depth = 1;
-    imageDesc.image_row_pitch = imageDesc.image_width;
-    imageDesc.image_slice_pitch = imageDesc.image_width * imageDesc.image_height;
+    imageDesc.image_row_pitch = 0;
+    imageDesc.image_slice_pitch = 0;
     imageDesc.num_components = 4;
     imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
 
