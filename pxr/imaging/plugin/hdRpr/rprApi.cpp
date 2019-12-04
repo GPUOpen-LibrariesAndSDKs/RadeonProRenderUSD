@@ -8,6 +8,7 @@
 #include "rifcpp/rifError.h"
 
 #include "config.h"
+#include "camera.h"
 #include "imageCache.h"
 #include "material.h"
 #include "materialFactory.h"
@@ -22,6 +23,8 @@
 #include "pxr/base/plug/plugin.h"
 #include "pxr/base/plug/thisPlugin.h"
 #include "pxr/imaging/glf/uvTextureData.h"
+#include "pxr/usd/usdRender/tokens.h"
+#include "pxr/usd/usdGeom/tokens.h"
 
 #include <RadeonProRender.h>
 #include <RadeonProRender_Baikal.h>
@@ -881,22 +884,27 @@ public:
         return heteroVolume;
     }
 
-    void SetCameraViewMatrix(const GfMatrix4d& m) {
+    void SetCamera(HdCamera const* camera) {
+        auto hdRprCamera = dynamic_cast<HdRprCamera const*>(camera);
+        if (!hdRprCamera) {
+            TF_CODING_ERROR("HdRprApi can work only with HdRprCamera");
+            return;
+        }
+
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        m_cameraViewMatrix = m;
-        m_dirtyFlags |= ChangeTracker::DirtyCamera;
+        if (m_hdCamera != hdRprCamera) {
+            m_hdCamera = hdRprCamera;
+            m_dirtyFlags |= ChangeTracker::DirtyHdCamera;
+        }
     }
 
-    void SetCameraProjectionMatrix(const GfMatrix4d& proj) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        m_cameraProjectionMatrix = proj;
-        m_dirtyFlags |= ChangeTracker::DirtyCamera;
+    HdCamera const* GetCamera() const {
+        return m_hdCamera;
     }
 
-    const GfMatrix4d& GetCameraViewMatrix() const {
-        return m_cameraViewMatrix;
+    GfMatrix4d GetCameraViewMatrix() const {
+        return m_hdCamera ? m_hdCamera->GetViewMatrix() : GfMatrix4d(1.0);
     }
 
     const GfMatrix4d& GetCameraProjectionMatrix() const {
@@ -964,9 +972,9 @@ public:
             m_defaultLightObject = nullptr;
         }
 
-        UpdateCamera();
-
         RenderSetting<bool> enableDenoise;
+        RenderSetting<bool> instantaneousShutter;
+        RenderSetting<TfToken> aspectRatioPolicy;
         {
             HdRprConfig* config;
             auto configInstanceLock = HdRprConfig::GetInstance(&config);
@@ -976,12 +984,21 @@ public:
                 enableDenoise.value = config->GetEnableDenoising();
             }
 
+            aspectRatioPolicy.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
+            aspectRatioPolicy.value = config->GetAspectRatioConformPolicy();
+            instantaneousShutter.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
+            instantaneousShutter.value = config->GetInstantaneousShutter();
+
             UpdateSettings(*config);
             config->ResetDirty();
         }
+        UpdateCamera(aspectRatioPolicy, instantaneousShutter);
         UpdateAovs(rprRenderParam, enableDenoise);
 
         m_dirtyFlags = ChangeTracker::Clean;
+        if (m_hdCamera) {
+            m_hdCamera->CleanDirtyBits();
+        }
     }
 
     void UpdateTahoeSettings(HdRprConfig const& preferences, bool force) {
@@ -1070,15 +1087,25 @@ public:
         }
     }
 
-    void UpdateCamera() {
-        if ((m_dirtyFlags & ChangeTracker::DirtyCamera) == 0 &&
-            (m_dirtyFlags & ChangeTracker::DirtyViewport) == 0) {
+    void UpdateCamera(RenderSetting<TfToken> const& aspectRatioPolicy, RenderSetting<bool> const& instantaneousShutter) {
+        if (!m_hdCamera) {
+            return;
+        }
+
+        if (aspectRatioPolicy.isDirty ||
+            instantaneousShutter.isDirty) {
+            m_dirtyFlags |= ChangeTracker::DirtyHdCamera;
+        }
+
+        if ((m_dirtyFlags & ChangeTracker::DirtyViewport) == 0 &&
+            !IsCameraChanged()) {
             return;
         }
 
         auto camera = m_camera->GetHandle();
-        auto iwvm = m_cameraViewMatrix.GetInverse();
-        auto& wvm = m_cameraViewMatrix;
+        auto& iwvm = m_hdCamera->GetViewInverseMatrix();
+        auto& wvm = m_hdCamera->GetViewMatrix();
+        auto aspectRatio = double(m_viewportSize[0]) / m_viewportSize[1];
 
         GfVec3f eye(iwvm[3][0], iwvm[3][1], iwvm[3][2]);
         GfVec3f up(wvm[0][1], wvm[1][1], wvm[2][1]);
@@ -1086,24 +1113,97 @@ public:
         GfVec3f at(eye - n);
         RPR_ERROR_CHECK(rprCameraLookAt(camera, eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]), "Fail to set camera Look At");
 
-        bool isOrthographic = round(m_cameraProjectionMatrix[3][3]) == 1.0;
-        if (isOrthographic) {
-            GfVec3f ndcTopLeft(-1.0f, 1.0f, 0.0f);
-            GfVec3f nearPlaneTrace = m_cameraProjectionMatrix.GetInverse().Transform(ndcTopLeft);
+        GfRange1f clippingRange(0.01f, 100000000.0f);
+        m_hdCamera->GetClippingRange(&clippingRange);
+        RPR_ERROR_CHECK(rprCameraSetNearPlane(camera, clippingRange.GetMin()), "Failed to set camera near plane");
+        RPR_ERROR_CHECK(rprCameraSetFarPlane(camera, clippingRange.GetMax()), "Failed to set camera far plane");
 
-            auto orthoWidth = std::abs(nearPlaneTrace[0]) * 2.0;
-            auto orthoHeight = std::abs(nearPlaneTrace[1]) * 2.0;
+        double shutterOpen = 0.0;
+        double shutterClose = 0.0;
+        if (!instantaneousShutter.value) {
+            m_hdCamera->GetShutterOpen(&shutterOpen);
+            m_hdCamera->GetShutterClose(&shutterClose);
+        }
+        // XXX (RPR): shutter close/open is a time value, but RPR accepts some abstract coefficient in [0, 1] range
+        RPR_ERROR_CHECK(rprCameraSetExposure(camera, std::max(shutterClose - shutterOpen, 0.0)), "Failed to set camera exposure");
 
-            RPR_ERROR_CHECK(rprCameraSetMode(camera, RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
-            RPR_ERROR_CHECK(rprCameraSetOrthoWidth(camera, orthoWidth), "Failed to set camera ortho width");
-            RPR_ERROR_CHECK(rprCameraSetOrthoHeight(camera, orthoHeight), "Failed to set camera ortho height");
+        float sensorWidth;
+        float sensorHeight;
+        float focalLength;
+
+        GfVec2f apertureSize;
+        TfToken projectionType;
+        if (m_hdCamera->GetFocalLength(&focalLength) &&
+            m_hdCamera->GetApertureSize(&apertureSize) &&
+            m_hdCamera->GetProjectionType(&projectionType)) {
+            ApplyAspectRatioPolicy(m_viewportSize, aspectRatioPolicy.value, apertureSize);
+            sensorWidth = apertureSize[0];
+            sensorHeight = apertureSize[1];
+
+            float zNear = clippingRange.GetMin();
+            float zFar = clippingRange.GetMax();
+            if (projectionType == UsdGeomTokens->orthographic) {
+                m_cameraProjectionMatrix.SetIdentity();
+                m_cameraProjectionMatrix[0][0] = 2.0f / apertureSize[0];
+                m_cameraProjectionMatrix[1][1] = 2.0f / apertureSize[1];
+                m_cameraProjectionMatrix[2][2] = -2.0f / (zFar - zNear);
+                m_cameraProjectionMatrix[3][2] = -(zFar + zNear) / (zFar - zNear);
+            } else {
+                if (projectionType != UsdGeomTokens->perspective) {
+                    TF_CODING_ERROR("Unexpected projection type: %s. Fallback value: perspective", projectionType.GetText());
+                    projectionType = UsdGeomTokens->perspective;
+                }
+
+                float range = (apertureSize[1] * 0.5f) / focalLength * zNear;
+                float left = -range * aspectRatio;
+                float right = range * aspectRatio;
+                float bottom = -range;
+                float top = range;
+
+                m_cameraProjectionMatrix.SetZero();
+                m_cameraProjectionMatrix[0][0] = (2.0f * zNear) / (right - left);
+                m_cameraProjectionMatrix[1][1] = (2.0f * zNear) / (top - bottom);
+                m_cameraProjectionMatrix[2][2] = -(zFar + zNear) / (zFar - zNear);
+                m_cameraProjectionMatrix[3][2] = -1.0f;
+                m_cameraProjectionMatrix[2][3] = -(2.0f * zFar * zNear) / (zFar - zNear);
+            }
         } else {
-            auto ratio = double(m_viewportSize[0]) / m_viewportSize[1];
-            auto focalLength = m_cameraProjectionMatrix[1][1] / (2.0 * ratio);
-            auto sensorWidth = 1.0f;
-            auto sensorHeight = 1.0f / ratio;
+            m_cameraProjectionMatrix = CameraUtilConformedWindow(m_hdCamera->GetProjectionMatrix(), m_hdCamera->GetWindowPolicy(), aspectRatio);
 
+            bool isOrthographic = round(m_cameraProjectionMatrix[3][3]) == 1.0;
+            if (isOrthographic) {
+                projectionType = UsdGeomTokens->orthographic;
+
+                GfVec3f ndcTopLeft(-1.0f, 1.0f, 0.0f);
+                GfVec3f nearPlaneTrace = m_cameraProjectionMatrix.GetInverse().Transform(ndcTopLeft);
+
+                sensorWidth = std::abs(nearPlaneTrace[0]) * 2.0;
+                sensorHeight = std::abs(nearPlaneTrace[1]) * 2.0;
+            } else {
+                projectionType = UsdGeomTokens->perspective;
+
+                sensorWidth = 1.0f;
+                sensorHeight = 1.0f / aspectRatio;
+                focalLength = m_cameraProjectionMatrix[1][1] / (2.0 * aspectRatio);
+            }
+        }
+
+        if (projectionType == UsdGeomTokens->orthographic) {
+            RPR_ERROR_CHECK(rprCameraSetMode(camera, RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
+            RPR_ERROR_CHECK(rprCameraSetOrthoWidth(camera, sensorWidth), "Failed to set camera ortho width");
+            RPR_ERROR_CHECK(rprCameraSetOrthoHeight(camera, sensorHeight), "Failed to set camera ortho height");
+        } else {
             RPR_ERROR_CHECK(rprCameraSetMode(camera, RPR_CAMERA_MODE_PERSPECTIVE), "Failed to set camera mode");
+
+            float focusDistance = 1.0f;
+            m_hdCamera->GetFocusDistance(&focusDistance);
+            RPR_ERROR_CHECK(rprCameraSetFocusDistance(camera, focusDistance), "Failed to set camera focus distance");
+
+            float fstop = 0.0f;
+            m_hdCamera->GetFStop(&fstop);
+            if (fstop == 0.0f) { fstop = std::numeric_limits<float>::max(); }
+            RPR_ERROR_CHECK(rprCameraSetFStop(camera, fstop), "Failed to set camera FStop");
+
             RPR_ERROR_CHECK(rprCameraSetFocalLength(camera, focalLength), "Fail to set camera focal length");
             RPR_ERROR_CHECK(rprCameraSetSensorSize(camera, sensorWidth, sensorHeight), "Failed to set camera sensor size");
         }
@@ -1145,7 +1245,7 @@ public:
         if (m_dirtyFlags & ChangeTracker::DirtyScene ||
             m_dirtyFlags & ChangeTracker::DirtyAOVRegistry ||
             m_dirtyFlags & ChangeTracker::DirtyViewport ||
-            m_dirtyFlags & ChangeTracker::DirtyCamera) {
+            IsCameraChanged()) {
             m_iter = 0;
             m_activePixels = -1;
             clearAovs = true;
@@ -1321,8 +1421,17 @@ public:
         return m_activePixels;
     }
 
+    bool IsCameraChanged() const {
+        if (!m_hdCamera) {
+            return false;
+        }
+
+        return (m_dirtyFlags & ChangeTracker::DirtyHdCamera) != 0 || m_hdCamera->GetDirtyBits() != HdCamera::Clean;
+    }
+
     bool IsChanged() const {
-        if (m_dirtyFlags != ChangeTracker::Clean) {
+        if (m_dirtyFlags != ChangeTracker::Clean ||
+            IsCameraChanged()) {
             return true;
         }
 
@@ -1749,6 +1858,33 @@ private:
         }
     }
 
+    void ApplyAspectRatioPolicy(GfVec2i viewportSize, TfToken const& policy, GfVec2f& size) {
+        float viewportAspectRatio = float(viewportSize[0]) / float(viewportSize[1]);
+        if (viewportAspectRatio <= 0.0) {
+            return;
+        }
+        float apertureAspectRatio = size[0] / size[1];
+        enum { Width, Height, None } adjust = None;
+        if (policy == UsdRenderTokens->adjustPixelAspectRatio) {
+            // XXX (RPR): Not supported by RPR API. How can we emulate it?
+            // pixelAspectRatio = apertureAspectRatio / viewportAspectRatio;
+        } else if (policy == UsdRenderTokens->adjustApertureHeight) {
+            adjust = Height;
+        } else if (policy == UsdRenderTokens->adjustApertureWidth) {
+            adjust = Width;
+        } else if (policy == UsdRenderTokens->expandAperture) {
+            adjust = (apertureAspectRatio > viewportAspectRatio) ? Height : Width;
+        } else if (policy == UsdRenderTokens->cropAperture) {
+            adjust = (apertureAspectRatio > viewportAspectRatio) ? Width : Height;
+        }
+        // Adjust aperture so that size[0] / size[1] == viewportAspectRatio.
+        if (adjust == Width) {
+            size[0] = size[1] * viewportAspectRatio;
+        } else if (adjust == Height) {
+            size[1] = size[0] / viewportAspectRatio;
+        }
+    }
+
 private:
     HdRenderDelegate* m_delegate;
 
@@ -1757,7 +1893,7 @@ private:
         AllDirty = ~0u,
         DirtyScene = 1 << 0,
         DirtyAOVRegistry = 1 << 1,
-        DirtyCamera = 1 << 2,
+        DirtyHdCamera = 1 << 2,
         DirtyViewport = 1 << 3,
         DirtyAOVBindings = 1 << 4,
     };
@@ -1777,9 +1913,8 @@ private:
     HdRenderPassAovBindingVector m_aovBindings;
 
     GfVec2i m_viewportSize;
-
-    GfMatrix4d m_cameraViewMatrix = GfMatrix4d(1.f);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
+    HdRprCamera const* m_hdCamera;
 
     RprApiObjectPtr m_defaultLightObject;
 
@@ -1983,20 +2118,20 @@ void HdRprApi::SetCurveVisibility(RprApiObject* curve, bool isVisible) {
 #endif
 }
 
-const GfMatrix4d& HdRprApi::GetCameraViewMatrix() const {
+void HdRprApi::SetCamera(HdCamera const* camera) {
+    m_impl->SetCamera(camera);
+}
+
+HdCamera const* HdRprApi::GetCamera() const {
+    return m_impl->GetCamera();
+}
+
+GfMatrix4d HdRprApi::GetCameraViewMatrix() const {
     return m_impl->GetCameraViewMatrix();
 }
 
 const GfMatrix4d& HdRprApi::GetCameraProjectionMatrix() const {
     return m_impl->GetCameraProjectionMatrix();
-}
-
-void HdRprApi::SetCameraViewMatrix(const GfMatrix4d& m) {
-    m_impl->SetCameraViewMatrix(m);
-}
-
-void HdRprApi::SetCameraProjectionMatrix(const GfMatrix4d& m) {
-    m_impl->SetCameraProjectionMatrix(m);
 }
 
 GfVec2i HdRprApi::GetViewportSize() const {

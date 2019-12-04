@@ -28,9 +28,9 @@ public:
 
     void Finalize(HdRenderParam* renderParam) override;
 
-protected:
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
+protected:
     HdDirtyBits _PropagateDirtyBits(HdDirtyBits bits) const override;
 
     void _InitRepr(TfToken const& reprName, HdDirtyBits* dirtyBits) override;

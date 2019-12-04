@@ -43,7 +43,10 @@ set(USD_LIBRARIES
     hdx
     usdLux
     usdUtils
-    pxOsd)
+    usdRender
+    usdGeom
+    pxOsd
+    cameraUtil)
 
 set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
 
@@ -137,6 +140,7 @@ pxr_plugin(hdRpr
         renderBuffer
         basisCurves
         imageCache
+        camera
         
         ${OptClass}
 

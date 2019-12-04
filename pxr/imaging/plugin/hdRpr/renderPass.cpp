@@ -54,16 +54,8 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
         m_renderParam->AcquireRprApiForEdit()->SetAovBindings(renderPassState->GetAovBindings());
     }
 
-    auto& cameraViewMatrix = rprApiConst->GetCameraViewMatrix();
-    auto& wvm = renderPassState->GetWorldToViewMatrix();
-    if (cameraViewMatrix != wvm) {
-        m_renderParam->AcquireRprApiForEdit()->SetCameraViewMatrix(wvm);
-    }
-
-    auto& cameraProjMatrix = rprApiConst->GetCameraProjectionMatrix();
-    auto proj = renderPassState->GetProjectionMatrix();
-    if (cameraProjMatrix != proj) {
-        m_renderParam->AcquireRprApiForEdit()->SetCameraProjectionMatrix(proj);
+    if (rprApiConst->GetCamera() != renderPassState->GetCamera()) {
+        m_renderParam->AcquireRprApiForEdit()->SetCamera(renderPassState->GetCamera());
     }
 
     if (rprApiConst->IsChanged()) {

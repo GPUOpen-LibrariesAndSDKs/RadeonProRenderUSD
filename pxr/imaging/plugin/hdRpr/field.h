@@ -14,7 +14,6 @@ public:
               HdRenderParam* renderParam,
               HdDirtyBits* dirtyBits) override;
 
-protected:
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 };
 

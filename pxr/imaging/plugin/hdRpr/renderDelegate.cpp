@@ -3,8 +3,7 @@
 #include "pxr/base/tf/diagnosticMgr.h"
 #include "pxr/base/tf/getenv.h"
 
-#include "pxr/imaging/hd/camera.h"
-
+#include "camera.h"
 #include "config.h"
 #include "renderPass.h"
 #include "renderParam.h"
@@ -238,7 +237,7 @@ void HdRprDelegate::DestroyRprim(HdRprim* rPrim) {
 HdSprim* HdRprDelegate::CreateSprim(TfToken const& typeId,
                                     SdfPath const& sprimId) {
     if (typeId == HdPrimTypeTokens->camera) {
-        return new HdCamera(sprimId);
+        return new HdRprCamera(sprimId);
     } else if (typeId == HdPrimTypeTokens->domeLight) {
         return new HdRprDomeLight(sprimId);
     } else if (typeId == HdPrimTypeTokens->rectLight) {
@@ -263,7 +262,7 @@ HdSprim* HdRprDelegate::CreateFallbackSprim(TfToken const& typeId) {
     // For fallback sprims, create objects with an empty scene path.
     // They'll use default values and won't be updated by a scene delegate.
     if (typeId == HdPrimTypeTokens->camera) {
-        return new HdCamera(SdfPath::EmptyPath());
+        return new HdRprCamera(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->domeLight) {
         return new HdRprDomeLight(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->rectLight) {
