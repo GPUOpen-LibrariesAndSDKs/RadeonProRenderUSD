@@ -1,5 +1,8 @@
 #include "renderDelegate.h"
 
+#include "pxr/base/tf/diagnosticMgr.h"
+#include "pxr/base/tf/getenv.h"
+
 #include "pxr/imaging/hd/camera.h"
 
 #include "config.h"
@@ -22,9 +25,82 @@
 #include "field.h"
 #endif
 
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+#include <cstdio>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 static HdRprApi* g_rprApi = nullptr;
+
+class HdRprDiagnosticMgrDelegate : public TfDiagnosticMgr::Delegate {
+public:
+    explicit HdRprDiagnosticMgrDelegate(std::string const& logFile) : m_outputFile(nullptr) {
+        if (logFile == "stderr") {
+            m_output = stderr;
+        } else if (logFile == "stdout") {
+            m_output = stdout;
+        } else {
+            m_outputFile = fopen(logFile.c_str(), "wa");
+            if (!m_outputFile) {
+                TF_RUNTIME_ERROR("Failed to open error output file: \"%s\". Defaults to stderr\n", logFile.c_str());
+                m_output = stderr;
+            } else {
+                m_output = m_outputFile;
+            }
+        }
+    }
+    ~HdRprDiagnosticMgrDelegate() override {
+        if (m_outputFile) {
+            fclose(m_outputFile);
+        }
+    }
+
+    void IssueError(TfError const &err) override {
+        IssueDiagnosticBase(err);
+    };
+    void IssueFatalError(TfCallContext const &context, std::string const &msg) override {
+        std::string message = TfStringPrintf(
+            "[FATAL ERROR] %s -- in %s at line %zu of %s",
+            msg.c_str(),
+            context.GetFunction(),
+            context.GetLine(),
+            context.GetFile());
+        IssueMessage(msg);
+    };
+    void IssueStatus(TfStatus const &status) override {
+        IssueDiagnosticBase(status);
+    };
+    void IssueWarning(TfWarning const &warning) override {
+        IssueDiagnosticBase(warning);
+    };
+
+private:
+    void IssueDiagnosticBase(TfDiagnosticBase const& d) {
+        std::string msg = TfStringPrintf(
+            "%s -- %s in %s at line %zu of %s",
+            d.GetCommentary().c_str(),
+            TfDiagnosticMgr::GetCodeName(d.GetDiagnosticCode()).c_str(),
+            d.GetContext().GetFunction(),
+            d.GetContext().GetLine(),
+            d.GetContext().GetFile());
+        IssueMessage(msg);
+    }
+
+    void IssueMessage(std::string const& message) {
+        std::time_t t = std::time(nullptr);
+        std::stringstream ss;
+        ss << "[" << std::put_time(std::gmtime(&t), "%T%z %F") << "] " << message;
+        auto str = ss.str();
+
+        fprintf(m_output, "%s\n", str.c_str());
+    }
+
+private:
+    FILE* m_output;
+    FILE* m_outputFile;
+};
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
@@ -75,6 +151,17 @@ HdRprDelegate::HdRprDelegate() {
         m_rprApi->AbortRender();
     });
     m_renderThread.StartThread();
+
+    auto errorOutputFile = TfGetenv("HD_RPR_ERROR_OUTPUT_FILE");
+    if (!errorOutputFile.empty()) {
+        m_diagnosticMgrDelegate = DiagnostMgrDelegatePtr(
+            new HdRprDiagnosticMgrDelegate(errorOutputFile),
+            [](HdRprDiagnosticMgrDelegate* delegate) {
+                TfDiagnosticMgr::GetInstance().RemoveDelegate(delegate);
+                delete delegate;
+            });
+        TfDiagnosticMgr::GetInstance().AddDelegate(m_diagnosticMgrDelegate.get());
+    }
 }
 
 HdRprDelegate::~HdRprDelegate() {

@@ -8,6 +8,7 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprDiagnosticMgrDelegate;
 class HdRprRenderParam;
 class HdRprApi;
 
@@ -73,6 +74,9 @@ private:
     std::unique_ptr<HdRprRenderParam> m_renderParam;
     HdRenderSettingDescriptorList m_settingDescriptors;
     HdRprRenderThread m_renderThread;
+
+    using DiagnostMgrDelegatePtr = std::unique_ptr<HdRprDiagnosticMgrDelegate, std::function<void (HdRprDiagnosticMgrDelegate*)>>;
+    DiagnostMgrDelegatePtr m_diagnosticMgrDelegate;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
