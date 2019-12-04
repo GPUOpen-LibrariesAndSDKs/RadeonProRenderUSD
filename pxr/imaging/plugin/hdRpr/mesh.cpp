@@ -90,6 +90,36 @@ bool HdRprMesh::GetPrimvarData(TfToken const& name,
 template bool HdRprMesh::GetPrimvarData<GfVec2f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec2f>&, VtIntArray&);
 template bool HdRprMesh::GetPrimvarData<GfVec3f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec3f>&, VtIntArray&);
 
+RprApiObject const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits) {
+    if (m_fallbackMaterial && (dirtyBits & HdChangeTracker::DirtyPrimvar)) {
+        m_fallbackMaterial = nullptr;
+    }
+
+    if (!m_fallbackMaterial) {
+        // XXX: Currently, displayColor is used as one color for whole mesh,
+        // but it should be used as attribute per vertex/face.
+        // RPR does not have such functionality, yet
+
+        GfVec3f color(0.18f);
+
+        HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(GetId(), HdInterpolationConstant);
+        for (auto& pv : primvars) {
+            if (pv.name == HdTokens->displayColor) {
+                VtValue val = sceneDelegate->Get(GetId(), HdTokens->displayColor);
+                if (val.IsHolding<VtVec3fArray>()) {
+                    color = val.UncheckedGet<VtVec3fArray>()[0];
+                    break;
+                }
+            }
+        }
+
+        auto matAdapter = MaterialAdapter(EMaterialType::COLOR, MaterialParams{ {HdRprMaterialTokens->color, VtValue(color)} });
+        m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
+    }
+
+    return m_fallbackMaterial.get();
+}
+
 void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                      HdRenderParam* renderParam,
                      HdDirtyBits* dirtyBits,
@@ -189,15 +219,18 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     // 3. Create RPR meshes
 
     if (newMesh) {
-        auto numFaces = m_faceVertexCounts.size();
+        m_rprMeshes.clear();
 
-        auto geomSubsets = m_topology.GetGeomSubsets();
-        // If the geometry has been partitioned into subsets, add an
-        // additional subset representing anything left over.
-        if (!geomSubsets.empty()) {
+        m_geomSubsets = m_topology.GetGeomSubsets();
+        if (m_geomSubsets.empty()) {
+            if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
+                m_rprMeshes.push_back(std::move(rprMesh));
+            }
+        } else {
+            auto numFaces = m_faceVertexCounts.size();
             std::vector<bool> faceIsUnused(numFaces, true);
             size_t numUnusedFaces = faceIsUnused.size();
-            for (auto const& subset : geomSubsets) {
+            for (auto const& subset : m_geomSubsets) {
                 for (int index : subset.indices) {
                     if (TF_VERIFY(index < numFaces) && faceIsUnused[index]) {
                         faceIsUnused[index] = false;
@@ -208,8 +241,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             // If we found any unused faces, build a final subset with those faces.
             // Use the material bound to the parent mesh.
             if (numUnusedFaces) {
-                geomSubsets.push_back(HdGeomSubset());
-                HdGeomSubset& unusedSubset = geomSubsets.back();
+                m_geomSubsets.push_back(HdGeomSubset());
+                HdGeomSubset& unusedSubset = m_geomSubsets.back();
                 unusedSubset.type = HdGeomSubset::TypeFaceSet;
                 unusedSubset.id = id;
                 unusedSubset.materialId = m_cachedMaterialId;
@@ -222,45 +255,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     }
                 }
             }
-        }
 
-        if (!m_fallbackMaterial) {
-            // XXX: Currently, displayColor is used as one color for whole mesh,
-            // but it should be used as attribute per vertex/face.
-            // RPR does not have such functionality, yet
-            HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant);
-            for (auto& pv : primvars) {
-                if (pv.name == HdTokens->displayColor) {
-                    VtValue val = sceneDelegate->Get(id, HdTokens->displayColor);
-
-                    GfVec3f color(1.0f);
-                    if (val.IsHolding<VtVec3fArray>()) {
-                        color = val.UncheckedGet<VtVec3fArray>()[0];
-                    }
-                    auto matAdapter = MaterialAdapter(EMaterialType::COLOR, MaterialParams{{HdRprMaterialTokens->color, VtValue(color)}});
-                    m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
-                    break;
-                }
-            }
-        }
-
-        m_rprMeshes.clear();
-
-        auto setMeshMaterial = [&sceneDelegate, &rprApi, this](RprApiObjectPtr& rprMesh, SdfPath const& materialId) {
-            auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
-            if (material && material->GetRprMaterialObject()) {
-                rprApi->SetMeshMaterial(rprMesh.get(), material->GetRprMaterialObject());
-            } else if (m_fallbackMaterial) {
-                rprApi->SetMeshMaterial(rprMesh.get(), m_fallbackMaterial.get());
-            }
-        };
-
-        if (geomSubsets.empty() || geomSubsets.size() == 1) {
-            if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
-                setMeshMaterial(rprMesh, geomSubsets.empty() ? m_cachedMaterialId : geomSubsets[0].materialId);
-                m_rprMeshes.push_back(std::move(rprMesh));
-            }
-        } else {
             // GeomSubset may reference face subset in any given order so we need to be able to
             //   randomly lookup face indexes but each face may be of an arbitrary number of vertices
             std::vector<int> indexesOffsetPrefixSum;
@@ -271,9 +266,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 offset += numVerticesInFace;
             }
 
-            for (auto const& subset : geomSubsets) {
+            for (auto it = m_geomSubsets.begin(); it != m_geomSubsets.end();) {
+                auto const& subset = *it;
                 if (subset.type != HdGeomSubset::TypeFaceSet) {
                     TF_RUNTIME_ERROR("Unknown HdGeomSubset Type");
+                    it = m_geomSubsets.erase(it);
                     continue;
                 }
 
@@ -310,8 +307,10 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 }
 
                 if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace, m_topology.GetOrientation())) {
-                    setMeshMaterial(rprMesh, subset.materialId);
                     m_rprMeshes.push_back(std::move(rprMesh));
+                    ++it;
+                } else {
+                    it = m_geomSubsets.erase(it);
                 }
             }
         }
@@ -401,17 +400,30 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
-        // if the mesh was created from scratch material is already set
-        if (!newMesh && (*dirtyBits & HdChangeTracker::DirtyMaterialId)) {
-            // when geometry subsetting enabled, the material comes from each particular HdGeomSubset
-            if (m_topology.GetGeomSubsets().empty()) {
-                RprApiObject const* rprMaterial = nullptr;
-                auto hdMaterial = sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_cachedMaterialId);
-                if (hdMaterial) {
-                    rprMaterial = static_cast<HdRprMaterial const*>(hdMaterial)->GetRprMaterialObject();
+        if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
+            (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)) { // If refine level was changed we need to reset displacement material
+            auto getMeshMaterial = [sceneDelegate, rprApi, dirtyBits, this](SdfPath const& materialId) {
+                auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
+                if (material && material->GetRprMaterialObject()) {
+                    return material->GetRprMaterialObject();
+                } else {
+                    return GetFallbackMaterial(sceneDelegate, rprApi, *dirtyBits);
                 }
+            };
+
+            if (m_geomSubsets.empty()) {
+                auto material = getMeshMaterial(m_cachedMaterialId);
                 for (auto& mesh : m_rprMeshes) {
-                    rprApi->SetMeshMaterial(mesh.get(), rprMaterial);
+                    rprApi->SetMeshMaterial(mesh.get(), material);
+                }
+            } else {
+                if (m_geomSubsets.size() == m_rprMeshes.size()) {
+                    for (int i = 0; i < m_rprMeshes.size(); ++i) {
+                        auto material = getMeshMaterial(m_geomSubsets[i].materialId);
+                        rprApi->SetMeshMaterial(m_rprMeshes[i].get(), material);
+                    }
+                } else {
+                    TF_CODING_ERROR("Unexpected number of meshes");
                 }
             }
         }
