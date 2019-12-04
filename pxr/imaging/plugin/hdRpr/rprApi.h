@@ -102,7 +102,7 @@ public:
     void SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material);
     void SetMeshVisibility(RprApiObject* mesh, bool isVisible);
 
-    RprApiObjectPtr CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, float width);
+    RprApiObjectPtr CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);
     void SetCurveMaterial(RprApiObject* curve, RprApiObject const* material);
     void SetCurveVisibility(RprApiObject* curve, bool isVisible);
     void SetCurveTransform(RprApiObject* curve, GfMatrix4f const& transform);
