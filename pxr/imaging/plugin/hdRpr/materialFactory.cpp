@@ -312,6 +312,13 @@ void RprMaterialFactory::AttachMaterialToShape(rpr_shape mesh, const RprApiMater
             subdFactor = 0;
         }
 
+        if (subdFactor == 0) {
+            TF_WARN("Displacement material requires subdivision to be enabled. The subdivision will be enabled with refine level of 1");
+            if (!RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, 1), "Failed to set mesh subdividion")) {
+                subdFactor = 1;
+            }
+        }
+
         if (material->displacementMaterial && subdFactor > 0) {
             RPR_ERROR_CHECK(rprShapeSetDisplacementMaterial(mesh, material->displacementMaterial), "Failed to set shape displacement material");
         } else {
