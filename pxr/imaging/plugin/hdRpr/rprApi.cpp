@@ -1655,10 +1655,12 @@ private:
                 } else {
                     aov = std::make_shared<HdRprApiAov>(rprAovIt->second, width, height, format, m_rprContext.get(), m_rifContext.get());
                 }
-            }
 
-            m_aovRegistry[aovName] = aov;
-            m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
+                m_aovRegistry[aovName] = aov;
+                m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
+            } else {
+                aov->Resize(width, height, format);
+            }
         } catch (std::runtime_error const& e) {
             TF_CODING_ERROR("Failed to create %s AOV: %s", aovName.GetText(), e.what());
         }
