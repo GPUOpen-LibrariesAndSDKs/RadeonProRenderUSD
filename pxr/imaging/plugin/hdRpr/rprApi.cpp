@@ -440,38 +440,31 @@ public:
         }
     }
 
-    RprApiObjectPtr CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, float width) {
-        if (!m_rprContext || points.empty() || indexes.empty()) {
+    RprApiObjectPtr CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
+        if (!m_rprContext) {
             return nullptr;
         }
 
-        const size_t k_segmentSize = 4;
-
-        VtVec3fArray newPoints = points;
-        VtIntArray newIndexes = indexes;
-
-        if (size_t extraPoints = newPoints.size() % k_segmentSize) {
-            newPoints.resize(points.size() + k_segmentSize - extraPoints);
-            newIndexes.resize(indexes.size() + k_segmentSize - extraPoints);
-
-            for (int i = 0; i < k_segmentSize; ++i) {
-                newPoints[newPoints.size() - i - 1] = points[points.size() - i - 1];
-                newIndexes[newIndexes.size() - i - 1] = indexes[indexes.size() - i - 1];
-            }
+        auto curveCount = segmentPerCurve.size();
+        bool isCurveTapered = radiuses.size() != curveCount;
+        
+        const size_t kRprCurveSegmentSize = 4;
+        if (segmentPerCurve.empty() || points.empty() || indices.empty() ||
+            indices.size() % kRprCurveSegmentSize != 0 ||
+            (isCurveTapered && radiuses.size() != (indices.size() / kRprCurveSegmentSize) * 2) ||
+            (!uvs.empty() && uvs.size() != curveCount)) {
+            TF_RUNTIME_ERROR("Failed to create RPR curve: invalid parameters");
+            return nullptr;
         }
-
-        const size_t segmentPerCurve = newPoints.size() / k_segmentSize;
-        std::vector<float> curveWidths(points.size(), width);
-        std::vector<int> segmentsPerCurve(points.size(), segmentPerCurve);
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         rpr_curve curve = nullptr;
         if (RPR_ERROR_CHECK(rprContextCreateCurve(
-            m_rprContext->GetHandle(), &curve
-            , newPoints.size(), (float*)newPoints.data(), sizeof(GfVec3f)
-            , newIndexes.size(), 1, (const rpr_uint*)newIndexes.data()
-            , &width, nullptr, segmentsPerCurve.data(), 0), "Fail to create curve")) {
+            m_rprContext->GetHandle(), &curve,
+            points.size(), (float const*)points.data(), sizeof(GfVec3f),
+            indices.size(), curveCount, (rpr_uint const*)indices.data(),
+            radiuses.data(), (float const*)uvs.data(), segmentPerCurve.data(), isCurveTapered ? 1 : 0), "Fail to create curve")) {
             return nullptr;
         }
         auto curveObject = RprApiObject::Wrap(curve);
@@ -1876,9 +1869,9 @@ RprApiObjectPtr HdRprApi::CreateMesh(const VtVec3fArray& points, const VtIntArra
     return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf, polygonWinding);
 }
 
-RprApiObjectPtr HdRprApi::CreateCurve(const VtVec3fArray& points, const VtIntArray& indexes, float width) {
+RprApiObjectPtr HdRprApi::CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateCurve(points, indexes, width);
+    return m_impl->CreateCurve(points, indices, radiuses, uvs, segmentPerCurve);
 }
 
 RprApiObjectPtr HdRprApi::CreateMeshInstance(RprApiObject* prototypeMesh) {

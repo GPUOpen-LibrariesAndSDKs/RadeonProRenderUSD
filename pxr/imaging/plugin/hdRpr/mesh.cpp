@@ -107,7 +107,10 @@ RprApiObject const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDelegat
             if (pv.name == HdTokens->displayColor) {
                 VtValue val = sceneDelegate->Get(GetId(), HdTokens->displayColor);
                 if (val.IsHolding<VtVec3fArray>()) {
-                    color = val.UncheckedGet<VtVec3fArray>()[0];
+                    auto colors = val.UncheckedGet<VtVec3fArray>();
+                    if (!colors.empty()) {
+                        color = colors[0];
+                    }
                     break;
                 }
             }

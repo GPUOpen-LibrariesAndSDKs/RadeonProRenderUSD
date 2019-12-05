@@ -3,9 +3,11 @@
 
 #include "pxr/imaging/hd/basisCurves.h"
 #include "pxr/base/gf/matrix4f.h"
+#include "pxr/base/gf/vec2f.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprApi;
 class HdRprMaterial;
 class RprApiObject;
 using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
@@ -25,14 +27,16 @@ public:
 
     void Finalize(HdRenderParam* renderParam) override;
 
-protected:
-
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
+protected:
     HdDirtyBits _PropagateDirtyBits(HdDirtyBits bits) const override;
 
     void _InitRepr(TfToken const& reprName,
                    HdDirtyBits* dirtyBits) override;
+
+private:
+    RprApiObjectPtr CreateRprCurve(HdRprApi* rprApi);
 
 private:
     RprApiObjectPtr m_rprCurve;
@@ -40,9 +44,13 @@ private:
     HdRprMaterial const* m_cachedMaterial;
 
     HdBasisCurvesTopology m_topology;
-    GfMatrix4f m_transform;
+    VtIntArray m_indices;
     VtFloatArray m_widths;
+    HdInterpolation m_widthsInterpolation;
+    VtVec2fArray m_uvs;
+    HdInterpolation m_uvsInterpolation;
     VtVec3fArray m_points;
+    GfMatrix4f m_transform;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
