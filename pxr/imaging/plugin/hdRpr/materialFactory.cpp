@@ -305,21 +305,22 @@ void RprMaterialFactory::AttachMaterialToShape(rpr_shape mesh, const RprApiMater
     if (material) {
         RPR_ERROR_CHECK(rprShapeSetMaterial(mesh, material->rootMaterial), "Failed to set shape material");
 
-        size_t dummy;
-        int subdFactor;
-        if (RPR_ERROR_CHECK(rprShapeGetInfo(mesh, RPR_SHAPE_SUBDIVISION_FACTOR, sizeof(subdFactor), &subdFactor, &dummy), "Failed to query mesh subdivision factor")) {
-            subdFactor = 0;
-        }
-
-        if (subdFactor == 0) {
-            TF_WARN("Displacement material requires subdivision to be enabled. The subdivision will be enabled with refine level of 1");
-            if (!RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, 1), "Failed to set mesh subdividion")) {
-                subdFactor = 1;
+        if (material->displacementMaterial) {
+            size_t dummy;
+            int subdFactor;
+            if (RPR_ERROR_CHECK(rprShapeGetInfo(mesh, RPR_SHAPE_SUBDIVISION_FACTOR, sizeof(subdFactor), &subdFactor, &dummy), "Failed to query mesh subdivision factor")) {
+                subdFactor = 0;
             }
-        }
 
-        if (material->displacementMaterial && subdFactor > 0) {
-            RPR_ERROR_CHECK(rprShapeSetDisplacementMaterial(mesh, material->displacementMaterial), "Failed to set shape displacement material");
+            if (subdFactor == 0) {
+                TF_WARN("Displacement material requires subdivision to be enabled. The subdivision will be enabled with refine level of 1");
+                if (!RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, 1), "Failed to set mesh subdividion")) {
+                    subdFactor = 1;
+                }
+            }
+            if (subdFactor > 0) {
+                RPR_ERROR_CHECK(rprShapeSetDisplacementMaterial(mesh, material->displacementMaterial), "Failed to set shape displacement material");
+            }
         } else {
             RPR_ERROR_CHECK(rprShapeSetDisplacementMaterial(mesh, nullptr), "Failed to unset shape displacement material");
         }
