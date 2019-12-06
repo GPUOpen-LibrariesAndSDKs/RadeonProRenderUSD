@@ -73,7 +73,7 @@ endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 set(GENERATED_FILES
     ${CMAKE_CURRENT_BINARY_DIR}/config.h
     ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
-    ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Viewport.ds)
+    ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds)
 set(GEN_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/python/generateRenderSettingFiles.py)
 add_custom_command(
     COMMAND ${PYTHON_EXECUTABLE} ${GEN_SCRIPT} ${CMAKE_CURRENT_BINARY_DIR}
@@ -173,7 +173,7 @@ endif(WIN32 OR LINUX)
 
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
-        FILES ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Viewport.ds
+        FILES ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
         DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/soho/parameters")
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_install_dir(lib/python/rpr installPrefix)

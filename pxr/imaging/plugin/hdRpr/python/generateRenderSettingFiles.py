@@ -470,9 +470,9 @@ PXR_NAMESPACE_CLOSE_SCOPE
             value_str = str(default_value)
             if isinstance(default_value, bool):
                 value_str = value_str.lower()
-                rs_sync += '        Set{name_title}(getBoolSetting(HdRprRenderSettingsTokens->{name}, m_prefData.{name}));\n'.format(name_title=name_title, name=name)
+                rs_sync += '        Set{name_title}(getBoolSetting(HdRprRenderSettingsTokens->{name}, k{name_title}Default));\n'.format(name_title=name_title, name=name)
             else:
-                rs_sync += '        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{name}, {type}(m_prefData.{name})));\n'.format(name_title=name_title, name=name, type=c_type_str)
+                rs_sync += '        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{name}, {type}(k{name_title}Default)));\n'.format(name_title=name_title, name=name, type=c_type_str)
 
             rs_range_definitions += 'const {type} k{name_title}Default = {type}({value});\n'.format(type=type_str, name_title=name_title, value=value_str)
             set_validation = ''
@@ -509,47 +509,86 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
 
             rs_set_default_values += '    {name} = k{name_title}Default;\n'.format(name=name, name_title=name_title)
 
-            houdini_param = 'parm {\n'
-            houdini_param += '    name "{}"\n'.format(name)
-            houdini_param += '    label "{}"\n'.format(setting['ui_name'])
-            if isinstance(default_value, bool):
-                houdini_param += '    type toggle\n'
-            elif 'values' in setting:
-                houdini_param += '    type ordinal\n'
-                houdini_param += '    menu {\n'
-                index = 0
-                for value in setting['values']:
-                    houdini_param += '        "{}" "{}"\n'.format(index, value)
-                    index += 1
-                houdini_param += '    }\n'
-            else:
-                houdini_param += '    type {}\n'.format(c_type_str)
-            houdini_param += '    size 1\n'
-            houdini_param += '    parmtag {{ "spare_category" "{}" }}\n'.format(category_name)
-            houdini_param += '    parmtag { "uiscope" "viewport" }\n'
-            houdini_param += '    parmtag {{ "usdvaluetype" "{}" }}\n'.format(c_type_str)
 
             houdini_settings = setting.get('houdini', {})
-            if 'custom_tags' in houdini_settings:
-                for custom_tag in houdini_settings['custom_tags']:
-                    houdini_param += '    parmtag {{ {} }}\n'.format(custom_tag)
-            if disabled_category:
-                houdini_param += '    invisible\n'
+            houdini_param_label = setting['ui_name']
+            houdini_hidewhen_conditions = []
             if 'hidewhen' in houdini_settings or category_hidewhen:
-                condition = houdini_settings.get('hidewhen', category_hidewhen)
-                houdini_param += '    hidewhen "{{ {condition} }}"\n'.format(condition=condition)
+                houdini_hidewhen_conditions.append(houdini_settings.get('hidewhen', category_hidewhen))
 
+            def CreateHoudiniParam(name, label, htype, default, values=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None, is_controlling_param=False):
+                param = 'parm {\n'
+                param += '    name "{}"\n'.format(name)
+                param += '    label "{}"\n'.format(label)
+                param += '    type {}\n'.format(htype)
+                if size: param += '    size {}\n'.format(size)
+                param += '    default {{ {} }}\n'.format(default)
+                for tag in tags:
+                    param += '    parmtag {{ {} }}\n'.format(tag)
+                if values:
+                    param += '    {} {{\n'.format('menujoin' if is_controlling_param else 'menu')
+                    for value in values:
+                        param += '        "{}" "{}"\n'.format(value[0], value[1])
+                    param += '    }\n'
+                if disabled_category:
+                    param += '    invisible\n'
+                if houdini_hidewhen_conditions:
+                    param += '    hidewhen "'
+                    for condition in houdini_hidewhen_conditions:
+                        param += '{{ {} }} '.format(condition)
+                    param += '"\n'
+                if disablewhen_conditions:
+                    param += '    disablewhen "'
+                    for condition in disablewhen_conditions:
+                        param += '{{ {} }} '.format(condition)
+                    param += '"\n'
+                if valid_range:                    
+                    param += '    range {{ {}! {} }}\n'.format(valid_range[0], valid_range[1])
+                if help_msg:
+                    param += '    help "{}"\n'.format(help_msg)
+                param += '}\n'
+
+                return param
+
+            control_param_name = name + '_control'
+            houdini_params += CreateHoudiniParam(control_param_name, houdini_param_label, 'string', '"none"',
+                values=[
+                    ('set', 'Set or Create'),
+                    ('setexisting', 'Set if Exists'),
+                    ('block', 'Block'),
+                    ('none', 'Do Nothing'),
+                ],
+                is_controlling_param=True)
+
+            render_param_values = []
+            render_param_type = c_type_str
+            render_param_default = default_value
             if isinstance(default_value, bool):
-                houdini_param += '    default {{ {} }}\n'.format(1 if default_value else 0)
-            else:
-                houdini_param += '    default {{ {} }}\n'.format(default_value)
-            if 'minValue' in setting and 'maxValue' in setting and not 'values' in setting:
-                houdini_param += '    range {{ {}! {} }}\n'.format(setting['minValue'], setting['maxValue'])
-            if 'help' in setting:
-                houdini_param += '    help "{}"\n'.format(setting['help'])
-            houdini_param += '}\n'
+                render_param_type = 'toggle'
+                render_param_default = 1 if default_value else 0
+            elif 'values' in setting:
+                render_param_type = 'ordinal'
+                for value in setting['values']:
+                    render_param_values.append((len(render_param_values), value))
 
-            houdini_params += houdini_param
+            render_param_range = None
+            if 'minValue' in setting and 'maxValue' in setting and not 'values' in setting:
+                render_param_range = (setting['minValue'], setting['maxValue'])
+
+            houdini_params += CreateHoudiniParam(name, houdini_param_label, render_param_type, render_param_default,
+                values=render_param_values,
+                tags=[
+                    '"spare_category" "{}"'.format(category_name),
+                    '"uiscope" "viewport"',
+                    '"usdvaluetype" "{}"'.format(c_type_str)
+                ] + houdini_settings.get('custom_tags', []),
+                disablewhen_conditions=[
+                    control_param_name + ' == block',
+                    control_param_name + ' == none',
+                ],
+                size=1,
+                valid_range=render_param_range,
+                help_msg=setting.get('help', None))
 
     rs_tokens_declaration += '\nTF_DECLARE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);'
 
@@ -572,7 +611,7 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
         rs_set_default_values=rs_set_default_values,
         rs_validate_values=rs_validate_values))
 
-    houdini_ds_dst_path = os.path.join(install_path, 'HdRprPlugin_Viewport.ds')
+    houdini_ds_dst_path = os.path.join(install_path, 'HdRprPlugin_Global.ds')
     houdini_ds_file = open(houdini_ds_dst_path, 'w')
     houdini_ds_file.write(houdini_ds_template.format(houdini_params=houdini_params))
 
