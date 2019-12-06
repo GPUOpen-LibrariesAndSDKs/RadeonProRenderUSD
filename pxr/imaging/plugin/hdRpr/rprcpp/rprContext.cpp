@@ -145,7 +145,7 @@ rpr_creation_flags getAllCompatibleGpuFlags(rpr_int pluginID, const char* cacheP
     return creationFlags;
 }
 
-const rpr_creation_flags getRprCreationFlags(RenderDeviceType renderDevice, rpr_int pluginID, const char* cachePath) {
+rpr_creation_flags getRprCreationFlags(RenderDeviceType renderDevice, rpr_int pluginID, const char* cachePath) {
     rpr_creation_flags flags = 0x0;
 
     if (RenderDeviceType::CPU == renderDevice) {
