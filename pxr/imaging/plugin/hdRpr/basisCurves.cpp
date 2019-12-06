@@ -149,7 +149,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
         } else {
             m_widths = VtFloatArray(1, 1.0f);
             m_widthsInterpolation = HdInterpolationConstant;
-            TF_WARN("[%s] Curve do not have widths. Fallback value is 1.0f with a constant interpolation");
+            TF_WARN("[%s] Curve do not have widths. Fallback value is 1.0f with a constant interpolation", id.GetText());
         }
         newCurve = true;
     }

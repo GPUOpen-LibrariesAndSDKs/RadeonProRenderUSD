@@ -6,16 +6,6 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PRIVATE_TOKENS(
-    _tokens,
-    (aov_color) \
-    (aov_normal) \
-    (aov_depth) \
-    (aov_linear_depth) \
-    (aov_primId) \
-    (aov_primvars_st)
-);
-
 HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id)
     : HdRenderBuffer(id)
     , m_numMappers(0)
