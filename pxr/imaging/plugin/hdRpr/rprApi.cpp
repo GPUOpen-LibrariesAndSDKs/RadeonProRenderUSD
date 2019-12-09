@@ -184,8 +184,7 @@ public:
             if (!normalIndexes.empty()) {
                 SplitPolygons(normalIndexes, vpf, newNormalIndexes);
                 ConvertIndices(&newNormalIndexes, newVpf, polygonWinding);
-            } else if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-                // XXX: Hybrid should interpret normals w/o indices as vertex interpolated
+            } else {
                 newNormalIndexes = newIndexes;
             }
         }
@@ -200,8 +199,7 @@ public:
             if (!uvIndexes.empty()) {
                 SplitPolygons(uvIndexes, vpf, newUvIndexes);
                 ConvertIndices(&newUvIndexes, newVpf, polygonWinding);
-            } else if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-                // XXX: Hybrid should interpret uvs w/o indices as vertex interpolated
+            } else {
                 newUvIndexes = newIndexes;
             }
         }
