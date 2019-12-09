@@ -161,6 +161,9 @@ void HdRprApiAov::OnFormatChange(rif::Context* rifContext) {
     if (rifContext && m_format != HdFormatFloat32Vec4) {
         m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
         m_filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
+
+        // Reset inputs
+        m_dirtyBits |= ChangeTracker::DirtySize;
     }
 }
 
