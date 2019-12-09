@@ -1119,6 +1119,9 @@ public:
                         }
                     } else {
                         m_boundAovs[aovBinding.aovName] = boundAovIter->second;
+
+                        // Update underlying format if needed
+                        boundAovIter->second->Resize(rb->GetWidth(), rb->GetHeight(), rb->GetFormat());
                     }
                 }
             }
