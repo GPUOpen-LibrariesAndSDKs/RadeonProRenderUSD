@@ -186,6 +186,19 @@ render_setting_categories = [
             }
         ]
     },
+    {
+        'name': 'UsdNativeCamera',
+        'settings': [
+            {
+                'name': 'aspectRatioConformPolicy',
+                'defaultValue': 'UsdRenderTokens->expandAperture',
+            },
+            {
+                'name': 'instantaneousShutter',
+                'defaultValue': False,
+            },
+        ]
+    }
 ]
 
 def camel_case_capitalize(w):
@@ -267,6 +280,7 @@ PXR_NAMESPACE_CLOSE_SCOPE
 #include "config.h"
 #include "rprApi.h"
 #include "pxr/base/arch/fileSystem.h"
+#include "pxr/usd/usdRender/tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -451,6 +465,8 @@ PXR_NAMESPACE_CLOSE_SCOPE
             default_value = setting['defaultValue']
 
             c_type_str = type(default_value).__name__
+            if c_type_str == 'str':
+                c_type_str = 'TfToken'
             type_str = c_type_str
 
             if 'values' in setting:
@@ -490,7 +506,8 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 rs_validate_values += '\n'
             rs_range_definitions += '\n'
 
-            rs_list_initialization += '    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title)
+            if 'ui_name' in setting:
+                rs_list_initialization += '    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title)
 
             if disabled_category:
                 rs_get_set_method_definitions += 'void HdRprConfig::Set{name_title}({c_type} {name}) {{ /* Platform no-op */ }}'.format(name_title=name_title, c_type=c_type_str, name=name)
@@ -509,6 +526,8 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
 
             rs_set_default_values += '    {name} = k{name_title}Default;\n'.format(name=name, name_title=name_title)
 
+            if not 'ui_name' in setting:
+                continue
 
             houdini_settings = setting.get('houdini', {})
             houdini_param_label = setting['ui_name']

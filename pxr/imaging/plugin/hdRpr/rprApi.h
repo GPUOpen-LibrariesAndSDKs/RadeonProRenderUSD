@@ -10,10 +10,11 @@
 #include "pxr/base/vt/array.h"
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/quaternion.h"
+#include "pxr/base/tf/staticTokens.h"
 #include "pxr/imaging/hd/types.h"
+#include "pxr/imaging/hd/camera.h"
 #include "pxr/imaging/hd/renderPassState.h"
 #include "pxr/imaging/hd/renderDelegate.h"
-#include "pxr/base/tf/staticTokens.h"
 
 #include <memory>
 #include <vector>
@@ -109,10 +110,11 @@ public:
 
     RprApiObjectPtr CreateMaterial(MaterialAdapter& materialAdapter);
 
-    const GfMatrix4d& GetCameraViewMatrix() const;
+    GfMatrix4d GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;
-    void SetCameraViewMatrix(const GfMatrix4d& m);
-    void SetCameraProjectionMatrix(const GfMatrix4d& m);
+
+    HdCamera const* GetCamera() const;
+    void SetCamera(HdCamera const* camera);
 
     GfVec2i GetViewportSize() const;
     void SetViewportSize(GfVec2i const& size);
