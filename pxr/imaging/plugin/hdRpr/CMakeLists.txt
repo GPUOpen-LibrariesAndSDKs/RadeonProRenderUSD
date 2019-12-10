@@ -141,6 +141,7 @@ pxr_plugin(hdRpr
         basisCurves
         imageCache
         camera
+        debugCodes
         
         ${OptClass}
 

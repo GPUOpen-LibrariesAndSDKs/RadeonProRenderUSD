@@ -1,5 +1,6 @@
 #include "rprContext.h"
 #include "rprError.h"
+#include "debugCodes.h"
 
 #include "../rprTools/RprTools.h"
 #include "../rprTools/RprTools.cpp"
@@ -127,10 +128,13 @@ rpr_creation_flags getAllCompatibleGpuFlags(rpr_int pluginID, const char* cacheP
     RPR_TOOLS_OS rprToolOs = RPR_TOOLS_OS::RPRTOS_LINUX;
 #endif // WIN32
 
+    TF_DEBUG(HD_RPR_DEBUG_CONTEXT_CREATION).Msg("GPUs:\n");
+
     rpr_creation_flags creationFlags = 0x0;
 #define TEST_GPU_COMPATIBILITY(index) \
     if (rprIsDeviceCompatible(pluginID, RPRTD_GPU ## index, cachePath, false, rprToolOs, additionalFlags) == RPRTC_COMPATIBLE) { \
         creationFlags |= RPR_CREATION_FLAGS_ENABLE_GPU ## index; \
+        TF_DEBUG(HD_RPR_DEBUG_CONTEXT_CREATION).Msg("#%d\n", index); \
     }
 
     TEST_GPU_COMPATIBILITY(0);
@@ -141,6 +145,18 @@ rpr_creation_flags getAllCompatibleGpuFlags(rpr_int pluginID, const char* cacheP
     TEST_GPU_COMPATIBILITY(5);
     TEST_GPU_COMPATIBILITY(6);
     TEST_GPU_COMPATIBILITY(7);
+    TEST_GPU_COMPATIBILITY(8);
+    TEST_GPU_COMPATIBILITY(9);
+    TEST_GPU_COMPATIBILITY(10);
+    TEST_GPU_COMPATIBILITY(11);
+    TEST_GPU_COMPATIBILITY(12);
+    TEST_GPU_COMPATIBILITY(13);
+    TEST_GPU_COMPATIBILITY(14);
+    TEST_GPU_COMPATIBILITY(15);
+
+    if (!creationFlags) {
+        TF_DEBUG(HD_RPR_DEBUG_CONTEXT_CREATION).Msg("None\n");
+    }
 
     return creationFlags;
 }
@@ -149,17 +165,19 @@ rpr_creation_flags getRprCreationFlags(RenderDeviceType renderDevice, rpr_int pl
     rpr_creation_flags flags = 0x0;
 
     if (RenderDeviceType::CPU == renderDevice) {
+        TF_DEBUG(HD_RPR_DEBUG_CONTEXT_CREATION).Msg("hdRpr CPU context\n");
         flags = RPR_CREATION_FLAGS_ENABLE_CPU;
     } else if (RenderDeviceType::GPU == renderDevice) {
+        TF_DEBUG(HD_RPR_DEBUG_CONTEXT_CREATION).Msg("hdRpr GPU context\n");
         flags = getAllCompatibleGpuFlags(pluginID, cachePath);
     } else {
         TF_CODING_ERROR("Unknown RenderDeviceType");
         return 0x0;
     }
 
-    #if __APPLE__
-        flags |= RPR_CREATION_FLAGS_ENABLE_METAL;
-    #endif
+#if __APPLE__
+    flags |= RPR_CREATION_FLAGS_ENABLE_METAL;
+#endif
 
     return flags;
 }
