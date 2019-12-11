@@ -8,6 +8,13 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 namespace {
 
+bool GfIsEqual(GfVec4f const& v1, GfVec4f const& v2, float tolerance = 1e-5f) {
+    return std::abs(v1[0] - v2[0]) <= tolerance &&
+           std::abs(v1[1] - v2[1]) <= tolerance &&
+           std::abs(v1[2] - v2[2]) <= tolerance &&
+           std::abs(v1[3] - v2[3]) <= tolerance;
+}
+
 bool GetWrapType(const EWrapMode& wrapMode, rpr_image_wrap_type& rprWrapType) {
     switch (wrapMode) {
         case EWrapMode::BLACK:
@@ -135,59 +142,27 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
         rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, rprImage);
         material->materialNodes.push_back(materialNode);
-
-        if (matTex.isScaleEnabled || matTex.isBiasEnabled) {
-            rpr_material_node uv_node = nullptr;
-            status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &uv_node);
-            if (uv_node) {
-                status = rprMaterialNodeSetInputUByKey(uv_node, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_UV);
-
-                rpr_material_node uv_scaled_node = nullptr;
-                rpr_material_node uv_bias_node = nullptr;
-
-                if (matTex.isScaleEnabled) {
-                    const GfVec4f& scale = matTex.scale;
-                    status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_scaled_node);
-                    if (uv_scaled_node) {
-                        material->materialNodes.push_back(uv_scaled_node);
-
-                        status = rprMaterialNodeSetInputUByKey(uv_scaled_node, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
-                        status = rprMaterialNodeSetInputNByKey(uv_scaled_node, RPR_MATERIAL_INPUT_COLOR0, uv_node);
-                        status = rprMaterialNodeSetInputFByKey(uv_scaled_node, RPR_MATERIAL_INPUT_COLOR1, scale[0], scale[1], scale[2], 0);
-                    }
-                }
-
-                if (matTex.isBiasEnabled) {
-                    const GfVec4f& bias = matTex.bias;
-                    rpr_material_node& color0Input = uv_scaled_node ? uv_scaled_node : uv_node;
-
-                    status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &uv_bias_node);
-                    if (uv_bias_node) {
-                        material->materialNodes.push_back(uv_bias_node);
-
-                        status = rprMaterialNodeSetInputUByKey(uv_bias_node, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
-                        status = rprMaterialNodeSetInputNByKey(uv_bias_node, RPR_MATERIAL_INPUT_COLOR0, color0Input);
-                        status = rprMaterialNodeSetInputFByKey(uv_bias_node, RPR_MATERIAL_INPUT_COLOR1, bias[0], bias[1], bias[2], 0);
-                    }
-                }
-
-                if (!uv_bias_node && !uv_scaled_node) {
-                    rprObjectDelete(uv_node);
-                } else {
-                    rpr_material_node uvIn = uv_bias_node ? uv_bias_node : uv_scaled_node;
-                    rprMaterialNodeSetInputNByKey(materialNode, RPR_MATERIAL_INPUT_UV, uvIn);
-                    material->materialNodes.push_back(uv_node);
-                }
-            }
-        }
-
-        if (matTex.isOneMinusSrcColor) {
+        
+        if (!GfIsEqual(matTex.scale, GfVec4f(1.0f))) {
             rpr_material_node arithmetic = nullptr;
             status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
             if (arithmetic) {
-                status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, 1.0, 1.0, 1.0, 1.0);
-                status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, materialNode);
-                status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_SUB);
+                status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
+                status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode);
+                status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, matTex.scale[0], matTex.scale[1], matTex.scale[2], matTex.scale[3]);
+                material->materialNodes.push_back(arithmetic);
+
+                materialNode = arithmetic;
+            }
+        }
+
+        if (!GfIsEqual(matTex.bias, GfVec4f(0.0f))) {
+            rpr_material_node arithmetic = nullptr;
+            status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
+            if (arithmetic) {
+                status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
+                status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode);
+                status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, matTex.bias[0], matTex.bias[1], matTex.bias[2], matTex.bias[3]);
                 material->materialNodes.push_back(arithmetic);
 
                 materialNode = arithmetic;

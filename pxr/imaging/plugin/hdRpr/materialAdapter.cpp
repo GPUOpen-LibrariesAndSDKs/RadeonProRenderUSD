@@ -52,6 +52,8 @@ bool GetNode(const TfToken& type, const HdMaterialNetwork& materialNetwork, HdMa
 }
 
 bool GetParam(const TfToken& type, const HdMaterialNode& node, VtValue& out_param) {
+    out_param = VtValue();
+
     auto& params = node.parameters;
 
     auto finded = params.find(type);
@@ -154,14 +156,12 @@ void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& ou
         // Get Scale
         GetParam(HdRprMaterialTokens->scale, node, param);
         if (param.IsHolding<GfVec4f>()) {
-            materialNode.isScaleEnabled = true;
             materialNode.scale = param.Get<GfVec4f>();
         }
 
         // Get Bias
         GetParam(HdRprMaterialTokens->bias, node, param);
         if (param.IsHolding<GfVec4f>()) {
-            materialNode.isBiasEnabled = true;
             materialNode.bias = param.Get<GfVec4f>();
         }
 
@@ -332,7 +332,13 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
             m_texRpr[RPR_MATERIAL_INPUT_UBER_REFRACTION_IOR] = materialTexture;
         } else if (paramName == HdRprMaterialTokens->opacity) {
             m_texRpr[RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT] = materialTexture;
-            materialTexture.isOneMinusSrcColor = true;
+
+            // refractionWeight == 1 - diffuseWeight
+            // UsdUvTexture has scale and bias: color = scale * textureValue + bias
+            // We use it to inverse diffuse weight, so refractionWeight = 1 - diffuseWeightColor = 1 - (scale * textureValue + bias) = 
+            //  = (1 - bias) + (-1 * scale) * textureValue, where (1 - bias) = newBias, (-1 * scale) = newScale
+            materialTexture.bias = GfVec4f(1.0f) - materialTexture.bias;
+            materialTexture.scale *= -1.0f;
             m_texRpr[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = materialTexture;
         } else if (paramName == HdRprMaterialTokens->normal) {
             m_texRpr[RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL] = materialTexture;
