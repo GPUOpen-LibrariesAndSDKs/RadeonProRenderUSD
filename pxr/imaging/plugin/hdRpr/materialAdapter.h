@@ -65,13 +65,8 @@ struct MaterialTexture {
     EWrapMode wrapS = EWrapMode::NONE;
     EWrapMode wrapT = EWrapMode::NONE;
 
-    bool isScaleEnabled = false;
-    GfVec4f scale;
-
-    bool isBiasEnabled = false;
-    GfVec4f bias;
-
-    bool isOneMinusSrcColor = false;
+    GfVec4f scale = GfVec4f(1.0f);
+    GfVec4f bias = GfVec4f(0.0f);
 };
 
 typedef std::map<TfToken, VtValue> MaterialParams;
