@@ -23,6 +23,8 @@ if(APPLE)
     set(CPACK_SYSTEM_NAME "macOS")
 elseif(WIN32)
     set(CPACK_SYSTEM_NAME "Windows")
+else()
+    set(CPACK_SYSTEM_NAME "${RPR_SDK_PLATFORM}")
 endif()
 
 include(CPack)

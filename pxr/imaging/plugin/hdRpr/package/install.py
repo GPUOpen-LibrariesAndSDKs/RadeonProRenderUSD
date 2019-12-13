@@ -49,15 +49,10 @@ def install_to_houdini_dir(hfs, package):
         hfs = os.path.abspath(os.path.join(hfs, os.pardir))
     install_package(hfs, package)
 
-valid_platforms = ['Linux', 'macOS', 'Windows']
 valid_targets = ['Houdini']
 package_pattern = re.compile(r'hdRpr-(?P<target>.*?)-.*-(?P<platform_>.*?).tar.gz', re.VERBOSE)
 def get_package_from_path(path):
     match = package_pattern.match(path)
-    platform_ = match.group('platform_')
-    if platform_ not in valid_platforms:
-        print('"{}": unknown platform. Skipping.'.format(path))
-        return None
 
     target = match.group('target')
     if target not in valid_targets:
