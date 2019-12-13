@@ -1790,17 +1790,15 @@ private:
             imageDesc.image_width = textureData->ResizedWidth();
             imageDesc.image_height = textureData->ResizedHeight();
             imageDesc.image_depth = 1;
+            imageDesc.image_row_pitch = 0;
+            imageDesc.image_slice_pitch = 0;
 
-            int bytesPerChannel;
             if (textureData->GLType() == GL_UNSIGNED_BYTE) {
                 imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
-                bytesPerChannel = 1;
             } else if (textureData->GLType() == GL_HALF_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
-                bytesPerChannel = 2;
             } else if (textureData->GLType() == GL_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
-                bytesPerChannel = 4;
             } else {
                 TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureData->GLType());
                 return false;
@@ -1816,9 +1814,6 @@ private:
                 TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), textureData->GLFormat());
                 return false;
             }
-
-            imageDesc.image_row_pitch = bytesPerChannel * imageDesc.num_components * imageDesc.image_width;
-            imageDesc.image_slice_pitch = imageDesc.image_row_pitch * imageDesc.image_height;
 
             auto rifImage = m_rifContext->CreateImage(imageDesc);
 

@@ -80,7 +80,7 @@ FilterAIDenoise::FilterAIDenoise(Context* rifContext, std::uint32_t width, std::
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1f(m_auxFilters[RemapDepthFilter], "dstHi", 1.0f), "Failed to set filter parameter");
 
     // auxillary rif images
-    rif_image_desc desc = {width, height, 1, width, width * height, 4, RIF_COMPONENT_TYPE_FLOAT32};
+    auto desc = Image::GetDesc(width, height, HdFormatFloat32Vec4);
 
     m_auxImages.resize(AuxImageMax);
     m_auxImages[RemappedDepthImage] = rifContext->CreateImage(desc);
@@ -107,7 +107,7 @@ FilterEaw::FilterEaw(Context* rifContext, std::uint32_t width, std::uint32_t hei
     m_auxFilters[Mlaa] = rifContext->CreateImageFilter(RIF_IMAGE_FILTER_MLAA);
 
     // auxillary rif images
-    rif_image_desc desc = { width, height, 1, width, width * height, 4, RIF_COMPONENT_TYPE_FLOAT32 };
+    auto desc = Image::GetDesc(width, height, HdFormatFloat32Vec4);
 
     m_auxImages.resize(AuxImageMax);
     m_auxImages[ColorVarianceImage] = rifContext->CreateImage(desc);
@@ -237,7 +237,7 @@ void Filter::SetParam(const char* name, FilterParam param) {
 }
 
 void Filter::Resize(std::uint32_t width, std::uint32_t height) {
-    rif_image_desc desc = {width, height, 1, width, width * height, 4, RIF_COMPONENT_TYPE_FLOAT32};
+    auto desc = Image::GetDesc(width, height, HdFormatFloat32Vec4);
     for (auto& image : m_auxImages) {
         if (image) {
             image = m_rifContext->CreateImage(desc);
