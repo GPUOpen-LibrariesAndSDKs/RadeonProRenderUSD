@@ -10,8 +10,9 @@
 PXR_NAMESPACE_OPEN_SCOPE
 
 struct RprApiMaterial {
-    rpr_material_node rootMaterial;
-    rpr_material_node displacementMaterial;
+    rpr_material_node rootMaterial = nullptr;
+    rpr_material_node twosidedNode = nullptr;
+    rpr_material_node displacementMaterial = nullptr;
     std::vector<std::shared_ptr<rpr::Image>> materialImages;
     std::vector<rpr_material_node> materialNodes;
 };
@@ -24,7 +25,7 @@ public:
 
     void DeleteMaterial(RprApiMaterial* rprmaterial);
 
-    void AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial* material);
+    void AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial* material, bool doublesided, bool displacementEnabled);
 
     void AttachMaterialToCurve(rpr_shape mesh, const RprApiMaterial* material);
 

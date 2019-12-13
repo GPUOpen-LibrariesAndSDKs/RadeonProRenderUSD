@@ -71,8 +71,8 @@ private:
     VtVec2fArray m_uvs;
     VtIntArray m_uvIndices;
 
-    int m_refineLevel = 0;
-    bool m_flatShadingEnabled = false;
+    HdDisplayStyle m_displayStyle;
+    bool m_doublesided = false;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

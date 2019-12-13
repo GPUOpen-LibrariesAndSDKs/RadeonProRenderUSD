@@ -110,6 +110,13 @@ public:
         return m_displacementTexture;
     }
 
+    void MarkAsDoublesided() {
+        m_doublesided = true;
+    }
+    bool IsDoublesided() const {
+        return m_doublesided;
+    }
+
 private:
     void PopulateRprColor(const MaterialParams& params);
     void PopulateEmissive(const MaterialParams& params);
@@ -123,6 +130,7 @@ private:
     MaterialRprParamsTexture m_texRpr;
 
     MaterialTexture m_displacementTexture;
+    bool m_doublesided = false;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

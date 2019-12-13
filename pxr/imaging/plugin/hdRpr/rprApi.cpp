@@ -310,9 +310,9 @@ public:
         }
     }
 
-    void SetMeshMaterial(rpr_shape mesh, const RprApiMaterial* material) {
+    void SetMeshMaterial(rpr_shape mesh, const RprApiMaterial* material, bool doublesided, bool displacementEnabled) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
-        m_rprMaterialFactory->AttachMaterialToShape(mesh, material);
+        m_rprMaterialFactory->AttachMaterialToShape(mesh, material, doublesided, displacementEnabled);
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
@@ -448,7 +448,7 @@ public:
 
         auto curveCount = segmentPerCurve.size();
         bool isCurveTapered = radiuses.size() != curveCount;
-        
+
         const size_t kRprCurveSegmentSize = 4;
         if (segmentPerCurve.empty() || points.empty() || indices.empty() ||
             indices.size() % kRprCurveSegmentSize != 0 ||
@@ -871,7 +871,7 @@ public:
         meshTransform.SetScale(volumeSize);
         meshTransform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
 
-        SetMeshMaterial(cubeMesh->GetHandle(), static_cast<RprApiMaterial*>(transparentMaterial->GetHandle()));
+        SetMeshMaterial(cubeMesh->GetHandle(), static_cast<RprApiMaterial*>(transparentMaterial->GetHandle()), true, false);
         SetMeshHeteroVolume(cubeMesh->GetHandle(), heteroVolume->GetHandle());
         SetMeshTransform(cubeMesh->GetHandle(), meshTransform);
         SetHeteroVolumeTransform(heteroVolume->GetHandle(), meshTransform);
@@ -940,7 +940,7 @@ public:
         }
 
         if (m_rifContext) {
-            m_rifContext->ExecuteCommandQueue();            
+            m_rifContext->ExecuteCommandQueue();
         }
 
         for (int i = 0; i < m_aovBindings.size(); ++i) {
@@ -2088,9 +2088,9 @@ void HdRprApi::SetMeshVertexInterpolationRule(RprApiObject* mesh, TfToken bounda
     m_impl->SetMeshVertexInterpolationRule(mesh->GetHandle(), boundaryInterpolation);
 }
 
-void HdRprApi::SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material) {
+void HdRprApi::SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material, bool doublesided, bool displacementEnabled) {
     auto materialHandle = material ? static_cast<RprApiMaterial*>(material->GetHandle()) : nullptr;
-    m_impl->SetMeshMaterial(mesh->GetHandle(), materialHandle);
+    m_impl->SetMeshMaterial(mesh->GetHandle(), materialHandle, doublesided, displacementEnabled);
 }
 
 void HdRprApi::SetMeshVisibility(RprApiObject* mesh, bool isVisible) {

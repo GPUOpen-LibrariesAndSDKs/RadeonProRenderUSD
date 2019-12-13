@@ -42,8 +42,6 @@ GfVec3f defaultEmission = GfVec3f(0.0f); // Default to no emission
 } // namespace anonymous
 
 void ReadFloatGrid(openvdb::FloatGrid const* grid, const openvdb::Coord& coordOffset, float valueOffset, float valueScale, std::vector<uint32_t>& outDensityGridOnIndices, std::vector<float>& outDensityGridOnValueIndices) {
-    openvdb::CoordBBox gridOnBB = grid->evalActiveVoxelBoundingBox();
-
     for (auto iter = grid->beginValueOn(); iter; ++iter) {
         openvdb::Coord curCoord = iter.getCoord() + coordOffset;
         outDensityGridOnIndices.push_back(curCoord.x());
@@ -93,7 +91,6 @@ void HdRprVolume::Sync(
         m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
     }
 
-    bool newVolume = false;
     if (*dirtyBits & HdChangeTracker::DirtyTopology) {
         m_rprHeteroVolume = nullptr;
 
@@ -271,7 +268,6 @@ void HdRprVolume::Sync(
             pColorGridData->indices, pColorGridData->values, pColorGridData->valueLUT,
             pEmissiveGridData->indices, pEmissiveGridData->values, pEmissiveGridData->valueLUT,
             GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], (float)voxelSize[1], (float)voxelSize[2]), gridBBLow);
-        newVolume = true;
     }
 
     *dirtyBits = HdChangeTracker::Clean;

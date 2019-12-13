@@ -82,7 +82,7 @@ void HdRprLightBase::Sync(HdSceneDelegate* sceneDelegate,
             TF_CODING_ERROR("Light material was not created");
         }
 
-        rprApi->SetMeshMaterial(m_lightMesh.get(), m_lightMaterial.get());
+        rprApi->SetMeshMaterial(m_lightMesh.get(), m_lightMaterial.get(), false, false);
         newLight = true;
     }
 

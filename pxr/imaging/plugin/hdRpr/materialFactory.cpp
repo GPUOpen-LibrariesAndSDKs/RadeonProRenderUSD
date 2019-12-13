@@ -94,6 +94,15 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
     auto material = new RprApiMaterial;
     material->rootMaterial = rootMaterialNode;
 
+    if (materialAdapter.IsDoublesided()) {
+        status = rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_TWOSIDED, &material->twosidedNode);
+        if (status != RPR_ERROR_UNSUPPORTED) {
+            RPR_ERROR_CHECK(status, "Failed to create twosided node");
+        } else if (status == RPR_SUCCESS) {
+            rprMaterialNodeSetInputNByKey(material->twosidedNode, RPR_MATERIAL_INPUT_FRONTFACE, rootMaterialNode);
+        }
+    }
+
     for (auto const& param : materialAdapter.GetVec4fRprParams()) {
         const uint32_t& paramId = param.first;
         const GfVec4f& paramValue = param.second;
@@ -142,7 +151,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
         rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, rprImage);
         material->materialNodes.push_back(materialNode);
-        
+
         if (!GfIsEqual(matTex.scale, GfVec4f(1.0f))) {
             rpr_material_node arithmetic = nullptr;
             status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
@@ -270,17 +279,23 @@ void RprMaterialFactory::DeleteMaterial(RprApiMaterial* material) {
     }
 
     SAFE_DELETE_RPR_OBJECT(material->rootMaterial);
+    SAFE_DELETE_RPR_OBJECT(material->twosidedNode);
     for (auto node : material->materialNodes) {
         SAFE_DELETE_RPR_OBJECT(node);
     }
     delete material;
 }
 
-void RprMaterialFactory::AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial* material) {
+void RprMaterialFactory::AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial* material, bool doublesided, bool displacementEnabled) {
     if (material) {
-        RPR_ERROR_CHECK(rprShapeSetMaterial(mesh, material->rootMaterial), "Failed to set shape material");
+        if (material->twosidedNode) {
+            RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(material->twosidedNode, RPR_MATERIAL_INPUT_BACKFACE, doublesided ? material->rootMaterial : nullptr), "Failed to set back face input of twosided node");
+            RPR_ERROR_CHECK(rprShapeSetMaterial(mesh, material->twosidedNode), "Failed to set shape material");
+        } else {
+            RPR_ERROR_CHECK(rprShapeSetMaterial(mesh, material->rootMaterial), "Failed to set shape material");
+        }
 
-        if (material->displacementMaterial) {
+        if (displacementEnabled && material->displacementMaterial) {
             size_t dummy;
             int subdFactor;
             if (RPR_ERROR_CHECK(rprShapeGetInfo(mesh, RPR_SHAPE_SUBDIVISION_FACTOR, sizeof(subdFactor), &subdFactor, &dummy), "Failed to query mesh subdivision factor")) {
