@@ -100,7 +100,7 @@ public:
     void SetMeshTransform(RprApiObject* mesh, const GfMatrix4f& transform);
     void SetMeshRefineLevel(RprApiObject* mesh, int level);
     void SetMeshVertexInterpolationRule(RprApiObject* mesh, TfToken boundaryInterpolation);
-    void SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material);
+    void SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material, bool doublesided, bool displacementEnabled);
     void SetMeshVisibility(RprApiObject* mesh, bool isVisible);
 
     RprApiObjectPtr CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);

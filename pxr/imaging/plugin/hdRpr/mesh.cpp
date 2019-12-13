@@ -44,6 +44,7 @@ HdDirtyBits HdRprMesh::GetInitialDirtyBitsMask() const {
         | HdChangeTracker::DirtyVisibility
         | HdChangeTracker::DirtyInstancer
         | HdChangeTracker::DirtyInstanceIndex
+        | HdChangeTracker::DirtyDoubleSided
         ;
 
     return (HdDirtyBits)mask;
@@ -183,19 +184,24 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_cachedMaterialId = sceneDelegate->GetMaterialId(id);
     }
 
+    if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
+        _sharedData.visible = sceneDelegate->GetVisible(id);
+    }
+
+    if (*dirtyBits & HdChangeTracker::DirtyDoubleSided) {
+        m_doublesided = sceneDelegate->GetDoubleSided(id);
+    }
+
     ////////////////////////////////////////////////////////////////////////
     // 2. Resolve drawstyles
 
     if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) {
-        auto displayStyle = sceneDelegate->GetDisplayStyle(id);
-        m_refineLevel = displayStyle.refineLevel;
-        m_flatShadingEnabled = displayStyle.flatShadingEnabled;
-        TF_UNUSED(displayStyle.displacementEnabled);
+        m_displayStyle = sceneDelegate->GetDisplayStyle(id);
     }
 
-    m_smoothNormals = m_flatShadingEnabled;
+    m_smoothNormals = m_displayStyle.flatShadingEnabled;
     // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
-    m_smoothNormals = m_smoothNormals && !(m_enableSubdiv && m_refineLevel > 0);
+    m_smoothNormals = m_smoothNormals && !(m_enableSubdiv && m_displayStyle.refineLevel > 0);
 
     if (!m_authoredNormals && m_smoothNormals) {
         if (!m_adjacencyValid) {
@@ -346,12 +352,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh.get(), m_enableSubdiv ? m_refineLevel : 0);
+                rprApi->SetMeshRefineLevel(rprMesh.get(), m_enableSubdiv ? m_displayStyle.refineLevel : 0);
             }
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyVisibility)) {
-            _UpdateVisibility(sceneDelegate, dirtyBits);
             for (auto& rprMesh : m_rprMeshes) {
                 rprApi->SetMeshVisibility(rprMesh.get(), _sharedData.visible);
             }
@@ -404,7 +409,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
-            (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)) { // If refine level was changed we need to reset displacement material
+            (*dirtyBits & HdChangeTracker::DirtyDoubleSided) || // update twosided material node
+            (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)) { // update displacement material
             auto getMeshMaterial = [sceneDelegate, rprApi, dirtyBits, this](SdfPath const& materialId) {
                 auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
                 if (material && material->GetRprMaterialObject()) {
@@ -417,13 +423,13 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             if (m_geomSubsets.empty()) {
                 auto material = getMeshMaterial(m_cachedMaterialId);
                 for (auto& mesh : m_rprMeshes) {
-                    rprApi->SetMeshMaterial(mesh.get(), material);
+                    rprApi->SetMeshMaterial(mesh.get(), material, m_doublesided, m_displayStyle.displacementEnabled);
                 }
             } else {
                 if (m_geomSubsets.size() == m_rprMeshes.size()) {
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
                         auto material = getMeshMaterial(m_geomSubsets[i].materialId);
-                        rprApi->SetMeshMaterial(m_rprMeshes[i].get(), material);
+                        rprApi->SetMeshMaterial(m_rprMeshes[i].get(), material, m_doublesided, m_displayStyle.displacementEnabled);
                     }
                 } else {
                     TF_CODING_ERROR("Unexpected number of meshes");
