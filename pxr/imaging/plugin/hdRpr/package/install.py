@@ -112,11 +112,11 @@ elif 'HFS' in os.environ:
     install_to_houdini_dir(os.environ['HFS'], package)
 else:
     if windows():
-        hfs_search_paths = ['C:\\Program Files\\Side Effects Software\\Houdini*']
+        hfs_search_paths = ['C:\\Program Files\\Side Effects Software\\Houdini 18*']
     elif linux():
-        hfs_search_paths = ['/opt/hfs*']
+        hfs_search_paths = ['/opt/hfs18*']
     else:
-        hfs_search_paths = ['/Applications/Houdini/Houdini*/Frameworks/Houdini.framework/Versions/Current/Resources']
+        hfs_search_paths = ['/Applications/Houdini/Houdini18*/Frameworks/Houdini.framework/Versions/Current/Resources']
 
     install_variants = set()
     for search_path in hfs_search_paths:
