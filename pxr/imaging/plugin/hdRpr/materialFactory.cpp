@@ -96,10 +96,10 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
     if (materialAdapter.IsDoublesided()) {
         status = rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_TWOSIDED, &material->twosidedNode);
-        if (status != RPR_ERROR_UNSUPPORTED) {
+        if (status == RPR_SUCCESS) {
+            RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(material->twosidedNode, RPR_MATERIAL_INPUT_FRONTFACE, rootMaterialNode), "Failed to set front face input of twosided node");
+        } else if (status != RPR_ERROR_UNSUPPORTED) {
             RPR_ERROR_CHECK(status, "Failed to create twosided node");
-        } else if (status == RPR_SUCCESS) {
-            rprMaterialNodeSetInputNByKey(material->twosidedNode, RPR_MATERIAL_INPUT_FRONTFACE, rootMaterialNode);
         }
     }
 
