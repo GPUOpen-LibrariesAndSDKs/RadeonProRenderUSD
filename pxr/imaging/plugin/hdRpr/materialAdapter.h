@@ -4,6 +4,7 @@
 #include "pxr/base/tf/token.h"
 #include "pxr/base/vt/value.h"
 #include "pxr/base/gf/vec4f.h"
+#include "pxr/base/gf/matrix3f.h"
 #include "pxr/imaging/hd/material.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -21,6 +22,7 @@ PXR_NAMESPACE_OPEN_SCOPE
     (mirror) \
     (UsdPreviewSurface) \
     (UsdUVTexture) \
+    (UsdTransform2d) \
     (color) \
     (diffuseColor) \
     (emissiveColor) \
@@ -35,7 +37,9 @@ PXR_NAMESPACE_OPEN_SCOPE
     (ior) \
     (normal) \
     (displacement) \
-    (transparency)
+    (transparency) \
+    (rotation) \
+    (translation)
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprMaterialTokens, HDRPR_MATERIAL_TOKENS);
 
@@ -67,6 +71,8 @@ struct MaterialTexture {
 
     GfVec4f scale = GfVec4f(1.0f);
     GfVec4f bias = GfVec4f(0.0f);
+
+    GfMatrix3f uvTransform = GfMatrix3f(1.0f);
 };
 
 typedef std::map<TfToken, VtValue> MaterialParams;

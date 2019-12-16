@@ -15,6 +15,17 @@ bool GfIsEqual(GfVec4f const& v1, GfVec4f const& v2, float tolerance = 1e-5f) {
            std::abs(v1[3] - v2[3]) <= tolerance;
 }
 
+bool GfIsEqual(GfMatrix3f const& m1, GfMatrix3f const& m2, float tolerance = 1e-5f) {
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            if (std::abs(m1[i][j] - m2[i][j]) >= tolerance) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool GetWrapType(const EWrapMode& wrapMode, rpr_image_wrap_type& rprWrapType) {
     switch (wrapMode) {
         case EWrapMode::BLACK:
@@ -151,6 +162,40 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
         rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, rprImage);
         material->materialNodes.push_back(materialNode);
+
+        if (!GfIsEqual(matTex.uvTransform, GfMatrix3f(1.0f))) {
+            rpr_material_node uvLookupNode = nullptr;
+            status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &uvLookupNode);
+            if (uvLookupNode) {
+                status = rprMaterialNodeSetInputUByKey(uvLookupNode, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_UV);
+
+                rpr_material_node transformUvNode = nullptr;
+                status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &transformUvNode);
+                if (transformUvNode) {
+                    // XXX (RPR): due to missing functionality to set explicitly third component of UV vector to 1
+                    // third component set to 1 using addition
+                    rpr_material_node setZtoOneNode = nullptr;
+                    status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &setZtoOneNode);
+                    status = rprMaterialNodeSetInputUByKey(setZtoOneNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
+                    status = rprMaterialNodeSetInputFByKey(setZtoOneNode, RPR_MATERIAL_INPUT_COLOR0, 0.0f, 0.0f, 1.0f, 0.0f);
+                    status = rprMaterialNodeSetInputNByKey(setZtoOneNode, RPR_MATERIAL_INPUT_COLOR1, uvLookupNode);
+
+                    status = rprMaterialNodeSetInputUByKey(transformUvNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MAT_MUL);
+                    status = rprMaterialNodeSetInputFByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR0, matTex.uvTransform[0][0], matTex.uvTransform[0][1], matTex.uvTransform[0][2], 0.0f);
+                    status = rprMaterialNodeSetInputFByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR1, matTex.uvTransform[1][0], matTex.uvTransform[1][1], matTex.uvTransform[1][2], 0.0f);
+                    status = rprMaterialNodeSetInputFByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR2, matTex.uvTransform[2][0], matTex.uvTransform[2][1], matTex.uvTransform[2][2], 0.0f);
+                    status = rprMaterialNodeSetInputNByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR3, setZtoOneNode);
+
+                    status = rprMaterialNodeSetInputNByKey(materialNode, RPR_MATERIAL_INPUT_UV, transformUvNode);
+
+                    material->materialNodes.push_back(transformUvNode);
+                    material->materialNodes.push_back(setZtoOneNode);
+                    material->materialNodes.push_back(uvLookupNode);
+                } else {
+                    rprObjectDelete(uvLookupNode);
+                }
+            }
+        }
 
         if (!GfIsEqual(matTex.scale, GfVec4f(1.0f))) {
             rpr_material_node arithmetic = nullptr;
