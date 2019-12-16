@@ -107,11 +107,11 @@ elif 'HFS' in os.environ:
     install_to_houdini_dir(os.environ['HFS'], package)
 else:
     if windows():
-        hfs_search_paths = ['C:\\Program Files\\Side Effects Software\\Houdini*']
+        hfs_search_paths = ['C:\\Program Files\\Side Effects Software\\Houdini 18*']
     elif linux():
-        hfs_search_paths = ['/opt/hfs*']
+        hfs_search_paths = ['/opt/hfs18*']
     else:
-        hfs_search_paths = ['/Applications/Houdini/Houdini*/Frameworks/Houdini.framework/Versions/Current/Resources']
+        hfs_search_paths = ['/Applications/Houdini/Houdini18*/Frameworks/Houdini.framework/Versions/Current/Resources']
 
     install_variants = set()
     for search_path in hfs_search_paths:
@@ -130,20 +130,11 @@ else:
     elif len(install_variants) == 1:
         install_to_houdini_dir(install_variants[0], package)
     else:
-        while True:
-            print('Few Houdini installation has been found. Select the desired one.')
-            i = 0
-            for path in install_variants:
-                print('{}. "{}"'.format(i, path))
-                i += 1
-            print('Enter number.')
-            try:
-                i = int(input())
-                if i >= 0 and i < len(install_variants):
-                    number = i
-                    break
-            except ValueError:
-                pass
-            print('Incorrect number.')
-
-        install_to_houdini_dir(install_variants[number], package)
+        print('Few Houdini installation has been found. Select the desired one.')
+        for i, path in enumerate(install_variants):
+            print('{}. "{}"'.format(i, path))
+        print('Enter number.')
+        try:
+            install_to_houdini_dir(install_variants[int(input())], package)
+        except (ValueError, IndexError) as e:
+            print('Installation canceled: incorrect number.')
