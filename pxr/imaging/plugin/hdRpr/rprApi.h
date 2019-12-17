@@ -70,6 +70,7 @@ std::unique_ptr<T> make_unique(Args&&... args) {
     (elementId) \
     (normal) \
     (worldCoordinate) \
+    (opacity) \
     ((primvarsSt, "primvars:st"))
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_API, HD_RPR_AOV_TOKENS);
