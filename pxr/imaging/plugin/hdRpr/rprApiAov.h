@@ -63,6 +63,8 @@ public:
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
 
+    void SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity);
+
     void EnableAIDenoise(std::shared_ptr<HdRprApiAov> albedo,
                          std::shared_ptr<HdRprApiAov> normal,
                          std::shared_ptr<HdRprApiAov> linearDepth);
@@ -78,9 +80,27 @@ protected:
     void OnSizeChange(rif::Context* rifContext) override;
 
 private:
+    enum Filter {
+        kFilterNone = 0,
+        kFilterResample = 1 << 0,
+        kFilterAIDenoise = 1 << 1,
+        kFilterEAWDenoise = 1 << 2,
+        kFilterComposeOpacity = 1 << 3,
+    };
+    void SetFilter(Filter filter, bool enable);
+    
+    template <typename T>
+    void ResizeFilter(int width, int height, Filter filterType, rif::Filter* filter, T input);
+
+private:
+    std::shared_ptr<HdRprApiAov> m_retainedOpacity;
     std::shared_ptr<HdRprApiAov> m_retainedDenoiseInputs[rif::MaxInput];
-    rif::FilterType m_currentFilter = rif::FilterType::None;
-    bool m_isCurrentFilterDirty = true;
+
+    Filter m_mainFilterType = kFilterNone;
+    std::vector<std::pair<Filter, std::unique_ptr<rif::Filter>>> m_auxFilters;
+
+    uint32_t m_enabledFilters = kFilterNone;
+    bool m_isEnabledFiltersDirty = true;
 };
 
 class HdRprApiNormalAov : public HdRprApiAov {

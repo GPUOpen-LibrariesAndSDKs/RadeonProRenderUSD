@@ -29,7 +29,7 @@ enum FilterInputType
     MaxInput
 };
 
-using FilterParam = BOOST_NS::variant<int, float, std::string, GfVec2i, GfMatrix4f>;
+using FilterParam = BOOST_NS::variant<int, float, std::string, GfVec2i, GfMatrix4f, rif_image>;
 
 enum class FilterType
 {
@@ -48,13 +48,17 @@ public:
 
     virtual ~Filter();
 
+    void SetInput(FilterInputType inputType, Filter* filter);
     void SetInput(FilterInputType inputType, rif_image rifImage, float sigma = 1.0f);
     void SetInput(FilterInputType inputType, rpr::FrameBuffer* rprFrameBuffer, float sigma = 1.0f);
+    void SetInput(const char* name, rpr::FrameBuffer* rprFrameBuffer);
     void SetOutput(rif_image rifImage);
     void SetOutput(rif_image_desc imageDesc);
     void SetOutput(rpr::FrameBuffer* rprFrameBuffer);
     void SetParam(const char* name, FilterParam param);
+    void SetParamFilter(const char* name, Filter* filter);
 
+    rif_image GetInput(FilterInputType inputType) const;
     rif_image GetOutput();
 
     virtual void Resize(std::uint32_t width, std::uint32_t height);
@@ -64,7 +68,7 @@ protected:
     Filter(Context* rifContext) : m_rifContext(rifContext) {}
 
     void DetachFilter();
-    virtual void AttachFilter() = 0;
+    virtual void AttachFilter(rif_image inputImage);
 
     void ApplyParameters();
 
@@ -93,6 +97,7 @@ protected:
     };
 
     std::unordered_map<FilterInputType, InputTraits, std::hash<std::underlying_type<FilterInputType>::type>> m_inputs;
+    std::map<std::string, InputTraits> m_namedInputs;
     std::unordered_map<std::string, FilterParam> m_params;
 
     rif_image m_outputImage = nullptr;

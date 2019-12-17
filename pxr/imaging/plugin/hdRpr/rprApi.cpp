@@ -25,6 +25,7 @@
 #include "pxr/imaging/glf/uvTextureData.h"
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
+#include "pxr/base/tf/envSetting.h"
 
 #include <RadeonProRender.h>
 #include <RadeonProRender_Baikal.h>
@@ -41,6 +42,9 @@
 #endif // __APPLE__
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+TF_DEFINE_ENV_SETTING(HDRPR_DISABLE_ALPHA, false,
+    "Disable alpha in color AOV. All alpha values would be 1.0");
 
 TF_DEFINE_PUBLIC_TOKENS(HdRprAovTokens, HD_RPR_AOV_TOKENS);
 
@@ -79,6 +83,7 @@ static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
     {HdRprAovTokens->normal, RPR_AOV_SHADING_NORMAL},
     {HdRprAovTokens->worldCoordinate, RPR_AOV_WORLD_COORDINATE},
     {HdRprAovTokens->primvarsSt, RPR_AOV_UV},
+    {HdRprAovTokens->opacity, RPR_AOV_OPACITY},
 };
 
 class HdRprApiImpl {
@@ -1526,6 +1531,19 @@ private:
             return;
         }
 
+        auto initInternalAov = [this](TfToken const& name) {
+            if (auto aov = CreateAov(name)) {
+                m_internalAovs.emplace(name, std::move(aov));
+            }
+        };
+
+        // In case we have RIF we can use it to combine opacity and color AOVs
+        // into image that can be used for alpha compositing,
+        // without it color AOV always have 1.0 in alpha channel
+        if (!TfGetEnvSetting(HDRPR_DISABLE_ALPHA)) {
+            initInternalAov(HdRprAovTokens->opacity);
+        }
+
         // We create separate AOVs needed for denoising ASAP
         // In such a way, when user enables denoising it will not require to rerender
         // but it requires more memory, obviously, it should be taken into an account
@@ -1536,12 +1554,12 @@ private:
         }
 #endif // __APPLE__
 
-        m_internalAovs[HdRprAovTokens->albedo] = CreateAov(HdRprAovTokens->albedo, 0, 0);
-        m_internalAovs[HdRprAovTokens->linearDepth] = CreateAov(HdRprAovTokens->linearDepth, 0, 0);
-        m_internalAovs[HdRprAovTokens->normal] = CreateAov(HdRprAovTokens->normal, 0, 0);
+        initInternalAov(HdRprAovTokens->albedo);
+        initInternalAov(HdRprAovTokens->linearDepth);
+        initInternalAov(HdRprAovTokens->normal);
         if (filterType == rif::FilterType::EawDenoise) {
-            m_internalAovs[HdRprAovTokens->primId] = CreateAov(HdRprAovTokens->primId, 0, 0);
-            m_internalAovs[HdRprAovTokens->worldCoordinate] = CreateAov(HdRprAovTokens->worldCoordinate, 0, 0);
+            initInternalAov(HdRprAovTokens->primId);
+            initInternalAov(HdRprAovTokens->worldCoordinate);
         }
     }
 
@@ -1718,7 +1736,7 @@ private:
         return CreateMesh(position, indexes, normals, VtIntArray(), VtVec2fArray(), VtIntArray(), vpf);
     }
 
-    std::shared_ptr<HdRprApiAov> CreateAov(TfToken const& aovName, int width, int height, HdFormat format = HdFormatFloat32Vec4) {
+    std::shared_ptr<HdRprApiAov> CreateAov(TfToken const& aovName, int width = 0, int height = 0, HdFormat format = HdFormatFloat32Vec4) {
         if (!m_rprContext ||
             width < 0 || height < 0 ||
             format == HdFormatInvalid || HdDataSizeOfFormat(format) == 0) {
@@ -1741,7 +1759,16 @@ private:
         try {
             if (!aov) {
                 if (aovName == HdRprAovTokens->color) {
-                    aov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get());
+                    auto colorAov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get());
+                    
+                    auto opacityAovIter = m_aovRegistry.find(HdRprAovTokens->opacity);
+                    if (opacityAovIter != m_aovRegistry.end()) {
+                        if (auto opacityAov = opacityAovIter->second.lock()) {
+                            colorAov->SetOpacityAov(opacityAov);
+                        }
+                    }
+
+                    aov = colorAov;
                 } else if (aovName == HdRprAovTokens->normal) {
                     aov = std::make_shared<HdRprApiNormalAov>(width, height, format, m_rprContext.get(), m_rifContext.get());
                 } else if (aovName == HdRprAovTokens->depth) {

@@ -41,7 +41,7 @@ void FrameBuffer::AttachAs(rpr_aov aov) {
     }
 
     if (aov != kAovNone) {
-        RPR_ERROR_CHECK(rprContextSetAOV(m_context, aov, GetHandle()), "Failed to attach aov framebuffer", m_context);
+        RPR_ERROR_CHECK_THROW(rprContextSetAOV(m_context, aov, GetHandle()), "Failed to attach aov framebuffer", m_context);
         m_aov = aov;
     }
 }
