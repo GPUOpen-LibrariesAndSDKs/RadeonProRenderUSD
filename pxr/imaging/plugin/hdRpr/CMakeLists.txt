@@ -180,6 +180,9 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
         FILES ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
         DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/soho/parameters")
+    install(
+        FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/rprmeshproperties1.hda
+        DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/otls")
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_install_dir(lib/python/rpr installPrefix)
 
