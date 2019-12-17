@@ -4,8 +4,10 @@
 #include "pxr/imaging/hd/material.h"
 
 #include "pxr/base/gf/vec3f.h"
+#include "pxr/base/gf/vec2f.h"
 #include "pxr/usd/sdf/assetPath.h"
 #include "pxr/usd/ar/resolver.h"
+#include "pxr/usd/usdUtils/pipeline.h"
 
 #include <RadeonProRender.h>
 #include <cfloat>
@@ -113,24 +115,89 @@ void GetParameters(const  HdMaterialNetwork& materialNetwork, const HdMaterialNo
 void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& out_materialTextures) {
     out_materialTextures.clear();
 
-    for (auto& relationship : materialNetwork.relationships) {
+    auto stToken = UsdUtilsGetPrimaryUVSetName();
+
+    for (auto& textureRel : materialNetwork.relationships) {
         auto nodeIter = std::find_if(materialNetwork.nodes.begin(), materialNetwork.nodes.end(),
-            [&relationship](HdMaterialNode const& node) {
-                return node.path == relationship.inputId;
+            [&textureRel](HdMaterialNode const& node) {
+                return node.path == textureRel.inputId;
         });
         if (nodeIter == materialNetwork.nodes.end()) {
-            TF_RUNTIME_ERROR("Invalid material network. Relationship %s does not match to any node", relationship.outputName.GetText());
+            TF_RUNTIME_ERROR("Invalid material network. Relationship %s does not match to any node", textureRel.outputName.GetText());
             continue;
         }
         if (nodeIter->identifier != HdRprMaterialTokens->UsdUVTexture) {
             continue;
         }
 
+        MaterialTexture materialNode;
+        VtValue param;
+
+        // Find out which node produces UV for look up
+        for (auto& stRel : materialNetwork.relationships) {
+            if (stRel.outputName != stToken ||
+                stRel.outputId != textureRel.inputId) {
+                continue;
+            }
+
+            auto stNodeIter = std::find_if(materialNetwork.nodes.begin(), materialNetwork.nodes.end(),
+                [&stRel](HdMaterialNode const& node) {
+                    return node.path == stRel.inputId;
+            });
+            if (stNodeIter == materialNetwork.nodes.end()) {
+                TF_RUNTIME_ERROR("Invalid material network. Relationship %s does not match to any node", stRel.outputName.GetText());
+                continue;
+            }
+            // Actually some much more complex node graph could exists
+            // But we support only direct UsdUvTexture<->UsdTransform2d relationship for now
+            if (stNodeIter->identifier == HdRprMaterialTokens->UsdTransform2d) {
+                float rotationDegrees = 0.0f;
+                GfVec2f scale(1.0f);
+                GfVec2f translation(0.0f);
+
+                GetParam(HdRprMaterialTokens->rotation, *stNodeIter, param);
+                if (param.IsHolding<float>()) {
+                    rotationDegrees = param.UncheckedGet<float>();
+                }
+
+                GetParam(HdRprMaterialTokens->scale, *stNodeIter, param);
+                if (param.IsHolding<GfVec2f>()) {
+                    scale = param.UncheckedGet<GfVec2f>();
+                }
+
+                GetParam(HdRprMaterialTokens->translation, *stNodeIter, param);
+                if (param.IsHolding<GfVec2f>()) {
+                    translation = param.UncheckedGet<GfVec2f>();
+                }
+
+                float rotation = GfDegreesToRadians(rotationDegrees);
+                float rotCos = std::cos(rotation);
+                float rotSin = std::sin(rotation);
+
+                // XXX (Houdini): Proposal of UsdPreviewSurface states that rotation is
+                //  "Counter-clockwise rotation in degrees around the origin",
+                //  by default, the origin is the zero point on the UV coordinate system
+                //  but Houdini's Karma uses origin = (0.5, 0.5). We stick with it right now
+                GfVec2f origin(0.5f);
+
+                materialNode.uvTransform = GfMatrix3f(1.0, 0.0, -origin[0],
+                                                      0.0, 1.0, -origin[1],
+                                                      0.0, 0.0, 1.0);
+
+                materialNode.uvTransform = GfMatrix3f(scale[0], 0.0, 0.0,
+                                                      0.0, scale[1], 0.0,
+                                                      0.0, 0.0, 1.0) * materialNode.uvTransform;
+                materialNode.uvTransform = GfMatrix3f(rotCos, -rotSin, 0.0,
+                                                      rotSin, rotCos, 0.0,
+                                                      0.0f, 0.0f, 1.0f) * materialNode.uvTransform;
+                materialNode.uvTransform[0][2] += translation[0] + origin[0];
+                materialNode.uvTransform[1][2] += translation[1] + origin[1];
+            }
+            break;
+        }
+
         auto& node = *nodeIter;
 
-        MaterialTexture materialNode;
-
-        VtValue param;
         GetParam(HdRprMaterialTokens->file, node, param);
 
         // Get image path
@@ -147,7 +214,7 @@ void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& ou
 
         // Get channel
         // The input name descripe channel(s) required 
-        materialNode.channel = GetChannel(relationship.inputName);
+        materialNode.channel = GetChannel(textureRel.inputName);
 
         // Get Wrap Modes
         materialNode.wrapS = GetWrapMode(HdRprMaterialTokens->wrapS, node);
@@ -165,7 +232,7 @@ void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& ou
             materialNode.bias = param.Get<GfVec4f>();
         }
 
-        out_materialTextures[relationship.outputName] = materialNode;
+        out_materialTextures[textureRel.outputName] = materialNode;
     }
 }
 
