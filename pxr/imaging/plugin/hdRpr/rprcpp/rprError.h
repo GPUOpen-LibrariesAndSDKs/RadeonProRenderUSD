@@ -1,7 +1,8 @@
 #ifndef RPRCPP_EXCEPTION_H
 #define RPRCPP_EXCEPTION_H
 
-#include "pxr/pxr.h"
+#include "debugCodes.h"
+
 #include "pxr/base/arch/functionLite.h"
 #include "pxr/base/tf/stringUtils.h"
 
@@ -74,6 +75,9 @@ inline std::string ConstructErrorMessage(rpr_status errorStatus, std::string con
 inline bool IsErrorCheck(const rpr_status status, const std::string& messageOnFail, char const* file, char const* function, size_t line, rpr_context context = nullptr) {
     if (RPR_SUCCESS == status) {
         return false;
+    }
+    if (status == RPR_ERROR_UNSUPPORTED && !TfDebug::IsEnabled(HD_RPR_DEBUG_CORE_UNSUPPORTED_ERROR)) {
+        return true;
     }
 
     auto errorMessage = ConstructErrorMessage(status, messageOnFail.c_str(), file, function, line, context);
