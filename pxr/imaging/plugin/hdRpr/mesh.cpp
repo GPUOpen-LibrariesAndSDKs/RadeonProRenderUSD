@@ -19,6 +19,10 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_PRIVATE_TOKENS(HdRprMeshPrivateTokens,
+    ((subdivisionLevel, "rpr:subdivisionLevel"))
+);
+
 HdRprMesh::HdRprMesh(SdfPath const& id, SdfPath const& instancerId)
     : HdMesh(id, instancerId) {
 
@@ -165,6 +169,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation = {
         {HdInterpolationFaceVarying, sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationFaceVarying)},
         {HdInterpolationVertex, sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationVertex)},
+        {HdInterpolationConstant, sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant)},
     };
 
     if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->normals)) {
@@ -195,13 +200,40 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     ////////////////////////////////////////////////////////////////////////
     // 2. Resolve drawstyles
 
+    bool isRefineLevelDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) {
         m_displayStyle = sceneDelegate->GetDisplayStyle(id);
+        if (m_refineLevel != m_displayStyle.refineLevel) {
+            isRefineLevelDirty = true;
+            m_refineLevel = m_displayStyle.refineLevel;
+        }
+    }
+
+    if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
+        auto& constantPrimvars = primvarDescsPerInterpolation.at(HdInterpolationConstant);
+        if (!constantPrimvars.empty()) {
+            auto subdivisionLevelPrimvarIter = std::find_if(constantPrimvars.begin(), constantPrimvars.end(), [](HdPrimvarDescriptor const& desc) {
+                return desc.name == HdRprMeshPrivateTokens->subdivisionLevel;
+                });
+            if (subdivisionLevelPrimvarIter != constantPrimvars.end()) {
+                auto subdivisionLevelValue = sceneDelegate->Get(id, HdRprMeshPrivateTokens->subdivisionLevel);
+                if (subdivisionLevelValue.IsHolding<int>()) {
+                    int refineLevel = subdivisionLevelValue.UncheckedGet<int>();
+                    if (m_refineLevel != refineLevel) {
+                        isRefineLevelDirty = true;
+                        m_refineLevel = refineLevel;
+                    }
+                } else {
+                    auto typeName = subdivisionLevelValue.GetTypeName();
+                    TF_WARN("[%s] %s: unexpected type. %s != int", id.GetText(), HdRprMeshPrivateTokens->subdivisionLevel.GetText(), typeName.c_str());
+                }
+            }
+        }
     }
 
     m_smoothNormals = m_displayStyle.flatShadingEnabled;
     // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
-    m_smoothNormals = m_smoothNormals && !(m_enableSubdiv && m_displayStyle.refineLevel > 0);
+    m_smoothNormals = m_smoothNormals && !(m_enableSubdiv && m_refineLevel > 0);
 
     if (!m_authoredNormals && m_smoothNormals) {
         if (!m_adjacencyValid) {
@@ -350,9 +382,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
-        if (newMesh || (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)) {
+        if (newMesh || isRefineLevelDirty) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh.get(), m_enableSubdiv ? m_displayStyle.refineLevel : 0);
+                rprApi->SetMeshRefineLevel(rprMesh.get(), m_enableSubdiv ? m_refineLevel : 0);
             }
         }
 
@@ -410,7 +442,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
             (*dirtyBits & HdChangeTracker::DirtyDoubleSided) || // update twosided material node
-            (*dirtyBits & HdChangeTracker::DirtyDisplayStyle)) { // update displacement material
+            (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) || isRefineLevelDirty) { // update displacement material
             auto getMeshMaterial = [sceneDelegate, rprApi, dirtyBits, this](SdfPath const& materialId) {
                 auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
                 if (material && material->GetRprMaterialObject()) {

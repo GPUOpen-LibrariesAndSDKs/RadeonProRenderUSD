@@ -72,6 +72,7 @@ private:
     VtIntArray m_uvIndices;
 
     HdDisplayStyle m_displayStyle;
+    int m_refineLevel = 0;
     bool m_doublesided = false;
 };
 
