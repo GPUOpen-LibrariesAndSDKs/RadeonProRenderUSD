@@ -1122,7 +1122,6 @@ public:
             m_hdCamera->GetShutterOpen(&shutterOpen);
             m_hdCamera->GetShutterClose(&shutterClose);
         }
-        // XXX (RPR): shutter close/open is a time value, but RPR accepts some abstract coefficient in [0, 1] range
         RPR_ERROR_CHECK(rprCameraSetExposure(camera, std::max(shutterClose - shutterOpen, 0.0)), "Failed to set camera exposure");
 
         float sensorWidth;
