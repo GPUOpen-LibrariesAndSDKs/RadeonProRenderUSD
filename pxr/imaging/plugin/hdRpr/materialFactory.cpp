@@ -254,15 +254,6 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             emissionColorNode = outNode;
         }
 
-        // SIGGRAPH HACK: Fix for models from Apple AR quick look gallery.
-        //   Of all the available ways to load images, none of them gives the opportunity to
-        //   get the gamma of the image and does not convert the image to linear space
-        if ((paramId == RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR ||
-             paramId == RPR_MATERIAL_INPUT_UBER_REFLECTION_COLOR) &&
-            ArGetResolver().GetExtension(matTex.path) == "png") {
-            rprImageSetGamma(material->materialImages.back()->GetHandle(), 2.2f);
-        }
-
         // normal map textures need to be passed through the normal map node
         if (paramId == RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL ||
             paramId == RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL) {
