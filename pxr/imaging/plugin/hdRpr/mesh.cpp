@@ -394,6 +394,35 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
+        if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
+            (*dirtyBits & HdChangeTracker::DirtyDoubleSided) || // update twosided material node
+            (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) || isRefineLevelDirty) { // update displacement material
+            auto getMeshMaterial = [sceneDelegate, rprApi, dirtyBits, this](SdfPath const& materialId) {
+                auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
+                if (material && material->GetRprMaterialObject()) {
+                    return material->GetRprMaterialObject();
+                } else {
+                    return GetFallbackMaterial(sceneDelegate, rprApi, *dirtyBits);
+                }
+            };
+
+            if (m_geomSubsets.empty()) {
+                auto material = getMeshMaterial(m_cachedMaterialId);
+                for (auto& mesh : m_rprMeshes) {
+                    rprApi->SetMeshMaterial(mesh.get(), material, m_doublesided, m_displayStyle.displacementEnabled);
+                }
+            } else {
+                if (m_geomSubsets.size() == m_rprMeshes.size()) {
+                    for (int i = 0; i < m_rprMeshes.size(); ++i) {
+                        auto material = getMeshMaterial(m_geomSubsets[i].materialId);
+                        rprApi->SetMeshMaterial(m_rprMeshes[i].get(), material, m_doublesided, m_displayStyle.displacementEnabled);
+                    }
+                } else {
+                    TF_CODING_ERROR("Unexpected number of meshes");
+                }
+            }
+        }
+
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyInstancer)) {
             if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()))) {
                 auto transforms = instancer->ComputeTransforms(id);
@@ -437,35 +466,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (updateTransform) {
             for (auto& rprMesh : m_rprMeshes) {
                 rprApi->SetMeshTransform(rprMesh.get(), m_transform);
-            }
-        }
-
-        if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
-            (*dirtyBits & HdChangeTracker::DirtyDoubleSided) || // update twosided material node
-            (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) || isRefineLevelDirty) { // update displacement material
-            auto getMeshMaterial = [sceneDelegate, rprApi, dirtyBits, this](SdfPath const& materialId) {
-                auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
-                if (material && material->GetRprMaterialObject()) {
-                    return material->GetRprMaterialObject();
-                } else {
-                    return GetFallbackMaterial(sceneDelegate, rprApi, *dirtyBits);
-                }
-            };
-
-            if (m_geomSubsets.empty()) {
-                auto material = getMeshMaterial(m_cachedMaterialId);
-                for (auto& mesh : m_rprMeshes) {
-                    rprApi->SetMeshMaterial(mesh.get(), material, m_doublesided, m_displayStyle.displacementEnabled);
-                }
-            } else {
-                if (m_geomSubsets.size() == m_rprMeshes.size()) {
-                    for (int i = 0; i < m_rprMeshes.size(); ++i) {
-                        auto material = getMeshMaterial(m_geomSubsets[i].materialId);
-                        rprApi->SetMeshMaterial(m_rprMeshes[i].get(), material, m_doublesided, m_displayStyle.displacementEnabled);
-                    }
-                } else {
-                    TF_CODING_ERROR("Unexpected number of meshes");
-                }
             }
         }
     }
