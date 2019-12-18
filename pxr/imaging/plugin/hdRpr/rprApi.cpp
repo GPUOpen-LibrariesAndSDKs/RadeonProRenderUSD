@@ -1820,12 +1820,16 @@ private:
             imageDesc.image_row_pitch = 0;
             imageDesc.image_slice_pitch = 0;
 
+            uint8_t bytesPerComponent;
             if (textureData->GLType() == GL_UNSIGNED_BYTE) {
                 imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
+                bytesPerComponent = 1;
             } else if (textureData->GLType() == GL_HALF_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
+                bytesPerComponent = 2;
             } else if (textureData->GLType() == GL_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
+                bytesPerComponent = 2;
             } else {
                 TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureData->GLType());
                 return false;
@@ -1848,7 +1852,8 @@ private:
             if (RIF_ERROR_CHECK(rifImageMap(rifImage->GetHandle(), RIF_IMAGE_MAP_WRITE, &mappedData), "Failed to map rif image") || !mappedData) {
                 return false;
             }
-            std::memcpy(mappedData, textureData->GetRawBuffer(), imageDesc.image_slice_pitch);
+            size_t imageSize = bytesPerComponent * imageDesc.num_components * imageDesc.image_width * imageDesc.image_height;
+            std::memcpy(mappedData, textureData->GetRawBuffer(), imageSize);
             RIF_ERROR_CHECK(rifImageUnmap(rifImage->GetHandle(), mappedData), "Failed to unmap rif image");
 
             auto colorRb = colorAovBinding->renderBuffer;
