@@ -63,6 +63,7 @@ public:
 
     virtual void Resize(std::uint32_t width, std::uint32_t height);
     void Update();
+    void Resolve();
 
 protected:
     Filter(Context* rifContext) : m_rifContext(rifContext) {}

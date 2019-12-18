@@ -282,10 +282,12 @@ void Filter::Update() {
         }
     }
 
+    m_dirtyFlags = Clean;
+}
+
+void Filter::Resolve() {
     UpdateInputs(m_inputs.begin(), m_inputs.end(), m_rifContext);
     UpdateInputs(m_namedInputs.begin(), m_namedInputs.end(), m_rifContext);
-
-    m_dirtyFlags = Clean;
 }
 
 void Filter::AttachFilter(rif_image inputImage) {

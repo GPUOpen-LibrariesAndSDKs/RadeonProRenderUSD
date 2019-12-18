@@ -80,6 +80,10 @@ void HdRprApiAov::Resolve() {
     if (m_aov) {
         m_aov->Resolve(m_resolved.get());
     }
+
+    if (m_filter) {
+        m_filter->Resolve();
+    }
 }
 
 void HdRprApiAov::Clear() {
@@ -321,6 +325,14 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     }
     if (m_filter) {
         m_filter->Update();
+    }
+}
+
+void HdRprApiColorAov::Resolve() {
+    HdRprApiAov::Resolve();
+
+    for (auto& auxFilter : m_auxFilters) {
+        auxFilter.second->Resolve();
     }
 }
 
