@@ -23,9 +23,9 @@ public:
 
     virtual void Resize(int width, int height, HdFormat format);
     virtual void Update(HdRprApi const* rprApi, rif::Context* rifContext);
+    virtual void Resolve();
 
     bool GetData(void* dstBuffer, size_t dstBufferSize);
-    void Resolve();
     void Clear();
 
     HdFormat GetFormat() const { return m_format; }
@@ -62,6 +62,7 @@ public:
     ~HdRprApiColorAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+    void Resolve() override;
 
     void SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity);
 
