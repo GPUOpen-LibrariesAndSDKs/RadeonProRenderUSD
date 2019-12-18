@@ -93,8 +93,6 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             return nullptr;
     }
 
-    auto status = RPR_SUCCESS;
-
     rpr_material_node rootMaterialNode = nullptr;
     if (RPR_ERROR_CHECK(rprMaterialSystemCreateNode(m_matSys, materialType, &rootMaterialNode), "Failed to create material node")) {
         return nullptr;
@@ -116,22 +114,20 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         if (materialAdapter.GetTexRprParams().count(paramId)) {
             continue;
         }
-        rprMaterialNodeSetInputFByKey(material->rootMaterial, paramId, paramValue[0], paramValue[1], paramValue[2], paramValue[3]);
+        RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(material->rootMaterial, paramId, paramValue[0], paramValue[1], paramValue[2], paramValue[3]), "Failed to set material node vec4 input");
     }
 
     for (auto param : materialAdapter.GetURprParams()) {
         const uint32_t& paramId = param.first;
         const uint32_t& paramValue = param.second;
 
-        rprMaterialNodeSetInputUByKey(material->rootMaterial, paramId, paramValue);
+        RPR_ERROR_CHECK(rprMaterialNodeSetInputUByKey(material->rootMaterial, paramId, paramValue), "Failed to set material node uint input");
     }
 
     auto getTextureMaterialNode = [&material](ImageCache* imageCache, rpr_material_system matSys, MaterialTexture const& matTex) -> rpr_material_node {
         if (matTex.path.empty()) {
             return nullptr;
         }
-
-        rpr_int status = RPR_SUCCESS;
 
         auto image = imageCache->GetImage(matTex.path);
         if (!image) {
@@ -150,55 +146,55 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         }
 
         rpr_material_node materialNode = nullptr;
-        rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_IMAGE_TEXTURE, &materialNode);
+        RPR_ERROR_CHECK(rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_IMAGE_TEXTURE, &materialNode), "Failed to create image texture material node");
         if (!materialNode) {
             return nullptr;
         }
 
-        rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, rprImage);
+        RPR_ERROR_CHECK(rprMaterialNodeSetInputImageDataByKey(materialNode, RPR_MATERIAL_INPUT_DATA, rprImage), "Failed to set material node image data input");
         material->materialNodes.push_back(materialNode);
 
         if (!GfIsEqual(matTex.uvTransform, GfMatrix3f(1.0f))) {
             rpr_material_node uvLookupNode = nullptr;
-            status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &uvLookupNode);
+            RPR_ERROR_CHECK(rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &uvLookupNode), "Failed to create uv lookup material node");
             if (uvLookupNode) {
-                status = rprMaterialNodeSetInputUByKey(uvLookupNode, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_UV);
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputUByKey(uvLookupNode, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_UV), "Failed to set material node uint input");
 
                 rpr_material_node transformUvNode = nullptr;
-                status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &transformUvNode);
+                RPR_ERROR_CHECK(rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &transformUvNode), "Failed to create arithmetic material node");
                 if (transformUvNode) {
                     // XXX (RPR): due to missing functionality to set explicitly third component of UV vector to 1
                     // third component set to 1 using addition
                     rpr_material_node setZtoOneNode = nullptr;
-                    status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &setZtoOneNode);
-                    status = rprMaterialNodeSetInputUByKey(setZtoOneNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
-                    status = rprMaterialNodeSetInputFByKey(setZtoOneNode, RPR_MATERIAL_INPUT_COLOR0, 0.0f, 0.0f, 1.0f, 0.0f);
-                    status = rprMaterialNodeSetInputNByKey(setZtoOneNode, RPR_MATERIAL_INPUT_COLOR1, uvLookupNode);
+                    RPR_ERROR_CHECK(rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &setZtoOneNode), "Failed to create arithmetic material node");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputUByKey(setZtoOneNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD), "Failed to set material node uint input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(setZtoOneNode, RPR_MATERIAL_INPUT_COLOR0, 0.0f, 0.0f, 1.0f, 0.0f), "Failed to set material node vec4 input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(setZtoOneNode, RPR_MATERIAL_INPUT_COLOR1, uvLookupNode), "Failed to set material node node input");
 
-                    status = rprMaterialNodeSetInputUByKey(transformUvNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MAT_MUL);
-                    status = rprMaterialNodeSetInputFByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR0, matTex.uvTransform[0][0], matTex.uvTransform[0][1], matTex.uvTransform[0][2], 0.0f);
-                    status = rprMaterialNodeSetInputFByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR1, matTex.uvTransform[1][0], matTex.uvTransform[1][1], matTex.uvTransform[1][2], 0.0f);
-                    status = rprMaterialNodeSetInputFByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR2, matTex.uvTransform[2][0], matTex.uvTransform[2][1], matTex.uvTransform[2][2], 0.0f);
-                    status = rprMaterialNodeSetInputNByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR3, setZtoOneNode);
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputUByKey(transformUvNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MAT_MUL), "Failed to set material node uint input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR0, matTex.uvTransform[0][0], matTex.uvTransform[0][1], matTex.uvTransform[0][2], 0.0f), "Failed to set material node vec4 input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR1, matTex.uvTransform[1][0], matTex.uvTransform[1][1], matTex.uvTransform[1][2], 0.0f), "Failed to set material node vec4 input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR2, matTex.uvTransform[2][0], matTex.uvTransform[2][1], matTex.uvTransform[2][2], 0.0f), "Failed to set material node vec4 input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(transformUvNode, RPR_MATERIAL_INPUT_COLOR3, setZtoOneNode), "Failed to set material node node input");
 
-                    status = rprMaterialNodeSetInputNByKey(materialNode, RPR_MATERIAL_INPUT_UV, transformUvNode);
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(materialNode, RPR_MATERIAL_INPUT_UV, transformUvNode), "Failed to set material node node input");
 
                     material->materialNodes.push_back(transformUvNode);
                     material->materialNodes.push_back(setZtoOneNode);
                     material->materialNodes.push_back(uvLookupNode);
                 } else {
-                    rprObjectDelete(uvLookupNode);
+                    RPR_ERROR_CHECK(rprObjectDelete(uvLookupNode), "Failed to release uv lookup node");
                 }
             }
         }
 
         if (!GfIsEqual(matTex.scale, GfVec4f(1.0f))) {
             rpr_material_node arithmetic = nullptr;
-            status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
+            RPR_ERROR_CHECK(rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic), "Failed to set material node vec4 input");
             if (arithmetic) {
-                status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
-                status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode);
-                status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, matTex.scale[0], matTex.scale[1], matTex.scale[2], matTex.scale[3]);
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL), "Failed to set material node uint input");
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode), "Failed to set material node node input");
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, matTex.scale[0], matTex.scale[1], matTex.scale[2], matTex.scale[3]), "Failed to set material node vec4 input");
                 material->materialNodes.push_back(arithmetic);
 
                 materialNode = arithmetic;
@@ -207,11 +203,11 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
         if (!GfIsEqual(matTex.bias, GfVec4f(0.0f))) {
             rpr_material_node arithmetic = nullptr;
-            status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
+            RPR_ERROR_CHECK(rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic), "Failed to create arithmetic material node");
             if (arithmetic) {
-                status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
-                status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode);
-                status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, matTex.bias[0], matTex.bias[1], matTex.bias[2], matTex.bias[3]);
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD), "Failed to set material node uint input");
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode), "Failed to set material node node input");
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, matTex.bias[0], matTex.bias[1], matTex.bias[2], matTex.bias[3]), "Failed to set material node vec4 input");
                 material->materialNodes.push_back(arithmetic);
 
                 materialNode = arithmetic;
@@ -224,11 +220,11 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
             if (GetSelectedChannel(matTex.channel, selectedChannel)) {
                 rpr_material_node arithmetic = nullptr;
-                status = rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic);
+                RPR_ERROR_CHECK(rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic), "Failed to create arithmetic material node");
                 if (arithmetic) {
-                    status = rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode);
-                    status = rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, 0.0, 0.0, 0.0, 0.0);
-                    status = rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, selectedChannel);
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode), "Failed to set material node node input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, 0.0, 0.0, 0.0, 0.0), "Failed to set material node vec4 input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, selectedChannel), "Failed to set material node uint input");
                     material->materialNodes.push_back(arithmetic);
 
                     outTexture = arithmetic;
@@ -271,10 +267,9 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
         if (paramId == RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL ||
             paramId == RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL) {
             rpr_material_node textureNode = outNode;
-            int status = rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_NORMAL_MAP, &outNode);
-            if (status == RPR_SUCCESS) {
+            if (!RPR_ERROR_CHECK(rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_NORMAL_MAP, &outNode), "Failed to create normal map material node")) {
                 material->materialNodes.push_back(outNode);
-                status = rprMaterialNodeSetInputNByKey(outNode, RPR_MATERIAL_INPUT_COLOR, textureNode);
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(outNode, RPR_MATERIAL_INPUT_COLOR, textureNode), "Failed to set material node node input");
             }
         }
 
