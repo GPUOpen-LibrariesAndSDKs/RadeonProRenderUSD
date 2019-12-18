@@ -69,7 +69,18 @@ std::shared_ptr<rpr::Image> ImageCache::CreateImage(std::string const& path) {
                     return nullptr;
             }
 
-            return std::make_shared<rpr::Image>(m_context->GetHandle(), textureData->ResizedWidth(), textureData->ResizedHeight(), format, textureData->GetRawBuffer());
+            auto rprImage = std::make_shared<rpr::Image>(m_context->GetHandle(), textureData->ResizedWidth(), textureData->ResizedHeight(), format, textureData->GetRawBuffer());
+
+            auto internalFormat = textureData->GLInternalFormat();
+            if (internalFormat == GL_SRGB ||
+                internalFormat == GL_SRGB8 ||
+                internalFormat == GL_SRGB_ALPHA ||
+                internalFormat == GL_SRGB8_ALPHA8) {
+                // XXX(RPR): sRGB formula is different from straight pow decoding, but it's the best we can do right now
+                RPR_ERROR_CHECK(rprImageSetGamma(rprImage->GetHandle(), 2.2f), "Failed to set image gamma");
+            }
+
+            return rprImage;
         } else {
             TF_RUNTIME_ERROR("Failed to load image %s: unsupported format", path.c_str());
         }
