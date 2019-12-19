@@ -49,7 +49,7 @@ if(WIN32)
         ${RPR_HYBRID_BINARY})
 else()
     find_library(RPR_HYBRID_BINARY
-        NAMES libHybrid Hybrid
+        NAMES Hybrid${CMAKE_SHARED_LIBRARY_SUFFIX}
         PATHS
             "${RPR_LOCATION_LIB}"
         DOC
@@ -62,7 +62,7 @@ else()
     endif()
 
     find_library(RPR_TAHOE_BINARY
-        NAMES libTahoe64 Tahoe64
+        NAMES libTahoe64
         PATHS
             "${RPR_LOCATION_LIB}"
         DOC
