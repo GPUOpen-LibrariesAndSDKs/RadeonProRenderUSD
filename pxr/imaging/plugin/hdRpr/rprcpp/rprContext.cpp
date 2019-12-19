@@ -110,7 +110,7 @@ const char* k_PluginLibNames[] = {
         "Hybrid.dll",
 #elif defined __linux__
         "libTahoe64.so",
-        "libHybrid.so",
+        "Hybrid.so",
 #elif defined __APPLE__
         "libTahoe64.dylib",
         "libHybrid.dylib",
@@ -201,7 +201,7 @@ std::unique_ptr<Context> Context::CreateContext(PluginType plugin, RenderDeviceT
     const std::string pluginPath = (rprSdkPath.empty()) ? pluginName : rprSdkPath + "/" + pluginName;
     rpr_int pluginID = rprRegisterPlugin(pluginPath.c_str());
     if (pluginID == -1) {
-        TF_RUNTIME_ERROR("Failed to register %s plugin", pluginName);
+        TF_RUNTIME_ERROR("Failed to register %s plugin located at \"%s\"", pluginName, pluginPath.c_str());
         return nullptr;
     }
 
