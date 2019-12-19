@@ -277,6 +277,7 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
         }
 
         m_filter = nullptr;
+        m_auxFilters.clear();
 
         if ((m_enabledFilters & kFilterAIDenoise) ||
             (m_enabledFilters & kFilterEAWDenoise) ||
