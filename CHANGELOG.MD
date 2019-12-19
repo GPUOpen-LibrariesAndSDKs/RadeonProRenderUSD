@@ -16,8 +16,6 @@
 
 ### Fixes
 	- Fixed finding Hybrid.so on Ubuntu
-	- Fixed teardown of Denoiser filter when disabled
-	- Fixed material attachment to instances in hybrid modes
 	- Houdini 18.0.311 changes orientation of Dome lights.  Match this corrected behavior, but for users on older versions of Houdini can set HDRPR_INVERT_DOME_LIGHT_Z_AXIS=0 in enviroment variables to get old behavior. 
 	- Hide "Error unsupported" warnings on hybrid modes
 	- Only Houdini 18 versions are shown in the installer script
