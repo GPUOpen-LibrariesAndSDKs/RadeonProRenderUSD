@@ -8,22 +8,12 @@ set(OptIncludeDir ${ARGN})
 set(OptClass${ARGN})
 
 if(RPR_ENABLE_OPENVDB_SUPPORT)
-
-    find_package_handle_standard_args(OpenVDB
-    REQUIRED_VARS
-        OpenVDB_INCLUDE_DIR
-        OpenVDB_LIBRARY
-        OpenVDB_LIBRARY_DIR
-    )
-
     add_definitions(-DUSE_VOLUME -DOPENVDB_DLL)
     
     set(OptLibs ${OptLibs} ${OpenVDB_LIBRARIES})
     set(OptBin ${OptBin} ${OpenVDB_BINARIES})
     set(OptIncludeDir ${OptIncludeDir} ${OpenVDB_INCLUDE_DIR})
     set(OptClass ${OptClass} field volume)
-
-
 endif(RPR_ENABLE_OPENVDB_SUPPORT)
 
 set(USD_LIBRARIES
