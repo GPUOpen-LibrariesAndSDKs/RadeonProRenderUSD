@@ -62,7 +62,7 @@ else()
     endif()
 
     find_library(RPR_TAHOE_BINARY
-        NAMES libTahoe64
+        NAMES libTahoe64 Tahoe64
         PATHS
             "${RPR_LOCATION_LIB}"
         DOC
