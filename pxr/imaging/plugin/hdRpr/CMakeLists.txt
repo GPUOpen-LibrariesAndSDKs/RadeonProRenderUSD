@@ -207,7 +207,7 @@ else(WIN32)
 
     # install() does not follow symlinks, so we do it manually
     set(RESOLVED_LIBRARIES "")
-    foreach (file ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY})
+    foreach (file ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY} ${RIF_DEPENDENCY_LIBRARIES})
         while(IS_SYMLINK ${file})
             file(READ_SYMLINK ${file} symfile)
             if(NOT IS_ABSOLUTE "${symfile}")

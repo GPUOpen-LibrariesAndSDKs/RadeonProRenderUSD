@@ -36,6 +36,12 @@ if(WIN32)
         ${RIF_LOCATION_LIB}/RadeonImageFilters64.dll
         ${RIF_LOCATION_LIB}/RadeonML-MIOpen.dll
         ${RIF_LOCATION_LIB}/RadeonML-DirectML.dll)
+else(WIN32)
+    if(NOT APPLE)
+        set(RIF_DEPENDENCY_LIBRARIES
+            ${RIF_LOCATION_LIB}/libMIOpen.so
+            ${RIF_LOCATION_LIB}/libRadeonML-MIOpen.so)
+    endif(NOT APPLE)
 endif(WIN32)
 
 if(NOT DEFINED RIF_MODELS_DIR)
