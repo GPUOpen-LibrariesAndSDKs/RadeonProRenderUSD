@@ -51,7 +51,6 @@ void HdRprMaterial::Sync(HdSceneDelegate* sceneDelegate,
 
             if (GetMaterial(networkMap, materialType, surface)) {
                 MaterialAdapter matAdapter = MaterialAdapter(materialType, surface);
-                matAdapter.MarkAsDoublesided();
                 m_rprMaterial = rprApi->CreateMaterial(matAdapter);
             } else {
                 TF_CODING_WARNING("Material type not supported");

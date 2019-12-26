@@ -116,9 +116,6 @@ public:
         return m_displacementTexture;
     }
 
-    void MarkAsDoublesided() {
-        m_doublesided = true;
-    }
     bool IsDoublesided() const {
         return m_doublesided;
     }

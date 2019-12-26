@@ -265,7 +265,7 @@ MaterialAdapter::MaterialAdapter(EMaterialType type, const MaterialParams& param
     }
 }
 
-MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& materialNetwork) : m_type(type) {
+MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& materialNetwork) : m_type(type), m_doublesided(true) {
     switch (type) {
         case EMaterialType::USD_PREVIEW_SURFACE: {
             HdMaterialNode previewNode;
@@ -368,7 +368,12 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
             m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_IOR] = VtValToVec4f(paramValue);
         } else if (paramName == HdRprMaterialTokens->opacity) {
             m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT] = VtValToVec4f(paramValue);
-            m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = GfVec4f(1.0f) - m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT];
+            auto refractionWeight = GfVec4f(1.0f) - m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT];
+            m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = refractionWeight;
+
+            if (refractionWeight[0] != 0.0f || refractionWeight[1] != 0.0f || refractionWeight[2] != 0.0f) {
+                m_doublesided = false;
+            }
         }
     }
 
@@ -407,6 +412,8 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
             materialTexture.bias = GfVec4f(1.0f) - materialTexture.bias;
             materialTexture.scale *= -1.0f;
             m_texRpr[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = materialTexture;
+
+            m_doublesided = false;
         } else if (paramName == HdRprMaterialTokens->normal) {
             m_texRpr[RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL] = materialTexture;
             m_texRpr[RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL] = materialTexture;
