@@ -975,6 +975,7 @@ public:
             m_defaultLightObject = nullptr;
         }
 
+        bool clearAovs = false;
         RenderSetting<bool> enableDenoise;
         RenderSetting<bool> instantaneousShutter;
         RenderSetting<TfToken> aspectRatioPolicy;
@@ -992,11 +993,47 @@ public:
             instantaneousShutter.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
             instantaneousShutter.value = config->GetInstantaneousShutter();
 
+            if (config->IsDirty(HdRprConfig::DirtyDevice) ||
+                config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
+                bool restartRequired = false;
+                if (config->IsDirty(HdRprConfig::DirtyDevice)) {
+                    if (int(m_rprContext->GetActiveRenderDeviceType()) != config->GetRenderDevice()) {
+                        restartRequired = true;
+                    }
+                }
+
+                if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
+                    auto quality = config->GetRenderQuality();
+
+                    auto activePlugin = m_rprContext->GetActivePluginType();
+                    if ((activePlugin == rpr::PluginType::TAHOE && quality < kRenderQualityFull) ||
+                        (activePlugin == rpr::PluginType::HYBRID && quality == kRenderQualityFull)) {
+                        restartRequired = true;
+                    }
+                }
+
+                m_state = restartRequired ? kStateRestartRequired : kStateRender;
+            }
+
+            if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
+                RenderQualityType currentRenderQuality;
+                if (m_rprContext->GetActivePluginType() == rpr::PluginType::TAHOE) {
+                    currentRenderQuality = kRenderQualityFull;
+                } else {
+                    rpr_uint currentHybridQuality = RPR_RENDER_QUALITY_HIGH;
+                    size_t dummy;
+                    RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, sizeof(currentHybridQuality), &currentHybridQuality, &dummy), "Failed to query current render quality");
+                    currentRenderQuality = static_cast<RenderQualityType>(currentHybridQuality);
+                }
+
+                clearAovs = currentRenderQuality != config->GetRenderQuality();
+            }
+
             UpdateSettings(*config);
             config->ResetDirty();
         }
         UpdateCamera(aspectRatioPolicy, instantaneousShutter);
-        UpdateAovs(rprRenderParam, enableDenoise);
+        UpdateAovs(rprRenderParam, enableDenoise, clearAovs);
 
         m_dirtyFlags = ChangeTracker::Clean;
         if (m_hdCamera) {
@@ -1046,7 +1083,10 @@ public:
                 // otherwise driver crashes guaranteed (Radeon VII)
                 quality = kRenderQualityHigh;
             }
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, quality), "Fail to set context hybrid render quality");
+            
+            if (quality < kRenderQualityFull) {
+                RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, quality), "Fail to set context hybrid render quality");
+            }
         }
     }
 
@@ -1065,28 +1105,6 @@ public:
             UpdateTahoeSettings(preferences, force);
         } else if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
             UpdateHybridSettings(preferences, force);
-        }
-
-        if (preferences.IsDirty(HdRprConfig::DirtyDevice) ||
-            preferences.IsDirty(HdRprConfig::DirtyRenderQuality)) {
-            bool restartRequired = false;
-            if (preferences.IsDirty(HdRprConfig::DirtyDevice)) {
-                if (int(m_rprContext->GetActiveRenderDeviceType()) != preferences.GetRenderDevice()) {
-                    restartRequired = true;
-                }
-            }
-
-            if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality)) {
-                auto quality = preferences.GetRenderQuality();
-
-                auto activePlugin = m_rprContext->GetActivePluginType();
-                if ((activePlugin == rpr::PluginType::TAHOE && quality < kRenderQualityFull) ||
-                    (activePlugin == rpr::PluginType::HYBRID && quality == kRenderQualityFull)) {
-                    restartRequired = true;
-                }
-            }
-
-            m_state = restartRequired ? kStateRestartRequired : kStateRender;
         }
     }
 
@@ -1211,7 +1229,7 @@ public:
         }
     }
 
-    void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise) {
+    void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, bool clearAovs) {
         if (m_dirtyFlags & ChangeTracker::DirtyAOVBindings) {
             auto retainedBoundAovs = std::move(m_boundAovs);
             for (auto& aovBinding : m_aovBindings) {
@@ -1246,13 +1264,10 @@ public:
             // Size of bound AOVs controled by aovBinding's renderBuffer
         }
 
-        bool clearAovs = false;
         if (m_dirtyFlags & ChangeTracker::DirtyScene ||
             m_dirtyFlags & ChangeTracker::DirtyAOVRegistry ||
             m_dirtyFlags & ChangeTracker::DirtyViewport ||
             IsCameraChanged()) {
-            m_iter = 0;
-            m_activePixels = -1;
             clearAovs = true;
         }
 
@@ -1269,6 +1284,11 @@ public:
             } else {
                 it = m_aovRegistry.erase(it);
             }
+        }
+
+        if (clearAovs) {
+            m_iter = 0;
+            m_activePixels = -1;
         }
     }
 
