@@ -1357,8 +1357,9 @@ public:
         }
     }
 
-    void Render(HdRprRenderThread* renderThread) {
-        if (!m_rprContext) {
+    void RenderFrame(HdRprRenderThread* renderThread) {
+        if (!m_rprContext ||
+            m_aovRegistry.empty()) {
             return;
         }
 
@@ -1366,11 +1367,6 @@ public:
             Update();
         } catch (std::runtime_error const& e) {
             TF_RUNTIME_ERROR("Failed to update: %s", e.what());
-            return;
-        }
-
-        if (m_aovRegistry.empty()) {
-            // Nothing to render
             return;
         }
 
@@ -1406,6 +1402,15 @@ public:
         for (auto& aovBinding : m_aovBindings) {
             if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
                 rb->Unmap();
+            }
+        }
+    }
+
+    void Render(HdRprRenderThread* renderThread) {
+        RenderFrame(renderThread);
+
+        for (auto& aovBinding : m_aovBindings) {
+            if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
                 rb->SetConverged(true);
             }
         }
