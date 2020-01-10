@@ -40,7 +40,6 @@ public:
 
 private:
     Context() = default;
-    static std::unique_ptr<Context> CreateContext(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop, char const* cachePath);
 
 private:
     PluginType m_activePlugin = PluginType::NONE;

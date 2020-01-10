@@ -184,7 +184,9 @@ rpr_creation_flags getRprCreationFlags(RenderDeviceType renderDevice, rpr_int pl
 
 } // namespace anonymous
 
-std::unique_ptr<Context> Context::CreateContext(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop, char const* cachePath) {
+std::unique_ptr<Context> Context::Create(PluginType plugin, RenderDeviceType renderDevice, bool enableGlInterop, char const* cachePath) {
+    SetupRprTracing();
+
     auto context = std::unique_ptr<Context>(new Context);
     context->m_activePlugin = plugin;
     context->m_renderDevice = renderDevice;
@@ -261,26 +263,6 @@ std::unique_ptr<Context> Context::CreateContext(PluginType plugin, RenderDeviceT
     }
 
     context->m_rprObjectHandle = contextHandle;
-    return context;
-}
-
-std::unique_ptr<Context> Context::Create(PluginType requestedPlugin, RenderDeviceType renderDevice, bool enableGlInterop, char const* cachePath) {
-    SetupRprTracing();
-
-    auto context = CreateContext(requestedPlugin, renderDevice, enableGlInterop, cachePath);
-    if (!context) {
-        TF_WARN("Failed to create context with requested plugin. Trying to create with first working variant");
-        for (auto plugin = PluginType::FIRST; plugin != PluginType::LAST; plugin = PluginType(int(plugin) + 1)) {
-            if (plugin == requestedPlugin) {
-                continue;
-            }
-            context = CreateContext(plugin, renderDevice, enableGlInterop, cachePath);
-            if (context) {
-                break;
-            }
-        }
-    }
-
     return context;
 }
 
