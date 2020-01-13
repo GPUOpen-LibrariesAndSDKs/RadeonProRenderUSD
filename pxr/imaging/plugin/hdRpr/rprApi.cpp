@@ -1041,11 +1041,6 @@ public:
     void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
             auto quality = preferences.GetRenderQuality();
-            if (quality == kRenderQualityMedium) {
-                // XXX (Hybrid): temporarily disable until issues on hybrid side is not solved
-                // otherwise driver crashes guaranteed (Radeon VII)
-                quality = kRenderQualityHigh;
-            }
             RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, quality), "Fail to set context hybrid render quality");
         }
     }
@@ -1451,7 +1446,7 @@ public:
     }
 
     bool IsConverged() const {
-        if (m_currentRenderQuality == kRenderQualityLow) {
+        if (m_currentRenderQuality < kRenderQualityHigh) {
             return m_iter == 1;
         }
 
