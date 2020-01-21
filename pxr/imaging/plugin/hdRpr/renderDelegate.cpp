@@ -316,7 +316,7 @@ HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) cons
         name != HdAovTokens->normal &&
         name != HdAovTokens->primId &&
         name != HdAovTokens->depth &&
-        name != HdAovTokens->linearDepth &&
+        name != HdRprUtilsGetCameraDepthName() &&
         !(aovId.isPrimvar && aovId.name == "st")) {
         // TODO: implement support for instanceId and elementId aov
         return HdAovDescriptor();
@@ -335,8 +335,8 @@ HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) cons
 
     float clearColorValue = 0.0f;
     if (name == HdAovTokens->depth ||
-        name == HdAovTokens->linearDepth) {
-        clearColorValue = name == HdAovTokens->linearDepth ? 0.0f : 1.0f;
+        name == HdRprUtilsGetCameraDepthName()) {
+        clearColorValue = name == HdRprUtilsGetCameraDepthName() ? 0.0f : 1.0f;
         format = HdFormatFloat32;
     } else if (name == HdAovTokens->color) {
         format = HdFormatFloat32Vec4;
@@ -386,6 +386,14 @@ bool HdRprDelegate::Pause() {
 bool HdRprDelegate::Resume() {
     m_renderThread.ResumeRender();
     return true;
+}
+
+TfToken const& HdRprUtilsGetCameraDepthName() {
+#if PXR_VERSION < 2002
+    return HdAovTokens->linearDepth;
+#else
+    return HdAovTokens->cameraDepth;
+#endif
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -125,6 +125,11 @@ public:
     void Resize(int width, int height, HdFormat format) override;
 
 private:
+    std::unique_ptr<rif::Filter> m_retainedFilter;
+
+    rif::Filter* m_ndcFilter;
+    rif::Filter* m_remapFilter;
+
     std::shared_ptr<HdRprApiAov> m_retainedWorldCoordinateAov;
     int m_width;
     int m_height;

@@ -13,6 +13,7 @@
 #include "material.h"
 #include "materialFactory.h"
 #include "materialAdapter.h"
+#include "renderDelegate.h"
 #include "renderBuffer.h"
 #include "renderParam.h"
 
@@ -46,7 +47,12 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_ENV_SETTING(HDRPR_DISABLE_ALPHA, false,
     "Disable alpha in color AOV. All alpha values would be 1.0");
 
-TF_DEFINE_PUBLIC_TOKENS(HdRprAovTokens, HD_RPR_AOV_TOKENS);
+TF_DEFINE_PRIVATE_TOKENS(HdRprAovTokens,
+    (albedo) \
+    (worldCoordinate) \
+    (opacity) \
+    ((primvarsSt, "primvars:st"))
+);
 
 TF_DEFINE_PRIVATE_TOKENS(RprApiObjectActionTokens,
     (attach) \
@@ -75,12 +81,12 @@ struct RenderSetting {
 } // namespace anonymous
 
 static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
-    {HdRprAovTokens->color, RPR_AOV_COLOR},
+    {HdAovTokens->color, RPR_AOV_COLOR},
+    {HdAovTokens->depth, RPR_AOV_DEPTH},
+    {HdAovTokens->primId, RPR_AOV_OBJECT_ID},
+    {HdAovTokens->normal, RPR_AOV_SHADING_NORMAL},
+    {HdRprUtilsGetCameraDepthName(), RPR_AOV_DEPTH},
     {HdRprAovTokens->albedo, RPR_AOV_DIFFUSE_ALBEDO},
-    {HdRprAovTokens->depth, RPR_AOV_DEPTH},
-    {HdRprAovTokens->linearDepth, RPR_AOV_DEPTH},
-    {HdRprAovTokens->primId, RPR_AOV_OBJECT_ID},
-    {HdRprAovTokens->normal, RPR_AOV_SHADING_NORMAL},
     {HdRprAovTokens->worldCoordinate, RPR_AOV_WORLD_COORDINATE},
     {HdRprAovTokens->primvarsSt, RPR_AOV_UV},
     {HdRprAovTokens->opacity, RPR_AOV_OPACITY},
@@ -1297,7 +1303,7 @@ public:
         }
 
         HdRprApiAov* aov = nullptr;
-        auto colorAovIter = m_aovRegistry.find(HdRprAovTokens->color);
+        auto colorAovIter = m_aovRegistry.find(HdAovTokens->color);
         if (colorAovIter == m_aovRegistry.end() ||
             !(aov = colorAovIter->second.lock().get())) {
             return;
@@ -1320,14 +1326,14 @@ public:
 
         if (filterType == rif::FilterType::EawDenoise) {
             colorAov->EnableEAWDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
-                                       m_internalAovs.at(HdRprAovTokens->normal),
-                                       m_internalAovs.at(HdRprAovTokens->linearDepth),
-                                       m_internalAovs.at(HdRprAovTokens->primId),
+                                       m_internalAovs.at(HdAovTokens->normal),
+                                       m_internalAovs.at(HdRprUtilsGetCameraDepthName()),
+                                       m_internalAovs.at(HdAovTokens->primId),
                                        m_internalAovs.at(HdRprAovTokens->worldCoordinate));
         } else {
             colorAov->EnableAIDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
-                                      m_internalAovs.at(HdRprAovTokens->normal),
-                                      m_internalAovs.at(HdRprAovTokens->linearDepth));
+                                      m_internalAovs.at(HdAovTokens->normal),
+                                      m_internalAovs.at(HdRprUtilsGetCameraDepthName()));
         }
     }
 
@@ -1572,11 +1578,12 @@ private:
         }
 #endif // __APPLE__
 
+        initInternalAov(HdRprUtilsGetCameraDepthName());
         initInternalAov(HdRprAovTokens->albedo);
-        initInternalAov(HdRprAovTokens->linearDepth);
-        initInternalAov(HdRprAovTokens->normal);
+        initInternalAov(HdAovTokens->color);
+        initInternalAov(HdAovTokens->normal);
         if (filterType == rif::FilterType::EawDenoise) {
-            initInternalAov(HdRprAovTokens->primId);
+            initInternalAov(HdAovTokens->primId);
             initInternalAov(HdRprAovTokens->worldCoordinate);
         }
     }
@@ -1776,7 +1783,7 @@ private:
 
         try {
             if (!aov) {
-                if (aovName == HdRprAovTokens->color) {
+                if (aovName == HdAovTokens->color) {
                     auto colorAov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get());
                     
                     auto opacityAovIter = m_aovRegistry.find(HdRprAovTokens->opacity);
@@ -1787,9 +1794,9 @@ private:
                     }
 
                     aov = colorAov;
-                } else if (aovName == HdRprAovTokens->normal) {
+                } else if (aovName == HdAovTokens->normal) {
                     aov = std::make_shared<HdRprApiNormalAov>(width, height, format, m_rprContext.get(), m_rifContext.get());
-                } else if (aovName == HdRprAovTokens->depth) {
+                } else if (aovName == HdAovTokens->depth) {
                     auto worldCoordinateAovIter = m_internalAovs.find(HdRprAovTokens->worldCoordinate);
                     if (worldCoordinateAovIter == m_internalAovs.end()) {
                         if (auto worldCoordinateAov = CreateAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4)) {
@@ -1822,7 +1829,7 @@ private:
         }
 
         auto colorAovBinding = std::find_if(m_aovBindings.begin(), m_aovBindings.end(), [](HdRenderPassAovBinding const& binding) {
-            return binding.aovName == HdRprAovTokens->color;
+            return binding.aovName == HdAovTokens->color;
         });
         if (colorAovBinding == m_aovBindings.end() ||
             !colorAovBinding->renderBuffer) {

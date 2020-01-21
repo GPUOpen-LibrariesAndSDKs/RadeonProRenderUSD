@@ -60,21 +60,6 @@ std::unique_ptr<T> make_unique(Args&&... args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
-#define HD_RPR_AOV_TOKENS \
-    (color) \
-    (albedo) \
-    (depth) \
-    (linearDepth) \
-    (primId) \
-    (instanceId) \
-    (elementId) \
-    (normal) \
-    (worldCoordinate) \
-    (opacity) \
-    ((primvarsSt, "primvars:st"))
-
-TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_API, HD_RPR_AOV_TOKENS);
-
 class HdRprApi final {
 public:
     HdRprApi(HdRenderDelegate* delegate);
