@@ -16,7 +16,7 @@ bool HdRprSphereLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath co
     return isDirty;
 }
 
-RprApiObjectPtr HdRprSphereLight::CreateLightMesh(HdRprApi* rprApi) {
+rpr::Shape* HdRprSphereLight::CreateLightMesh(HdRprApi* rprApi) {
     return rprApi->CreateSphereLightMesh(m_radius);
 }
 

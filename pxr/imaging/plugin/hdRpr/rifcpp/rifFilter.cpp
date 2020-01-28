@@ -198,14 +198,14 @@ void Filter::SetInput(FilterInputType inputType, rif_image rifImage, const float
     m_dirtyFlags |= DirtyIOImage;
 }
 
-void Filter::SetInput(FilterInputType inputType, rpr::FrameBuffer* rprFrameBuffer, const float sigma) {
+void Filter::SetInput(FilterInputType inputType, HdRprApiFramebuffer* rprFrameBuffer, const float sigma) {
     assert(rprFrameBuffer);
 
     m_inputs[inputType] = InputTraits(rprFrameBuffer, m_rifContext, sigma);
     m_dirtyFlags |= DirtyIOImage;
 }
 
-void Filter::SetInput(const char* name, rpr::FrameBuffer* rprFrameBuffer) {
+void Filter::SetInput(const char* name, HdRprApiFramebuffer* rprFrameBuffer) {
     m_namedInputs[name] = InputTraits(rprFrameBuffer, m_rifContext, 1.0f);
     m_dirtyFlags |= DirtyParameters;
 }
@@ -222,7 +222,7 @@ void Filter::SetOutput(rif_image rifImage) {
     m_dirtyFlags |= DirtyIOImage;
 }
 
-void Filter::SetOutput(rpr::FrameBuffer* rprFrameBuffer) {
+void Filter::SetOutput(HdRprApiFramebuffer* rprFrameBuffer) {
     m_retainedOutputImage = m_rifContext->CreateImage(rprFrameBuffer);
     m_outputImage = m_retainedOutputImage->GetHandle();
     m_dirtyFlags |= DirtyIOImage;

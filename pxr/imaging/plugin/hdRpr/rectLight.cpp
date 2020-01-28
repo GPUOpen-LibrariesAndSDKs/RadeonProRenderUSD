@@ -16,7 +16,7 @@ bool HdRprRectLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath cons
     return isDirty;
 }
 
-RprApiObjectPtr HdRprRectLight::CreateLightMesh(HdRprApi* rprApi) {
+rpr::Shape* HdRprRectLight::CreateLightMesh(HdRprApi* rprApi) {
     return rprApi->CreateRectLightMesh(m_width, m_height);
 }
 

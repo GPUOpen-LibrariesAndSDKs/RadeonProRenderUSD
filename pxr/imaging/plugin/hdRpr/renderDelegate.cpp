@@ -41,7 +41,7 @@ public:
         } else if (logFile == "stdout") {
             m_output = stdout;
         } else {
-            m_outputFile = fopen(logFile.c_str(), "wa");
+            m_outputFile = fopen(logFile.c_str(), "a+");
             if (!m_outputFile) {
                 TF_RUNTIME_ERROR("Failed to open error output file: \"%s\". Defaults to stderr\n", logFile.c_str());
                 m_output = stderr;

@@ -1,5 +1,6 @@
 #include "distantLight.h"
 #include "renderParam.h"
+#include "rprApi.h"
 
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
@@ -52,13 +53,13 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
 
         float angle = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->angle).Get<float>();
 
-        rprApi->SetDirectionalLightAttributes(m_rprLight.get(), color * computedIntensity, angle * (M_PI / 180.0));
+        rprApi->SetDirectionalLightAttributes(m_rprLight, color * computedIntensity, angle * (M_PI / 180.0));
 
         newLight = true;
     }
 
     if (newLight || ((bits & HdLight::DirtyTransform) && m_rprLight)) {
-        rprApi->SetLightTransform(m_rprLight.get(), m_transform);
+        rprApi->SetTransform(m_rprLight, m_transform);
     }
 
     *dirtyBits = HdLight::Clean;
@@ -70,10 +71,13 @@ HdDirtyBits HdRprDistantLight::GetInitialDirtyBitsMask() const {
 }
 
 void HdRprDistantLight::Finalize(HdRenderParam* renderParam) {
-    // Stop render thread to safely release resources
-    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
-    rprRenderParam->GetRenderThread()->StopRender();
-    rprRenderParam->RemoveLight();
+    if (m_rprLight) {
+        auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+        rprRenderParam->AcquireRprApiForEdit()->Release(m_rprLight);
+        m_rprLight = nullptr;
+
+        rprRenderParam->RemoveLight();
+    }
 
     HdSprim::Finalize(renderParam);
 }

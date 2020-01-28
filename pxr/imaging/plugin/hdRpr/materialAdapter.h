@@ -7,6 +7,8 @@
 #include "pxr/base/gf/matrix3f.h"
 #include "pxr/imaging/hd/material.h"
 
+#include <RadeonProRender.hpp>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 #define HDRPR_MATERIAL_TOKENS \
@@ -78,9 +80,9 @@ struct MaterialTexture {
 typedef std::map<TfToken, VtValue> MaterialParams;
 typedef std::map<TfToken, MaterialTexture> MaterialTextures;
 
-typedef std::map<uint32_t, GfVec4f> MaterialRprParamsVec4f;
-typedef std::map<uint32_t, uint32_t> MaterialRprParamsU;
-typedef std::map<uint32_t, MaterialTexture> MaterialRprParamsTexture;
+typedef std::map<rpr::MaterialNodeInput, GfVec4f> MaterialRprParamsVec4f;
+typedef std::map<rpr::MaterialNodeInput, uint32_t> MaterialRprParamsU;
+typedef std::map<rpr::MaterialNodeInput, MaterialTexture> MaterialRprParamsTexture;
 
 enum class EMaterialType : int32_t {
     NONE = -1

@@ -213,8 +213,6 @@ def generate_files(install_path):
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/renderDelegate.h"
 
-#include "rprcpp/rprContext.h"
-
 #include <mutex>
 
 PXR_NAMESPACE_OPEN_SCOPE

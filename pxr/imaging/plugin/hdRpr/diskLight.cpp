@@ -20,7 +20,7 @@ bool HdRprDiskLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath cons
     return isDirty;
 }
 
-RprApiObjectPtr HdRprDiskLight::CreateLightMesh(HdRprApi* rprApi) {
+rpr::Shape* HdRprDiskLight::CreateLightMesh(HdRprApi* rprApi) {
     return rprApi->CreateDiskLightMesh(m_radius);
 }
 

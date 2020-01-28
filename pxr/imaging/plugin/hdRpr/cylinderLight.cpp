@@ -18,7 +18,7 @@ bool HdRprCylinderLight::SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath 
     return isDirty;
 }
 
-RprApiObjectPtr HdRprCylinderLight::CreateLightMesh(HdRprApi* rprApi) {
+rpr::Shape* HdRprCylinderLight::CreateLightMesh(HdRprApi* rprApi) {
     return rprApi->CreateCylinderLightMesh(m_radius, m_length);
 }
 

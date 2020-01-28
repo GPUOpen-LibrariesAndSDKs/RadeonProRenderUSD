@@ -1,8 +1,7 @@
 #include "rprApi.h"
 #include "rprApiAov.h"
-#include "rprcpp/rprFramebufferGL.h"
-#include "rprcpp/rprContext.h"
-#include "rprcpp/rprImage.h"
+#include "materialFactory.h"
+
 #include "rifcpp/rifFilter.h"
 #include "rifcpp/rifImage.h"
 #include "rifcpp/rifError.h"
@@ -10,8 +9,6 @@
 #include "config.h"
 #include "camera.h"
 #include "imageCache.h"
-#include "material.h"
-#include "materialFactory.h"
 #include "materialAdapter.h"
 #include "renderDelegate.h"
 #include "renderBuffer.h"
@@ -19,17 +16,22 @@
 
 #include "pxr/base/gf/math.h"
 #include "pxr/base/gf/vec2f.h"
-#include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/base/arch/fileSystem.h"
 #include "pxr/base/plug/plugin.h"
 #include "pxr/base/plug/thisPlugin.h"
+#include "pxr/imaging/pxOsd/tokens.h"
+#include "pxr/imaging/glf/glew.h"
 #include "pxr/imaging/glf/uvTextureData.h"
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
 
-#include <RadeonProRender.h>
+#include "rpr/contextHelpers.h"
+#include "rpr/imageHelpers.h"
+#include "rpr/error.h"
+
 #include <RadeonProRender_Baikal.h>
+
 #include <fstream>
 #include <vector>
 #include <mutex>
@@ -54,11 +56,6 @@ TF_DEFINE_PRIVATE_TOKENS(HdRprAovTokens,
     ((primvarsSt, "primvars:st"))
 );
 
-TF_DEFINE_PRIVATE_TOKENS(RprApiObjectActionTokens,
-    (attach) \
-    (contextSetScene)
-);
-
 namespace {
 
 using RecursiveLockGuard = std::lock_guard<std::recursive_mutex>;
@@ -79,6 +76,27 @@ struct RenderSetting {
 };
 
 } // namespace anonymous
+
+struct HdRprApiVolume {
+    std::unique_ptr<rpr::HeteroVolume> heteroVolume;
+    std::unique_ptr<rpr::Grid> albedoGrid;
+    std::unique_ptr<rpr::Grid> densityGrid;
+    std::unique_ptr<rpr::Grid> emissionGrid;
+    std::unique_ptr<rpr::Shape> cubeMesh;
+    std::unique_ptr<HdRprApiMaterial> cubeMeshMaterial;
+    GfMatrix4f transform;
+};
+
+struct HdRprApiEnvironmentLight {
+    std::unique_ptr<rpr::EnvironmentLight> light;
+    std::unique_ptr<rpr::Image> image;
+
+    enum {
+        kDetached,
+        kAttachedAsLight,
+        kAttachedAsEnvLight
+    } state = kDetached;
+};
 
 static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
     {HdAovTokens->color, RPR_AOV_COLOR},
@@ -108,55 +126,22 @@ public:
         }
         m_state = kStateRender;
 
-        InitRpr();
-        InitRif();
-        InitMaterialSystem();
-        CreateScene();
-        CreateCamera();
-    }
-
-    void CreateScene() {
-        if (!m_rprContext) {
-            return;
+        try {
+            InitRpr();
+            InitRif();
+            InitScene();
+            InitCamera();
+        } catch (rpr::Error& e) {
+            TF_RUNTIME_ERROR("%s", e.what());
+        } catch (rif::Error& e) {
+            TF_RUNTIME_ERROR("%s", e.what());
         }
-
-        rpr_scene scene;
-        if (RPR_ERROR_CHECK(rprContextCreateScene(m_rprContext->GetHandle(), &scene), "Fail to create scene")) return;
-        m_scene = RprApiObject::Wrap(scene);
-
-        if (RPR_ERROR_CHECK(rprContextSetScene(m_rprContext->GetHandle(), scene), "Fail to set scene")) return;
-        m_scene->AttachOnReleaseAction(RprApiObjectActionTokens->contextSetScene, [this](void* scene) {
-            if (m_rprContext->GetActivePluginType() != rpr::PluginType::HYBRID) {
-                if (!RPR_ERROR_CHECK(rprContextSetScene(m_rprContext->GetHandle(), nullptr), "Failed to unset scene")) {
-                    m_dirtyFlags |= ChangeTracker::DirtyScene;
-                }
-            }
-        });
     }
 
-    void CreateCamera() {
-        if (!m_rprContext) {
-            return;
-        }
-
-        rpr_camera camera;
-        RPR_ERROR_CHECK(rprContextCreateCamera(m_rprContext->GetHandle(), &camera), "Fail to create camera");
-        m_camera = RprApiObject::Wrap(camera);
-
-        RPR_ERROR_CHECK(rprSceneSetCamera(m_scene->GetHandle(), camera), "Fail to to set camera to scene");
-        m_camera->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* camera) {
-            if (!RPR_ERROR_CHECK(rprSceneSetCamera(m_scene->GetHandle(), nullptr), "Failed to unset camera")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        });
-
-        m_dirtyFlags |= ChangeTracker::DirtyScene;
-    }
-
-    RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes,
-                               VtVec3fArray normals, const VtIntArray& normalIndexes,
-                               VtVec2fArray uvs, const VtIntArray& uvIndexes,
-                               const VtIntArray& vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
+    rpr::Shape* CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes,
+                           VtVec3fArray normals, const VtIntArray& normalIndexes,
+                           VtVec2fArray uvs, const VtIntArray& uvIndexes,
+                           const VtIntArray& vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -167,7 +152,7 @@ public:
 
         VtIntArray newNormalIndexes;
         if (normals.empty()) {
-            if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+            if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
                 // XXX (Hybrid): we need to generate geometry normals by ourself
                 normals.reserve(newVpf.size());
                 newNormalIndexes.clear();
@@ -205,7 +190,7 @@ public:
 
         VtIntArray newUvIndexes;
         if (uvs.empty()) {
-            if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+            if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
                 newUvIndexes = newIndexes;
                 uvs = VtVec2fArray(points.size(), GfVec2f(0.0f));
             }
@@ -230,47 +215,56 @@ public:
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        rpr_shape mesh = nullptr;
-        if (RPR_ERROR_CHECK(rprContextCreateMesh(
-            m_rprContext->GetHandle(),
+        rpr::Status status;
+        auto mesh = m_rprContext->CreateShape(
             (rpr_float const*)points.data(), points.size(), sizeof(GfVec3f),
             (rpr_float const*)(normals.data()), normals.size(), sizeof(GfVec3f),
             (rpr_float const*)(uvs.data()), uvs.size(), sizeof(GfVec2f),
             newIndexes.data(), sizeof(rpr_int),
             normalIndicesData, sizeof(rpr_int),
             uvIndicesData, sizeof(rpr_int),
-            newVpf.data(), newVpf.size(), &mesh), "Fail create mesh")) {
+            newVpf.data(), newVpf.size(), &status);
+        if (!mesh) {
+            RPR_ERROR_CHECK(status, "Failed to create mesh");
             return nullptr;
         }
-        auto meshObject = RprApiObject::Wrap(mesh);
 
-        if (RPR_ERROR_CHECK(rprSceneAttachShape(m_scene->GetHandle(), mesh), "Fail attach mesh to scene")) {
+        if (RPR_ERROR_CHECK(m_scene->Attach(mesh), "Failed to attach mesh to scene")) {
+            delete mesh;
             return nullptr;
         }
-        meshObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* mesh) {
-            if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), mesh), "Failed to detach mesh from scene")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        });
-
         m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-        return meshObject;
+        return mesh;
     }
 
-    void SetMeshTransform(rpr_shape mesh, const GfMatrix4f& transform) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        if (!RPR_ERROR_CHECK(rprShapeSetTransform(mesh, false, transform.GetArray()), "Fail set mesh transformation")) {
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
+    rpr::Shape* CreateMeshInstance(rpr::Shape* prototype) {
+        if (!m_rprContext) {
+            return nullptr;
         }
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        rpr::Status status;
+        auto mesh = m_rprContext->CreateShapeInstance(prototype, &status);
+        if (!mesh) {
+            RPR_ERROR_CHECK(status, "Failed to create mesh instance");
+            return nullptr;
+        }
+
+        if (RPR_ERROR_CHECK(m_scene->Attach(mesh), "Failed to attach mesh to scene")) {
+            delete mesh;
+            return nullptr;
+        }
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+        return mesh;
     }
 
-    void SetMeshRefineLevel(rpr_shape mesh, const int level) {
+    void SetMeshRefineLevel(rpr::Shape* mesh, const int level) {
         if (!m_rprContext) {
             return;
         }
 
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
             // Not supported
             return;
         }
@@ -281,22 +275,22 @@ public:
 
         size_t dummy;
         int oldLevel;
-        if (!RPR_ERROR_CHECK(rprShapeGetInfo(mesh, RPR_SHAPE_SUBDIVISION_FACTOR, sizeof(oldLevel), &oldLevel, &dummy), "Failed to query mesh subdivision factor")) {
+        if (!RPR_ERROR_CHECK(mesh->GetInfo(RPR_SHAPE_SUBDIVISION_FACTOR, sizeof(oldLevel), &oldLevel, &dummy), "Failed to query mesh subdivision factor")) {
             dirty = level != oldLevel;
         }
 
         if (dirty) {
-            if (RPR_ERROR_CHECK(rprShapeSetSubdivisionFactor(mesh, level), "Fail set mesh subdividion")) return;
+            if (RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(level), "Failed to set mesh subdividion level")) return;
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
 
-    void SetMeshVertexInterpolationRule(rpr_shape mesh, TfToken const& boundaryInterpolation) {
+    void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken const& boundaryInterpolation) {
         if (!m_rprContext) {
             return;
         }
 
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
             // Not supported
             return;
         }
@@ -311,146 +305,85 @@ public:
 
         size_t dummy;
         rpr_subdiv_boundary_interfop_type interfopType;
-        if (!RPR_ERROR_CHECK(rprShapeGetInfo(mesh, RPR_SHAPE_SUBDIVISION_BOUNDARYINTEROP, sizeof(interfopType), &interfopType, &dummy), "Failed to query mesh subdivision interfopType")) {
+        if (!RPR_ERROR_CHECK(mesh->GetInfo(RPR_SHAPE_SUBDIVISION_BOUNDARYINTEROP, sizeof(interfopType), &interfopType, &dummy), "Failed to query mesh subdivision interfopType")) {
             dirty = newInterfopType != interfopType;
         }
 
         if (dirty) {
-            if (RPR_ERROR_CHECK(rprShapeSetSubdivisionBoundaryInterop(mesh, newInterfopType), "Fail set mesh subdividion boundary")) return;
+            if (RPR_ERROR_CHECK(mesh->SetSubdivisionBoundaryInterop(newInterfopType), "Fail set mesh subdividion boundary")) return;
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
 
-    void SetMeshMaterial(rpr_shape mesh, const RprApiMaterial* material, bool doublesided, bool displacementEnabled) {
+    void SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
-        m_rprMaterialFactory->AttachMaterialToShape(mesh, material, doublesided, displacementEnabled);
+        m_materialFactory->AttachMaterial(mesh, material, doublesided, displacementEnabled);
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    void SetMeshHeteroVolume(rpr_shape mesh, rpr_hetero_volume heteroVolume) {
+    void SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
-        if (!RPR_ERROR_CHECK(rprShapeSetHeteroVolume(mesh, heteroVolume), "Fail set mesh hetero volume")) {
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
-        }
-    }
-
-    void SetCurveMaterial(rpr_curve curve, const RprApiMaterial* material) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        m_rprMaterialFactory->AttachMaterialToCurve(curve, material);
+        m_materialFactory->AttachMaterial(curve, material);
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    void SetCurveTransform(rpr_curve curve, GfMatrix4f const& transform) {
+    void SetCurveVisibility(rpr::Curve* curve, bool isVisible) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
-        if (!RPR_ERROR_CHECK(rprCurveSetTransform(curve, false, transform.GetArray()), "Fail set curve transformation")) {
+        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+            // XXX (Hybrid): rprCurveSetVisibility not supported, emulate visibility using attach/detach
+            if (isVisible) {
+                m_scene->Attach(curve);
+            } else {
+                m_scene->Detach(curve);
+            }
             m_dirtyFlags |= ChangeTracker::DirtyScene;
+        } else {
+            if (!RPR_ERROR_CHECK(curve->SetVisibility(isVisible), "Failed to set curve visibility")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
         }
     }
 
-    void SetCurveVisibility(RprApiObject* curve, bool isVisible) {
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+    void Release(rpr::Curve* curve) {
+        if (curve) {
+            RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+            if (!RPR_ERROR_CHECK(m_scene->Detach(curve), "Failed to detach curve from scene")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            };
+            delete curve;
+        }
+    }
+
+    void Release(rpr::Shape* shape) {
+        if (shape) {
+            RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+            if (!RPR_ERROR_CHECK(m_scene->Detach(shape), "Failed to detach mesh from scene")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            };
+            delete shape;
+        }
+    }
+
+    void SetMeshVisibility(rpr::Shape* mesh, bool isVisible) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
             // XXX (Hybrid): rprShapeSetVisibility not supported, emulate visibility using attach/detach
             if (isVisible) {
-                if (curve->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
-                    return;
-                }
-
-                RecursiveLockGuard rprLock(g_rprAccessMutex);
-                if (!RPR_ERROR_CHECK(rprSceneAttachCurve(m_scene->GetHandle(), curve->GetHandle()), "Failed to attach curve to scene")) {
-                    m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-                    curve->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* curve) {
-                        if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve), "Failed to detach curve from scene")) {
-                            m_dirtyFlags |= ChangeTracker::DirtyScene;
-                        }
-                    });
-                }
+                m_scene->Attach(mesh);
             } else {
-                if (!curve->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
-                    return;
-                }
-
-                RecursiveLockGuard rprLock(g_rprAccessMutex);
-                if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve->GetHandle()), "Failed to detach curve from scene")) {
-                    m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-                    curve->DetachOnReleaseAction(RprApiObjectActionTokens->attach);
-                }
+                m_scene->Detach(mesh);
             }
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
         } else {
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
-            if (!RPR_ERROR_CHECK(rprCurveSetVisibility(curve->GetHandle(), isVisible), "Fail to set curve visibility")) {
+            if (!RPR_ERROR_CHECK(mesh->SetVisibility(isVisible), "Failed to set mesh visibility")) {
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         }
     }
 
-    RprApiObjectPtr CreateMeshInstance(rpr_shape mesh) {
-        if (!m_rprContext) {
-            return nullptr;
-        }
-
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        rpr_shape meshInstance;
-        if (RPR_ERROR_CHECK(rprContextCreateInstance(m_rprContext->GetHandle(), mesh, &meshInstance), "Fail to create mesh instance")) {
-            return nullptr;
-        }
-        auto meshInstanceObject = RprApiObject::Wrap(meshInstance);
-
-        if (RPR_ERROR_CHECK(rprSceneAttachShape(m_scene->GetHandle(), meshInstance), "Fail to attach mesh instance")) {
-            return nullptr;
-        }
-        m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-        meshInstanceObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* instance) {
-            if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), instance), "Failed to detach mesh instance from scene")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        });
-
-        return meshInstanceObject;
-    }
-
-    void SetMeshVisibility(RprApiObject* mesh, bool isVisible) {
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-            // XXX (Hybrid): rprShapeSetVisibility not supported, emulate visibility using attach/detach
-            if (isVisible) {
-                if (mesh->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
-                    return;
-                }
-
-                RecursiveLockGuard rprLock(g_rprAccessMutex);
-                if (!RPR_ERROR_CHECK(rprSceneAttachShape(m_scene->GetHandle(), mesh->GetHandle()), "Failed to attach shape to scene")) {
-                    m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-                    mesh->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* mesh) {
-                        if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), mesh), "Failed to detach mesh from scene")) {
-                            m_dirtyFlags |= ChangeTracker::DirtyScene;
-                        }
-                    });
-                }
-            } else {
-                if (!mesh->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
-                    return;
-                }
-
-                RecursiveLockGuard rprLock(g_rprAccessMutex);
-                if (!RPR_ERROR_CHECK(rprSceneDetachShape(m_scene->GetHandle(), mesh->GetHandle()), "Failed to detach mesh from scene")) {
-                    m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-                    mesh->DetachOnReleaseAction(RprApiObjectActionTokens->attach);
-                }
-            }
-        } else {
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
-            if (!RPR_ERROR_CHECK(rprShapeSetVisibility(mesh->GetHandle(), isVisible), "Fail to set mesh visibility")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        }
-    }
-
-    RprApiObjectPtr CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
+    rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -467,133 +400,167 @@ public:
             return nullptr;
         }
 
+        uint32_t creationFlags = rpr::kCurveCreationFlagsNone;
+        if (isCurveTapered) {
+            creationFlags |= rpr::kCurveCreationFlagTapered;
+        }
+
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        rpr_curve curve = nullptr;
-        if (RPR_ERROR_CHECK(rprContextCreateCurve(
-            m_rprContext->GetHandle(), &curve,
+        rpr::Status status;
+        auto curve = m_rprContext->CreateCurve(
             points.size(), (float const*)points.data(), sizeof(GfVec3f),
             indices.size(), curveCount, (rpr_uint const*)indices.data(),
-            radiuses.data(), (float const*)uvs.data(), segmentPerCurve.data(), isCurveTapered ? 1 : 0), "Fail to create curve")) {
+            radiuses.data(), (float const*)uvs.data(), segmentPerCurve.data(), rpr::CurveCreationFlags(creationFlags), &status);
+        if (!curve) {
+            RPR_ERROR_CHECK(status, "Failed to create curve");
             return nullptr;
         }
-        auto curveObject = RprApiObject::Wrap(curve);
 
-        if (RPR_ERROR_CHECK(rprSceneAttachCurve(m_scene->GetHandle(), curve), "Fail to attach curve")) {
+        if (RPR_ERROR_CHECK(m_scene->Attach(curve), "Failed to attach curve to scene")) {
+            delete curve;
             return nullptr;
         }
         m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-        curveObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* curve) {
-            if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve), "Failed to detach curve from scene")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        });
-
-        return curveObject;
+        return curve;
     }
 
-    RprApiObjectPtr CreateDirectionalLight() {
+    rpr::DirectionalLight* CreateDirectionalLight() {
         if (!m_rprContext) {
             return nullptr;
         }
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        rpr_light light;
-        if (RPR_ERROR_CHECK(rprContextCreateDirectionalLight(m_rprContext->GetHandle(), &light), "Failed to create directional light")) {
+        rpr::Status status;
+        auto light = m_rprContext->CreateDirectionalLight(&status);
+        if (!light) {
+            RPR_ERROR_CHECK(status, "Failed to create directional light", m_rprContext.get());
             return nullptr;
         }
-        auto lightObject = RprApiObject::Wrap(light);
 
-        if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene->GetHandle(), light), "Failed to attach directional light to scene")) {
+        if (RPR_ERROR_CHECK(m_scene->Attach(light), "Failed to attach directional light to scene", m_rprContext.get())) {
+            delete light;
             return nullptr;
         }
+
         m_dirtyFlags |= ChangeTracker::DirtyScene;
-        lightObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* light) {
-            if (!RPR_ERROR_CHECK(rprSceneDetachLight(m_scene->GetHandle(), light), "Failed to detach directional light from scene")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        });
-
-        return lightObject;
+        return light;
     }
 
-    void SetDirectionalLightAttributes(rpr_light light, GfVec3f const& color, float shadowSoftnessAngle) {
+    void SetDirectionalLightAttributes(rpr::DirectionalLight* light, GfVec3f const& color, float shadowSoftnessAngle) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        RPR_ERROR_CHECK(rprDirectionalLightSetRadiantPower3f(light, color[0], color[1], color[2]), "Failed to set directional light color");
-        RPR_ERROR_CHECK(rprDirectionalLightSetShadowSoftnessAngle(light, GfClamp(shadowSoftnessAngle, 0.0f, float(M_PI_4))), "Failed to set directional light shadow angle");
+        RPR_ERROR_CHECK(light->SetRadiantPower(color[0], color[1], color[2]), "Failed to set directional light color");
+        RPR_ERROR_CHECK(light->SetShadowSoftnessAngle(GfClamp(shadowSoftnessAngle, 0.0f, float(M_PI_4))), "Failed to set directional light color");
     }
 
-    RprApiObjectPtr CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
-        rpr_light light;
+    void Release(rpr::Light* light) {
+        if (light) {
+            RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        if (RPR_ERROR_CHECK(rprContextCreateEnvironmentLight(m_rprContext->GetHandle(), &light), "Fail to create environment light")) return nullptr;
-        auto lightObject = RprApiObject::Wrap(light);
+            if (!RPR_ERROR_CHECK(m_scene->Detach(light), "Failed to detach light from scene")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+            delete light;
+        }
+    }
 
-        if (RPR_ERROR_CHECK(rprEnvironmentLightSetImage(light, image->GetHandle()), "Fail to set image to environment light")) return nullptr;
-        lightObject->AttachDependency(std::move(image));
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
+        auto envLight = new HdRprApiEnvironmentLight;
 
-        if (RPR_ERROR_CHECK(rprEnvironmentLightSetIntensityScale(light, intensity), "Fail to set environment light intencity")) return nullptr;
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
-            if (RPR_ERROR_CHECK(rprSceneSetEnvironmentLight(m_scene->GetHandle(), light), "Fail to set environment light")) return nullptr;
-            lightObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* light) {
-                if (!RPR_ERROR_CHECK(rprSceneSetEnvironmentLight(m_scene->GetHandle(), nullptr), "Fail to unset environment light")) {
-                    m_dirtyFlags |= ChangeTracker::DirtyScene;
-                }
-            });
+        rpr::Status status;
+        envLight->light.reset(m_rprContext->CreateEnvironmentLight(&status));
+        envLight->image = std::move(image);
+
+        if (!envLight ||
+            RPR_ERROR_CHECK(envLight->light->SetImage(envLight->image.get()), "Failed to set env light image", m_rprContext.get()) ||
+            RPR_ERROR_CHECK(envLight->light->SetIntensityScale(intensity), "Failed to set env light intensity", m_rprContext.get())) {
+            RPR_ERROR_CHECK(status, "Failed to create environment light");
+            delete envLight;
+            return nullptr;
+        }
+
+        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+            if ((status = m_scene->SetEnvironmentLight(envLight->light.get())) == RPR_SUCCESS) {
+                envLight->state = HdRprApiEnvironmentLight::kAttachedAsEnvLight;
+            }
         } else {
-            if (RPR_ERROR_CHECK(rprSceneAttachLight(m_scene->GetHandle(), light), "Fail to attach environment light to scene")) return nullptr;
-            lightObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* light) {
-                if (!RPR_ERROR_CHECK(rprSceneDetachLight(m_scene->GetHandle(), light), "Fail to detach environment light")) {
-                    m_dirtyFlags |= ChangeTracker::DirtyScene;
-                }
-            });
+            if ((status = m_scene->Attach(envLight->light.get())) == RPR_SUCCESS) {
+                envLight->state = HdRprApiEnvironmentLight::kAttachedAsLight;
+            }
+        }
+        if (status != RPR_SUCCESS) {
+            RPR_ERROR_CHECK(status, "Failed to attach environment light", m_rprContext.get());
+            delete envLight;
+            return nullptr;
         }
 
         m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-        return lightObject;
+        return envLight;
     }
 
-    RprApiObjectPtr CreateEnvironmentLight(const std::string& path, float intensity) {
+    void Release(HdRprApiEnvironmentLight* envLight) {
+        if (envLight) {
+            RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+            rpr::Status status;
+            if (envLight->state == HdRprApiEnvironmentLight::kAttachedAsEnvLight) {
+                status = m_scene->SetEnvironmentLight(nullptr);
+            } else {
+                status = m_scene->Detach(envLight->light.get());
+            }
+
+            if (!RPR_ERROR_CHECK(status, "Failed to detach environment light")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+            delete envLight;
+        }
+    }
+
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& path, float intensity) {
         if (!m_rprContext || path.empty()) {
             return nullptr;
         }
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
-        try {
-            auto image = pxr::make_unique<rpr::Image>(m_rprContext->GetHandle(), path.c_str());
-            return CreateEnvironmentLight(std::move(image), intensity);
-        } catch (rpr::Error const& error) {
-            TF_RUNTIME_ERROR("Failed to create environment light: %s", error.what());
+
+        auto image = std::unique_ptr<rpr::Image>(rpr::CreateImage(m_rprContext.get(), path.c_str()));
+        if (!image) {
+            return nullptr;
         }
 
-        return nullptr;
+        return CreateEnvironmentLight(std::move(image), intensity);
     }
 
-    RprApiObjectPtr CreateEnvironmentLight(GfVec3f color, float intensity) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity) {
         if (!m_rprContext) {
             return nullptr;
         }
 
         std::array<float, 3> backgroundColor = {color[0], color[1], color[2]};
         rpr_image_format format = {3, RPR_COMPONENT_TYPE_FLOAT32};
-        rpr_uint imageSize = m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID ? 64 : 1;
+        rpr_uint imageSize = m_rprContextMetadata.pluginType == rpr::kPluginHybrid ? 64 : 1;
         std::vector<std::array<float, 3>> imageData(imageSize * imageSize, backgroundColor);
 
-        try {
-            auto image = pxr::make_unique<rpr::Image>(m_rprContext->GetHandle(), imageSize, imageSize, format, imageData[0].data());
-            return CreateEnvironmentLight(std::move(image), intensity);
-        } catch (rpr::Error const& error) {
-            TF_RUNTIME_ERROR("Failed to create environment light: %s", error.what());
+        rpr::Status status;
+        auto image = std::unique_ptr<rpr::Image>(rpr::CreateImage(m_rprContext.get(), imageSize, imageSize, format, imageData.data(), &status));
+        if (!image) {
+            RPR_ERROR_CHECK(status, "Failed to create image", m_rprContext.get());
+            return nullptr;
         }
 
-        return nullptr;
+        return CreateEnvironmentLight(std::move(image), intensity);
     }
 
-    RprApiObjectPtr CreateRectLightMesh(float width, float height) {
+    void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        if (!RPR_ERROR_CHECK(object->SetTransform(transform.GetArray(), false), "Fail set object transform")) {
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+    }
+
+    rpr::Shape* CreateRectLightMesh(float width, float height) {
         constexpr const size_t rectVertexCount = 4;
         VtVec3fArray positions(rectVertexCount);
         positions[0] = GfVec3f(width * 0.5f, height * 0.5f, 0.f);
@@ -617,7 +584,7 @@ public:
         return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
     }
 
-    RprApiObjectPtr CreateDiskLightMesh(float radius) {
+    rpr::Shape* CreateDiskLightMesh(float radius) {
         constexpr uint32_t k_diskVertexCount = 32;
 
         VtVec3fArray points;
@@ -648,7 +615,7 @@ public:
         return CreateMesh(points, pointIndices, normals, normalIndices, VtVec2fArray(), VtIntArray(), vpf);
     }
 
-    RprApiObjectPtr CreateSphereLightMesh(float radius) {
+    rpr::Shape* CreateSphereLightMesh(float radius) {
         VtVec3fArray positions;
         VtVec3fArray normals;
         VtVec2fArray uv;
@@ -657,13 +624,11 @@ public:
 
         constexpr int nx = 16, ny = 16;
 
-        const float d = radius;
-
         for (int j = ny - 1; j >= 0; j--) {
             for (int i = 0; i < nx; i++) {
                 float t = i / (float)nx * M_PI;
                 float p = j / (float)ny * 2.f * M_PI;
-                positions.push_back(d * GfVec3f(sin(t) * cos(p), cos(t), sin(t) * sin(p)));
+                positions.push_back(radius * GfVec3f(sin(t) * cos(p), cos(t), sin(t) * sin(p)));
                 normals.push_back(GfVec3f(sin(t) * cos(p), cos(t), sin(t) * sin(p)));
             }
         }
@@ -683,7 +648,7 @@ public:
         return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
     }
 
-    RprApiObjectPtr CreateCylinderLightMesh(float radius, float length) {
+    rpr::Shape* CreateCylinderLightMesh(float radius, float length) {
         constexpr int numPointsAtCap = 36;
 
         VtVec3fArray points;
@@ -763,93 +728,25 @@ public:
         return CreateMesh(points, pointIndices, normals, normalIndices, VtVec2fArray(), VtIntArray(), vpf);
     }
 
-    void SetLightTransform(rpr_light light, GfMatrix4f const& transform) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        if (!RPR_ERROR_CHECK(rprLightSetTransform(light, false, transform.GetArray()), "Fail set light transformation")) {
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
-        }
-    }
-
-    RprApiObjectPtr CreateMaterial(const MaterialAdapter& materialAdapter) {
-        if (!m_rprContext || !m_rprMaterialFactory) {
+    HdRprApiMaterial* CreateMaterial(const MaterialAdapter& MaterialAdapter) {
+        if (!m_rprContext) {
             return nullptr;
         }
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
-        auto material = m_rprMaterialFactory->CreateMaterial(materialAdapter.GetType(), materialAdapter);
-        if (!material) {
-            return nullptr;
+        return m_materialFactory->CreateMaterial(MaterialAdapter.GetType(), MaterialAdapter);
+    }
+
+    void Release(HdRprApiMaterial* material) {
+        if (material) {
+            RecursiveLockGuard rprLock(g_rprAccessMutex);
+            m_materialFactory->Release(material);
         }
-
-        return pxr::make_unique<RprApiObject>(material, [this](void* material) {
-            m_rprMaterialFactory->DeleteMaterial(static_cast<RprApiMaterial*>(material));
-        });
     }
 
-    RprApiObjectPtr CreateHeteroVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-                                       const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
-                                       const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-                                       const GfVec3i& gridSize) {
-        rpr_hetero_volume heteroVolume = nullptr;
-        if (RPR_ERROR_CHECK(rprContextCreateHeteroVolume(m_rprContext->GetHandle(), &heteroVolume), "Fail create hetero density volume")) return nullptr;
-        auto heteroVolumeObject = RprApiObject::Wrap(heteroVolume);
-
-        rpr_grid rprGridDensity;
-        if (RPR_ERROR_CHECK(rprContextCreateGrid(
-            m_rprContext->GetHandle(), &rprGridDensity
-            , gridSize[0], gridSize[1], gridSize[2], &densityGridOnIndices[0]
-            , densityGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
-            , &densityGridOnValueIndices[0], densityGridOnValueIndices.size() * sizeof(densityGridOnValueIndices[0])
-            , 0)
-            , "Fail create density grid")) return nullptr;
-        heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridDensity));
-
-        rpr_grid rprGridAlbedo;
-        if (RPR_ERROR_CHECK(rprContextCreateGrid(
-            m_rprContext->GetHandle(), &rprGridAlbedo
-            , gridSize[0], gridSize[1], gridSize[2], &colorGridOnIndices[0]
-            , colorGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
-            , &colorGridOnValueIndices[0], colorGridOnValueIndices.size() * sizeof(colorGridOnValueIndices[0])
-            , 0)
-            , "Fail create albedo grid")) return nullptr;
-        heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridAlbedo));
-
-        rpr_grid rprGridEmission;
-        if (RPR_ERROR_CHECK(rprContextCreateGrid(
-            m_rprContext->GetHandle(), &rprGridEmission
-            , gridSize[0], gridSize[1], gridSize[2], &emissiveGridOnIndices[0]
-            , emissiveGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32
-            , &emissiveGridOnValueIndices[0], emissiveGridOnValueIndices.size() * sizeof(emissiveGridOnValueIndices[0])
-            , 0)
-            , "Fail create emission grid")) return nullptr;
-        heteroVolumeObject->AttachDependency(RprApiObject::Wrap(rprGridEmission));
-
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityGrid(heteroVolume, rprGridDensity), "Fail to set density hetero volume")) return nullptr;
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetDensityLookup(heteroVolume, &densityGridValues[0], densityGridValues.size() / 3), "Fail to set density volume lookup")) return nullptr;
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoGrid(heteroVolume, rprGridAlbedo), "Fail to set albedo hetero volume")) return nullptr;
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetAlbedoLookup(heteroVolume, &colorGridValues[0], colorGridValues.size() / 3), "Fail to set albedo volume lookup")) return nullptr;
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetEmissionGrid(heteroVolume, rprGridEmission), "Fail to set emission hetero volume")) return nullptr;
-        if (RPR_ERROR_CHECK(rprHeteroVolumeSetEmissionLookup(heteroVolume, &emissiveGridValues[0], emissiveGridValues.size() / 3), "Fail to set emission volume lookup")) return nullptr;
-
-        if (RPR_ERROR_CHECK(rprSceneAttachHeteroVolume(m_scene->GetHandle(), heteroVolume), "Fail attach hetero volume to scene")) return nullptr;
-        m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-        heteroVolumeObject->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* volume) {
-            if (!RPR_ERROR_CHECK(rprSceneDetachHeteroVolume(m_scene->GetHandle(), volume), "Failed to detach hetero volume from scene")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        });
-
-        return heteroVolumeObject;
-    }
-
-    void SetHeteroVolumeTransform(rpr_hetero_volume heteroVolume, const GfMatrix4f& m) {
-        RPR_ERROR_CHECK(rprHeteroVolumeSetTransform(heteroVolume, false, m.GetArray()), "Fail to set hetero volume transform");
-    }
-
-    RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-                                 const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
-                                 const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
+    HdRprApiVolume* CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+                                 const std::vector<uint32_t>& albedoGridOnIndices, const std::vector<float>& albedoGridOnValueIndices, const std::vector<float>& albedoGridValues,
+                                 const std::vector<uint32_t>& emissionGridOnIndices, const std::vector<float>& emissionGridOnValueIndices, const std::vector<float>& emissionGridValues,
                                  const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
         if (!m_rprContext) {
             return nullptr;
@@ -857,38 +754,76 @@ public:
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        auto heteroVolume = CreateHeteroVolume(densityGridOnIndices, densityGridOnValueIndices, densityGridValues, colorGridOnIndices, colorGridOnValueIndices, colorGridValues, emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues, gridSize);
-        if (!heteroVolume) {
-            return nullptr;
-        }
-
-        auto cubeMesh = CreateCubeMesh(1.0f, 1.0f, 1.0f);
-        if (!cubeMesh) {
-            return nullptr;
-        }
+        auto rprApiVolume = new HdRprApiVolume;
 
         MaterialAdapter matAdapter(EMaterialType::TRANSPERENT,
-                                   MaterialParams{{HdPrimvarRoleTokens->color, VtValue(GfVec4f(1.0f, 1.0f, 1.0f, 1.0f))}});
+            MaterialParams{{HdPrimvarRoleTokens->color, VtValue(GfVec4f(1.0f))}});
+        rprApiVolume->cubeMeshMaterial.reset(CreateMaterial(matAdapter));
+        rprApiVolume->cubeMesh.reset(CreateCubeMesh(1.0f, 1.0f, 1.0f));
 
-        auto transparentMaterial = CreateMaterial(matAdapter);
-        if (!transparentMaterial) {
+        rpr::Status densityGridStatus;
+        rprApiVolume->densityGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2], &densityGridOnIndices[0],
+            densityGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &densityGridOnValueIndices[0], densityGridOnValueIndices.size() * sizeof(densityGridOnValueIndices[0]), 0, &densityGridStatus));
+
+        rpr::Status albedoGridStatus;
+        rprApiVolume->albedoGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2], &albedoGridOnIndices[0],
+            albedoGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &albedoGridOnValueIndices[0], albedoGridOnValueIndices.size() * sizeof(albedoGridOnValueIndices[0]), 0, &albedoGridStatus));
+
+        rpr::Status emissionGridStatus;
+        rprApiVolume->emissionGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2], &emissionGridOnIndices[0],
+            emissionGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &emissionGridOnValueIndices[0], emissionGridOnValueIndices.size() * sizeof(emissionGridOnValueIndices[0]), 0, &emissionGridStatus));
+
+        rpr::Status heteroVolumeStatus;
+        rprApiVolume->heteroVolume.reset(m_rprContext->CreateHeteroVolume(&heteroVolumeStatus));
+
+        if (!rprApiVolume->densityGrid || !rprApiVolume->albedoGrid || !rprApiVolume->emissionGrid ||
+            !rprApiVolume->cubeMeshMaterial || !rprApiVolume->cubeMesh ||
+            !rprApiVolume->heteroVolume ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityGrid(rprApiVolume->densityGrid.get()), "Failed to set density hetero volume grid") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityLookup(densityGridValues.data(), densityGridValues.size() / 3), "Failed to set density volume lookup values") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoGrid(rprApiVolume->albedoGrid.get()), "Failed to set albedo hetero volume grid") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoLookup(albedoGridValues.data(), albedoGridValues.size() / 3), "Failed to set albedo volume lookup values") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionGrid(rprApiVolume->emissionGrid.get()), "Failed to set emission hetero volume grid") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionLookup(emissionGridValues.data(), emissionGridValues.size() / 3), "Failed to set emission volume lookup values") ||
+            RPR_ERROR_CHECK(rprApiVolume->cubeMesh->SetHeteroVolume(rprApiVolume->heteroVolume.get()), "Failed to set hetero volume to mesh") ||
+            RPR_ERROR_CHECK(m_scene->Attach(rprApiVolume->heteroVolume.get()), "Failed attach hetero volume")) {
+
+            RPR_ERROR_CHECK(densityGridStatus, "Failed to create density grid");
+            RPR_ERROR_CHECK(albedoGridStatus, "Failed to create albedo grid");
+            RPR_ERROR_CHECK(emissionGridStatus, "Failed to create emission grid");
+            RPR_ERROR_CHECK(heteroVolumeStatus, "Failed to create hetero volume");
+            delete rprApiVolume;
             return nullptr;
         }
 
-        GfMatrix4f meshTransform(1.0f);
-        GfVec3f volumeSize = GfVec3f(voxelSize[0] * gridSize[0], voxelSize[1] * gridSize[1], voxelSize[2] * gridSize[2]);
-        meshTransform.SetScale(volumeSize);
-        meshTransform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
+        SetMeshMaterial(rprApiVolume->cubeMesh.get(), rprApiVolume->cubeMeshMaterial.get(), true, false);
 
-        SetMeshMaterial(cubeMesh->GetHandle(), static_cast<RprApiMaterial*>(transparentMaterial->GetHandle()), true, false);
-        SetMeshHeteroVolume(cubeMesh->GetHandle(), heteroVolume->GetHandle());
-        SetMeshTransform(cubeMesh->GetHandle(), meshTransform);
-        SetHeteroVolumeTransform(heteroVolume->GetHandle(), meshTransform);
+        rprApiVolume->transform = GfMatrix4f(1.0f);
+        rprApiVolume->transform.SetScale(GfCompMult(voxelSize, gridSize));
+        rprApiVolume->transform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
 
-        heteroVolume->AttachDependency(std::move(cubeMesh));
-        heteroVolume->AttachDependency(std::move(transparentMaterial));
+        return rprApiVolume;
+    }
 
-        return heteroVolume;
+    void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform) {
+        auto t = transform * volume->transform;
+        RPR_ERROR_CHECK(volume->cubeMesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
+        RPR_ERROR_CHECK(volume->heteroVolume->SetTransform(t.data(), false), "Failed to set heteroVolume transform");
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+    }
+
+    void Release(HdRprApiVolume* volume) {
+        if (volume) {
+            RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+            m_scene->Detach(volume->heteroVolume.get());
+            delete volume;
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
     }
 
     void SetCamera(HdCamera const* camera) {
@@ -973,7 +908,7 @@ public:
         if (!rprRenderParam->HasLights()) {
             if (!m_defaultLightObject) {
                 const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
-                m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
+                m_defaultLightObject.reset(CreateEnvironmentLight(k_defaultLightColor, 1.f));
             }
         } else {
             m_defaultLightObject = nullptr;
@@ -1001,7 +936,7 @@ public:
                 config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 bool restartRequired = false;
                 if (config->IsDirty(HdRprConfig::DirtyDevice)) {
-                    if (int(m_rprContext->GetActiveRenderDeviceType()) != config->GetRenderDevice()) {
+                    if (int(m_rprContextMetadata.renderDeviceType) != config->GetRenderDevice()) {
                         restartRequired = true;
                     }
                 }
@@ -1009,9 +944,9 @@ public:
                 if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                     auto quality = config->GetRenderQuality();
 
-                    auto activePlugin = m_rprContext->GetActivePluginType();
-                    if ((activePlugin == rpr::PluginType::TAHOE && quality < kRenderQualityFull) ||
-                        (activePlugin == rpr::PluginType::HYBRID && quality == kRenderQualityFull)) {
+                    auto activePlugin = m_rprContextMetadata.pluginType;
+                    if ((activePlugin == rpr::kPluginTahoe && quality < kRenderQualityFull) ||
+                        (activePlugin == rpr::kPluginHybrid && quality == kRenderQualityFull)) {
                         restartRequired = true;
                     }
                 }
@@ -1021,12 +956,12 @@ public:
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 RenderQualityType currentRenderQuality;
-                if (m_rprContext->GetActivePluginType() == rpr::PluginType::TAHOE) {
+                if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe) {
                     currentRenderQuality = kRenderQualityFull;
                 } else {
                     rpr_uint currentHybridQuality = RPR_RENDER_QUALITY_HIGH;
                     size_t dummy;
-                    RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, sizeof(currentHybridQuality), &currentHybridQuality, &dummy), "Failed to query current render quality");
+                    RPR_ERROR_CHECK(m_rprContext->GetInfo(rpr::ContextInfo(RPR_CONTEXT_RENDER_QUALITY), sizeof(currentHybridQuality), &currentHybridQuality, &dummy), "Failed to query current render quality");
                     currentRenderQuality = static_cast<RenderQualityType>(currentHybridQuality);
                 }
 
@@ -1048,23 +983,23 @@ public:
     void UpdateTahoeSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
             m_varianceThreshold = preferences.GetVarianceThreshold();
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, m_varianceThreshold), "Failed to set as.threshold");
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinAdaptiveSamples()), "Failed to set as.minspp");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, m_varianceThreshold), "Failed to set as.threshold");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinAdaptiveSamples()), "Failed to set as.minspp");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_RECURSION, preferences.GetMaxRayDepth()), "Failed to set max recursion");
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetMaxRayDepthDiffuse()), "Failed to set max depth diffuse");
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetMaxRayDepthGlossy()), "Failed to set max depth glossy");
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetMaxRayDepthRefraction()), "Failed to set max depth refraction");
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetMaxRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_DEPTH_SHADOW, preferences.GetMaxRayDepthShadow()), "Failed to set max depth shadow");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, preferences.GetMaxRayDepth()), "Failed to set max recursion");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetMaxRayDepthDiffuse()), "Failed to set max depth diffuse");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetMaxRayDepthGlossy()), "Failed to set max depth glossy");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetMaxRayDepthRefraction()), "Failed to set max depth refraction");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetMaxRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_SHADOW, preferences.GetMaxRayDepthShadow()), "Failed to set max depth shadow");
 
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetRaycastEpsilon()), "Failed to set ray cast epsilon");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetRaycastEpsilon()), "Failed to set ray cast epsilon");
             auto radianceClamp = preferences.GetEnableRadianceClamping() ? preferences.GetRadianceClamping() : std::numeric_limits<float>::max();
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1f(m_rprContext->GetHandle(), RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
@@ -1072,8 +1007,8 @@ public:
         if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode)) {
             bool is_interactive = preferences.GetInteractiveMode();
             auto maxRayDepth = is_interactive ? preferences.GetInteractiveMaxRayDepth() : preferences.GetMaxRayDepth();
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
-            RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_PREVIEW, int(is_interactive)), "Failed to set preview mode");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, int(is_interactive)), "Failed to set preview mode");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
@@ -1083,7 +1018,7 @@ public:
         if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
             auto quality = preferences.GetRenderQuality();
             if (quality < kRenderQualityFull) {
-                RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_RENDER_QUALITY, quality), "Fail to set context hybrid render quality");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RENDER_QUALITY), int(quality)), "Fail to set context hybrid render quality");
             }
         }
     }
@@ -1099,15 +1034,15 @@ public:
 
         m_currentRenderQuality = preferences.GetRenderQuality();
 
-        if (m_rprContext->GetActivePluginType() == rpr::PluginType::TAHOE) {
+        if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe) {
             UpdateTahoeSettings(preferences, force);
-        } else if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+        } else if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
             UpdateHybridSettings(preferences, force);
         }
     }
 
     void UpdateCamera(RenderSetting<TfToken> const& aspectRatioPolicy, RenderSetting<bool> const& instantaneousShutter) {
-        if (!m_hdCamera) {
+        if (!m_hdCamera || !m_camera) {
             return;
         }
 
@@ -1121,7 +1056,6 @@ public:
             return;
         }
 
-        auto camera = m_camera->GetHandle();
         auto& iwvm = m_hdCamera->GetViewInverseMatrix();
         auto& wvm = m_hdCamera->GetViewMatrix();
         auto aspectRatio = double(m_viewportSize[0]) / m_viewportSize[1];
@@ -1130,12 +1064,12 @@ public:
         GfVec3f up(wvm[0][1], wvm[1][1], wvm[2][1]);
         GfVec3f n(wvm[0][2], wvm[1][2], wvm[2][2]);
         GfVec3f at(eye - n);
-        RPR_ERROR_CHECK(rprCameraLookAt(camera, eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]), "Fail to set camera Look At");
+        RPR_ERROR_CHECK(m_camera->LookAt(eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]), "Fail to set camera Look At");
 
         GfRange1f clippingRange(0.01f, 100000000.0f);
         m_hdCamera->GetClippingRange(&clippingRange);
-        RPR_ERROR_CHECK(rprCameraSetNearPlane(camera, clippingRange.GetMin()), "Failed to set camera near plane");
-        RPR_ERROR_CHECK(rprCameraSetFarPlane(camera, clippingRange.GetMax()), "Failed to set camera far plane");
+        RPR_ERROR_CHECK(m_camera->SetNearPlane(clippingRange.GetMin()), "Failed to set camera near plane");
+        RPR_ERROR_CHECK(m_camera->SetFarPlane(clippingRange.GetMax()), "Failed to set camera far plane");
 
         double shutterOpen = 0.0;
         double shutterClose = 0.0;
@@ -1143,7 +1077,7 @@ public:
             m_hdCamera->GetShutterOpen(&shutterOpen);
             m_hdCamera->GetShutterClose(&shutterClose);
         }
-        RPR_ERROR_CHECK(rprCameraSetExposure(camera, std::max(shutterClose - shutterOpen, 0.0)), "Failed to set camera exposure");
+        RPR_ERROR_CHECK(m_camera->SetExposure(std::max(shutterClose - shutterOpen, 0.0)), "Failed to set camera exposure");
 
         float sensorWidth;
         float sensorHeight;
@@ -1207,23 +1141,23 @@ public:
         }
 
         if (projectionType == UsdGeomTokens->orthographic) {
-            RPR_ERROR_CHECK(rprCameraSetMode(camera, RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
-            RPR_ERROR_CHECK(rprCameraSetOrthoWidth(camera, sensorWidth), "Failed to set camera ortho width");
-            RPR_ERROR_CHECK(rprCameraSetOrthoHeight(camera, sensorHeight), "Failed to set camera ortho height");
+            RPR_ERROR_CHECK(m_camera->SetMode(RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
+            RPR_ERROR_CHECK(m_camera->SetOrthoWidth(sensorWidth), "Failed to set camera ortho width");
+            RPR_ERROR_CHECK(m_camera->SetOrthoHeight(sensorHeight), "Failed to set camera ortho height");
         } else {
-            RPR_ERROR_CHECK(rprCameraSetMode(camera, RPR_CAMERA_MODE_PERSPECTIVE), "Failed to set camera mode");
+            RPR_ERROR_CHECK(m_camera->SetMode(RPR_CAMERA_MODE_PERSPECTIVE), "Failed to set camera mode");
 
             float focusDistance = 1.0f;
             m_hdCamera->GetFocusDistance(&focusDistance);
-            RPR_ERROR_CHECK(rprCameraSetFocusDistance(camera, focusDistance), "Failed to set camera focus distance");
+            RPR_ERROR_CHECK(m_camera->SetFocusDistance(focusDistance), "Failed to set camera focus distance");
 
             float fstop = 0.0f;
             m_hdCamera->GetFStop(&fstop);
             if (fstop == 0.0f) { fstop = std::numeric_limits<float>::max(); }
-            RPR_ERROR_CHECK(rprCameraSetFStop(camera, fstop), "Failed to set camera FStop");
+            RPR_ERROR_CHECK(m_camera->SetFStop(fstop), "Failed to set camera FStop");
 
-            RPR_ERROR_CHECK(rprCameraSetFocalLength(camera, focalLength), "Fail to set camera focal length");
-            RPR_ERROR_CHECK(rprCameraSetSensorSize(camera, sensorWidth, sensorHeight), "Failed to set camera sensor size");
+            RPR_ERROR_CHECK(m_camera->SetFocalLength(focalLength), "Fail to set camera focal length");
+            RPR_ERROR_CHECK(m_camera->SetSensorSize(sensorWidth, sensorHeight), "Failed to set camera sensor size");
         }
     }
 
@@ -1317,7 +1251,7 @@ public:
 
         rif::FilterType filterType = rif::FilterType::EawDenoise;
 #ifndef __APPLE__
-        if (m_rprContext->GetActiveRenderDeviceType() == rpr::RenderDeviceType::GPU) {
+        if (m_rprContextMetadata.renderDeviceType == rpr::kRenderDeviceGPU) {
             filterType = rif::FilterType::AIDenoise;
         }
 #endif // __APPLE__
@@ -1344,7 +1278,7 @@ public:
                 break;
             }
 
-            auto status = rprContextRender(m_rprContext->GetHandle());
+            auto status = m_rprContext->Render();
 
             if (status == RPR_ERROR_ABORTED ||
                 RPR_ERROR_CHECK(status, "Fail contex render framebuffer")) {
@@ -1354,7 +1288,7 @@ public:
 
             m_iter++;
             if (m_varianceThreshold > 0.0f) {
-                if (RPR_ERROR_CHECK(rprContextGetInfo(m_rprContext->GetHandle(), RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
+                if (RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                     m_activePixels = -1;
                 }
             }
@@ -1383,6 +1317,10 @@ public:
             Update();
         } catch (std::runtime_error const& e) {
             TF_RUNTIME_ERROR("Failed to update: %s", e.what());
+            m_dirtyFlags = ChangeTracker::Clean;
+            if (m_hdCamera) {
+                m_hdCamera->CleanDirtyBits();
+            }
             return;
         }
 
@@ -1434,7 +1372,7 @@ public:
 
     void AbortRender() {
         if (m_rprContext) {
-            RPR_ERROR_CHECK(rprContextAbortRender(m_rprContext->GetHandle()), "Failed to abort render");
+            RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
         }
     }
 
@@ -1474,7 +1412,7 @@ public:
     }
 
     bool IsGlInteropEnabled() const {
-        return m_rprContext && m_rprContext->IsGlInteropEnabled();
+        return m_rprContext && m_rprContextMetadata.isGlInteropEnabled;
     }
 
     bool IsAovFormatConversionAvailable() const {
@@ -1488,7 +1426,6 @@ public:
 private:
     void InitRpr() {
         RenderQualityType renderQuality;
-        rpr::RenderDeviceType renderDevice;
         {
             HdRprConfig* config;
             auto configInstanceLock = HdRprConfig::GetInstance(&config);
@@ -1496,17 +1433,17 @@ private:
             config->Sync(m_delegate);
 
             renderQuality = config->GetRenderQuality();
-            renderDevice = static_cast<rpr::RenderDeviceType>(config->GetRenderDevice());
+            m_rprContextMetadata.renderDeviceType = static_cast<rpr::RenderDeviceType>(config->GetRenderDevice());
         }
 
-        auto plugin = renderQuality == kRenderQualityFull ? rpr::PluginType::TAHOE : rpr::PluginType::HYBRID;
+        m_rprContextMetadata.pluginType = renderQuality == kRenderQualityFull ? rpr::kPluginTahoe : rpr::kPluginHybrid;
         auto cachePath = HdRprApi::GetCachePath();
-        m_rprContext = rpr::Context::Create(plugin, renderDevice, false, cachePath.c_str());
+        m_rprContext.reset(rpr::CreateContext(cachePath.c_str(), &m_rprContextMetadata));
         if (!m_rprContext) {
-            return;
+            RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
-        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(m_rprContext->GetHandle(), RPR_CONTEXT_Y_FLIP, 0), "Fail to set context YFLIP parameter");
+        RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Fail to set context Y FLIP parameter");
 
         {
             HdRprConfig* config;
@@ -1515,6 +1452,7 @@ private:
         }
 
         m_imageCache.reset(new ImageCache(m_rprContext.get()));
+        m_materialFactory.reset(new RprMaterialFactory(m_imageCache.get()));
     }
 
     bool ValidateRifModels(std::string const& modelsPath) {
@@ -1531,10 +1469,6 @@ private:
     }
 
     void InitRif() {
-        if (!m_rprContext) {
-            return;
-        }
-
         PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
         auto modelsPath = PlugFindPluginResource(plugin, "rif_models", false);
         if (modelsPath.empty()) {
@@ -1544,7 +1478,7 @@ private:
             TF_RUNTIME_ERROR("RIF version and AI models version mismatch");
         }
 
-        m_rifContext = rif::Context::Create(m_rprContext.get(), modelsPath);
+        m_rifContext = rif::Context::Create(m_rprContext.get(), m_rprContextMetadata, modelsPath);
         if (!m_rifContext) {
             return;
         }
@@ -1567,7 +1501,7 @@ private:
         // but it requires more memory, obviously, it should be taken into an account
         rif::FilterType filterType = rif::FilterType::EawDenoise;
 #ifndef __APPLE__
-        if (m_rprContext->GetActiveRenderDeviceType() == rpr::RenderDeviceType::GPU) {
+        if (m_rprContextMetadata.renderDeviceType == rpr::kRenderDeviceGPU) {
             filterType = rif::FilterType::AIDenoise;
         }
 #endif // __APPLE__
@@ -1582,15 +1516,24 @@ private:
         }
     }
 
-    void InitMaterialSystem() {
-        if (!m_rprContext) {
-            return;
+    void InitScene() {
+        rpr::Status status;
+        m_scene.reset(m_rprContext->CreateScene(&status));
+        if (!m_scene) {
+            RPR_ERROR_CHECK_THROW(status, "Failed to create scene", m_rprContext.get());
         }
 
-        rpr_material_system matsys;
-        if (RPR_ERROR_CHECK(rprContextCreateMaterialSystem(m_rprContext->GetHandle(), 0, &matsys), "Fail create Material System resolve")) return;
-        m_matsys = RprApiObject::Wrap(matsys);
-        m_rprMaterialFactory.reset(new RprMaterialFactory(matsys, m_imageCache.get()));
+        RPR_ERROR_CHECK_THROW(m_rprContext->SetScene(m_scene.get()), "Failed to set context scene");
+    }
+
+    void InitCamera() {
+        rpr::Status status;
+        m_camera.reset(m_rprContext->CreateCamera(&status));
+        if (!m_camera) {
+            RPR_ERROR_CHECK_THROW(status, "Failed to create camera", m_rprContext.get());
+        }
+
+        RPR_ERROR_CHECK_THROW(m_scene->SetCamera(m_camera.get()), "Failed to to set scene camera");
     }
 
     void SplitPolygons(const VtIntArray& indexes, const VtIntArray& vpf, VtIntArray& out_newIndexes, VtIntArray& out_newVpf) {
@@ -1659,7 +1602,7 @@ private:
         }
     }
 
-    RprApiObjectPtr CreateCubeMesh(float width, float height, float depth) {
+    rpr::Shape* CreateCubeMesh(float width, float height, float depth) {
         constexpr const size_t cubeVertexCount = 24;
         constexpr const size_t cubeNormalCount = 24;
         constexpr const size_t cubeVpfCount = 12;
@@ -1778,7 +1721,7 @@ private:
         try {
             if (!aov) {
                 if (aovName == HdAovTokens->color) {
-                    auto colorAov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get());
+                    auto colorAov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get(), m_rprContextMetadata);
                     
                     auto opacityAovIter = m_aovRegistry.find(HdRprAovTokens->opacity);
                     if (opacityAovIter != m_aovRegistry.end()) {
@@ -1789,7 +1732,7 @@ private:
 
                     aov = colorAov;
                 } else if (aovName == HdAovTokens->normal) {
-                    aov = std::make_shared<HdRprApiNormalAov>(width, height, format, m_rprContext.get(), m_rifContext.get());
+                    aov = std::make_shared<HdRprApiNormalAov>(width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else if (aovName == HdAovTokens->depth) {
                     auto worldCoordinateAovIter = m_internalAovs.find(HdRprAovTokens->worldCoordinate);
                     if (worldCoordinateAovIter == m_internalAovs.end()) {
@@ -1800,9 +1743,9 @@ private:
                             return nullptr;
                         }
                     }
-                    aov = std::make_shared<HdRprApiDepthAov>(format, worldCoordinateAovIter->second, m_rprContext.get(), m_rifContext.get());
+                    aov = std::make_shared<HdRprApiDepthAov>(format, worldCoordinateAovIter->second, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else {
-                    aov = std::make_shared<HdRprApiAov>(rprAovIt->second, width, height, format, m_rprContext.get(), m_rifContext.get());
+                    aov = std::make_shared<HdRprApiAov>(rprAovIt->second, width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 }
 
                 m_aovRegistry[aovName] = aov;
@@ -1947,12 +1890,14 @@ private:
     uint32_t m_dirtyFlags = ChangeTracker::AllDirty;
 
     std::unique_ptr<rpr::Context> m_rprContext;
+    rpr::ContextMetadata m_rprContextMetadata;
+
     std::unique_ptr<rif::Context> m_rifContext;
+
+    std::unique_ptr<rpr::Scene> m_scene;
+    std::unique_ptr<rpr::Camera> m_camera;
     std::unique_ptr<ImageCache> m_imageCache;
-    RprApiObjectPtr m_scene;
-    RprApiObjectPtr m_camera;
-    RprApiObjectPtr m_matsys;
-    std::unique_ptr<RprMaterialFactory> m_rprMaterialFactory;
+    std::unique_ptr<RprMaterialFactory> m_materialFactory;
 
     std::map<TfToken, std::weak_ptr<HdRprApiAov>> m_aovRegistry;
     std::map<TfToken, std::shared_ptr<HdRprApiAov>> m_boundAovs;
@@ -1963,7 +1908,7 @@ private:
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
     HdRprCamera const* m_hdCamera;
 
-    RprApiObjectPtr m_defaultLightObject;
+    std::unique_ptr<HdRprApiEnvironmentLight> m_defaultLightObject;
 
     int m_iter = 0;
     int m_activePixels = -1;
@@ -1979,63 +1924,6 @@ private:
     State m_state = kStateUninitialized;
 };
 
-std::unique_ptr<RprApiObject> RprApiObject::Wrap(void* handle) {
-    return pxr::make_unique<RprApiObject>(handle);
-}
-
-void DefaultRprApiObjectDeleter(void* handle) {
-    RPR_ERROR_CHECK(rprObjectDelete(handle), "Failed to release rpr object");
-}
-
-RprApiObject::RprApiObject(void* handle) : RprApiObject(handle, DefaultRprApiObjectDeleter) {
-
-}
-
-RprApiObject::RprApiObject(void* handle, std::function<void (void*)> deleter)
-    : m_handle(handle)
-    , m_deleter(deleter) {
-
-}
-
-RprApiObject::~RprApiObject() {
-    RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-    for (auto& onReleaseActionEntry : m_onReleaseActions) {
-        if (onReleaseActionEntry.second) {
-            onReleaseActionEntry.second(m_handle);
-        }
-    }
-    m_dependencyObjects.clear();
-    if (m_deleter && m_handle) {
-        m_deleter(m_handle);
-    }
-}
-
-void RprApiObject::AttachDependency(std::unique_ptr<rpr::Object>&& dependencyObject) {
-    m_dependencyRprObjects.push_back(std::move(dependencyObject));
-}
-
-void RprApiObject::AttachDependency(RprApiObjectPtr&& dependencyObject) {
-    m_dependencyObjects.push_back(std::move(dependencyObject));
-}
-
-void RprApiObject::AttachOnReleaseAction(TfToken const& actionName, std::function<void(void*)> action) {
-    TF_VERIFY(m_onReleaseActions.count(actionName) == 0);
-    m_onReleaseActions.emplace(actionName, std::move(action));
-}
-
-void RprApiObject::DetachOnReleaseAction(TfToken const& actionName) {
-    m_onReleaseActions.erase(actionName);
-}
-
-bool RprApiObject::HasOnReleaseAction(TfToken const& actionName) {
-    return m_onReleaseActions.count(actionName) != 0;
-}
-
-void* RprApiObject::GetHandle() const {
-    return m_handle;
-}
-
 HdRprApi::HdRprApi(HdRenderDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
 
 }
@@ -2044,65 +1932,64 @@ HdRprApi::~HdRprApi() {
     delete m_impl;
 }
 
-RprApiObjectPtr HdRprApi::CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding) {
+rpr::Shape* HdRprApi::CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding) {
     m_impl->InitIfNeeded();
     return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf, polygonWinding);
 }
 
-RprApiObjectPtr HdRprApi::CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
+rpr::Curve* HdRprApi::CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
     m_impl->InitIfNeeded();
     return m_impl->CreateCurve(points, indices, radiuses, uvs, segmentPerCurve);
 }
 
-RprApiObjectPtr HdRprApi::CreateMeshInstance(RprApiObject* prototypeMesh) {
-    m_impl->InitIfNeeded();
-    return m_impl->CreateMeshInstance(prototypeMesh->GetHandle());
+rpr::Shape* HdRprApi::CreateMeshInstance(rpr::Shape* prototypeMesh) {
+    return m_impl->CreateMeshInstance(prototypeMesh);
 }
 
-RprApiObjectPtr HdRprApi::CreateEnvironmentLight(GfVec3f color, float intensity) {
+HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(GfVec3f color, float intensity) {
     m_impl->InitIfNeeded();
     return m_impl->CreateEnvironmentLight(color, intensity);
 }
 
-RprApiObjectPtr HdRprApi::CreateEnvironmentLight(const std::string& prthTotexture, float intensity) {
+HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(const std::string& prthTotexture, float intensity) {
     m_impl->InitIfNeeded();
     return m_impl->CreateEnvironmentLight(prthTotexture, intensity);
 }
 
-RprApiObjectPtr HdRprApi::CreateRectLightMesh(float width, float height) {
-    m_impl->InitIfNeeded();
+void HdRprApi::SetTransform(HdRprApiEnvironmentLight* envLight, GfMatrix4f const& transform) {
+    m_impl->SetTransform(envLight->light.get(), transform);
+}
+
+void HdRprApi::SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
+    m_impl->SetTransform(object, transform);
+}
+
+rpr::Shape* HdRprApi::CreateRectLightMesh(float width, float height) {
     return m_impl->CreateRectLightMesh(width, height);
 }
 
-RprApiObjectPtr HdRprApi::CreateSphereLightMesh(float radius) {
-    m_impl->InitIfNeeded();
+rpr::Shape* HdRprApi::CreateSphereLightMesh(float radius) {
     return m_impl->CreateSphereLightMesh(radius);
 }
 
-RprApiObjectPtr HdRprApi::CreateCylinderLightMesh(float radius, float length) {
-    m_impl->InitIfNeeded();
+rpr::Shape* HdRprApi::CreateCylinderLightMesh(float radius, float length) {
     return m_impl->CreateCylinderLightMesh(radius, length);
 }
 
-RprApiObjectPtr HdRprApi::CreateDiskLightMesh(float radius) {
-    m_impl->InitIfNeeded();
+rpr::Shape* HdRprApi::CreateDiskLightMesh(float radius) {
     return m_impl->CreateDiskLightMesh(radius);
 }
 
-void HdRprApi::SetLightTransform(RprApiObject* light, GfMatrix4f const& transform) {
-    m_impl->SetLightTransform(light->GetHandle(), transform);
-}
-
-RprApiObjectPtr HdRprApi::CreateDirectionalLight() {
+rpr::DirectionalLight* HdRprApi::CreateDirectionalLight() {
     m_impl->InitIfNeeded();
     return m_impl->CreateDirectionalLight();
 }
 
-void HdRprApi::SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftnessAngle) {
-    m_impl->SetDirectionalLightAttributes(directionalLight->GetHandle(), color, shadowSoftnessAngle);
+void HdRprApi::SetDirectionalLightAttributes(rpr::DirectionalLight* directionalLight, GfVec3f const& color, float shadowSoftnessAngle) {
+    m_impl->SetDirectionalLightAttributes(directionalLight, color, shadowSoftnessAngle);
 }
 
-RprApiObjectPtr HdRprApi::CreateVolume(
+HdRprApiVolume* HdRprApi::CreateVolume(
     const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
     const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
     const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
@@ -2115,43 +2002,57 @@ RprApiObjectPtr HdRprApi::CreateVolume(
         gridSize, voxelSize, gridBBLow);
 }
 
-RprApiObjectPtr HdRprApi::CreateMaterial(MaterialAdapter& materialAdapter) {
+HdRprApiMaterial* HdRprApi::CreateMaterial(MaterialAdapter& MaterialAdapter) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateMaterial(materialAdapter);
+    return m_impl->CreateMaterial(MaterialAdapter);
 }
 
-void HdRprApi::SetMeshTransform(RprApiObject* mesh, const GfMatrix4f& transform) {
-    m_impl->SetMeshTransform(mesh->GetHandle(), transform);
+void HdRprApi::SetMeshRefineLevel(rpr::Shape* mesh, int level) {
+    m_impl->SetMeshRefineLevel(mesh, level);
 }
 
-void HdRprApi::SetMeshRefineLevel(RprApiObject* mesh, int level) {
-    m_impl->SetMeshRefineLevel(mesh->GetHandle(), level);
+void HdRprApi::SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation) {
+    m_impl->SetMeshVertexInterpolationRule(mesh, boundaryInterpolation);
 }
 
-void HdRprApi::SetMeshVertexInterpolationRule(RprApiObject* mesh, TfToken boundaryInterpolation) {
-    m_impl->SetMeshVertexInterpolationRule(mesh->GetHandle(), boundaryInterpolation);
+void HdRprApi::SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled) {
+    m_impl->SetMeshMaterial(mesh, material, doublesided, displacementEnabled);
 }
 
-void HdRprApi::SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material, bool doublesided, bool displacementEnabled) {
-    auto materialHandle = material ? static_cast<RprApiMaterial*>(material->GetHandle()) : nullptr;
-    m_impl->SetMeshMaterial(mesh->GetHandle(), materialHandle, doublesided, displacementEnabled);
-}
-
-void HdRprApi::SetMeshVisibility(RprApiObject* mesh, bool isVisible) {
+void HdRprApi::SetMeshVisibility(rpr::Shape* mesh, bool isVisible) {
     m_impl->SetMeshVisibility(mesh, isVisible);
 }
 
-void HdRprApi::SetCurveMaterial(RprApiObject* curve, RprApiObject const* material) {
-    auto materialHandle = material ? static_cast<RprApiMaterial*>(material->GetHandle()) : nullptr;
-    m_impl->SetCurveMaterial(curve->GetHandle(), materialHandle);
+void HdRprApi::SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material) {
+    m_impl->SetCurveMaterial(curve, material);
 }
 
-void HdRprApi::SetCurveTransform(RprApiObject* curve, GfMatrix4f const& transform) {
-    m_impl->SetCurveTransform(curve->GetHandle(), transform);
-}
-
-void HdRprApi::SetCurveVisibility(RprApiObject* curve, bool isVisible) {
+void HdRprApi::SetCurveVisibility(rpr::Curve* curve, bool isVisible) {
     m_impl->SetCurveVisibility(curve, isVisible);
+}
+
+void HdRprApi::Release(HdRprApiEnvironmentLight* envLight) {
+    m_impl->Release(envLight);
+}
+
+void HdRprApi::Release(HdRprApiMaterial* material) {
+    m_impl->Release(material);
+}
+
+void HdRprApi::Release(HdRprApiVolume* volume) {
+    m_impl->Release(volume);
+}
+
+void HdRprApi::Release(rpr::Light* light) {
+    m_impl->Release(light);
+}
+
+void HdRprApi::Release(rpr::Shape* shape) {
+    m_impl->Release(shape);
+}
+
+void HdRprApi::Release(rpr::Curve* curve) {
+    m_impl->Release(curve);
 }
 
 void HdRprApi::SetCamera(HdCamera const* camera) {
