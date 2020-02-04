@@ -3,11 +3,11 @@
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     set(USD_INCLUDE_DIR ${HOUDINI_INCLUDE_DIR})
     set(USD_LIBRARY_DIR ${HOUDINI_LIB})
+    set(PXR_LIB_PREFIX pxr_)
     if(WIN32)
-        set(USD_LIBRARY_MONOLITHIC TRUE)
-    else()
-        set(USD_LIBRARY_MONOLITHIC FALSE)
+        set(PXR_LIB_PREFIX libpxr_)
     endif()
+    set(USD_LIBRARY_MONOLITHIC FALSE)
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     find_path(USD_INCLUDE_DIR pxr/pxr.h
               PATHS ${USD_ROOT}/include
@@ -17,7 +17,7 @@ else(RPR_BUILD_AS_HOUDINI_PLUGIN)
               NO_SYSTEM_ENVIRONMENT_PATH)
 
     find_path(USD_LIBRARY_DIR
-              NAMES libusd.dylib libusd.dll libusd.so
+              NAMES "${PXR_LIB_PREFIX}usd${CMAKE_SHARED_LIBRARY_SUFFIX}"
               PATHS ${USD_ROOT}/lib
                     $ENV{USD_ROOT}/lib
               DOC "USD Libraries directory"
@@ -27,7 +27,7 @@ else(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
     if(NOT USD_LIBRARY_DIR)
         find_path(USD_LIBRARY_DIR
-                  NAMES libusd_ms.dylib libusd_ms.dll libusd_ms.so
+                  NAMES "${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
                   PATHS ${USD_ROOT}/lib
                         $ENV{USD_ROOT}/lib
                   DOC "USD Libraries directory"

@@ -37,28 +37,22 @@ set(USD_LIBRARIES
     usdGeom
     pxOsd
     cameraUtil)
+if(${USD_LIBRARY_MONOLITHIC})
+    set(USD_LIBRARIES usd_ms)
+endif()
+
+set(_prefixedUsdLibraries "")
+foreach(name ${USD_LIBRARIES})
+    list(APPEND _prefixedUsdLibraries "${PXR_LIB_PREFIX}${name}")
+endforeach()
+set(USD_LIBRARIES "${_prefixedUsdLibraries}")
 
 set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
-
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    set(USD_LIB_PREFIX pxr_)
-    if(WIN32)
-        set(USD_LIB_PREFIX libpxr_)
-    endif()
-
-    set(HOUDINI_USD_LIBRARIES "")
-    foreach(name ${USD_LIBRARIES})
-        list(APPEND HOUDINI_USD_LIBRARIES "${USD_LIB_PREFIX}${name}")
-    endforeach()
-    set(USD_LIBRARIES "${HOUDINI_USD_LIBRARIES}")
-
     list(APPEND OptLibs Houdini)
     add_definitions(-DENABLE_RAT)
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Houdini.png${_sep}images/restartRequired.png)
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    if(${USD_LIBRARY_MONOLITHIC})
-        set(USD_LIBRARIES usd_ms)
-    endif()
     add_definitions(-DENABLE_PREFERENCES_FILE)
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Usdview.png${_sep}images/restartRequired.png)
 endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
