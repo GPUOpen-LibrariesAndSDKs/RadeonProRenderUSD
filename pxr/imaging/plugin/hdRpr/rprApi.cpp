@@ -341,45 +341,43 @@ public:
         }
     }
 
-#if 0
-    void SetCurveVisibility(rpr_curve curve, bool isVisible) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        if (!RPR_ERROR_CHECK(rprCurveSetVisibility(curve, isVisible), "Fail to set curve visibility")) {
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
-        }
-    }
-#else
-    void AttachCurveToScene(RprApiObject* curve) {
-        if (curve->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
-            return;
-        }
-
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        if (!RPR_ERROR_CHECK(rprSceneAttachCurve(m_scene->GetHandle(), curve->GetHandle()), "Failed to attach curve to scene")) {
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-            curve->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* curve) {
-                if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve), "Failed to detach curve from scene")) {
-                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+    void SetCurveVisibility(RprApiObject* curve, bool isVisible) {
+        if (m_rprContext->GetActivePluginType() == rpr::PluginType::HYBRID) {
+            // XXX (Hybrid): rprShapeSetVisibility not supported, emulate visibility using attach/detach
+            if (isVisible) {
+                if (curve->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
+                    return;
                 }
-            });
+
+                RecursiveLockGuard rprLock(g_rprAccessMutex);
+                if (!RPR_ERROR_CHECK(rprSceneAttachCurve(m_scene->GetHandle(), curve->GetHandle()), "Failed to attach curve to scene")) {
+                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+
+                    curve->AttachOnReleaseAction(RprApiObjectActionTokens->attach, [this](void* curve) {
+                        if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve), "Failed to detach curve from scene")) {
+                            m_dirtyFlags |= ChangeTracker::DirtyScene;
+                        }
+                    });
+                }
+            } else {
+                if (!curve->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
+                    return;
+                }
+
+                RecursiveLockGuard rprLock(g_rprAccessMutex);
+                if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve->GetHandle()), "Failed to detach curve from scene")) {
+                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+
+                    curve->DetachOnReleaseAction(RprApiObjectActionTokens->attach);
+                }
+            }
+        } else {
+            RecursiveLockGuard rprLock(g_rprAccessMutex);
+            if (!RPR_ERROR_CHECK(rprCurveSetVisibility(curve->GetHandle(), isVisible), "Fail to set curve visibility")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
         }
     }
-
-    void DetachCurveFromScene(RprApiObject* curve) {
-        if (!curve->HasOnReleaseAction(RprApiObjectActionTokens->attach)) {
-            return;
-        }
-
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        if (!RPR_ERROR_CHECK(rprSceneDetachCurve(m_scene->GetHandle(), curve->GetHandle()), "Failed to detach curve from scene")) {
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
-
-            curve->DetachOnReleaseAction(RprApiObjectActionTokens->attach);
-        }
-    }
-#endif
 
     RprApiObjectPtr CreateMeshInstance(rpr_shape mesh) {
         if (!m_rprContext) {
@@ -515,11 +513,11 @@ public:
         return lightObject;
     }
 
-    void SetDirectionalLightAttributes(rpr_light light, GfVec3f const& color, float shadowSoftness) {
+    void SetDirectionalLightAttributes(rpr_light light, GfVec3f const& color, float shadowSoftnessAngle) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         RPR_ERROR_CHECK(rprDirectionalLightSetRadiantPower3f(light, color[0], color[1], color[2]), "Failed to set directional light color");
-        RPR_ERROR_CHECK(rprDirectionalLightSetShadowSoftness(light, GfClamp(shadowSoftness, 0.0f, 1.0f)), "Failed to set directional light color");
+        RPR_ERROR_CHECK(rprDirectionalLightSetShadowSoftnessAngle(light, GfClamp(shadowSoftnessAngle, 0.0f, float(M_PI_4))), "Failed to set directional light shadow angle");
     }
 
     RprApiObjectPtr CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
@@ -1340,9 +1338,7 @@ public:
                 break;
             }
 
-            m_rendering.store(true);
             auto status = rprContextRender(m_rprContext->GetHandle());
-            m_rendering.store(false);
 
             if (status == RPR_ERROR_ABORTED ||
                 RPR_ERROR_CHECK(status, "Fail contex render framebuffer")) {
@@ -1431,10 +1427,9 @@ public:
     }
 
     void AbortRender() {
-        // XXX: disable until FIR-1588 resolved
-        /*if (m_rprContext && m_rendering) {
+        if (m_rprContext) {
             RPR_ERROR_CHECK(rprContextAbortRender(m_rprContext->GetHandle()), "Failed to abort render");
-        }*/
+        }
     }
 
     int GetNumCompletedSamples() const {
@@ -1514,7 +1509,6 @@ private:
         }
 
         m_imageCache.reset(new ImageCache(m_rprContext.get()));
-        m_rendering.store(false);
     }
 
     bool ValidateRifModels(std::string const& modelsPath) {
@@ -1970,8 +1964,6 @@ private:
     float m_varianceThreshold = 0.0f;
     RenderQualityType m_currentRenderQuality = kRenderQualityFull;
 
-    std::atomic<bool> m_rendering;
-
     enum State {
         kStateUninitialized,
         kStateRender,
@@ -2099,8 +2091,8 @@ RprApiObjectPtr HdRprApi::CreateDirectionalLight() {
     return m_impl->CreateDirectionalLight();
 }
 
-void HdRprApi::SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftness) {
-    m_impl->SetDirectionalLightAttributes(directionalLight->GetHandle(), color, shadowSoftness);
+void HdRprApi::SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftnessAngle) {
+    m_impl->SetDirectionalLightAttributes(directionalLight->GetHandle(), color, shadowSoftnessAngle);
 }
 
 RprApiObjectPtr HdRprApi::CreateVolume(
@@ -2152,16 +2144,7 @@ void HdRprApi::SetCurveTransform(RprApiObject* curve, GfMatrix4f const& transfor
 }
 
 void HdRprApi::SetCurveVisibility(RprApiObject* curve, bool isVisible) {
-    // XXX: RPR API does not have function to manage curve visibility
-#if 0
-    m_impl->SetCurveVisibility(curve->GetHandle(), isVisible);
-#else
-    if (isVisible) {
-        m_impl->AttachCurveToScene(curve);
-    } else {
-        m_impl->DetachCurveFromScene(curve);
-    }
-#endif
+    m_impl->SetCurveVisibility(curve, isVisible);
 }
 
 void HdRprApi::SetCamera(HdCamera const* camera) {

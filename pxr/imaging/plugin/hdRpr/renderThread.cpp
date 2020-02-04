@@ -114,6 +114,10 @@ void HdRprRenderThread::ResumeRender() {
 }
 
 void HdRprRenderThread::WaitUntilPaused() {
+    if (!m_pauseRender || IsStopRequested()) {
+        return;
+    }
+
     std::unique_lock<std::mutex> lock(m_pauseWaitMutex);
     while (m_pauseRender && !IsStopRequested()) {
         m_pauseWaitCV.wait(lock);

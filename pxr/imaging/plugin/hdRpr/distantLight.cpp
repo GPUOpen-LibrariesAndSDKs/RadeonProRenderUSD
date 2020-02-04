@@ -51,10 +51,8 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         float angle = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->angle).Get<float>();
-        // TODO: implement physically correct conversion
-        float shadowSoftness = std::min(angle * (M_PI / 180.0) * M_PI, 1.0);
 
-        rprApi->SetDirectionalLightAttributes(m_rprLight.get(), color * computedIntensity, shadowSoftness);
+        rprApi->SetDirectionalLightAttributes(m_rprLight.get(), color * computedIntensity, angle * (M_PI / 180.0));
 
         newLight = true;
     }

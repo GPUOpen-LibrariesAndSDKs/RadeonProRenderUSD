@@ -89,7 +89,7 @@ public:
     void SetLightTransform(RprApiObject* light, GfMatrix4f const& transform);
 
     RprApiObjectPtr CreateDirectionalLight();
-    void SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftness);
+    void SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftnessAngle);
 
     RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
                                  const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
