@@ -88,6 +88,7 @@ enum class EMaterialType : int32_t {
     , EMISSIVE
     , TRANSPERENT
     , USD_PREVIEW_SURFACE
+    , HOUDINI_PRINCIPLED_SHADER
 };
 
 class MaterialAdapter {
@@ -125,6 +126,7 @@ private:
     void PopulateEmissive(const MaterialParams& params);
     void PopulateTransparent(const MaterialParams& params);
     void PopulateUsdPreviewSurface(const MaterialParams& params, const MaterialTextures& textures);
+    void PopulateHoudiniPrincipledShader(HdMaterialNetwork const& materialNetwork);
 
     EMaterialType m_type;
 

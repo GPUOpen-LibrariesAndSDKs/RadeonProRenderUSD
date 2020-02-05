@@ -5,28 +5,52 @@
 #include "renderParam.h"
 #include "rprApi.h"
 
+#include "pxr/usd/sdf/assetPath.h"
+
 PXR_NAMESPACE_OPEN_SCOPE
 
-static bool GetMaterial(const HdMaterialNetworkMap& networkMap, EMaterialType& out_materialType, HdMaterialNetwork& out_surface) {
-    for (const auto& networkIt : networkMap.map) {
-        const HdMaterialNetwork& network = networkIt.second;
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    ((infoSourceAsset, "info:sourceAsset")));
 
+static bool GetMaterial(HdSceneDelegate* delegate, HdMaterialNetworkMap const& networkMap, HdRprRenderParam* renderParam, EMaterialType& out_materialType, HdMaterialNetwork& out_surface) {
+    out_materialType = EMaterialType::NONE;
+
+    for (const auto& networkIt : networkMap.map) {
+        if (networkIt.first != HdMaterialTerminalTokens->surface) {
+            continue;
+        }
+
+        auto& network = networkIt.second;
         if (network.nodes.empty()) {
             continue;
         }
 
-        for (const HdMaterialNode& node : network.nodes) {
+        for (auto& node : network.nodes) {
             if (node.identifier == HdRprMaterialTokens->UsdPreviewSurface) {
                 out_surface = network;
                 out_materialType = EMaterialType::USD_PREVIEW_SURFACE;
+            } else {
+                if (renderParam->GetMaterialNetworkSelector() == HdRprMaterialNetworkSelectorTokens->karma) {
+                    auto nodeAsset = delegate->Get(node.path, _tokens->infoSourceAsset);
+                    if (nodeAsset.IsHolding<SdfAssetPath>()) {
+                        auto& asset = nodeAsset.UncheckedGet<SdfAssetPath>();
+                        if (!asset.GetAssetPath().empty()) {
+                            std::string principledShaderDef("opdef:/Vop/principledshader::2.0");
+                            if (asset.GetAssetPath().compare(0, principledShaderDef.size(), principledShaderDef.c_str())) {
+                                return false;
+                            }
 
-                return true;
+                            out_surface = network;
+                            out_materialType = EMaterialType::HOUDINI_PRINCIPLED_SHADER;
+                            return true;
+                        }
+                    }
+                }
             }
         }
     }
 
-    out_materialType = EMaterialType::NONE;
-    return false;
+    return out_materialType != EMaterialType::NONE;
 }
 
 HdRprMaterial::HdRprMaterial(SdfPath const& id) : HdMaterial(id) {
@@ -49,7 +73,7 @@ void HdRprMaterial::Sync(HdSceneDelegate* sceneDelegate,
             EMaterialType materialType;
             HdMaterialNetwork surface;
 
-            if (GetMaterial(networkMap, materialType, surface)) {
+            if (GetMaterial(sceneDelegate, networkMap, rprRenderParam, materialType, surface)) {
                 MaterialAdapter matAdapter = MaterialAdapter(materialType, surface);
                 m_rprMaterial = rprApi->CreateMaterial(matAdapter);
             } else {

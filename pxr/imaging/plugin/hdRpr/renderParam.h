@@ -7,6 +7,12 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+#define HDRPR_MATERIAL_NETWORK_SELECTOR_TOKENS \
+    (rpr) \
+    (karma)
+
+TF_DECLARE_PUBLIC_TOKENS(HdRprMaterialNetworkSelectorTokens, HDRPR_MATERIAL_NETWORK_SELECTOR_TOKENS);
+
 class HdRprApi;
 
 class HdRprRenderParam final : public HdRenderParam {
@@ -15,6 +21,7 @@ public:
         : m_rprApi(rprApi)
         , m_renderThread(renderThread) {
         m_numLights.store(0);
+        InitializeEnvParameters();
     }
     ~HdRprRenderParam() override = default;
 
@@ -30,11 +37,17 @@ public:
     void RemoveLight() { --m_numLights; }
     bool HasLights() const { return m_numLights != 0; }
 
+    TfToken const& GetMaterialNetworkSelector() const { return m_materialNetworkSelector; }
+
 private:
+    void InitializeEnvParameters();
+
     HdRprApi* m_rprApi;
     HdRprRenderThread* m_renderThread;
 
     std::atomic<uint32_t> m_numLights;
+
+    TfToken m_materialNetworkSelector;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

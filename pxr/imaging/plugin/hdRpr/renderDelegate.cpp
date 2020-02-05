@@ -178,7 +178,7 @@ void HdRprDelegate::CommitResources(HdChangeTracker* tracker) {
 }
 
 TfToken HdRprDelegate::GetMaterialNetworkSelector() const {
-    return _tokens->rpr;
+    return m_renderParam->GetMaterialNetworkSelector();
 }
 
 TfTokenVector const& HdRprDelegate::GetSupportedRprimTypes() const {

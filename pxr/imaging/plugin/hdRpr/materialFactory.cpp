@@ -87,6 +87,7 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             break;
         case EMaterialType::COLOR:
         case EMaterialType::USD_PREVIEW_SURFACE:
+        case EMaterialType::HOUDINI_PRINCIPLED_SHADER:
             materialType = RPR_MATERIAL_NODE_UBERV2;
             break;
         default:
