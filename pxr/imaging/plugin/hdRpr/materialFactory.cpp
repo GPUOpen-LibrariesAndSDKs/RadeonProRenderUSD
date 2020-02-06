@@ -230,6 +230,17 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
 
                     outTexture = arithmetic;
                 }
+            } else if (matTex.channel == EColorChannel::LUMINANCE) {
+                rpr_material_node arithmetic = nullptr;
+                RPR_ERROR_CHECK(rprMaterialSystemCreateNode(matSys, RPR_MATERIAL_NODE_ARITHMETIC, &arithmetic), "Failed to create arithmetic material node");
+                if (arithmetic) {
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR0, materialNode), "Failed to set material node node input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(arithmetic, RPR_MATERIAL_INPUT_COLOR1, 0.2126, 0.7152, 0.0722, 0.0), "Failed to set material node vec4 input");
+                    RPR_ERROR_CHECK(rprMaterialNodeSetInputUByKey(arithmetic, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_DOT3), "Failed to set material node uint input");
+                    material->materialNodes.push_back(arithmetic);
+
+                    outTexture = arithmetic;
+                }
             } else {
                 outTexture = materialNode;
             }
@@ -255,17 +266,27 @@ RprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const Mat
             emissionColorNode = outNode;
         }
 
-        // normal map textures need to be passed through the normal map node
-        if (paramId == RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL ||
-            paramId == RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL) {
-            rpr_material_node textureNode = outNode;
-            if (!RPR_ERROR_CHECK(rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_NORMAL_MAP, &outNode), "Failed to create normal map material node")) {
-                material->materialNodes.push_back(outNode);
-                RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(outNode, RPR_MATERIAL_INPUT_COLOR, textureNode), "Failed to set material node node input");
-            }
+        rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outNode);
+    }
+
+    for (auto const& normalMapParam : materialAdapter.GetNormalMapParams()) {
+        rpr_material_node textureNode = getTextureMaterialNode(m_imageCache, m_matSys, normalMapParam.second.texture);
+        if (!textureNode) {
+            continue;
         }
 
-        rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, outNode);
+        rpr_material_node normalMapNode = nullptr;
+        if (!RPR_ERROR_CHECK(rprMaterialSystemCreateNode(m_matSys, RPR_MATERIAL_NODE_NORMAL_MAP, &normalMapNode), "Failed to create normal map material node")) {
+            material->materialNodes.push_back(normalMapNode);
+            RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(normalMapNode, RPR_MATERIAL_INPUT_COLOR, textureNode), "Failed to set material node node input");
+
+            auto s = normalMapParam.second.effectScale;
+            RPR_ERROR_CHECK(rprMaterialNodeSetInputFByKey(normalMapNode, RPR_MATERIAL_INPUT_SCALE, s, s, s, s), "Failed to set material node node input");
+
+            for (auto paramId : normalMapParam.first) {
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputNByKey(material->rootMaterial, paramId, normalMapNode), "Failed to set normal map node");
+            }
+        }
     }
 
     if (emissionColorNode) {
