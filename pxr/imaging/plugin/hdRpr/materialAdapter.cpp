@@ -617,16 +617,19 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
         return MaterialTexture();
     };
 
-    auto populateRprParameter = [&](std::vector<rpr_material_node_input> rprInputs, TfToken const& paramName) {
+    auto populateRprParameter = [&](std::vector<rpr_material_node_input> rprInputs, TfToken const& paramName) -> bool {
+        bool isAuthored = false;
+
         VtValue value;
 
         auto parameterIt = params.find(paramName);
         if (parameterIt != params.end()) {
             value = parameterIt->second;
+            isAuthored = true;
         } else {
             parameterIt = g_houdiniPrincipledShaderParameterDefaultValues.find(paramName);
             if (parameterIt == g_houdiniPrincipledShaderParameterDefaultValues.end()) {
-                return;
+                return isAuthored;
             }
 
             value = parameterIt->second;
@@ -671,7 +674,7 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
                 }
             }
 
-            return;
+            return true;
         }
 
         auto vec = VtValToVec4f(value);
@@ -708,6 +711,8 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
                 m_vec4fRprParams[rprInput] = vec;
             }
         }
+
+        return isAuthored;
     };
 
 
@@ -718,7 +723,13 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
     populateRprParameter({RPR_MATERIAL_INPUT_UBER_REFLECTION_ANISOTROPY}, HoudiniPrincipledShaderTokens->anisotropy);
     populateRprParameter({RPR_MATERIAL_INPUT_UBER_REFLECTION_ANISOTROPY_ROTATION}, HoudiniPrincipledShaderTokens->anisotropyDirection);
 
-    populateRprParameter({RPR_MATERIAL_INPUT_UBER_REFLECTION_METALNESS, RPR_MATERIAL_INPUT_UBER_COATING_METALNESS}, HoudiniPrincipledShaderTokens->metallic);
+    bool hasTransparency = false;
+    hasTransparency |= populateRprParameter({RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT}, HoudiniPrincipledShaderTokens->transparency);
+    hasTransparency |= populateRprParameter({RPR_MATERIAL_INPUT_UBER_TRANSPARENCY}, HoudiniPrincipledShaderTokens->opacityColor);
+
+    if (!hasTransparency) {
+        populateRprParameter({RPR_MATERIAL_INPUT_UBER_REFLECTION_METALNESS, RPR_MATERIAL_INPUT_UBER_COATING_METALNESS}, HoudiniPrincipledShaderTokens->metallic);
+    }
 
     populateRprParameter({RPR_MATERIAL_INPUT_UBER_COATING_THICKNESS}, HoudiniPrincipledShaderTokens->coat);
     populateRprParameter({RPR_MATERIAL_INPUT_UBER_COATING_ROUGHNESS}, HoudiniPrincipledShaderTokens->coatRoughness);
@@ -742,8 +753,6 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
     populateRprParameter({RPR_MATERIAL_INPUT_UBER_SHEEN_TINT}, HoudiniPrincipledShaderTokens->sheenTint);
 
     populateRprParameter({RPR_MATERIAL_INPUT_UBER_EMISSION_COLOR}, HoudiniPrincipledShaderTokens->emissionColor);
-
-    populateRprParameter({RPR_MATERIAL_INPUT_UBER_TRANSPARENCY}, HoudiniPrincipledShaderTokens->opacityColor);
 
     if (GetParameter(HoudiniPrincipledShaderTokens->baseNormalEnable, params, 0)) {
         NormalMapParam baseNormalMapParam;
