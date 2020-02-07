@@ -482,7 +482,8 @@ TF_DEFINE_PRIVATE_TOKENS(HoudiniPrincipledShaderTokens,
     ((coatNormalScale, "coatNormal_scale")) \
     ((baseNormalEnable, "baseBumpAndNormal_enable")) \
     ((baseNormalType, "baseBumpAndNormal_type")) \
-    (separateCoatNormals)
+    (separateCoatNormals) \
+    (frontface)
 );
 
 std::map<TfToken, VtValue> g_houdiniPrincipledShaderParameterDefaultValues = {
@@ -522,6 +523,8 @@ T GetParameter(TfToken const& name, std::map<TfToken, VtValue> const& parameters
 void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& materialNetwork) {
     auto& node = materialNetwork.nodes[0];
     auto& params = node.parameters;
+
+    m_doublesided = GetParameter(HoudiniPrincipledShaderTokens->frontface, params, 1) == 0;
 
     //auto albedomult = GetParameter(HoudiniPrincipledShaderTokens->albedomult, params, 1.0f);
 
