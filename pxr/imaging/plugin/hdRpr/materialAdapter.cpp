@@ -607,6 +607,8 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
             if (baseParameter != HoudiniPrincipledShaderTokens->basecolor &&
                 baseParameter != HoudiniPrincipledShaderTokens->transmissionColor &&
                 baseParameter != HoudiniPrincipledShaderTokens->subsurfaceColor &&
+                baseParameter != HoudiniPrincipledShaderTokens->baseNormal &&
+                baseParameter != HoudiniPrincipledShaderTokens->coatNormal &&
                 texture.channel == EColorChannel::NONE) {
                 texture.channel = EColorChannel::LUMINANCE;
             }
