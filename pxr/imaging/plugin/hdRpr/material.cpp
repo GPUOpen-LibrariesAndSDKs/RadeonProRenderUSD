@@ -10,7 +10,10 @@
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
-    ((infoSourceAsset, "info:sourceAsset")));
+    ((infoSourceAsset, "info:sourceAsset")) \
+    ((infoImplementationSource, "info:implementationSource")) \
+    (sourceAsset)
+);
 
 static bool GetMaterial(HdSceneDelegate* delegate, HdMaterialNetworkMap const& networkMap, HdRprRenderParam* renderParam, EMaterialType& out_materialType, HdMaterialNetwork& out_surface) {
     out_materialType = EMaterialType::NONE;
@@ -31,18 +34,22 @@ static bool GetMaterial(HdSceneDelegate* delegate, HdMaterialNetworkMap const& n
                 out_materialType = EMaterialType::USD_PREVIEW_SURFACE;
             } else {
                 if (renderParam->GetMaterialNetworkSelector() == HdRprMaterialNetworkSelectorTokens->karma) {
-                    auto nodeAsset = delegate->Get(node.path, _tokens->infoSourceAsset);
-                    if (nodeAsset.IsHolding<SdfAssetPath>()) {
-                        auto& asset = nodeAsset.UncheckedGet<SdfAssetPath>();
-                        if (!asset.GetAssetPath().empty()) {
-                            std::string principledShaderDef("opdef:/Vop/principledshader::2.0");
-                            if (asset.GetAssetPath().compare(0, principledShaderDef.size(), principledShaderDef.c_str())) {
-                                return false;
-                            }
+                    auto implementationSource = delegate->Get(node.path, _tokens->infoImplementationSource);
+                    if (implementationSource.IsHolding<TfToken>() &&
+                        implementationSource.UncheckedGet<TfToken>() == _tokens->sourceAsset) {
+                        auto nodeAsset = delegate->Get(node.path, _tokens->infoSourceAsset);
+                        if (nodeAsset.IsHolding<SdfAssetPath>()) {
+                            auto& asset = nodeAsset.UncheckedGet<SdfAssetPath>();
+                            if (!asset.GetAssetPath().empty()) {
+                                std::string principledShaderDef("opdef:/Vop/principledshader::2.0");
+                                if (asset.GetAssetPath().compare(0, principledShaderDef.size(), principledShaderDef.c_str())) {
+                                    return false;
+                                }
 
-                            out_surface = network;
-                            out_materialType = EMaterialType::HOUDINI_PRINCIPLED_SHADER;
-                            return true;
+                                out_surface = network;
+                                out_materialType = EMaterialType::HOUDINI_PRINCIPLED_SHADER;
+                                return true;
+                            }
                         }
                     }
                 }
