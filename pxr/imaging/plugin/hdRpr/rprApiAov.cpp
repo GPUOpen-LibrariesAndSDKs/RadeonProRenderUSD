@@ -417,6 +417,21 @@ HdRprApiDepthAov::HdRprApiDepthAov(
     }
 
     m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, rifContext);
+    m_ndcFilter = m_filter.get();
+    m_remapFilter = nullptr;
+
+#if PXR_VERSION >= 2002
+    m_retainedFilter = std::move(m_filter);
+
+    m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext);
+    m_filter->SetParam("srcRangeAuto", 0);
+    m_filter->SetParam("srcLo", -1.0f);
+    m_filter->SetParam("srcHi", 1.0f);
+    m_filter->SetParam("dstLo", 0.0f);
+    m_filter->SetParam("dstHi", 1.0f);
+    m_remapFilter = m_filter.get();
+#endif
+
     auto fbDesc = m_retainedWorldCoordinateAov->GetAovFb()->GetDesc();
     m_width = fbDesc.fb_width;
     m_height = fbDesc.fb_height;
@@ -427,15 +442,25 @@ void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     if (m_dirtyBits & ChangeTracker::DirtyFormat ||
         m_dirtyBits & ChangeTracker::DirtySize) {
 
-        m_filter->SetInput(rif::Color, m_retainedWorldCoordinateAov->GetResolvedFb());
-        m_filter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+        if (m_remapFilter) {
+            m_ndcFilter->SetInput(rif::Color, m_retainedWorldCoordinateAov->GetResolvedFb());
+            m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+            m_remapFilter->SetInput(rif::Color, m_ndcFilter->GetOutput());
+            m_remapFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+        } else {
+            m_ndcFilter->SetInput(rif::Color, m_retainedWorldCoordinateAov->GetResolvedFb());
+            m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+        }
     }
     m_dirtyBits = ChangeTracker::Clean;
 
     auto viewProjectionMatrix = rprApi->GetCameraViewMatrix() * rprApi->GetCameraProjectionMatrix();
-    m_filter->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
+    m_ndcFilter->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
 
-    m_filter->Update();
+    if (m_remapFilter) {
+        m_remapFilter->Update();
+    }
+    m_ndcFilter->Update();
 }
 
 void HdRprApiDepthAov::Resize(int width, int height, HdFormat format) {

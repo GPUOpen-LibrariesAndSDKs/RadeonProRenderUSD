@@ -863,6 +863,7 @@ function(pxr_toplevel_prologue)
                 PROPERTIES
                     FOLDER "${folder}"
                     PREFIX "${PXR_LIB_PREFIX}"
+                    IMPORT_PREFIX "${PXR_LIB_PREFIX}"
             )
             _get_install_dir("lib" libInstallPrefix)
             install(
@@ -986,6 +987,7 @@ function(pxr_monolithic_epilogue)
             FOLDER "${folder}"
             POSITION_INDEPENDENT_CODE ON
             PREFIX "${PXR_LIB_PREFIX}"
+            IMPORT_PREFIX "${PXR_LIB_PREFIX}"
     )
 
     # Adding $<TARGET_OBJECTS:foo> will not bring along compile

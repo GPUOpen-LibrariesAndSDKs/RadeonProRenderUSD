@@ -79,6 +79,8 @@ private:
     DiagnostMgrDelegatePtr m_diagnosticMgrDelegate;
 };
 
+TfToken const& HdRprUtilsGetCameraDepthName();
+
 PXR_NAMESPACE_CLOSE_SCOPE
 
 extern "C" {
