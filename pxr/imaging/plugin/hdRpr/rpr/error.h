@@ -74,7 +74,7 @@ inline bool IsErrorCheck(rpr_status status, const std::string& messageOnFail, ch
     if (RPR_SUCCESS == status) {
         return false;
     }
-    if (status == RPR_ERROR_UNSUPPORTED && !PXR_NS::TfDebug::IsEnabled(PXR_NS::HD_RPR_DEBUG_CORE_UNSUPPORTED_ERROR)) {
+    if ((status == RPR_ERROR_UNSUPPORTED || status == RPR_ERROR_UNIMPLEMENTED) && !PXR_NS::TfDebug::IsEnabled(PXR_NS::HD_RPR_DEBUG_CORE_UNSUPPORTED_ERROR)) {
         return true;
     }
 
