@@ -35,6 +35,7 @@ set(USD_LIBRARIES
     usdUtils
     usdRender
     usdGeom
+    usdImaging
     pxOsd
     cameraUtil)
 if(${USD_LIBRARY_MONOLITHIC})
@@ -123,13 +124,9 @@ pxr_plugin(hdRpr
         material
         materialFactory
         materialAdapter
-        lightBase
         domeLight
-        rectLight
         distantLight
-        sphereLight
-        cylinderLight
-        diskLight
+        light
         renderBuffer
         basisCurves
         imageCache

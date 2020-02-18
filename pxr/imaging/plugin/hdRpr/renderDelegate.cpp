@@ -10,11 +10,8 @@
 #include "mesh.h"
 #include "instancer.h"
 #include "domeLight.h"
-#include "sphereLight.h"
-#include "cylinderLight.h"
-#include "rectLight.h"
-#include "diskLight.h"
 #include "distantLight.h"
+#include "light.h"
 #include "material.h"
 #include "renderBuffer.h"
 #include "basisCurves.h"
@@ -240,16 +237,13 @@ HdSprim* HdRprDelegate::CreateSprim(TfToken const& typeId,
         return new HdRprCamera(sprimId);
     } else if (typeId == HdPrimTypeTokens->domeLight) {
         return new HdRprDomeLight(sprimId);
-    } else if (typeId == HdPrimTypeTokens->rectLight) {
-        return new HdRprRectLight(sprimId);
-    } else if (typeId == HdPrimTypeTokens->sphereLight) {
-        return new HdRprSphereLight(sprimId);
-    } else if (typeId == HdPrimTypeTokens->cylinderLight) {
-        return new HdRprCylinderLight(sprimId);
     } else if (typeId == HdPrimTypeTokens->distantLight) {
         return new HdRprDistantLight(sprimId);
-    } else if (typeId == HdPrimTypeTokens->diskLight) {
-        return new HdRprDiskLight(sprimId);
+    } else if (typeId == HdPrimTypeTokens->rectLight ||
+        typeId == HdPrimTypeTokens->sphereLight ||
+        typeId == HdPrimTypeTokens->cylinderLight ||
+        typeId == HdPrimTypeTokens->diskLight) {
+        return new HdRprLight(sprimId, typeId);
     } else if (typeId == HdPrimTypeTokens->material) {
         return new HdRprMaterial(sprimId);
     }
@@ -265,14 +259,11 @@ HdSprim* HdRprDelegate::CreateFallbackSprim(TfToken const& typeId) {
         return new HdRprCamera(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->domeLight) {
         return new HdRprDomeLight(SdfPath::EmptyPath());
-    } else if (typeId == HdPrimTypeTokens->rectLight) {
-        return new HdRprRectLight(SdfPath::EmptyPath());
-    } else if (typeId == HdPrimTypeTokens->sphereLight) {
-        return new HdRprSphereLight(SdfPath::EmptyPath());
-    } else if (typeId == HdPrimTypeTokens->cylinderLight) {
-        return new HdRprCylinderLight(SdfPath::EmptyPath());
-    } else if (typeId == HdPrimTypeTokens->diskLight) {
-        return new HdRprDiskLight(SdfPath::EmptyPath());
+    } else if (typeId == HdPrimTypeTokens->rectLight ||
+        typeId == HdPrimTypeTokens->sphereLight ||
+        typeId == HdPrimTypeTokens->cylinderLight ||
+        typeId == HdPrimTypeTokens->diskLight) {
+        return new HdRprLight(SdfPath::EmptyPath(), typeId);
     } else if (typeId == HdPrimTypeTokens->distantLight) {
         return new HdRprDistantLight(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->material) {

@@ -119,6 +119,10 @@ public:
     }
 
     void InitIfNeeded() {
+        if (m_state != kStateUninitialized) {
+            return;
+        }
+
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         if (m_state != kStateUninitialized) {
@@ -383,6 +387,33 @@ public:
         }
     }
 
+    void SetMeshLightVisibility(rpr::Shape* mesh, bool isVisible) {
+        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+            return;
+        }
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        if (isVisible) {
+            if (!RPR_ERROR_CHECK(mesh->SetVisibility(true), "Fail to set mesh visibility")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+            if (!RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_PRIMARY_ONLY_FLAG, false), "Fail to set mesh visibility")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+            if (!RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_LIGHT, false), "Fail to set mesh visibility")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+            if (!RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_SHADOW, false), "Fail to set mesh visibility")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+        } else {
+            if (!RPR_ERROR_CHECK(mesh->SetVisibility(false), "Fail to set mesh visibility")) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+        }
+    }
+
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
         if (!m_rprContext) {
             return nullptr;
@@ -425,7 +456,8 @@ public:
         return curve;
     }
 
-    rpr::DirectionalLight* CreateDirectionalLight() {
+    template <typename T>
+    T* CreateLight(std::function<T*(rpr::Status*)> creator) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -433,9 +465,9 @@ public:
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         rpr::Status status;
-        auto light = m_rprContext->CreateDirectionalLight(&status);
+        auto light = creator(&status);
         if (!light) {
-            RPR_ERROR_CHECK(status, "Failed to create directional light", m_rprContext.get());
+            RPR_ERROR_CHECK(status, "Failed to create light", m_rprContext.get());
             return nullptr;
         }
 
@@ -448,11 +480,59 @@ public:
         return light;
     }
 
+    rpr::DirectionalLight* CreateDirectionalLight() {
+        return CreateLight<rpr::DirectionalLight>([this](rpr::Status* status) {
+            return m_rprContext->CreateDirectionalLight(status);
+        });
+    }
+
+    rpr::SpotLight* CreateSpotLight(float angle, float softness) {
+        return CreateLight<rpr::SpotLight>([this, angle, softness](rpr::Status* status) {
+            auto light = m_rprContext->CreateSpotLight(status);
+            if (light) {
+                float outerAngle = GfDegreesToRadians(angle);
+                float innerAngle = outerAngle * (1.0f - softness);
+                RPR_ERROR_CHECK(light->SetConeShape(innerAngle, outerAngle), "Failed to set spot light cone shape");
+            }
+            return light;
+        });
+    }
+
+    rpr::PointLight* CreatePointLight() {
+        return CreateLight<rpr::PointLight>([this](rpr::Status* status) {
+            return m_rprContext->CreatePointLight(status);
+        });
+    }
+
+    rpr::IESLight* CreateIESLight(std::string const& iesFilepath) {
+        return CreateLight<rpr::IESLight>([this, &iesFilepath](rpr::Status* status) {
+            auto light = m_rprContext->CreateIESLight(status);
+            if (light) {
+                // TODO: consider exposing it as light primitive primvar
+                constexpr int kIESImageResolution = 256;
+
+                *status = light->SetImageFromFile(iesFilepath.c_str(), kIESImageResolution, kIESImageResolution);
+                if (RPR_ERROR_CHECK(*status, "Failed to set IES data")) {
+                    delete light;
+                    light = nullptr;
+                }
+            }
+            return light;
+        });
+    }
+
     void SetDirectionalLightAttributes(rpr::DirectionalLight* light, GfVec3f const& color, float shadowSoftnessAngle) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         RPR_ERROR_CHECK(light->SetRadiantPower(color[0], color[1], color[2]), "Failed to set directional light color");
         RPR_ERROR_CHECK(light->SetShadowSoftnessAngle(GfClamp(shadowSoftnessAngle, 0.0f, float(M_PI_4))), "Failed to set directional light color");
+    }
+
+    template <typename Light>
+    void SetLightColor(Light* light, GfVec3f const& color) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        RPR_ERROR_CHECK(light->SetRadiantPower(color[0], color[1], color[2]), "Failed to set light color");
     }
 
     void Release(rpr::Light* light) {
@@ -558,174 +638,6 @@ public:
         if (!RPR_ERROR_CHECK(object->SetTransform(transform.GetArray(), false), "Fail set object transform")) {
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
-    }
-
-    rpr::Shape* CreateRectLightMesh(float width, float height) {
-        constexpr const size_t rectVertexCount = 4;
-        VtVec3fArray positions(rectVertexCount);
-        positions[0] = GfVec3f(width * 0.5f, height * 0.5f, 0.f);
-        positions[1] = GfVec3f(width * 0.5f, height * -0.5f, 0.f);
-        positions[2] = GfVec3f(width * -0.5f, height * -0.5f, 0.f);
-        positions[3] = GfVec3f(width * -0.5f, height * 0.5f, 0.f);
-
-        // All normals -z
-        VtVec3fArray normals(rectVertexCount, GfVec3f(0.f, 0.f, -1.f));
-
-        VtIntArray idx(rectVertexCount);
-        idx[0] = 0;
-        idx[1] = 1;
-        idx[2] = 2;
-        idx[3] = 3;
-
-        VtIntArray vpf(1, rectVertexCount);
-
-        VtVec2fArray uv; // empty
-
-        return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
-    }
-
-    rpr::Shape* CreateDiskLightMesh(float radius) {
-        constexpr uint32_t k_diskVertexCount = 32;
-
-        VtVec3fArray points;
-        VtVec3fArray normals;
-        VtIntArray pointIndices;
-        VtIntArray normalIndices(k_diskVertexCount * 3, 0);
-        VtIntArray vpf(k_diskVertexCount, 3);
-
-        points.reserve(k_diskVertexCount + 1);
-        pointIndices.reserve(k_diskVertexCount * 3);
-
-        const double step = M_PI * 2.0 / k_diskVertexCount;
-        for (int i = 0; i < k_diskVertexCount; ++i) {
-            double angle = step * i;
-            points.push_back(GfVec3f(radius * cos(angle), radius * sin(angle), 0.0f));
-        }
-        const int centerPointIndex = points.size();
-        points.push_back(GfVec3f(0.0f));
-
-        normals.push_back(GfVec3f(0.0f, 0.0f, -1.0f));
-
-        for (int i = 0; i < k_diskVertexCount; ++i) {
-            pointIndices.push_back(i);
-            pointIndices.push_back((i + 1) % k_diskVertexCount);
-            pointIndices.push_back(centerPointIndex);
-        }
-
-        return CreateMesh(points, pointIndices, normals, normalIndices, VtVec2fArray(), VtIntArray(), vpf);
-    }
-
-    rpr::Shape* CreateSphereLightMesh(float radius) {
-        VtVec3fArray positions;
-        VtVec3fArray normals;
-        VtVec2fArray uv;
-        VtIntArray idx;
-        VtIntArray vpf;
-
-        constexpr int nx = 16, ny = 16;
-
-        for (int j = ny - 1; j >= 0; j--) {
-            for (int i = 0; i < nx; i++) {
-                float t = i / (float)nx * M_PI;
-                float p = j / (float)ny * 2.f * M_PI;
-                positions.push_back(radius * GfVec3f(sin(t) * cos(p), cos(t), sin(t) * sin(p)));
-                normals.push_back(GfVec3f(sin(t) * cos(p), cos(t), sin(t) * sin(p)));
-            }
-        }
-
-        for (int j = 0; j < ny; j++) {
-            for (int i = 0; i < nx - 1; i++) {
-                int o0 = j * nx;
-                int o1 = ((j + 1) % ny) * nx;
-                idx.push_back(o0 + i);
-                idx.push_back(o0 + i + 1);
-                idx.push_back(o1 + i + 1);
-                idx.push_back(o1 + i);
-                vpf.push_back(4);
-            }
-        }
-
-        return CreateMesh(positions, idx, normals, VtIntArray(), uv, VtIntArray(), vpf);
-    }
-
-    rpr::Shape* CreateCylinderLightMesh(float radius, float length) {
-        constexpr int numPointsAtCap = 36;
-
-        VtVec3fArray points;
-        VtVec3fArray normals;
-        VtIntArray pointIndices;
-        VtIntArray normalIndices;
-        VtIntArray vpf;
-
-        points.reserve(numPointsAtCap * 2 + 2);
-        normals.reserve(numPointsAtCap + 2);
-        vpf.reserve(numPointsAtCap * 3);
-        pointIndices.reserve(numPointsAtCap * 4 + 2 * (numPointsAtCap * 3));
-        normalIndices.reserve(numPointsAtCap * 4 + 2 * (numPointsAtCap * 3));
-
-        const float halfLength = 0.5f * length;
-
-        for (int i = 0; i < numPointsAtCap * 2; ++i) {
-            float angle = 2.0f * M_PI * float(i % numPointsAtCap) / numPointsAtCap;
-            bool top = i < numPointsAtCap;
-            auto point = GfVec3f(top ? halfLength : -halfLength, radius * cos(angle), radius * sin(angle));
-            points.push_back(point);
-        }
-
-        {
-            // Top cap faces
-            points.push_back(GfVec3f(halfLength, 0.0f, 0.0f));
-            normals.push_back(GfVec3f(1.0f, 0.0f, 0.0f));
-            const int topCapCenterPointIndex = points.size() - 1;
-            const int topCapNormalIndex = normals.size() - 1;
-            for (int i = 0; i < numPointsAtCap; ++i) {
-                pointIndices.push_back(i);
-                pointIndices.push_back((i + 1) % numPointsAtCap);
-                pointIndices.push_back(topCapCenterPointIndex);
-                normalIndices.push_back(topCapNormalIndex);
-                normalIndices.push_back(topCapNormalIndex);
-                normalIndices.push_back(topCapNormalIndex);
-                vpf.push_back(3);
-            }
-        }
-
-        const int botPointIndexOffset = numPointsAtCap;
-        {
-            // Bottom cap faces
-            points.push_back(GfVec3f(-halfLength, 0.0f, 0.0f));
-            normals.push_back(GfVec3f(-1.0f, 0.0f, 0.0f));
-            const int botCapCenterPointIndex = points.size() - 1;
-            const int botCapNormalIndex = normals.size() - 1;
-            for (int i = 0; i < numPointsAtCap; ++i) {
-                pointIndices.push_back(botCapCenterPointIndex);
-                pointIndices.push_back((i + 1) % numPointsAtCap + botPointIndexOffset);
-                pointIndices.push_back(i + botPointIndexOffset);
-                normalIndices.push_back(botCapNormalIndex);
-                normalIndices.push_back(botCapNormalIndex);
-                normalIndices.push_back(botCapNormalIndex);
-                vpf.push_back(3);
-            }
-        }
-
-        for (int i = 0; i < numPointsAtCap; ++i) {
-            float angle = 2.0f * M_PI * float(i % numPointsAtCap) / numPointsAtCap;
-            normals.push_back(GfVec3f(0.0f, cos(angle), sin(angle)));
-        }
-
-        const int normalIndexOffset = 2;
-        for (int i = 0; i < numPointsAtCap; ++i) {
-            pointIndices.push_back(i);
-            pointIndices.push_back(i + botPointIndexOffset);
-            pointIndices.push_back((i + 1) % numPointsAtCap + botPointIndexOffset);
-            pointIndices.push_back((i + 1) % numPointsAtCap);
-            normalIndices.push_back(i + normalIndexOffset);
-            normalIndices.push_back(i + normalIndexOffset);
-            normalIndices.push_back((i + 1) % numPointsAtCap + normalIndexOffset);
-            normalIndices.push_back((i + 1) % numPointsAtCap + normalIndexOffset);
-            vpf.push_back(4);
-        }
-
-        return CreateMesh(points, pointIndices, normals, normalIndices, VtVec2fArray(), VtIntArray(), vpf);
     }
 
     HdRprApiMaterial* CreateMaterial(const MaterialAdapter& MaterialAdapter) {
@@ -1419,6 +1331,10 @@ public:
         return m_rifContext != nullptr;
     }
 
+    bool IsArbitraryShapedLightSupported() const {
+        return m_rprContextMetadata.pluginType != rpr::kPluginHybrid;
+    }
+
     int GetCurrentRenderQuality() const {
         return m_currentRenderQuality;
     }
@@ -1964,29 +1880,40 @@ void HdRprApi::SetTransform(rpr::SceneObject* object, GfMatrix4f const& transfor
     m_impl->SetTransform(object, transform);
 }
 
-rpr::Shape* HdRprApi::CreateRectLightMesh(float width, float height) {
-    return m_impl->CreateRectLightMesh(width, height);
-}
-
-rpr::Shape* HdRprApi::CreateSphereLightMesh(float radius) {
-    return m_impl->CreateSphereLightMesh(radius);
-}
-
-rpr::Shape* HdRprApi::CreateCylinderLightMesh(float radius, float length) {
-    return m_impl->CreateCylinderLightMesh(radius, length);
-}
-
-rpr::Shape* HdRprApi::CreateDiskLightMesh(float radius) {
-    return m_impl->CreateDiskLightMesh(radius);
-}
-
 rpr::DirectionalLight* HdRprApi::CreateDirectionalLight() {
     m_impl->InitIfNeeded();
     return m_impl->CreateDirectionalLight();
 }
 
+rpr::SpotLight* HdRprApi::CreateSpotLight(float angle, float softness) {
+    m_impl->InitIfNeeded();
+    return m_impl->CreateSpotLight(angle, softness);
+}
+
+rpr::PointLight* HdRprApi::CreatePointLight() {
+    m_impl->InitIfNeeded();
+    return m_impl->CreatePointLight();
+}
+
+rpr::IESLight* HdRprApi::CreateIESLight(std::string const& iesFilepath) {
+    m_impl->InitIfNeeded();
+    return m_impl->CreateIESLight(iesFilepath);
+}
+
 void HdRprApi::SetDirectionalLightAttributes(rpr::DirectionalLight* directionalLight, GfVec3f const& color, float shadowSoftnessAngle) {
     m_impl->SetDirectionalLightAttributes(directionalLight, color, shadowSoftnessAngle);
+}
+
+void HdRprApi::SetLightColor(rpr::SpotLight* light, GfVec3f const& color) {
+    m_impl->SetLightColor(light, color);
+}
+
+void HdRprApi::SetLightColor(rpr::PointLight* light, GfVec3f const& color) {
+    m_impl->SetLightColor(light, color);
+}
+
+void HdRprApi::SetLightColor(rpr::IESLight* light, GfVec3f const& color) {
+    m_impl->SetLightColor(light, color);
 }
 
 HdRprApiVolume* HdRprApi::CreateVolume(
@@ -2021,6 +1948,10 @@ void HdRprApi::SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* materia
 
 void HdRprApi::SetMeshVisibility(rpr::Shape* mesh, bool isVisible) {
     m_impl->SetMeshVisibility(mesh, isVisible);
+}
+
+void HdRprApi::SetMeshLightVisibility(rpr::Shape* lightMesh, bool isVisible) {
+    m_impl->SetMeshLightVisibility(lightMesh, isVisible);
 }
 
 void HdRprApi::SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material) {
@@ -2114,6 +2045,11 @@ bool HdRprApi::IsGlInteropEnabled() const {
 
 bool HdRprApi::IsAovFormatConversionAvailable() const {
     return m_impl->IsAovFormatConversionAvailable();
+}
+
+bool HdRprApi::IsArbitraryShapedLightSupported() const {
+    m_impl->InitIfNeeded();
+    return m_impl->IsArbitraryShapedLightSupported();
 }
 
 int HdRprApi::GetCurrentRenderQuality() const {
