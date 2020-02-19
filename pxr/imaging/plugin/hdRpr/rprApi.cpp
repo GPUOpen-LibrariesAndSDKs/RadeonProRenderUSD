@@ -51,6 +51,7 @@ TF_DEFINE_ENV_SETTING(HDRPR_DISABLE_ALPHA, false,
 
 TF_DEFINE_PRIVATE_TOKENS(HdRprAovTokens,
     (albedo) \
+    (variance) \
     (worldCoordinate) \
     (opacity) \
     ((primvarsSt, "primvars:st"))
@@ -105,6 +106,7 @@ static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
     {HdAovTokens->normal, RPR_AOV_SHADING_NORMAL},
     {HdRprUtilsGetCameraDepthName(), RPR_AOV_DEPTH},
     {HdRprAovTokens->albedo, RPR_AOV_DIFFUSE_ALBEDO},
+    {HdRprAovTokens->variance, RPR_AOV_VARIANCE},
     {HdRprAovTokens->worldCoordinate, RPR_AOV_WORLD_COORDINATE},
     {HdRprAovTokens->primvarsSt, RPR_AOV_UV},
     {HdRprAovTokens->opacity, RPR_AOV_OPACITY},
@@ -986,6 +988,18 @@ public:
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, m_varianceThreshold), "Failed to set as.threshold");
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinAdaptiveSamples()), "Failed to set as.minspp");
 
+            if (m_varianceThreshold > 0.0f) {
+                if (!m_internalAovs.count(HdRprAovTokens->variance)) {
+                    if (auto aov = CreateAov(HdRprAovTokens->variance, m_viewportSize[0], m_viewportSize[1])) {
+                        m_internalAovs.emplace(HdRprAovTokens->variance, std::move(aov));
+                    } else {
+                        TF_RUNTIME_ERROR("Failed to create variance AOV, adaptive sampling will not work");
+                    }
+                }
+            } else {
+                m_internalAovs.erase(HdRprAovTokens->variance);
+            }
+
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
@@ -1276,6 +1290,10 @@ public:
             stopRequested = renderThread->IsStopRequested();
             if (stopRequested) {
                 break;
+            }
+
+            if (m_rprContextMetadata.pluginType != rpr::kPluginHybrid) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, m_iter), "Failed to set framecount");
             }
 
             auto status = m_rprContext->Render();
@@ -1904,7 +1922,7 @@ private:
     std::map<TfToken, std::shared_ptr<HdRprApiAov>> m_internalAovs;
     HdRenderPassAovBindingVector m_aovBindings;
 
-    GfVec2i m_viewportSize;
+    GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
     HdRprCamera const* m_hdCamera;
 
