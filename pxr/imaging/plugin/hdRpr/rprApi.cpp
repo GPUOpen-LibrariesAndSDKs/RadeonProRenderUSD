@@ -30,6 +30,8 @@
 #include "rpr/imageHelpers.h"
 #include "rpr/error.h"
 
+#include "notify/message.h"
+
 #include <RadeonProRender_Baikal.h>
 
 #include <fstream>
@@ -138,6 +140,8 @@ public:
         } catch (rif::Error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
         }
+
+        UpdateRestartRequiredMessageStatus();
     }
 
     rpr::Shape* CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes,
@@ -1363,6 +1367,21 @@ public:
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
             }
         } else if (m_state == kStateRestartRequired) {
+            if (m_showRestartRequiredWarning) {
+
+                std::string message =
+R"(Restart required when you change "Render Device" or "Render Quality" (To "Full" or vice versa).
+You can revert your changes now and you will not lose any rendering progress.
+You can restart renderer by pressing "RPR Persp" - "Restart Render".
+
+Don't show this message again?
+)";
+
+                if (HdRprShowMessage("Restart required", message)) {
+                    UpdateRestartRequiredMessageStatus(true);
+                }
+            }
+
             PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
             auto imagesPath = PlugFindPluginResource(plugin, "images", false);
             auto path = imagesPath + "/restartRequired.png";
@@ -1552,6 +1571,23 @@ private:
         }
 
         RPR_ERROR_CHECK_THROW(m_scene->SetCamera(m_camera.get()), "Failed to to set scene camera");
+    }
+
+    void UpdateRestartRequiredMessageStatus(bool createIfMissing = false) {
+        auto statusFilePath = (HdRprApi::GetCachePath() + ARCH_PATH_SEP) + "dontShowRestartRequiredMessage";
+
+        bool fileExists = false;
+        if (createIfMissing) {
+            auto f = fopen(statusFilePath.c_str(), "w");
+            if (f) {
+                fileExists = true;
+                fclose(f);
+            }
+        } else {
+            fileExists = ArchFileAccess(statusFilePath.c_str(), F_OK) == 0;
+        }
+
+        m_showRestartRequiredWarning = !fileExists;
     }
 
     void SplitPolygons(const VtIntArray& indexes, const VtIntArray& vpf, VtIntArray& out_newIndexes, VtIntArray& out_newVpf) {
@@ -1940,6 +1976,8 @@ private:
         kStateRestartRequired
     };
     State m_state = kStateUninitialized;
+
+    bool m_showRestartRequiredWarning = true;
 };
 
 HdRprApi::HdRprApi(HdRenderDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {

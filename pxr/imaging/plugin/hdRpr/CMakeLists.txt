@@ -151,6 +151,19 @@ pxr_plugin(hdRpr
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
 )
 
+target_sources(hdRpr PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.h)
+if(APPLE)
+    target_sources(hdRpr PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.mm)
+    target_link_libraries(hdRpr
+        objc
+        "-framework AppKit")
+else()
+    target_sources(hdRpr PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.cpp)
+endif()
+
 target_compile_definitions(hdRpr PRIVATE
     RPR_CPPWRAPER_DISABLE_MUTEXLOCK
     RPR_API_USE_HEADER_V2)
