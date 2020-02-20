@@ -2,7 +2,7 @@
 #include "instancer.h"
 #include "renderParam.h"
 #include "material.h"
-#include "materialFactory.h"
+#include "materialAdapter.h"
 #include "rprApi.h"
 
 #include "pxr/imaging/pxOsd/tokens.h"
@@ -95,8 +95,9 @@ bool HdRprMesh::GetPrimvarData(TfToken const& name,
 template bool HdRprMesh::GetPrimvarData<GfVec2f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec2f>&, VtIntArray&);
 template bool HdRprMesh::GetPrimvarData<GfVec3f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec3f>&, VtIntArray&);
 
-RprApiObject const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits) {
+HdRprApiMaterial const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits) {
     if (m_fallbackMaterial && (dirtyBits & HdChangeTracker::DirtyPrimvar)) {
+        rprApi->Release(m_fallbackMaterial);
         m_fallbackMaterial = nullptr;
     }
 
@@ -125,7 +126,7 @@ RprApiObject const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDelegat
         m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
     }
 
-    return m_fallbackMaterial.get();
+    return m_fallbackMaterial;
 }
 
 void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
@@ -260,12 +261,21 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     // 3. Create RPR meshes
 
     if (newMesh) {
+        for (auto mesh : m_rprMeshes) {
+            rprApi->Release(mesh);
+        }
+        for (auto instances : m_rprMeshInstances) {
+            for (auto instance : instances) {
+                rprApi->Release(instance);
+            }
+        }
+        m_rprMeshInstances.clear();
         m_rprMeshes.clear();
 
         m_geomSubsets = m_topology.GetGeomSubsets();
         if (m_geomSubsets.empty()) {
             if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
-                m_rprMeshes.push_back(std::move(rprMesh));
+                m_rprMeshes.push_back(rprMesh);
             }
         } else {
             auto numFaces = m_faceVertexCounts.size();
@@ -348,7 +358,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 }
 
                 if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace, m_topology.GetOrientation())) {
-                    m_rprMeshes.push_back(std::move(rprMesh));
+                    m_rprMeshes.push_back(rprMesh);
                     ++it;
                 } else {
                     it = m_geomSubsets.erase(it);
@@ -378,19 +388,19 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
             auto vertexInterpolationRule = subdivTags.GetVertexInterpolationRule();
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshVertexInterpolationRule(rprMesh.get(), vertexInterpolationRule);
+                rprApi->SetMeshVertexInterpolationRule(rprMesh, vertexInterpolationRule);
             }
         }
 
         if (newMesh || isRefineLevelDirty) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh.get(), m_enableSubdiv ? m_refineLevel : 0);
+                rprApi->SetMeshRefineLevel(rprMesh, m_enableSubdiv ? m_refineLevel : 0);
             }
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyVisibility)) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshVisibility(rprMesh.get(), _sharedData.visible);
+                rprApi->SetMeshVisibility(rprMesh, _sharedData.visible);
             }
         }
 
@@ -409,13 +419,13 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             if (m_geomSubsets.empty()) {
                 auto material = getMeshMaterial(m_cachedMaterialId);
                 for (auto& mesh : m_rprMeshes) {
-                    rprApi->SetMeshMaterial(mesh.get(), material, m_doublesided, m_displayStyle.displacementEnabled);
+                    rprApi->SetMeshMaterial(mesh, material, m_doublesided, m_displayStyle.displacementEnabled);
                 }
             } else {
                 if (m_geomSubsets.size() == m_rprMeshes.size()) {
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
                         auto material = getMeshMaterial(m_geomSubsets[i].materialId);
-                        rprApi->SetMeshMaterial(m_rprMeshes[i].get(), material, m_doublesided, m_displayStyle.displacementEnabled);
+                        rprApi->SetMeshMaterial(m_rprMeshes[i], material, m_doublesided, m_displayStyle.displacementEnabled);
                     }
                 } else {
                     TF_CODING_ERROR("Unexpected number of meshes");
@@ -428,9 +438,15 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 auto transforms = instancer->ComputeTransforms(id);
                 if (transforms.empty()) {
                     // Reset to state without instances
+                    for (auto instances : m_rprMeshInstances) {
+                        for (auto instance : instances) {
+                            rprApi->Release(instance);
+                        }
+                    }
                     m_rprMeshInstances.clear();
+
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
-                        rprApi->SetMeshVisibility(m_rprMeshes[i].get(), _sharedData.visible);
+                        rprApi->SetMeshVisibility(m_rprMeshes[i], _sharedData.visible);
                     }
                 } else {
                     updateTransform = false;
@@ -439,25 +455,36 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         instanceTransform = meshTransform * instanceTransform;
                     }
 
+                    // Release excessive mesh instances if any
+                    for (size_t i = m_rprMeshes.size(); i < m_rprMeshInstances.size(); ++i) {
+                        for (auto instance : m_rprMeshInstances[i]) {
+                            rprApi->Release(instance);
+                        }
+                    }
+
                     m_rprMeshInstances.resize(m_rprMeshes.size());
+
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
                         auto& meshInstances = m_rprMeshInstances[i];
                         if (meshInstances.size() != transforms.size()) {
                             if (meshInstances.size() > transforms.size()) {
+                                for (size_t i = transforms.size(); i < meshInstances.size(); ++i) {
+                                    rprApi->Release(meshInstances[i]);
+                                }
                                 meshInstances.resize(transforms.size());
                             } else {
                                 for (int j = meshInstances.size(); j < transforms.size(); ++j) {
-                                    meshInstances.push_back(rprApi->CreateMeshInstance(m_rprMeshes[i].get()));
+                                    meshInstances.push_back(rprApi->CreateMeshInstance(m_rprMeshes[i]));
                                 }
                             }
                         }
 
                         for (int j = 0; j < transforms.size(); ++j) {
-                            rprApi->SetMeshTransform(meshInstances[j].get(), GfMatrix4f(transforms[j]));
+                            rprApi->SetTransform(meshInstances[j], GfMatrix4f(transforms[j]));
                         }
 
                         // Hide prototype
-                        rprApi->SetMeshVisibility(m_rprMeshes[i].get(), false);
+                        rprApi->SetMeshVisibility(m_rprMeshes[i], false);
                     }
                 }
             }
@@ -465,7 +492,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (updateTransform) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshTransform(rprMesh.get(), m_transform);
+                rprApi->SetTransform(rprMesh, m_transform);
             }
         }
     }
@@ -474,8 +501,21 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 }
 
 void HdRprMesh::Finalize(HdRenderParam* renderParam) {
-    // Stop render thread to safely release resources
-    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+    auto rprApi = static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
+
+    for (auto mesh : m_rprMeshes) {
+        rprApi->Release(mesh);
+    }
+    for (auto instances : m_rprMeshInstances) {
+        for (auto instance : instances) {
+            rprApi->Release(instance);
+        }
+    }
+    m_rprMeshInstances.clear();
+    m_rprMeshes.clear();
+
+    rprApi->Release(m_fallbackMaterial);
+    m_fallbackMaterial = nullptr;
 
     HdMesh::Finalize(renderParam);
 }

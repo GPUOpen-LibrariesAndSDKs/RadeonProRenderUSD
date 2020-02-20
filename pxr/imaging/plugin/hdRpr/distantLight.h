@@ -7,7 +7,7 @@
 #include "pxr/imaging/hd/sprim.h"
 #include "pxr/usd/sdf/path.h"
 
-#include "rprApi.h"
+namespace rpr { class DirectionalLight; }
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -28,7 +28,7 @@ public:
     void Finalize(HdRenderParam* renderParam) override;
 
 protected:
-    RprApiObjectPtr m_rprLight;
+    rpr::DirectionalLight* m_rprLight = nullptr;
     GfMatrix4f m_transform;
 };
 

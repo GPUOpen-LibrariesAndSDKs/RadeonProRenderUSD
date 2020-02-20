@@ -1,7 +1,6 @@
 #include "lightBase.h"
 #include "renderParam.h"
-#include "material.h"
-#include "materialFactory.h"
+#include "materialAdapter.h"
 #include "rprApi.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
@@ -82,12 +81,12 @@ void HdRprLightBase::Sync(HdSceneDelegate* sceneDelegate,
             TF_CODING_ERROR("Light material was not created");
         }
 
-        rprApi->SetMeshMaterial(m_lightMesh.get(), m_lightMaterial.get(), false, false);
+        rprApi->SetMeshMaterial(m_lightMesh, m_lightMaterial, false, false);
         newLight = true;
     }
 
     if (newLight || ((bits & DirtyTransform) && m_lightMesh)) {
-        rprApi->SetMeshTransform(m_lightMesh.get(), m_transform);
+        rprApi->SetTransform(m_lightMesh, m_transform);
     }
 
     *dirtyBits = DirtyBits::Clean;
@@ -100,10 +99,17 @@ HdDirtyBits HdRprLightBase::GetInitialDirtyBitsMask() const {
 }
 
 void HdRprLightBase::Finalize(HdRenderParam* renderParam) {
-    // Stop render thread to safely release resources
     auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
-    rprRenderParam->GetRenderThread()->StopRender();
-    rprRenderParam->RemoveLight();
+    if (m_lightMaterial) {
+        rprRenderParam->RemoveLight();
+    }
+
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
+    rprApi->Release(m_lightMesh);
+    m_lightMesh = nullptr;
+
+    rprApi->Release(m_lightMaterial);
+    m_lightMaterial = nullptr;
 
     HdLight::Finalize(renderParam);
 }

@@ -1,8 +1,8 @@
 #include "rprApiAov.h"
 #include "rprApi.h"
+#include "rprApiFramebuffer.h"
 #include "rifcpp/rifError.h"
-#include "rprcpp/rprContext.h"
-#include "rprcpp/rprFramebuffer.h"
+#include "rpr/error.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -39,7 +39,7 @@ bool ReadRifImage(rif_image image, void* dstBuffer, size_t dstBufferSize) {
 } // namespace anonymous
 
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                         rpr::Context* rprContext, std::unique_ptr<rif::Filter> filter)
+                         rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter)
     : m_format(format),
     m_filter(std::move(filter)) {
     auto componentType = HdGetComponentFormat(format);
@@ -50,18 +50,18 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
         m_format = HdFormatFloat32Vec4;
     }
 
-    m_aov = pxr::make_unique<rpr::FrameBuffer>(rprContext->GetHandle(), width, height);
+    m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height);
     m_aov->AttachAs(rprAovType);
 
     // XXX (Hybrid): Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
-    if (rprContext->GetActivePluginType() != rpr::PluginType::HYBRID) {
-        m_resolved = pxr::make_unique<rpr::FrameBuffer>(rprContext->GetHandle(), width, height);
+    if (rprContextMetadata.pluginType != rpr::kPluginHybrid) {
+        m_resolved = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height);
     }
 }
 
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                         rpr::Context* rprContext, rif::Context* rifContext)
-    : HdRprApiAov(rprAovType, width, height, format, rprContext, [format, rifContext]() -> std::unique_ptr<rif::Filter> {
+                         rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, rif::Context* rifContext)
+    : HdRprApiAov(rprAovType, width, height, format, rprContext, rprContextMetadata, [format, rifContext]() -> std::unique_ptr<rif::Filter> {
         if (format == HdFormatFloat32Vec4) {
             // RPR framebuffers by default with such format
             return nullptr;
@@ -155,7 +155,7 @@ void HdRprApiAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
     }
 }
 
-rpr::FrameBuffer* HdRprApiAov::GetResolvedFb() {
+HdRprApiFramebuffer* HdRprApiAov::GetResolvedFb() {
     return (m_resolved ? m_resolved : m_aov).get();
 }
 
@@ -180,8 +180,8 @@ void HdRprApiAov::OnSizeChange(rif::Context* rifContext) {
     }
 }
 
-HdRprApiColorAov::HdRprApiColorAov(int width, int height, HdFormat format, rpr::Context* rprContext)
-    : HdRprApiAov(RPR_AOV_COLOR, width, height, format, rprContext, nullptr) {
+HdRprApiColorAov::HdRprApiColorAov(int width, int height, HdFormat format, rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata)
+    : HdRprApiAov(RPR_AOV_COLOR, width, height, format, rprContext, rprContextMetadata, nullptr) {
 
 }
 
@@ -385,8 +385,8 @@ void HdRprApiColorAov::OnSizeChange(rif::Context* rifContext) {
 
 HdRprApiNormalAov::HdRprApiNormalAov(
     int width, int height, HdFormat format,
-    rpr::Context* rprContext, rif::Context* rifContext)
-    : HdRprApiAov(RPR_AOV_SHADING_NORMAL, width, height, format, rprContext, rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext)) {
+    rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, rif::Context* rifContext)
+    : HdRprApiAov(RPR_AOV_SHADING_NORMAL, width, height, format, rprContext, rprContextMetadata, rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext)) {
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create normal AOV: RIF context required");
     }
@@ -410,7 +410,7 @@ void HdRprApiNormalAov::OnSizeChange(rif::Context* rifContext) {
 HdRprApiDepthAov::HdRprApiDepthAov(
     HdFormat format,
     std::shared_ptr<HdRprApiAov> worldCoordinateAov,
-    rpr::Context* rprContext, rif::Context* rifContext)
+    rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, rif::Context* rifContext)
     : m_retainedWorldCoordinateAov(worldCoordinateAov) {
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create depth AOV: RIF context required");

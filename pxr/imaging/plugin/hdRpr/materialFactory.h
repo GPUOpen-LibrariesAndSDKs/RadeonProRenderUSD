@@ -3,34 +3,34 @@
 
 #include "pxr/pxr.h"
 #include "materialAdapter.h"
-#include "imageCache.h"
 
-#include <RadeonProRender.h>
+#include <vector>
+
+namespace rpr { class MaterialNode; class Image; class Shape; class Curve; }
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-struct RprApiMaterial {
-    rpr_material_node rootMaterial = nullptr;
-    rpr_material_node twosidedNode = nullptr;
-    rpr_material_node displacementMaterial = nullptr;
+struct HdRprApiMaterial {
+    rpr::MaterialNode* rootMaterial = nullptr;
+    rpr::MaterialNode* twosidedNode = nullptr;
+    rpr::MaterialNode* displacementMaterial = nullptr;
+    std::vector<rpr::MaterialNode*> materialNodes;
     std::vector<std::shared_ptr<rpr::Image>> materialImages;
-    std::vector<rpr_material_node> materialNodes;
 };
+
+class ImageCache;
 
 class RprMaterialFactory {
 public:
-    RprMaterialFactory(rpr_material_system matSys, ImageCache* imageCache);
+    RprMaterialFactory(ImageCache* imageCache);
 
-    RprApiMaterial* CreateMaterial(EMaterialType type, const MaterialAdapter& materialAdapter);
+    HdRprApiMaterial* CreateMaterial(EMaterialType type, MaterialAdapter const& materialAdapter);
+    void Release(HdRprApiMaterial* material);
 
-    void DeleteMaterial(RprApiMaterial* rprmaterial);
-
-    void AttachMaterialToShape(rpr_shape mesh, const RprApiMaterial* material, bool doublesided, bool displacementEnabled);
-
-    void AttachMaterialToCurve(rpr_shape mesh, const RprApiMaterial* material);
+    void AttachMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled);
+    void AttachMaterial(rpr::Curve* mesh, HdRprApiMaterial const* material);
 
 private:
-    rpr_material_system m_matSys;
     ImageCache* m_imageCache;
 };
 

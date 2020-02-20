@@ -16,7 +16,7 @@ protected:
     bool SyncGeomParams(HdSceneDelegate* sceneDelegate, SdfPath const& id) override;
 
     // Create mesh with emmisive material
-    RprApiObjectPtr CreateLightMesh(HdRprApi* rprApi) override;
+    rpr::Shape* CreateLightMesh(HdRprApi* rprApi) override;
 
     // Normalize Light Color with surface area
     GfVec3f NormalizeLightColor(const GfMatrix4f& transform, const GfVec3f& emmisionColor) override;

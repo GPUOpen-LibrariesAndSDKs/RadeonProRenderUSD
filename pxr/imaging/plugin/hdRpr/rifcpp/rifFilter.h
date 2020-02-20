@@ -15,6 +15,8 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprApiFramebuffer;
+
 namespace rif {
 
 enum FilterInputType
@@ -50,11 +52,11 @@ public:
 
     void SetInput(FilterInputType inputType, Filter* filter);
     void SetInput(FilterInputType inputType, rif_image rifImage, float sigma = 1.0f);
-    void SetInput(FilterInputType inputType, rpr::FrameBuffer* rprFrameBuffer, float sigma = 1.0f);
-    void SetInput(const char* name, rpr::FrameBuffer* rprFrameBuffer);
+    void SetInput(FilterInputType inputType, HdRprApiFramebuffer* rprFrameBuffer, float sigma = 1.0f);
+    void SetInput(const char* name, HdRprApiFramebuffer* rprFrameBuffer);
     void SetOutput(rif_image rifImage);
     void SetOutput(rif_image_desc imageDesc);
-    void SetOutput(rpr::FrameBuffer* rprFrameBuffer);
+    void SetOutput(HdRprApiFramebuffer* rprFrameBuffer);
     void SetParam(const char* name, FilterParam param);
     void SetParamFilter(const char* name, Filter* filter);
 
@@ -84,14 +86,14 @@ protected:
 
     struct InputTraits {
         rif_image rifImage;
-        rpr::FrameBuffer* rprFrameBuffer;
+        HdRprApiFramebuffer* rprFrameBuffer;
         float sigma;
 
         std::unique_ptr<rif::Image> retainedImage;
 
         InputTraits() : rifImage(nullptr), rprFrameBuffer(nullptr), sigma(0.0f) {}
         InputTraits(rif_image rifImage, float sigma) : rifImage(rifImage), rprFrameBuffer(nullptr), sigma(sigma) {}
-        InputTraits(rpr::FrameBuffer* rprFrameBuffer, Context* context, float sigma) : rprFrameBuffer(rprFrameBuffer), sigma(sigma) {
+        InputTraits(HdRprApiFramebuffer* rprFrameBuffer, Context* context, float sigma) : rprFrameBuffer(rprFrameBuffer), sigma(sigma) {
             retainedImage = context->CreateImage(rprFrameBuffer);
             rifImage = retainedImage->GetHandle();
         }

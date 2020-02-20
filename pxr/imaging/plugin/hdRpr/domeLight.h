@@ -8,8 +8,7 @@
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
-class RprApiObject;
-using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
+struct HdRprApiEnvironmentLight;
 
 class HdRprDomeLight : public HdSprim {
 
@@ -28,7 +27,7 @@ public:
     void Finalize(HdRenderParam* renderParam) override;
 
 protected:
-    RprApiObjectPtr m_rprLight;
+    HdRprApiEnvironmentLight* m_rprLight = nullptr;
     GfMatrix4f m_transform;
     bool m_created = false;
 };

@@ -2,8 +2,6 @@
 #define HDRPR_RPR_API_H
 
 #include "api.h"
-#include "renderThread.h"
-#include "rprcpp/rprObject.h"
 
 #include "pxr/base/gf/vec2i.h"
 #include "pxr/base/gf/vec3f.h"
@@ -16,44 +14,22 @@
 #include "pxr/imaging/hd/renderPassState.h"
 #include "pxr/imaging/hd/renderDelegate.h"
 
+#include <RadeonProRender.hpp>
+
 #include <memory>
 #include <vector>
-#include <string.h>
+#include <string>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-class HdRprApiImpl;
+class HdRprRenderThread;
 class MaterialAdapter;
-struct RprApiMaterial;
 
-class RprApiObject {
-public:
-    static std::unique_ptr<RprApiObject> Wrap(void* handle);
+class HdRprApiImpl;
 
-    RprApiObject() : m_handle(nullptr) {}
-    RprApiObject(nullptr_t) : m_handle(nullptr) {}
-
-    explicit RprApiObject(void* handle);
-    RprApiObject(void* handle, std::function<void (void*)> deleter);
-    ~RprApiObject();
-
-    void AttachDependency(std::unique_ptr<RprApiObject>&& dependencyObject);
-    void AttachDependency(std::unique_ptr<rpr::Object>&& dependencyObject);
-
-    void AttachOnReleaseAction(TfToken const& actionName, std::function<void (void*)> action);
-    void DetachOnReleaseAction(TfToken const& actionName);
-    bool HasOnReleaseAction(TfToken const& actionName);
-
-    void* GetHandle() const;
-
-private:
-    void* m_handle;
-    std::function<void (void*)> m_deleter;
-    std::vector<std::unique_ptr<RprApiObject>> m_dependencyObjects;
-    std::vector<std::unique_ptr<rpr::Object>> m_dependencyRprObjects;
-    std::map<TfToken, std::function<void (void*)>> m_onReleaseActions;
-};
-using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
+struct HdRprApiVolume;
+struct HdRprApiMaterial;
+struct HdRprApiEnvironmentLight;
 
 template <typename T, typename... Args>
 std::unique_ptr<T> make_unique(Args&&... args) {
@@ -65,36 +41,44 @@ public:
     HdRprApi(HdRenderDelegate* delegate);
     ~HdRprApi();
 
-    RprApiObjectPtr CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
-    RprApiObjectPtr CreateEnvironmentLight(GfVec3f color, float intensity);
-    RprApiObjectPtr CreateRectLightMesh(float width, float height);
-    RprApiObjectPtr CreateSphereLightMesh(float radius);
-    RprApiObjectPtr CreateCylinderLightMesh(float radius, float length);
-    RprApiObjectPtr CreateDiskLightMesh(float radius);
-    void SetLightTransform(RprApiObject* light, GfMatrix4f const& transform);
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity);
+    void SetTransform(HdRprApiEnvironmentLight* envLight, GfMatrix4f const& transform);
+    void Release(HdRprApiEnvironmentLight* envLight);
 
-    RprApiObjectPtr CreateDirectionalLight();
-    void SetDirectionalLightAttributes(RprApiObject* directionalLight, GfVec3f const& color, float shadowSoftnessAngle);
+    rpr::DirectionalLight* CreateDirectionalLight();
+    void SetDirectionalLightAttributes(rpr::DirectionalLight* light, GfVec3f const& color, float shadowSoftnessAngle);
+    void Release(rpr::Light* light);
 
-    RprApiObjectPtr CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-                                 const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
-                                 const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow);
+    HdRprApiVolume* CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
+                                const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
+                                const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
+                                const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow);
+    void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform);
+    void Release(HdRprApiVolume* volume);
 
-    RprApiObjectPtr CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding);
-    RprApiObjectPtr CreateMeshInstance(RprApiObject* prototypeMesh);
-    void SetMeshTransform(RprApiObject* mesh, const GfMatrix4f& transform);
-    void SetMeshRefineLevel(RprApiObject* mesh, int level);
-    void SetMeshVertexInterpolationRule(RprApiObject* mesh, TfToken boundaryInterpolation);
-    void SetMeshMaterial(RprApiObject* mesh, RprApiObject const* material, bool doublesided, bool displacementEnabled);
-    void SetMeshVisibility(RprApiObject* mesh, bool isVisible);
+    HdRprApiMaterial* CreateMaterial(MaterialAdapter& materialAdapter);
+    void Release(HdRprApiMaterial* material);
 
-    RprApiObjectPtr CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);
-    void SetCurveMaterial(RprApiObject* curve, RprApiObject const* material);
-    void SetCurveVisibility(RprApiObject* curve, bool isVisible);
-    void SetCurveTransform(RprApiObject* curve, GfMatrix4f const& transform);
+    rpr::Shape* CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding);
+    rpr::Shape* CreateMeshInstance(rpr::Shape* prototypeMesh);
+    void SetMeshRefineLevel(rpr::Shape* mesh, int level);
+    void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation);
+    void SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled);
+    void SetMeshVisibility(rpr::Shape* mesh, bool isVisible);
+    void Release(rpr::Shape* shape);
 
-    RprApiObjectPtr CreateMaterial(MaterialAdapter& materialAdapter);
+    rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);
+    void SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material);
+    void SetCurveVisibility(rpr::Curve* curve, bool isVisible);
+    void Release(rpr::Curve* curve);
+
+    void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform);
+
+    rpr::Shape* CreateRectLightMesh(float width, float height);
+    rpr::Shape* CreateSphereLightMesh(float radius);
+    rpr::Shape* CreateCylinderLightMesh(float radius, float length);
+    rpr::Shape* CreateDiskLightMesh(float radius);
 
     GfMatrix4d GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;

@@ -6,8 +6,7 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-class RprApiObject;
-using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
+struct HdRprApiVolume;
 
 class HdRprVolume : public HdVolume {
 public:
@@ -32,7 +31,7 @@ protected:
                    HdDirtyBits* dirtyBits) override;
 
 private:
-    RprApiObjectPtr m_rprHeteroVolume;
+    HdRprApiVolume* m_rprVolume = nullptr;
     GfMatrix4f m_transform;
 };
 

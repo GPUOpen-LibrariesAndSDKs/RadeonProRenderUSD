@@ -92,7 +92,7 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (newLight || ((bits & HdLight::DirtyTransform) && m_rprLight)) {
-        rprApi->SetLightTransform(m_rprLight.get(), m_transform);
+        rprApi->SetTransform(m_rprLight, m_transform);
     }
 
     if (newLight && !m_created) {
@@ -108,10 +108,17 @@ HdDirtyBits HdRprDomeLight::GetInitialDirtyBitsMask() const {
 }
 
 void HdRprDomeLight::Finalize(HdRenderParam* renderParam) {
-    // Stop render thread to safely release resources
     auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
-    rprRenderParam->GetRenderThread()->StopRender();
-    rprRenderParam->RemoveLight();
+    
+    if (m_rprLight) {
+        rprRenderParam->AcquireRprApiForEdit()->Release(m_rprLight);
+        m_rprLight = nullptr;
+    }
+
+    if (m_created) {
+        rprRenderParam->RemoveLight();
+        m_created = false;
+    }
 
     HdSprim::Finalize(renderParam);
 }

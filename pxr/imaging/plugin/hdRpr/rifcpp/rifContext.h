@@ -3,36 +3,37 @@
 
 #include "rifImage.h"
 
-#include <RadeonProRender.h>
 #include <string>
 #include <memory>
-
-PXR_NAMESPACE_OPEN_SCOPE
 
 namespace rpr {
 
 class Context;
-class FrameBuffer;
+struct ContextMetadata;
 
 } // namespace rpr
+
+PXR_NAMESPACE_OPEN_SCOPE
+
+class HdRprApiFramebuffer;
 
 namespace rif {
 
 class Context {
 public:
-    static std::unique_ptr<Context> Create(rpr::Context* rprContext, std::string const& modelPath);
+    static std::unique_ptr<Context> Create(rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, std::string const& modelPath);
 
     virtual ~Context();
 
     rif_image_filter CreateImageFilter(rif_image_filter_type type);
 
     std::unique_ptr<Image> CreateImage(rif_image_desc const& desc);
-    virtual std::unique_ptr<Image> CreateImage(rpr::FrameBuffer* rprFrameBuffer) = 0;
+    virtual std::unique_ptr<Image> CreateImage(HdRprApiFramebuffer* rprFrameBuffer) = 0;
 
     void AttachFilter(rif_image_filter filter, rif_image inputImage, rif_image outputImage);
     void DetachFilter(rif_image_filter filter);
 
-    virtual void UpdateInputImage(rpr::FrameBuffer* rprFrameBuffer, rif_image image);
+    virtual void UpdateInputImage(HdRprApiFramebuffer* rprFrameBuffer, rif_image image);
 
     void ExecuteCommandQueue();
 
