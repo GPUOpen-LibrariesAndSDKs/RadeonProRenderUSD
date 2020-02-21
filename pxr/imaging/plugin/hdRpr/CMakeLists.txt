@@ -41,9 +41,10 @@ if(${USD_LIBRARY_MONOLITHIC})
     set(USD_LIBRARIES usd_ms)
 endif()
 
+STRING(REGEX REPLACE "^lib" "" _libPrefix ${PXR_LIB_PREFIX})
 set(_prefixedUsdLibraries "")
 foreach(name ${USD_LIBRARIES})
-    list(APPEND _prefixedUsdLibraries "${PXR_LIB_PREFIX}${name}")
+    list(APPEND _prefixedUsdLibraries "${_libPrefix}${name}")
 endforeach()
 set(USD_LIBRARIES "${_prefixedUsdLibraries}")
 
