@@ -47,7 +47,15 @@ public:
     void Release(HdRprApiEnvironmentLight* envLight);
 
     rpr::DirectionalLight* CreateDirectionalLight();
+    rpr::SpotLight* CreateSpotLight(float angle, float softness);
+    rpr::IESLight* CreateIESLight(std::string const& iesFilepath);
+    rpr::PointLight* CreatePointLight();
+
     void SetDirectionalLightAttributes(rpr::DirectionalLight* light, GfVec3f const& color, float shadowSoftnessAngle);
+    void SetLightColor(rpr::SpotLight* light, GfVec3f const& color);
+    void SetLightColor(rpr::PointLight* light, GfVec3f const& color);
+    void SetLightColor(rpr::IESLight* light, GfVec3f const& color);
+
     void Release(rpr::Light* light);
 
     HdRprApiVolume* CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
@@ -66,6 +74,7 @@ public:
     void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation);
     void SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled);
     void SetMeshVisibility(rpr::Shape* mesh, bool isVisible);
+    void SetMeshLightVisibility(rpr::Shape* lightMesh, bool isVisible);
     void Release(rpr::Shape* shape);
 
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);
@@ -74,11 +83,6 @@ public:
     void Release(rpr::Curve* curve);
 
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform);
-
-    rpr::Shape* CreateRectLightMesh(float width, float height);
-    rpr::Shape* CreateSphereLightMesh(float radius);
-    rpr::Shape* CreateCylinderLightMesh(float radius, float length);
-    rpr::Shape* CreateDiskLightMesh(float radius);
 
     GfMatrix4d GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;
@@ -102,6 +106,7 @@ public:
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
     bool IsAovFormatConversionAvailable() const;
+    bool IsArbitraryShapedLightSupported() const;
     int GetCurrentRenderQuality() const;
 
     static std::string GetAppDataPath();
