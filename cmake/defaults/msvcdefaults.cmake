@@ -93,6 +93,9 @@ _add_define("BOOST_ALL_DYN_LINK")
 # Need half::_toFloat and half::_eLut.
 _add_define("OPENEXR_DLL")
 
+# M_PI, M_PI_2, etc
+_add_define("_USE_MATH_DEFINES")
+
 # These files require /bigobj compiler flag
 #   Vt/arrayPyBuffer.cpp
 #   Usd/crateFile.cpp
