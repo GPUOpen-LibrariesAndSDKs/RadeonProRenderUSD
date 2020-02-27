@@ -92,7 +92,10 @@ void HdRprVolume::Sync(
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyTopology) {
-        m_rprHeteroVolume = nullptr;
+        if (m_rprVolume) {
+            rprApi->Release(m_rprVolume);
+        }
+        m_rprVolume = nullptr;
 
         openvdb::initialize();
         std::map<std::string, openvdb::GridBase::Ptr> openvdbFileGrids;
@@ -263,7 +266,7 @@ void HdRprVolume::Sync(
         openvdb::Vec3d gridMin = gridTransform.indexToWorld(gridOnBB.min());
         GfVec3f gridBBLow = GfVec3f((float)(gridMin.x() - voxelSize[0] / 2), (float)(gridMin.y() - voxelSize[1] / 2), (float)(gridMin.z() - voxelSize[2] / 2));
 
-        m_rprHeteroVolume = rprApi->CreateVolume(
+        m_rprVolume = rprApi->CreateVolume(
             pDensityGridData->indices, pDensityGridData->values, pDensityGridData->valueLUT,
             pColorGridData->indices, pColorGridData->values, pColorGridData->valueLUT,
             pEmissiveGridData->indices, pEmissiveGridData->values, pEmissiveGridData->valueLUT,
@@ -297,8 +300,8 @@ void HdRprVolume::_InitRepr(TfToken const& reprName,
 }
 
 void HdRprVolume::Finalize(HdRenderParam* renderParam) {
-    // Stop render thread to safely release resources
-    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+    static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit()->Release(m_rprVolume);
+    m_rprVolume = nullptr;
 
     HdVolume::Finalize(renderParam);
 }

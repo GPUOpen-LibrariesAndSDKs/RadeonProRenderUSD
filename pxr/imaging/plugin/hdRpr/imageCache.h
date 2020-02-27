@@ -2,18 +2,19 @@
 #define HDRPR_IMAGE_CACHE_H
 
 #include "pxr/pxr.h"
-#include "rprcpp/rprImage.h"
 
 #include <memory>
+#include <string>
 #include <unordered_map>
-
-PXR_NAMESPACE_OPEN_SCOPE
 
 namespace rpr {
 
 class Context;
+class Image;
 
 } // namespace rpr
+
+PXR_NAMESPACE_OPEN_SCOPE
 
 class ImageCache {
 public:
@@ -24,11 +25,14 @@ public:
     void RequireGarbageCollection();
     void GarbageCollectIfNeeded();
 
+    rpr::Context* GetContext() { return m_context; }
+
 private:
     std::shared_ptr<rpr::Image> CreateImage(std::string const& path);
 
     class ImageMetadata {
     public:
+        ImageMetadata() = default;
         ImageMetadata(std::string const& path);
 
         bool IsMetadataEqual(ImageMetadata const& md);

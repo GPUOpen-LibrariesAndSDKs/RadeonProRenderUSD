@@ -5,12 +5,14 @@
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/vec2f.h"
 
+namespace rpr { class Curve; }
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
+struct HdRprApiMaterial;
+
 class HdRprMaterial;
-class RprApiObject;
-using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
 
 class HdRprBasisCurves : public HdBasisCurves {
 
@@ -36,11 +38,12 @@ protected:
                    HdDirtyBits* dirtyBits) override;
 
 private:
-    RprApiObjectPtr CreateRprCurve(HdRprApi* rprApi);
+    rpr::Curve* CreateRprCurve(HdRprApi* rprApi);
 
 private:
-    RprApiObjectPtr m_rprCurve;
-    RprApiObjectPtr m_fallbackMaterial;
+    rpr::Curve* m_rprCurve = nullptr;
+    HdRprApiMaterial* m_fallbackMaterial = nullptr;
+
     HdRprMaterial const* m_cachedMaterial;
 
     HdBasisCurvesTopology m_topology;

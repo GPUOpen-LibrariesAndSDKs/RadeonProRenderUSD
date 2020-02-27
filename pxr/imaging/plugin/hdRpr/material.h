@@ -5,8 +5,7 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-class RprApiObject;
-using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
+struct HdRprApiMaterial;
 
 class HdRprMaterial final : public HdMaterial {
 public:
@@ -25,10 +24,10 @@ public:
 
     /// Get pointer to RPR material
     /// In case material сreation failure return nullptr
-    const RprApiObject* GetRprMaterialObject() const;
+    HdRprApiMaterial const* GetRprMaterialObject() const;
 
 private:
-    RprApiObjectPtr m_rprMaterial;
+    HdRprApiMaterial* m_rprMaterial = nullptr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

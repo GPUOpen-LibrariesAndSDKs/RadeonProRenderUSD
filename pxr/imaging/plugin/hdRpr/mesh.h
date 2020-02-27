@@ -7,12 +7,13 @@
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/base/gf/matrix4f.h"
 
+namespace rpr { class Shape; }
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
+struct HdRprApiMaterial;
 class HdRprParam;
-class RprApiObject;
-using RprApiObjectPtr = std::unique_ptr<RprApiObject>;
 
 class HdRprMesh final : public HdMesh {
 public:
@@ -43,12 +44,13 @@ private:
                         VtArray<T>& out_data,
                         VtIntArray& out_indices);
 
-    RprApiObject const* GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits);
+    HdRprApiMaterial const* GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits);
 
 private:
-    std::vector<RprApiObjectPtr> m_rprMeshes;
-    std::vector<std::vector<RprApiObjectPtr>> m_rprMeshInstances;
-    RprApiObjectPtr m_fallbackMaterial;
+    std::vector<rpr::Shape*> m_rprMeshes;
+    std::vector<std::vector<rpr::Shape*>> m_rprMeshInstances;
+    HdRprApiMaterial* m_fallbackMaterial = nullptr;
+
     SdfPath m_cachedMaterialId;
     GfMatrix4f m_transform;
 

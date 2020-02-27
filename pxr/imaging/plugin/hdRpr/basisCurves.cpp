@@ -210,7 +210,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
     if (m_rprCurve) {
         if (newCurve || (*dirtyBits & HdChangeTracker::DirtyMaterialId)) {
             if (m_cachedMaterial && m_cachedMaterial->GetRprMaterialObject()) {
-                rprApi->SetCurveMaterial(m_rprCurve.get(), m_cachedMaterial->GetRprMaterialObject());
+                rprApi->SetCurveMaterial(m_rprCurve, m_cachedMaterial->GetRprMaterialObject());
             } else {
                 GfVec3f color(0.18f);
 
@@ -227,23 +227,23 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                 MaterialAdapter matAdapter(EMaterialType::COLOR, MaterialParams{{HdRprMaterialTokens->color, VtValue(color)}});
                 m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
 
-                rprApi->SetCurveMaterial(m_rprCurve.get(), m_fallbackMaterial.get());
+                rprApi->SetCurveMaterial(m_rprCurve, m_fallbackMaterial);
             }
         }
 
         if (newCurve || (*dirtyBits & HdChangeTracker::DirtyVisibility)) {
-            rprApi->SetCurveVisibility(m_rprCurve.get(), _sharedData.visible);
+            rprApi->SetCurveVisibility(m_rprCurve, _sharedData.visible);
         }
 
         if (newCurve || (*dirtyBits & HdChangeTracker::DirtyTransform)) {
-            rprApi->SetCurveTransform(m_rprCurve.get(), m_transform);
+            rprApi->SetTransform(m_rprCurve, m_transform);
         }
     }
 
     *dirtyBits = HdChangeTracker::Clean;
 }
 
-RprApiObjectPtr HdRprBasisCurves::CreateRprCurve(HdRprApi* rprApi) {
+rpr::Curve* HdRprBasisCurves::CreateRprCurve(HdRprApi* rprApi) {
     bool isCurveTapered = m_widthsInterpolation != HdInterpolationConstant && m_widthsInterpolation != HdInterpolationUniform;
     // Each segment of USD linear curves defined by two vertices
     // For tapered curve we need to convert it to RPR representation:
@@ -327,9 +327,14 @@ RprApiObjectPtr HdRprBasisCurves::CreateRprCurve(HdRprApi* rprApi) {
 }
 
 void HdRprBasisCurves::Finalize(HdRenderParam* renderParam) {
-    // Stop render thread to safely release resources
-    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+    auto rprApi = static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
 
+    rprApi->Release(m_rprCurve);
+    m_rprCurve = nullptr;
+
+    rprApi->Release(m_fallbackMaterial);
+    m_fallbackMaterial = nullptr;
+ 
     HdBasisCurves::Finalize(renderParam);
 }
 

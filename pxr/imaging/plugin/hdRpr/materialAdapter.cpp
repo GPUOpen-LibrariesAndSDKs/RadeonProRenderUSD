@@ -9,7 +9,7 @@
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/usdUtils/pipeline.h"
 
-#include <RadeonProRender.h>
+#include <RadeonProRender.hpp>
 #include <cfloat>
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -423,7 +423,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
         } else if (paramName == HdRprMaterialTokens->normal) {
             NormalMapParam param;
             param.texture = materialTexture;
-            m_normalMapParams.emplace_back(std::vector<rpr_material_node_input>{RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL}, param);
+            m_normalMapParams.emplace_back(std::vector<rpr::MaterialNodeInput>{RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL}, param);
         } else if (paramName == HdRprMaterialTokens->displacement) {
             m_displacementTexture = materialTexture;
         }
@@ -622,7 +622,7 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
         return MaterialTexture();
     };
 
-    auto populateRprParameter = [&](std::vector<rpr_material_node_input> rprInputs, TfToken const& paramName) -> bool {
+    auto populateRprParameter = [&](std::vector<rpr::MaterialNodeInput> rprInputs, TfToken const& paramName) -> bool {
         bool isAuthored = false;
 
         VtValue value;
@@ -763,14 +763,14 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
         NormalMapParam baseNormalMapParam;
         baseNormalMapParam.texture = getMaterialTexture(HoudiniPrincipledShaderTokens->baseNormal);
 
-        std::vector<rpr_material_node_input> rprInputs = {RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL, RPR_MATERIAL_INPUT_UBER_REFRACTION_NORMAL};
+        std::vector<rpr::MaterialNodeInput> rprInputs = {RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL, RPR_MATERIAL_INPUT_UBER_REFRACTION_NORMAL};
 
         if (GetParameter(HoudiniPrincipledShaderTokens->separateCoatNormals, params, 0)) {
             NormalMapParam coatNormalMapParam;
             coatNormalMapParam.texture = getMaterialTexture(HoudiniPrincipledShaderTokens->coatNormal);
             if (!coatNormalMapParam.texture.path.empty()) {
                 coatNormalMapParam.effectScale = GetParameter(HoudiniPrincipledShaderTokens->coatNormalScale, params, 1.0f);
-                m_normalMapParams.emplace_back(std::vector<rpr_material_node_input>{RPR_MATERIAL_INPUT_UBER_COATING_NORMAL}, coatNormalMapParam);
+                m_normalMapParams.emplace_back(std::vector<rpr::MaterialNodeInput>{RPR_MATERIAL_INPUT_UBER_COATING_NORMAL}, coatNormalMapParam);
             }
         } else {
             rprInputs.push_back(RPR_MATERIAL_INPUT_UBER_COATING_NORMAL);

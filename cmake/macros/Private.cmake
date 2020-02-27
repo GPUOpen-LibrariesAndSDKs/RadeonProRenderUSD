@@ -649,7 +649,7 @@ function(_pxr_install_rpath rpathRef NAME)
 
     set_target_properties(${NAME}
         PROPERTIES 
-            INSTALL_RPATH_USE_LINK_PATH TRUE
+            INSTALL_RPATH_USE_LINK_PATH FALSE
             INSTALL_RPATH "${final}"
     )
 endfunction()
@@ -1281,8 +1281,12 @@ function(_pxr_library NAME)
     # The former is for helper libraries for a third party application and
     # the latter for core USD libraries.
     _pxr_init_rpath(rpath "${libInstallPrefix}")
-    _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/${PXR_INSTALL_SUBDIR}/lib")
-    _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/lib")
+    if(RPR_BUILD_AS_HOUDINI_PLUGIN)
+        _pxr_add_rpath(rpath "${HOUDINI_LIB}")
+    else()
+        _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/${PXR_INSTALL_SUBDIR}/lib")
+        _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/lib")
+    endif()
     _pxr_install_rpath(rpath ${NAME})
 
     #

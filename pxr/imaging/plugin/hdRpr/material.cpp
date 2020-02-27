@@ -1,5 +1,4 @@
 #include "material.h"
-#include "materialFactory.h"
 #include "materialAdapter.h"
 
 #include "renderParam.h"
@@ -101,14 +100,14 @@ void HdRprMaterial::Reload() {
 }
 
 void HdRprMaterial::Finalize(HdRenderParam* renderParam) {
-    // Stop render thread to safely release resources
-    static_cast<HdRprRenderParam*>(renderParam)->GetRenderThread()->StopRender();
+    static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit()->Release(m_rprMaterial);
+    m_rprMaterial = nullptr;
 
     HdMaterial::Finalize(renderParam);
 }
 
-RprApiObject const* HdRprMaterial::GetRprMaterialObject() const {
-    return m_rprMaterial.get();
+HdRprApiMaterial const* HdRprMaterial::GetRprMaterialObject() const {
+    return m_rprMaterial;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -1,12 +1,12 @@
-#ifndef RPRCPP_EXCEPTION_H
-#define RPRCPP_EXCEPTION_H
+#ifndef HDRPR_CORE_ERROR_H
+#define HDRPR_CORE_ERROR_H
 
 #include "debugCodes.h"
 
 #include "pxr/base/arch/functionLite.h"
 #include "pxr/base/tf/stringUtils.h"
 
-#include <RadeonProRender.h>
+#include <RadeonProRender.hpp>
 #include <stdexcept>
 #include <cassert>
 #include <string>
@@ -29,18 +29,16 @@
 #define RPR_THROW_ERROR_MSG(fmt, ...) \
     rpr::ThrowErrorMsg(__ARCH_FILE__, __ARCH_FUNCTION__, __LINE__, fmt, ##__VA_ARGS__);
 
-PXR_NAMESPACE_OPEN_SCOPE
-
 namespace rpr {
 
-inline std::string ConstructErrorMessage(rpr_status errorStatus, std::string const& messageOnFail, char const* file, char const* function, size_t line, rpr_context context = nullptr) {
+inline std::string ConstructErrorMessage(rpr_status errorStatus, std::string const& messageOnFail, char const* file, char const* function, size_t line, rpr::Context* context = nullptr) {
     auto rprErrorString = [errorStatus, context]() -> std::string {
         if (context) {
             size_t lastErrorMessageSize = 0;
-            auto status = rprContextGetInfo(context, RPR_CONTEXT_LAST_ERROR_MESSAGE, 0, nullptr, &lastErrorMessageSize);
+            auto status = context->GetInfo(RPR_CONTEXT_LAST_ERROR_MESSAGE, 0, nullptr, &lastErrorMessageSize);
             if (status == RPR_SUCCESS && lastErrorMessageSize > 1) {
                 std::string message(lastErrorMessageSize, '\0');
-                status = rprContextGetInfo(context, RPR_CONTEXT_LAST_ERROR_MESSAGE, message.size(), &message[0], nullptr);
+                status = context->GetInfo(RPR_CONTEXT_LAST_ERROR_MESSAGE, message.size(), &message[0], nullptr);
                 if (status == RPR_SUCCESS) {
                     return message;
                 }
@@ -60,23 +58,23 @@ inline std::string ConstructErrorMessage(rpr_status errorStatus, std::string con
         return "error code - " + std::to_string(errorStatus);
     };
 
-    auto suffix = TfStringPrintf(" in %s at line %zu of %s", function, line, file);
+    auto suffix = PXR_NS::TfStringPrintf(" in %s at line %zu of %s", function, line, file);
 #ifdef RPR_GIT_SHORT_HASH
-    suffix += TfStringPrintf("(%s)", RPR_GIT_SHORT_HASH);
+    suffix += PXR_NS::TfStringPrintf("(%s)", RPR_GIT_SHORT_HASH);
 #endif // RPR_GIT_SHORT_HASH
     if (errorStatus == RPR_SUCCESS) {
-        return TfStringPrintf("[RPR ERROR] %s%s", messageOnFail.c_str(), suffix.c_str());
+        return PXR_NS::TfStringPrintf("[RPR ERROR] %s%s", messageOnFail.c_str(), suffix.c_str());
     } else {
         auto errorStr = rprErrorString();
-        return TfStringPrintf("[RPR ERROR] %s -- %s%s", messageOnFail.c_str(), errorStr.c_str(), suffix.c_str());
+        return PXR_NS::TfStringPrintf("[RPR ERROR] %s -- %s%s", messageOnFail.c_str(), errorStr.c_str(), suffix.c_str());
     }
 }
 
-inline bool IsErrorCheck(const rpr_status status, const std::string& messageOnFail, char const* file, char const* function, size_t line, rpr_context context = nullptr) {
+inline bool IsErrorCheck(rpr_status status, const std::string& messageOnFail, char const* file, char const* function, size_t line, rpr::Context* context = nullptr) {
     if (RPR_SUCCESS == status) {
         return false;
     }
-    if (status == RPR_ERROR_UNSUPPORTED && !TfDebug::IsEnabled(HD_RPR_DEBUG_CORE_UNSUPPORTED_ERROR)) {
+    if ((status == RPR_ERROR_UNSUPPORTED || status == RPR_ERROR_UNIMPLEMENTED) && !PXR_NS::TfDebug::IsEnabled(PXR_NS::HD_RPR_DEBUG_CORE_UNSUPPORTED_ERROR)) {
         return true;
     }
 
@@ -87,7 +85,7 @@ inline bool IsErrorCheck(const rpr_status status, const std::string& messageOnFa
 
 class Error : public std::runtime_error {
 public:
-    Error(rpr_status errorStatus, const char* messageOnFail, char const* file, char const* function, size_t line, rpr_context context = nullptr)
+    Error(rpr_status errorStatus, const char* messageOnFail, char const* file, char const* function, size_t line, rpr::Context* context = nullptr)
         : std::runtime_error(ConstructErrorMessage(errorStatus, messageOnFail, file, function, line, context)) {
 
     }
@@ -101,13 +99,11 @@ public:
 inline void ThrowErrorMsg(char const* file, char const* function, size_t line, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    auto messageOnFail = TfVStringPrintf(fmt, ap);
+    auto messageOnFail = PXR_NS::TfVStringPrintf(fmt, ap);
     va_end(ap);
     throw Error(ConstructErrorMessage(RPR_SUCCESS, messageOnFail, file, function, line));
 }
 
 } // namespace rpr
 
-PXR_NAMESPACE_CLOSE_SCOPE
-
-#endif // RPRCPP_EXCEPTION_H
+#endif // HDRPR_CORE_ERROR_H

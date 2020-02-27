@@ -79,6 +79,10 @@ if(NOT RPR_TAHOE_BINARY AND NOT RPR_HYBRID_BINARY)
     message(FATAL_ERROR "At least one RPR plugin required")
 endif()
 
+if(NOT DEFINED RPR_TOOLS_LOCATION)
+    set(RPR_TOOLS_LOCATION ${RPR_LOCATION_INCLUDE}/../rprTools)
+endif()
+
 include(FindPackageHandleStandardArgs)
 
 find_package_handle_standard_args(Rpr

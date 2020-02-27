@@ -35,15 +35,17 @@ set(USD_LIBRARIES
     usdUtils
     usdRender
     usdGeom
+    usdImaging
     pxOsd
     cameraUtil)
 if(${USD_LIBRARY_MONOLITHIC})
     set(USD_LIBRARIES usd_ms)
 endif()
 
+STRING(REGEX REPLACE "^lib" "" _libPrefix ${PXR_LIB_PREFIX})
 set(_prefixedUsdLibraries "")
 foreach(name ${USD_LIBRARIES})
-    list(APPEND _prefixedUsdLibraries "${PXR_LIB_PREFIX}${name}")
+    list(APPEND _prefixedUsdLibraries "${_libPrefix}${name}")
 endforeach()
 set(USD_LIBRARIES "${_prefixedUsdLibraries}")
 
@@ -79,6 +81,13 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
 list(APPEND RIF_MODEL_RESOURCE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
 
+# Currently RPR SDK does not distribute correct c++ wrapper, we do it by ourself instead
+set(RPR_CPP_WRAPPER_LOCATION ${CMAKE_CURRENT_SOURCE_DIR})
+
+if(NOT DEFINED RPR_CPP_WRAPPER_LOCATION)
+    set(RPR_CPP_WRAPPER_LOCATION ${RPR_TOOLS_LOCATION})
+endif()
+
 pxr_plugin(hdRpr
    LIBRARIES
         ${USD_LIBRARIES}
@@ -95,6 +104,7 @@ pxr_plugin(hdRpr
 
     INCLUDE_DIRS
         ${RPR_LOCATION_INCLUDE}
+        ${RPR_CPP_WRAPPER_LOCATION}
         ${RIF_LOCATION_INCLUDE}
         ${Boost_INCLUDE_DIRS}
         ${TBB_INCLUDE_DIRS}
@@ -112,18 +122,15 @@ pxr_plugin(hdRpr
         renderParam
         rprApi
         rprApiAov
+        rprApiFramebuffer
         mesh
         instancer
         material
         materialFactory
         materialAdapter
-        lightBase
         domeLight
-        rectLight
         distantLight
-        sphereLight
-        cylinderLight
-        diskLight
+        light
         renderBuffer
         basisCurves
         imageCache
@@ -135,7 +142,6 @@ pxr_plugin(hdRpr
     PRIVATE_HEADERS
         boostIncludePath.h
         api.h
-        materialFactory.h
 
     RESOURCE_FILES
         plugInfo.json
@@ -146,22 +152,47 @@ pxr_plugin(hdRpr
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
 )
 
-add_subdirectory(rprcpp)
+target_sources(hdRpr PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.h)
+if(APPLE)
+    target_sources(hdRpr PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.mm)
+    target_link_libraries(hdRpr
+        objc
+        "-framework AppKit")
+else()
+    target_sources(hdRpr PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.cpp)
+endif()
+
+target_compile_definitions(hdRpr PRIVATE
+    RPR_CPPWRAPER_DISABLE_MUTEXLOCK
+    RPR_API_USE_HEADER_V2)
+
+target_sources(hdRpr PRIVATE
+    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRender.hpp
+    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRenderCpp.cpp)
+
+add_subdirectory(rpr)
 add_subdirectory(rifcpp)
 add_subdirectory(houdini)
 
-# LINUX is not listed in default system variables (https://cmake.org/cmake/help/3.15/manual/cmake-variables.7.html)
-if(NOT DEFINED LINUX)
-    if(UNIX AND NOT APPLE AND NOT CYGWIN)
-        set(LINUX TRUE)
-    else(UNIX AND NOT APPLE AND NOT CYGWIN)
-        SET(LINUX FALSE)
-    endif(UNIX AND NOT APPLE AND NOT CYGWIN)
-endif(NOT DEFINED LINUX)
+get_target_property(hdRpr_SOURCES hdRpr SOURCES)
+foreach(FILE ${hdRpr_SOURCES}) 
+    get_filename_component(ABS_FILE ${FILE} ABSOLUTE)
+    file(RELATIVE_PATH relPath ${CMAKE_CURRENT_SOURCE_DIR} ${ABS_FILE})
 
-if(WIN32 OR LINUX)
-    add_definitions(-DUSE_GL_INTEROP)
-endif(WIN32 OR LINUX)
+    string(FIND "${relPath}" ".." out)
+    if("${out}" EQUAL 0)
+        source_group("external" FILES "${FILE}")
+    else()
+        get_filename_component(PARENT_DIR "${FILE}" DIRECTORY)
+        string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" GROUP "${PARENT_DIR}")
+        string(REPLACE "/" "\\" GROUP "${GROUP}")
+
+        source_group("${GROUP}" FILES "${FILE}")
+    endif()
+endforeach()
 
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
