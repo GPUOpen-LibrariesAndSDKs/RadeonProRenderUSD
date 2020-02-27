@@ -42,7 +42,12 @@ if(${USD_LIBRARY_MONOLITHIC})
     set(USD_LIBRARIES usd_ms)
 endif()
 
-STRING(REGEX REPLACE "^lib" "" _libPrefix ${PXR_LIB_PREFIX})
+set(_libPrefix ${PXR_LIB_PREFIX})
+# UNIX compilers adding "lib" prefix implicitly
+if(NOT WIN32)
+    string(REGEX REPLACE "^lib" "" _libPrefix "${PXR_LIB_PREFIX}")
+endif()
+
 set(_prefixedUsdLibraries "")
 foreach(name ${USD_LIBRARIES})
     list(APPEND _prefixedUsdLibraries "${_libPrefix}${name}")
