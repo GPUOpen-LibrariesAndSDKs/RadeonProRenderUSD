@@ -210,6 +210,11 @@ void Filter::SetInput(const char* name, HdRprApiFramebuffer* rprFrameBuffer) {
     m_dirtyFlags |= DirtyParameters;
 }
 
+void Filter::SetInput(const char* name, rif_image rifImage) {
+    m_namedInputs[name] = InputTraits(rifImage, 1.0f);
+    m_dirtyFlags |= DirtyParameters;
+}
+
 void Filter::SetOutput(rif_image_desc imageDesc) {
     m_retainedOutputImage = m_rifContext->CreateImage(imageDesc);
     m_outputImage = m_retainedOutputImage->GetHandle();
