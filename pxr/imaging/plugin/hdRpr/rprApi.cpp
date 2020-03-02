@@ -1791,10 +1791,35 @@ private:
             auto colorRb = colorAovBinding->renderBuffer;
 
             try {
-                auto blitFilter = rif::Filter::Create(rif::FilterType::Resample, m_rifContext.get(), colorRb->GetWidth(), colorRb->GetHeight());
-                blitFilter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_BICUBIC);
-                blitFilter->SetInput(rif::Color, rifImage->GetHandle());
+                auto blitFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, m_rifContext.get());
+                auto blitKernelCode = std::string(R"(
+                    const int2 outSize = GET_BUFFER_SIZE(outputImage);
+
+                    int2 coord;
+                    GET_COORD_OR_RETURN(coord, outSize);
+
+                    vec2 uv = (convert_vec2(coord) + 0.5f)/convert_vec2(outSize);
+                    float aspectRatio = (float)(outSize.x)/outSize.y;
+
+                    vec2 srcUv;
+                    if (aspectRatio > 1.0f) {
+                        float scale = 1.0f/aspectRatio;
+                        srcUv = make_vec2((uv.x - (1.0f - scale)*0.5f)/scale, uv.y);
+                    } else {
+                        srcUv = make_vec2(uv.x, (uv.y - (1.0f - aspectRatio)*0.5f)/aspectRatio);
+                    }
+
+                    const int2 inSize = GET_BUFFER_SIZE(srcImage);
+                    int2 srcCoord = convert_int2(srcUv*convert_vec2(inSize));
+                    srcCoord = clamp(srcCoord, make_int2(0, 0), inSize - 1);
+                    vec4 color = ReadPixelTyped(srcImage, srcCoord.x, srcCoord.y);
+
+                    WritePixelTyped(outputImage, coord.x, coord.y, color);
+                )");
+                blitFilter->SetInput("srcImage", rifImage->GetHandle());
+                blitFilter->SetParam("code", blitKernelCode);
                 blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorRb->GetFormat()));
+                blitFilter->SetInput(rif::Color, blitFilter->GetOutput());
                 blitFilter->Update();
 
                 m_rifContext->ExecuteCommandQueue();

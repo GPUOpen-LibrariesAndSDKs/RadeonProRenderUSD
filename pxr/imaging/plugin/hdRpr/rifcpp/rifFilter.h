@@ -54,6 +54,7 @@ public:
     void SetInput(FilterInputType inputType, rif_image rifImage, float sigma = 1.0f);
     void SetInput(FilterInputType inputType, HdRprApiFramebuffer* rprFrameBuffer, float sigma = 1.0f);
     void SetInput(const char* name, HdRprApiFramebuffer* rprFrameBuffer);
+    void SetInput(const char* name, rif_image rifImage);
     void SetOutput(rif_image rifImage);
     void SetOutput(rif_image_desc imageDesc);
     void SetOutput(HdRprApiFramebuffer* rprFrameBuffer);
