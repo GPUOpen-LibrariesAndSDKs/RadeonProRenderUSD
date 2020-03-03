@@ -21,6 +21,31 @@ def linux():
 def macOS():
     return platform.system() == "Darwin"
 
+if windows():
+    hfs_search_paths = ['C:\\Program Files\\Side Effects Software\\Houdini 18*']
+elif linux():
+    hfs_search_paths = ['/opt/hfs18*']
+else:
+    hfs_search_paths = ['/Applications/Houdini/Houdini18*/Frameworks/Houdini.framework/Versions/Current/Resources']
+
+def is_valid_install_dir(path):
+    if not os.path.isdir(path):
+        return False
+
+    setup_script_path = os.path.join(path, 'houdini_setup')
+    if not os.path.isfile(setup_script_path):
+        return False
+
+    test_dir = os.path.join(path, 'create_access_test')
+    try:
+        os.mkdir(test_dir)
+    except OSError:
+        print('No permission to create directories in {}. Run with root privileges to install here.'.format(path))
+        return False
+    else:
+        os.rmdir(test_dir)
+    return True
+
 def query_agreement(install_dir):
     print('hdRpr will be installed to "{}"'.format(install_dir))
     print('Do you agree? [y/n]')
@@ -30,8 +55,8 @@ def query_agreement(install_dir):
         except ValueError:
             print('yes or no')
 
-def install_package(install_dir, package):
-    if query_agreement(install_dir):
+def install_package(install_dir, package, force=False):
+    if force or query_agreement(install_dir):
         try:
             tar_file = tarfile.open(package[0], 'r:gz')
             tar_file.extractall(install_dir)
@@ -44,10 +69,19 @@ def install_package(install_dir, package):
             print(e)
             print('Could not install package. Try running with root privileges')
 
-def install_to_houdini_dir(hfs, package):
+def install_to_houdini_dir(hfs, package, force=False):
     if macOS():
         hfs = os.path.abspath(os.path.join(hfs, os.pardir))
-    install_package(hfs, package)
+    install_package(hfs, package, force)
+
+def install_to_custom_dir(package):
+    print('Please enter Houdini\'s path (e.g. {}):'.format(hfs_search_paths[0]))
+    while True:
+        path = input()
+        if is_valid_install_dir(path):
+            install_to_houdini_dir(path, package, force=True)
+            break
+        print('Invalid path. Please try again')
 
 valid_targets = ['Houdini']
 package_pattern = re.compile(r'hdRpr-(?P<target>.*?)-.*-(?P<platform_>.*?).tar.gz', re.VERBOSE)
@@ -106,35 +140,33 @@ if args.install_dir:
 elif 'HFS' in os.environ:
     install_to_houdini_dir(os.environ['HFS'], package)
 else:
-    if windows():
-        hfs_search_paths = ['C:\\Program Files\\Side Effects Software\\Houdini 18*']
-    elif linux():
-        hfs_search_paths = ['/opt/hfs18*']
-    else:
-        hfs_search_paths = ['/Applications/Houdini/Houdini18*/Frameworks/Houdini.framework/Versions/Current/Resources']
-
     install_variants = set()
     for search_path in hfs_search_paths:
         for path in glob.glob(search_path):
             if os.path.islink(path):
                 path = os.path.realpath(path)
-            if os.path.isdir(path):
-                setup_script_path = os.path.join(path, 'houdini_setup')
-                if os.path.isfile(setup_script_path):
-                    install_variants.add(path)
+            if is_valid_install_dir(path):
+                install_variants.add(path)
 
     install_variants = list(install_variants)
 
     if len(install_variants) == 0:
-        print('Could not find any Houdini installation directories. Specify directory using --install_dir argument')
+        print('Could not find any Houdini installation directories.')
+        install_to_custom_dir(package)
     elif len(install_variants) == 1:
         install_to_houdini_dir(install_variants[0], package)
     else:
         print('Few Houdini installation has been found. Select the desired one.')
         for i, path in enumerate(install_variants):
             print('{}. "{}"'.format(i, path))
+        custom_path_idx = len(install_variants)
+        print('{}. Custom path'.format(custom_path_idx))
         print('Enter number.')
         try:
-            install_to_houdini_dir(install_variants[int(input())], package)
+            idx = int(input())
+            if idx == custom_path_idx:
+                install_to_custom_dir(package)
+            else:
+                install_to_houdini_dir(install_variants[idx], package, force=True)
         except (ValueError, IndexError) as e:
             print('Installation canceled: incorrect number.')
