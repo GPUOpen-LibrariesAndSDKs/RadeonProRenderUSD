@@ -43,7 +43,7 @@ Image* CreateImage(Context* context, uint32_t width, uint32_t height, ImageForma
     return context->CreateImage(format, GetRprImageDesc(format, width, height), data, status);
 }
 
-Image* CreateImage(Context* context, char const* path) {
+Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
     PXR_NAMESPACE_USING_DIRECTIVE
 
 #ifdef ENABLE_RAT
@@ -113,9 +113,10 @@ Image* CreateImage(Context* context, char const* path) {
             return nullptr;
         }
 
-        if (image->getColorSpace() == PXL_CS_LINEAR ||
+        if (!forceLinearSpace &&
+            (image->getColorSpace() == PXL_CS_LINEAR ||
             image->getColorSpace() == PXL_CS_GAMMA2_2 || 
-            image->getColorSpace() == PXL_CS_CUSTOM_GAMMA) {
+            image->getColorSpace() == PXL_CS_CUSTOM_GAMMA)) {
             RPR_ERROR_CHECK(rprImage->SetGamma(image->getColorSpaceGamma()), "Failed to set image gamma", context);
         }
 
@@ -196,10 +197,11 @@ Image* CreateImage(Context* context, char const* path) {
                     }
 
                     auto internalFormat = textureData->GLInternalFormat();
-                    if (internalFormat == GL_SRGB ||
+                    if (!forceLinearSpace &&
+                        (internalFormat == GL_SRGB ||
                         internalFormat == GL_SRGB8 ||
                         internalFormat == GL_SRGB_ALPHA ||
-                        internalFormat == GL_SRGB8_ALPHA8) {
+                        internalFormat == GL_SRGB8_ALPHA8)) {
                         // XXX(RPR): sRGB formula is different from straight pow decoding, but it's the best we can do right now
                         RPR_ERROR_CHECK(rprImage->SetGamma(2.2f), "Failed to set image gamma", context);
                     }
@@ -216,10 +218,11 @@ Image* CreateImage(Context* context, char const* path) {
             }
 
             auto internalFormat = textureData->GLInternalFormat();
-            if (internalFormat == GL_SRGB ||
+            if (!forceLinearSpace &&
+                (internalFormat == GL_SRGB ||
                 internalFormat == GL_SRGB8 ||
                 internalFormat == GL_SRGB_ALPHA ||
-                internalFormat == GL_SRGB8_ALPHA8) {
+                internalFormat == GL_SRGB8_ALPHA8)) {
                 // XXX(RPR): sRGB formula is different from straight pow decoding, but it's the best we can do right now
                 RPR_ERROR_CHECK(rprImage->SetGamma(2.2f), "Failed to set image gamma");
             }

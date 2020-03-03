@@ -1,4 +1,5 @@
 #include "imageCache.h"
+#include "rpr/helpers.h"
 #include "rpr/imageHelpers.h"
 
 #include "pxr/base/arch/fileSystem.h"
@@ -10,20 +11,37 @@ ImageCache::ImageCache(rpr::Context* context)
 
 }
 
-std::shared_ptr<rpr::Image> ImageCache::GetImage(std::string const& path) {
+std::shared_ptr<rpr::Image> ImageCache::GetImage(std::string const& path, bool forceLinearSpace) {
     ImageMetadata md(path);
 
-    auto it = m_cache.find(path);
+    auto cacheKey = path;
+
+    static const char* kForceLinearSpaceCacheKeySuffix = "?l";
+    if (forceLinearSpace) {
+        cacheKey += kForceLinearSpaceCacheKeySuffix;
+    }
+
+    auto it = m_cache.find(cacheKey);
     if (it != m_cache.end() && it->second.IsMetadataEqual(md)) {
         if (auto image = it->second.handle.lock()) {
             return image;
         }
     }
 
-    auto image = std::shared_ptr<rpr::Image>(rpr::CreateImage(m_context, path.c_str()));
+    auto image = std::shared_ptr<rpr::Image>(rpr::CreateImage(m_context, path.c_str(), forceLinearSpace));
     if (image) {
         md.handle = image;
-        m_cache.emplace(path, md);
+        m_cache.emplace(cacheKey, md);
+
+        auto gammaFromFile = rpr::GetInfo<float>(image.get(), RPR_IMAGE_GAMMA_FROM_FILE);
+        if (std::abs(gammaFromFile - 1.0f) < 0.01f) {
+            // Image is in linear space, we can cache the same image for both variants of forceLinearSpace
+            if (forceLinearSpace) {
+                m_cache.emplace(path, md);
+            } else {
+                m_cache.emplace(path + kForceLinearSpaceCacheKeySuffix, md);
+            }
+        }
     }
     return image;
 }

@@ -69,13 +69,14 @@ struct MaterialTexture {
 
     EColorChannel channel = EColorChannel::NONE;
 
-    EWrapMode wrapS = EWrapMode::NONE;
-    EWrapMode wrapT = EWrapMode::NONE;
+    EWrapMode wrapMode = EWrapMode::NONE;
 
     GfVec4f scale = GfVec4f(1.0f);
     GfVec4f bias = GfVec4f(0.0f);
 
     GfMatrix3f uvTransform = GfMatrix3f(1.0f);
+
+    bool forceLinearSpace = false;
 };
 
 typedef std::map<TfToken, VtValue> MaterialParams;
@@ -102,9 +103,9 @@ enum class EMaterialType : int32_t {
 
 class MaterialAdapter {
 public:
-    MaterialAdapter(EMaterialType type, const MaterialParams& params);
+    MaterialAdapter(EMaterialType type, MaterialParams const& params);
 
-    MaterialAdapter(EMaterialType type, const HdMaterialNetwork& materialNetwork);
+    MaterialAdapter(EMaterialType type, HdMaterialNetwork const& surfaceNetwork, HdMaterialNetwork const& displacementNetwork);
 
     EMaterialType GetType() const {
         return m_type;
@@ -139,7 +140,7 @@ private:
     void PopulateEmissive(const MaterialParams& params);
     void PopulateTransparent(const MaterialParams& params);
     void PopulateUsdPreviewSurface(const MaterialParams& params, const MaterialTextures& textures);
-    void PopulateHoudiniPrincipledShader(HdMaterialNetwork const& materialNetwork);
+    void PopulateHoudiniPrincipledShader(HdMaterialNetwork const& surfaceNetwork, HdMaterialNetwork const& displacementNetwork);
 
     EMaterialType m_type;
 

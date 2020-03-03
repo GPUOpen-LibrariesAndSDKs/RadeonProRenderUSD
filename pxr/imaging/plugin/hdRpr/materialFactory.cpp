@@ -136,20 +136,16 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
             return nullptr;
         }
 
-        auto image = imageCache->GetImage(matTex.path);
+        auto image = imageCache->GetImage(matTex.path, matTex.forceLinearSpace);
         if (!image) {
             return nullptr;
         }
         auto rprImage = image.get();
         material->materialImages.push_back(std::move(image));
 
-        rpr_image_wrap_type rprWrapSType;
-        rpr_image_wrap_type rprWrapTType;
-        if (GetWrapType(matTex.wrapS, rprWrapSType) && GetWrapType(matTex.wrapT, rprWrapTType)) {
-            if (rprWrapSType != rprWrapTType) {
-                TF_RUNTIME_ERROR("RPR renderer does not support different WrapS and WrapT modes");
-            }
-            RPR_ERROR_CHECK(rprImage->SetWrap(rprWrapSType), "Failed to set image wrap mode");
+        rpr::ImageWrapType rprWrapType;
+        if (GetWrapType(matTex.wrapMode, rprWrapType)) {
+            RPR_ERROR_CHECK(rprImage->SetWrap(rprWrapType), "Failed to set image wrap mode");
         }
 
         rpr::Status status;

@@ -217,8 +217,12 @@ void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& ou
         materialNode.channel = GetChannel(textureRel.inputName);
 
         // Get Wrap Modes
-        materialNode.wrapS = GetWrapMode(HdRprMaterialTokens->wrapS, node);
-        materialNode.wrapT = GetWrapMode(HdRprMaterialTokens->wrapT, node);
+        auto wrapS = GetWrapMode(HdRprMaterialTokens->wrapS, node);
+        auto wrapT = GetWrapMode(HdRprMaterialTokens->wrapT, node);
+        if (wrapS != wrapT) {
+            TF_RUNTIME_ERROR("RPR renderer does not support different WrapS and WrapT modes");
+        }
+        materialNode.wrapMode = wrapS;
 
         // Get Scale
         GetParam(HdRprMaterialTokens->scale, node, param);
@@ -265,16 +269,17 @@ MaterialAdapter::MaterialAdapter(EMaterialType type, const MaterialParams& param
     }
 }
 
-MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& materialNetwork) : m_type(type), m_doublesided(true) {
+MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& surfaceNetwork, HdMaterialNetwork const& displacementNetwork)
+    : m_type(type), m_doublesided(true) {
     switch (type) {
         case EMaterialType::USD_PREVIEW_SURFACE: {
             HdMaterialNode previewNode;
-            if (!GetNode(HdRprMaterialTokens->UsdPreviewSurface, materialNetwork, previewNode)) {
+            if (!GetNode(HdRprMaterialTokens->UsdPreviewSurface, surfaceNetwork, previewNode)) {
                 break;
             }
 
             MaterialParams materialParameters;
-            GetParameters(materialNetwork, previewNode, materialParameters);
+            GetParameters(surfaceNetwork, previewNode, materialParameters);
 
             auto setFallbackValue = [&materialParameters](TfToken const& name, VtValue value) {
                 // TODO: change to try_emplace when it will be available
@@ -296,14 +301,15 @@ MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& ma
             setFallbackValue(HdRprMaterialTokens->opacityThreshold, VtValue(0.0f));
 
             MaterialTextures materialTextures;
-            GetTextures(materialNetwork, materialTextures);
+            GetTextures(surfaceNetwork, materialTextures);
 
             PopulateUsdPreviewSurface(materialParameters, materialTextures);
             break;
         }
-        case EMaterialType::HOUDINI_PRINCIPLED_SHADER:
-            PopulateHoudiniPrincipledShader(materialNetwork);
+        case EMaterialType::HOUDINI_PRINCIPLED_SHADER: {
+            PopulateHoudiniPrincipledShader(surfaceNetwork, displacementNetwork);
             break;
+        }
         default:
             break;
     }
@@ -483,7 +489,15 @@ TF_DEFINE_PRIVATE_TOKENS(HoudiniPrincipledShaderTokens,
     ((baseNormalEnable, "baseBumpAndNormal_enable")) \
     ((baseNormalType, "baseBumpAndNormal_type")) \
     (separateCoatNormals) \
-    (frontface)
+    (frontface) \
+    ((displacementEnable, "dispTex_enable")) \
+    ((displacementTexture, "dispTex_texture")) \
+    ((displacementOffset, "dispTex_offset")) \
+    ((displacementScale, "dispTex_scale")) \
+    ((displacementColorSpace, "dispTex_colorSpace")) \
+    ((displacementChannel, "dispTex_channel")) \
+    ((displacementWrap, "dispTex_wrap")) \
+    ((displacementType, "dispTex_type"))
 );
 
 std::map<TfToken, VtValue> g_houdiniPrincipledShaderParameterDefaultValues = {
@@ -510,7 +524,7 @@ std::map<TfToken, VtValue> g_houdiniPrincipledShaderParameterDefaultValues = {
 };
 
 template <typename T>
-T GetParameter(TfToken const& name, std::map<TfToken, VtValue> const& parameters, T defaultValue) {
+T GetParameter(TfToken const& name, std::map<TfToken, VtValue> const& parameters, T defaultValue = T()) {
     auto parameterIt = parameters.find(name);
     if (parameterIt != parameters.end() &&
         parameterIt->second.IsHolding<T>()) {
@@ -520,26 +534,48 @@ T GetParameter(TfToken const& name, std::map<TfToken, VtValue> const& parameters
     return defaultValue;
 }
 
-void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& materialNetwork) {
-    auto& node = materialNetwork.nodes[0];
+EColorChannel HoudiniChannelToRpr(int channel, EColorChannel rprDefault) {
+    if (channel == 1) {
+        return EColorChannel::R;
+    } else if (channel == 2) {
+        return EColorChannel::G;
+    } else if (channel == 3) {
+        return EColorChannel::B;
+    } else {
+        return rprDefault;
+    }
+}
+
+EWrapMode HoudiniWrapModeToRpr(std::string const& wrapMode) {
+    if (wrapMode == "streak") {
+        return EWrapMode::CLAMP;
+    } else if (wrapMode == "decal") {
+        return EWrapMode::BLACK;
+    } else {
+        return EWrapMode::REPEAT;
+    }
+}
+
+void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& surfaceNetwork, HdMaterialNetwork const& displacementNetwork) {
+    auto& node = surfaceNetwork.nodes[0];
     auto& params = node.parameters;
 
     m_doublesided = GetParameter(HoudiniPrincipledShaderTokens->frontface, params, 1) == 0;
 
-    //auto albedomult = GetParameter(HoudiniPrincipledShaderTokens->albedomult, params, 1.0f);
-
     // Unused properties:
-    // albedomult
     // reflectTint
     // reflectivity
 
+    auto albedoMultiplier = GetParameter(HoudiniPrincipledShaderTokens->albedomult, params, 1.0f);
     auto opacity = GetParameter(HoudiniPrincipledShaderTokens->opacity, params, 1.0f);
     auto emissionIntensity = GetParameter(HoudiniPrincipledShaderTokens->emissionIntensity, params, 1.0f);
     auto subsurfaceModel = GetParameter(HoudiniPrincipledShaderTokens->subsurfaceModel, params, std::string("full"));
     auto iorMode = RPR_UBER_MATERIAL_IOR_MODE_PBR;
+    bool useBaseColorTextureAlpha = false;
 
     auto getMaterialTexture = [&](TfToken const& baseParameter) -> MaterialTexture {
         MaterialTexture texture;
+        texture.wrapMode = EWrapMode::REPEAT;
 
         // Each parameter (e.g. basecolor) may have set of properties in the form:
         // paramName_propertyName (e.g. basecolor_texture)
@@ -564,12 +600,20 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
                 auto texturePropertyName = propertyName + (sizeof("texture") - 1);
                 if (*texturePropertyName == '\0') {
                     if (it->second.IsHolding<SdfAssetPath>()) {
-                        auto assetPath = it->second.UncheckedGet<SdfAssetPath>();
+                        auto& assetPath = it->second.UncheckedGet<SdfAssetPath>();
                         texture.path = assetPath.GetResolvedPath();
                     }
                 } else if (std::strcmp(texturePropertyName, "Intensity") == 0) {
                     if (it->second.IsHolding<float>()) {
                         texture.scale = GfVec4f(it->second.UncheckedGet<float>());
+                    }
+                } else if (std::strcmp(texturePropertyName, "ColorSpace") == 0) {
+                    if (it->second.IsHolding<std::string>()) {
+                        texture.forceLinearSpace = it->second.UncheckedGet<std::string>() == "linear";
+                    }
+                } else if (std::strcmp(texturePropertyName, "Wrap") == 0) {
+                    if (it->second.IsHolding<std::string>()) {
+                        texture.wrapMode = HoudiniWrapModeToRpr(it->second.UncheckedGet<std::string>());
                     }
                 }
             } else if (std::strncmp(propertyName, "useTexture", sizeof("useTexture") - 1) == 0) {
@@ -583,20 +627,13 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
                     }
                 } else if (std::strcmp(useTexturePropertyName, "Alpha") == 0) {
                     if (it->second.IsHolding<int>() &&
-                        it->second.UncheckedGet<int>()) {
-                        // TODO: useTextureAlpha support for basecolor parameter
+                        it->second.UncheckedGet<int>() == 1) {
+                        useBaseColorTextureAlpha = true;
                     }
                 }
             } else if (std::strcmp(propertyName, "monoChannel") == 0) {
                 if (it->second.IsHolding<int>()) {
-                    int channel = it->second.UncheckedGet<int>();
-                    if (channel == 1) {
-                        texture.channel = EColorChannel::R;
-                    } else if (channel == 2) {
-                        texture.channel = EColorChannel::G;
-                    } else if (channel == 3) {
-                        texture.channel = EColorChannel::B;
-                    }
+                    texture.channel = HoudiniChannelToRpr(it->second.UncheckedGet<int>(), EColorChannel::NONE);
                 }
             }
         }
@@ -622,6 +659,51 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
         return MaterialTexture();
     };
 
+    auto setMaterialTexture = [&](rpr::MaterialNodeInput rprInput, MaterialTexture const& texture) {
+        if (rprInput == RPR_MATERIAL_INPUT_UBER_EMISSION_COLOR) {
+            m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_EMISSION_WEIGHT] = GfVec4f(1.0f);
+
+            auto emissionTexture = texture;
+            emissionTexture.scale = GfVec4f(emissionIntensity);
+            m_texRpr[rprInput] = emissionTexture;
+        } else if (rprInput == RPR_MATERIAL_INPUT_UBER_TRANSPARENCY) {
+            auto transparencyTex = texture;
+            transparencyTex.bias = GfVec4f(1.0f) - transparencyTex.bias;
+            transparencyTex.scale *= -1.0f * opacity;
+            m_texRpr[rprInput] = transparencyTex;
+            m_doublesided = false;
+        } else if (rprInput == RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT) {
+            m_texRpr[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = texture;
+            m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 1;
+
+            auto diffuseWeightTex = texture;
+            // Inverse logic of UsdPreviewSurface opacity texture
+            diffuseWeightTex.bias = GfVec4f(1.0f) - diffuseWeightTex.bias;
+            diffuseWeightTex.scale *= -1.0f;
+            m_texRpr[RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT] = diffuseWeightTex;
+
+            m_doublesided = false;
+        } else if (albedoMultiplier != 1.0f &&
+            (rprInput == RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR ||
+            rprInput == RPR_MATERIAL_INPUT_UBER_COATING_COLOR ||
+            rprInput == RPR_MATERIAL_INPUT_UBER_COATING_TRANSMISSION_COLOR ||
+            rprInput == RPR_MATERIAL_INPUT_UBER_SHEEN)) {
+            auto premultipliedTexture = texture;
+            premultipliedTexture.scale *= albedoMultiplier;
+            m_texRpr[rprInput] = texture;
+        } else {
+            if (rprInput == RPR_MATERIAL_INPUT_UBER_REFLECTION_METALNESS) {
+                iorMode = RPR_UBER_MATERIAL_IOR_MODE_METALNESS;
+            } else if (rprInput == RPR_MATERIAL_INPUT_UBER_COATING_THICKNESS) {
+                m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_COATING_WEIGHT] = GfVec4f(1.0f);
+            } else if (rprInput == RPR_MATERIAL_INPUT_UBER_SSS_WEIGHT) {
+                m_texRpr[RPR_MATERIAL_INPUT_UBER_BACKSCATTER_WEIGHT] = texture;
+            }
+
+            m_texRpr[rprInput] = texture;
+        }
+    };
+
     auto populateRprParameter = [&](std::vector<rpr::MaterialNodeInput> rprInputs, TfToken const& paramName) -> bool {
         bool isAuthored = false;
 
@@ -643,40 +725,7 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
         auto texture = getMaterialTexture(paramName);
         if (!texture.path.empty()) {
             for (auto rprInput : rprInputs) {
-                if (rprInput == RPR_MATERIAL_INPUT_UBER_EMISSION_COLOR) {
-                    m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_EMISSION_WEIGHT] = GfVec4f(1.0f);
-
-                    auto emissionTexture = texture;
-                    emissionTexture.scale = GfVec4f(emissionIntensity);
-                    m_texRpr[rprInput] = emissionTexture;
-                } else if (rprInput == RPR_MATERIAL_INPUT_UBER_TRANSPARENCY) {
-                    auto transparencyTex = texture;
-                    transparencyTex.bias = GfVec4f(1.0f) - transparencyTex.bias;
-                    transparencyTex.scale *= -1.0f * opacity;
-                    m_texRpr[rprInput] = transparencyTex;
-                    m_doublesided = false;
-                } else if (rprInput == RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT) {
-                    m_texRpr[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = texture;
-                    m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 1;
-
-                    auto diffuseWeightTex = texture;
-                    // Inverse logic of UsdPreviewSurface opacity texture
-                    diffuseWeightTex.bias = GfVec4f(1.0f) - diffuseWeightTex.bias;
-                    diffuseWeightTex.scale *= -1.0f;
-                    m_texRpr[RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT] = diffuseWeightTex;
-
-                    m_doublesided = false;
-                } else {
-                    if (rprInput == RPR_MATERIAL_INPUT_UBER_REFLECTION_METALNESS) {
-                        iorMode = RPR_UBER_MATERIAL_IOR_MODE_METALNESS;
-                    } else if (rprInput == RPR_MATERIAL_INPUT_UBER_COATING_THICKNESS) {
-                        m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_COATING_WEIGHT] = GfVec4f(1.0f);
-                    } else if (rprInput == RPR_MATERIAL_INPUT_UBER_SSS_WEIGHT) {
-                        m_texRpr[RPR_MATERIAL_INPUT_UBER_BACKSCATTER_WEIGHT] = texture;
-                    }
-
-                    m_texRpr[rprInput] = texture;
-                }
+                setMaterialTexture(rprInput, texture);
             }
 
             return true;
@@ -711,6 +760,11 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
                     m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_COATING_WEIGHT] = GfVec4f(1.0f);
                 } else if (rprInput == RPR_MATERIAL_INPUT_UBER_SSS_WEIGHT) {
                     m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_BACKSCATTER_WEIGHT] = vec;
+                } else if (rprInput == RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR ||
+                    rprInput == RPR_MATERIAL_INPUT_UBER_COATING_COLOR ||
+                    rprInput == RPR_MATERIAL_INPUT_UBER_COATING_TRANSMISSION_COLOR ||
+                    rprInput == RPR_MATERIAL_INPUT_UBER_SHEEN) {
+                    vec *= albedoMultiplier;
                 }
 
                 m_vec4fRprParams[rprInput] = vec;
@@ -719,7 +773,6 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
 
         return isAuthored;
     };
-
 
     populateRprParameter({RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR, RPR_MATERIAL_INPUT_UBER_REFLECTION_COLOR, RPR_MATERIAL_INPUT_UBER_COATING_COLOR, RPR_MATERIAL_INPUT_UBER_COATING_TRANSMISSION_COLOR, RPR_MATERIAL_INPUT_UBER_SHEEN}, HoudiniPrincipledShaderTokens->basecolor);
     populateRprParameter({RPR_MATERIAL_INPUT_UBER_REFRACTION_IOR, RPR_MATERIAL_INPUT_UBER_COATING_IOR}, HoudiniPrincipledShaderTokens->ior);
@@ -730,7 +783,25 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
 
     bool hasTransparency = false;
     hasTransparency |= populateRprParameter({RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT}, HoudiniPrincipledShaderTokens->transparency);
-    hasTransparency |= populateRprParameter({RPR_MATERIAL_INPUT_UBER_TRANSPARENCY}, HoudiniPrincipledShaderTokens->opacityColor);
+    if (useBaseColorTextureAlpha) {
+        auto baseColorTextureIt = m_texRpr.find(RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR);
+        if (baseColorTextureIt != m_texRpr.end()) {
+            MaterialTexture opacityTexture = baseColorTextureIt->second;
+            opacityTexture.channel = EColorChannel::A;
+            opacityTexture.scale = GfVec4f(1.0f);
+            opacityTexture.bias = GfVec4f(0.0f);
+            opacityTexture.forceLinearSpace = true;
+
+            setMaterialTexture(RPR_MATERIAL_INPUT_UBER_TRANSPARENCY, opacityTexture);
+            hasTransparency = true;
+        } else {
+            useBaseColorTextureAlpha = false;
+        }
+    }
+
+    if (!useBaseColorTextureAlpha) {
+        hasTransparency |= populateRprParameter({RPR_MATERIAL_INPUT_UBER_TRANSPARENCY}, HoudiniPrincipledShaderTokens->opacityColor);
+    }
 
     if (!hasTransparency) {
         populateRprParameter({RPR_MATERIAL_INPUT_UBER_REFLECTION_METALNESS, RPR_MATERIAL_INPUT_UBER_COATING_METALNESS}, HoudiniPrincipledShaderTokens->metallic);
@@ -785,6 +856,28 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& m
     m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_REFLECTION_WEIGHT] = GfVec4f(1.0f);
 
     m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFLECTION_MODE] = iorMode;
+
+    if (!displacementNetwork.nodes.empty()) {
+        auto& dispNode = displacementNetwork.nodes[0];
+        auto& dispParams = dispNode.parameters;
+
+        if (GetParameter(HoudiniPrincipledShaderTokens->displacementEnable, dispParams, 0)) {
+            auto dispType = GetParameter<std::string>(HoudiniPrincipledShaderTokens->displacementType, dispParams);
+            if (dispType == "vectordisp") {
+                TF_RUNTIME_ERROR("Vector displacement unsupported");
+            } else {
+                auto dispTexturePath = GetParameter<SdfAssetPath>(HoudiniPrincipledShaderTokens->displacementTexture, dispParams);
+                if (!dispTexturePath.GetResolvedPath().empty()) {
+                    m_displacementTexture.path = dispTexturePath.GetResolvedPath();
+                    m_displacementTexture.scale = GfVec4f(GetParameter(HoudiniPrincipledShaderTokens->displacementScale, dispParams, 0.05f));
+                    m_displacementTexture.bias = GfVec4f(GetParameter(HoudiniPrincipledShaderTokens->displacementOffset, dispParams, -0.5f));
+                    m_displacementTexture.wrapMode = HoudiniWrapModeToRpr(GetParameter<std::string>(HoudiniPrincipledShaderTokens->displacementWrap, dispParams));
+                    m_displacementTexture.channel = HoudiniChannelToRpr(GetParameter(HoudiniPrincipledShaderTokens->displacementChannel, dispParams, 0), EColorChannel::LUMINANCE);
+                    m_displacementTexture.forceLinearSpace = GetParameter(HoudiniPrincipledShaderTokens->displacementColorSpace, dispParams, std::string("linear")) == "linear";
+                }
+            }
+        }
+    }
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
