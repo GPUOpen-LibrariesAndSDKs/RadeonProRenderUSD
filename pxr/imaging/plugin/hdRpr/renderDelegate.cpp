@@ -100,7 +100,6 @@ private:
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
-    (rpr) \
     (percentDone)
 );
 
@@ -175,7 +174,7 @@ void HdRprDelegate::CommitResources(HdChangeTracker* tracker) {
 }
 
 TfToken HdRprDelegate::GetMaterialNetworkSelector() const {
-    return _tokens->rpr;
+    return m_renderParam->GetMaterialNetworkSelector();
 }
 
 TfTokenVector const& HdRprDelegate::GetSupportedRprimTypes() const {

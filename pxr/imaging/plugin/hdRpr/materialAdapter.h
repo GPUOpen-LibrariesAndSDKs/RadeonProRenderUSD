@@ -61,6 +61,7 @@ enum class EColorChannel {
     , G
     , B
     , A
+    , LUMINANCE
 };
 
 struct MaterialTexture {
@@ -68,13 +69,14 @@ struct MaterialTexture {
 
     EColorChannel channel = EColorChannel::NONE;
 
-    EWrapMode wrapS = EWrapMode::NONE;
-    EWrapMode wrapT = EWrapMode::NONE;
+    EWrapMode wrapMode = EWrapMode::NONE;
 
     GfVec4f scale = GfVec4f(1.0f);
     GfVec4f bias = GfVec4f(0.0f);
 
     GfMatrix3f uvTransform = GfMatrix3f(1.0f);
+
+    bool forceLinearSpace = false;
 };
 
 typedef std::map<TfToken, VtValue> MaterialParams;
@@ -84,19 +86,26 @@ typedef std::map<rpr::MaterialNodeInput, GfVec4f> MaterialRprParamsVec4f;
 typedef std::map<rpr::MaterialNodeInput, uint32_t> MaterialRprParamsU;
 typedef std::map<rpr::MaterialNodeInput, MaterialTexture> MaterialRprParamsTexture;
 
+struct NormalMapParam {
+    MaterialTexture texture;
+    float effectScale = 1.0f;
+};
+using MaterialRprParamsNormalMap = std::vector<std::pair<std::vector<rpr::MaterialNodeInput>, NormalMapParam>>;
+
 enum class EMaterialType : int32_t {
     NONE = -1
     , COLOR = 0
     , EMISSIVE
     , TRANSPERENT
     , USD_PREVIEW_SURFACE
+    , HOUDINI_PRINCIPLED_SHADER
 };
 
 class MaterialAdapter {
 public:
-    MaterialAdapter(EMaterialType type, const MaterialParams& params);
+    MaterialAdapter(EMaterialType type, MaterialParams const& params);
 
-    MaterialAdapter(EMaterialType type, const HdMaterialNetwork& materialNetwork);
+    MaterialAdapter(EMaterialType type, HdMaterialNetwork const& surfaceNetwork, HdMaterialNetwork const& displacementNetwork);
 
     EMaterialType GetType() const {
         return m_type;
@@ -118,6 +127,10 @@ public:
         return m_displacementTexture;
     }
 
+    const MaterialRprParamsNormalMap& GetNormalMapParams() const {
+        return m_normalMapParams;
+    }
+
     bool IsDoublesided() const {
         return m_doublesided;
     }
@@ -127,12 +140,14 @@ private:
     void PopulateEmissive(const MaterialParams& params);
     void PopulateTransparent(const MaterialParams& params);
     void PopulateUsdPreviewSurface(const MaterialParams& params, const MaterialTextures& textures);
+    void PopulateHoudiniPrincipledShader(HdMaterialNetwork const& surfaceNetwork, HdMaterialNetwork const& displacementNetwork);
 
     EMaterialType m_type;
 
     MaterialRprParamsVec4f m_vec4fRprParams;
     MaterialRprParamsU m_uRprParams;
     MaterialRprParamsTexture m_texRpr;
+    MaterialRprParamsNormalMap m_normalMapParams;
 
     MaterialTexture m_displacementTexture;
     bool m_doublesided = false;

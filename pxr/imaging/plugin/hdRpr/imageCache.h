@@ -20,7 +20,7 @@ class ImageCache {
 public:
     ImageCache(rpr::Context* context);
 
-    std::shared_ptr<rpr::Image> GetImage(std::string const& path);
+    std::shared_ptr<rpr::Image> GetImage(std::string const& path, bool forceLinearSpace = false);
 
     void RequireGarbageCollection();
     void GarbageCollectIfNeeded();
@@ -28,8 +28,6 @@ public:
     rpr::Context* GetContext() { return m_context; }
 
 private:
-    std::shared_ptr<rpr::Image> CreateImage(std::string const& path);
-
     class ImageMetadata {
     public:
         ImageMetadata() = default;

@@ -86,6 +86,7 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
             break;
         case EMaterialType::COLOR:
         case EMaterialType::USD_PREVIEW_SURFACE:
+        case EMaterialType::HOUDINI_PRINCIPLED_SHADER:
             materialType = RPR_MATERIAL_NODE_UBERV2;
             break;
         default:
@@ -135,20 +136,16 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
             return nullptr;
         }
 
-        auto image = imageCache->GetImage(matTex.path);
+        auto image = imageCache->GetImage(matTex.path, matTex.forceLinearSpace);
         if (!image) {
             return nullptr;
         }
         auto rprImage = image.get();
         material->materialImages.push_back(std::move(image));
 
-        rpr_image_wrap_type rprWrapSType;
-        rpr_image_wrap_type rprWrapTType;
-        if (GetWrapType(matTex.wrapS, rprWrapSType) && GetWrapType(matTex.wrapT, rprWrapTType)) {
-            if (rprWrapSType != rprWrapTType) {
-                TF_RUNTIME_ERROR("RPR renderer does not support different WrapS and WrapT modes");
-            }
-            RPR_ERROR_CHECK(rprImage->SetWrap(rprWrapSType), "Failed to set image wrap mode");
+        rpr::ImageWrapType rprWrapType;
+        if (GetWrapType(matTex.wrapMode, rprWrapType)) {
+            RPR_ERROR_CHECK(rprImage->SetWrap(rprWrapType), "Failed to set image wrap mode");
         }
 
         rpr::Status status;
@@ -248,6 +245,18 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
                 } else {
                     RPR_ERROR_CHECK(status, "Failed to create arithmetic material node");
                 }
+            } else if (matTex.channel == EColorChannel::LUMINANCE) {
+                rpr::MaterialNode* arithmetic = context->CreateMaterialNode(RPR_MATERIAL_NODE_ARITHMETIC, &status);
+                if (arithmetic) {
+                    RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR0, materialNode), "Failed to set material node node input");
+                    RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR1, 0.2126, 0.7152, 0.0722, 0.0), "Failed to set material node vec4 input");
+                    RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_DOT3), "Failed to set material node uint input");
+                    material->materialNodes.push_back(arithmetic);
+
+                    outTexture = arithmetic;
+                } else {
+                    RPR_ERROR_CHECK(status, "Failed to create arithmetic material node");
+                }
             } else {
                 outTexture = materialNode;
             }
@@ -273,24 +282,29 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
             emissionColorNode = outNode;
         }
 
-        // normal map textures need to be passed through the normal map node
-        if (paramId == RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL ||
-            paramId == RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL) {
-            auto textureNode = outNode;
-            auto normalMapNode = context->CreateMaterialNode(RPR_MATERIAL_NODE_NORMAL_MAP, &status);
-            if (normalMapNode) {
-                if (!RPR_ERROR_CHECK(normalMapNode->SetInput(RPR_MATERIAL_INPUT_COLOR, textureNode), "Failed to set material node node input")) {
-                    outNode = normalMapNode;
-                    material->materialNodes.push_back(normalMapNode);
-                } else {
-                    delete normalMapNode;
-                }
-            } else {
-                RPR_ERROR_CHECK(status, "Failed to create normal map material node");
-            }
+        material->rootMaterial->SetInput(paramId, outNode);
+    }
+
+    for (auto const& normalMapParam : materialAdapter.GetNormalMapParams()) {
+        auto textureNode = getTextureMaterialNode(m_imageCache, normalMapParam.second.texture);
+        if (!textureNode) {
+            continue;
         }
 
-        material->rootMaterial->SetInput(paramId, outNode);
+        auto normalMapNode = context->CreateMaterialNode(RPR_MATERIAL_NODE_NORMAL_MAP, &status);
+        if (normalMapNode) {
+            material->materialNodes.push_back(normalMapNode);
+            RPR_ERROR_CHECK(normalMapNode->SetInput(RPR_MATERIAL_INPUT_COLOR, textureNode), "Failed to set material node node input");
+
+            auto s = normalMapParam.second.effectScale;
+            RPR_ERROR_CHECK(normalMapNode->SetInput(RPR_MATERIAL_INPUT_SCALE, s, s, s, s), "Failed to set material node node input");
+
+            for (auto paramId : normalMapParam.first) {
+                RPR_ERROR_CHECK(material->rootMaterial->SetInput(paramId, normalMapNode), "Failed to set normal map node");
+            }
+        } else {
+            RPR_ERROR_CHECK(status, "Failed to create normal map material node");
+        }
     }
 
     if (emissionColorNode) {

@@ -58,9 +58,11 @@ set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     list(APPEND OptLibs Houdini)
     add_definitions(-DENABLE_RAT)
+    add_definitions(-DHDRPR_DEFAULT_MATERIAL_NETWORK_SELECTOR="karma")
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Houdini.png${_sep}images/restartRequired.png)
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     add_definitions(-DENABLE_PREFERENCES_FILE)
+    add_definitions(-DHDRPR_DEFAULT_MATERIAL_NETWORK_SELECTOR="rpr")
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Usdview.png${_sep}images/restartRequired.png)
 endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
@@ -122,6 +124,7 @@ pxr_plugin(hdRpr
         renderDelegate
         renderPass
         renderThread
+        renderParam
         rprApi
         rprApiAov
         rprApiFramebuffer
