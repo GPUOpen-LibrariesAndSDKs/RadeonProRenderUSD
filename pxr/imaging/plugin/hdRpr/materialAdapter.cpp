@@ -283,9 +283,7 @@ MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& su
 
             auto setFallbackValue = [&materialParameters](TfToken const& name, VtValue value) {
                 // TODO: change to try_emplace when it will be available
-                if (materialParameters.count(name) == 0) {
-                    materialParameters.emplace(name, value);
-                }
+                materialParameters.emplace(name, value);
             };
             setFallbackValue(HdRprMaterialTokens->diffuseColor, VtValue(GfVec3f(0.18f)));
             setFallbackValue(HdRprMaterialTokens->emissiveColor, VtValue(GfVec3f(0.0f)));
@@ -557,12 +555,11 @@ EWrapMode HoudiniWrapModeToRpr(std::string const& wrapMode) {
 }
 
 void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& surfaceNetwork, HdMaterialNetwork const& displacementNetwork) {
-    auto& node = surfaceNetwork.nodes[0];
-    auto& params = node.parameters;
+    auto& params = surfaceNetwork.nodes[0].parameters;
 
     m_doublesided = GetParameter(HoudiniPrincipledShaderTokens->frontface, params, 1) == 0;
 
-    // Unused properties:
+    // XXX: unused parameters:
     // reflectTint
     // reflectivity
 
@@ -579,11 +576,11 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& s
 
         // Each parameter (e.g. basecolor) may have set of properties in the form:
         // paramName_propertyName (e.g. basecolor_texture)
-        // but property itself may be missing in input params
+        // but parameter itself may be missing in input params
 
         bool useTexture = false;
         for (auto it = params.lower_bound(baseParameter); it != params.end(); ++it) {
-            // check that the current parameter is the property of our base parameter
+            // check that this property corresponds to our base parameter
             if (it->first.GetString().compare(0, baseParameter.size(), baseParameter.GetText())) {
                 break;
             }
@@ -858,8 +855,7 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& s
     m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFLECTION_MODE] = iorMode;
 
     if (!displacementNetwork.nodes.empty()) {
-        auto& dispNode = displacementNetwork.nodes[0];
-        auto& dispParams = dispNode.parameters;
+        auto& dispParams = displacementNetwork.nodes[0].parameters;
 
         if (GetParameter(HoudiniPrincipledShaderTokens->displacementEnable, dispParams, 0)) {
             auto dispType = GetParameter<std::string>(HoudiniPrincipledShaderTokens->displacementType, dispParams);

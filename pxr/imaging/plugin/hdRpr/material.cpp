@@ -32,7 +32,7 @@ static bool GetMaterialNetwork(
     for (auto& node : network.nodes) {
         if (node.identifier == HdRprMaterialTokens->UsdPreviewSurface) {
             *out_materialType = EMaterialType::USD_PREVIEW_SURFACE;
-            break;
+            return true;
         } else {
             if (renderParam.GetMaterialNetworkSelector() == HdRprMaterialNetworkSelectorTokens->karma) {
                 auto implementationSource = delegate->Get(node.path, _tokens->infoImplementationSource);
@@ -56,7 +56,7 @@ static bool GetMaterialNetwork(
         }
     }
 
-    return *out_materialType != EMaterialType::NONE;
+    return false;
 }
 
 HdRprMaterial::HdRprMaterial(SdfPath const& id) : HdMaterial(id) {

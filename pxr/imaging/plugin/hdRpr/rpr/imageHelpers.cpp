@@ -157,59 +157,6 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
             }
             ImageDesc desc = GetRprImageDesc(format, textureData->ResizedWidth(), textureData->ResizedHeight());
 
-            if (1) {
-                if (format.type == RPR_COMPONENT_TYPE_FLOAT16 ||
-                    format.type == RPR_COMPONENT_TYPE_FLOAT32) {
-                    int channelBytes = format.type == RPR_COMPONENT_TYPE_FLOAT16 ? sizeof(GfHalf) : sizeof(float);
-                    int srcPixelBytes = format.num_components * channelBytes;
-
-                    size_t numPixels = textureData->ResizedWidth() * textureData->ResizedHeight();
-                    std::vector<uint8_t> convertedImage;
-                    convertedImage.reserve(numPixels * format.num_components);
-                    auto srcData = textureData->GetRawBuffer();
-
-                    if (format.type == RPR_COMPONENT_TYPE_FLOAT16) {
-                        for (int i = 0; i < numPixels; ++i) {
-                            auto srcPixelData = reinterpret_cast<GfHalf*>(srcData + srcPixelBytes * i);
-                            auto dstPixelData = &convertedImage[i * format.num_components];
-                            for (int i = 0; i < format.num_components; ++i) {
-                                dstPixelData[i] = std::round(float(srcPixelData[i]) * 255.0f);
-                            }
-                        }
-                    } else {
-                        for (int i = 0; i < numPixels; ++i) {
-                            auto srcPixelData = reinterpret_cast<float*>(srcData + srcPixelBytes * i);
-                            auto dstPixelData = &convertedImage[i * format.num_components];
-                            for (int i = 0; i < format.num_components; ++i) {
-                                dstPixelData[i] = std::round(float(srcPixelData[i]) * 255.0f);
-                            }
-                        }
-                    }
-
-                    format.type = RPR_COMPONENT_TYPE_UINT8;
-                    desc = GetRprImageDesc(format, desc.image_width, desc.image_height);
-
-                    rpr::Status status;
-                    auto rprImage = context->CreateImage(format, desc, convertedImage.data(), &status);
-                    if (!rprImage) {
-                        RPR_ERROR_CHECK(status, "Failed to create image from data", context);
-                        return nullptr;
-                    }
-
-                    auto internalFormat = textureData->GLInternalFormat();
-                    if (!forceLinearSpace &&
-                        (internalFormat == GL_SRGB ||
-                        internalFormat == GL_SRGB8 ||
-                        internalFormat == GL_SRGB_ALPHA ||
-                        internalFormat == GL_SRGB8_ALPHA8)) {
-                        // XXX(RPR): sRGB formula is different from straight pow decoding, but it's the best we can do right now
-                        RPR_ERROR_CHECK(rprImage->SetGamma(2.2f), "Failed to set image gamma", context);
-                    }
-
-                    return rprImage;
-                }
-            }
-
             rpr::Status status;
             auto rprImage = context->CreateImage(format, desc, textureData->GetRawBuffer(), &status);
             if (!rprImage) {

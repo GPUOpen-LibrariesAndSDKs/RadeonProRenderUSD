@@ -100,7 +100,6 @@ private:
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
-    (rpr) \
     (percentDone)
 );
 
