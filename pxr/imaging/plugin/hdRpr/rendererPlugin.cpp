@@ -36,6 +36,14 @@ HdRenderDelegate* HdRprPlugin::CreateRenderDelegate() {
     return new HdRprDelegate();
 }
 
+HdRenderDelegate* HdRprPlugin::CreateRenderDelegate(HdRenderSettingsMap const& settingsMap) {
+    auto renderDelegate = new HdRprDelegate();
+    for (auto& entry : settingsMap) {
+        renderDelegate->SetRenderSetting(entry.first, entry.second);
+    }
+    return renderDelegate;
+}
+
 void HdRprPlugin::DeleteRenderDelegate(HdRenderDelegate* renderDelegate) {
     delete renderDelegate;
 }

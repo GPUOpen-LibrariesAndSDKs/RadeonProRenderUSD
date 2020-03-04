@@ -15,6 +15,8 @@ public:
 
     HdRenderDelegate* CreateRenderDelegate() override;
 
+    HdRenderDelegate* CreateRenderDelegate(HdRenderSettingsMap const& settingsMap) override;
+
     void DeleteRenderDelegate(HdRenderDelegate* renderDelegate) override;
 
     bool IsSupported() const override { return true; }
