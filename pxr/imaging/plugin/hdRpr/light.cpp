@@ -404,7 +404,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
         }
     }
 
-    if (bits & (DirtyTransform || DirtyParams)) {
+    if (bits & (DirtyTransform | DirtyParams)) {
         struct LightTransformSetter : public BOOST_NS::static_visitor<> {
             HdRprApi* rprApi;
             GfMatrix4f const& transform;
