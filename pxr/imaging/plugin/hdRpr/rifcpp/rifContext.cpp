@@ -309,9 +309,9 @@ std::unique_ptr<Context> Context::Create(rpr::Context* rprContext, rpr::ContextM
 
     try {
         std::unique_ptr<Context> rifContext;
-        if (contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL) {
-            rifContext.reset(new ContextMetal(rprContext, modelPath));
-        } else if (HasGpuContext(contextFlags) && rprContextMetadata.pluginType != rpr::kPluginHybrid) {
+        if (HasGpuContext(contextFlags) &&
+            rprContextMetadata.pluginType != rpr::kPluginHybrid &&
+            !(contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL)) {
             rifContext.reset(new ContextOpenCL(rprContext, modelPath));
         } else {
             rifContext.reset(new ContextCPU(rprContext, modelPath));
