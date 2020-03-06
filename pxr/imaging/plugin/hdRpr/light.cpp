@@ -382,8 +382,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
             }
 
             bool operator()(rpr::SpotLight* light) const {
-                // XXX: multiplied by 4 to be closer to Karma intensity
-                if (emissionColorIsDirty) { rprApi->SetLightColor(light, emissionColor * 4.0); }
+                if (emissionColorIsDirty) { rprApi->SetLightColor(light, emissionColor); }
                 return true;
             }
 
