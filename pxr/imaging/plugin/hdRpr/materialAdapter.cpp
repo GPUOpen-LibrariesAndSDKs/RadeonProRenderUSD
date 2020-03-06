@@ -487,7 +487,7 @@ TF_DEFINE_PRIVATE_TOKENS(HoudiniPrincipledShaderTokens,
     ((baseNormalEnable, "baseBumpAndNormal_enable")) \
     ((baseNormalType, "baseBumpAndNormal_type")) \
     (separateCoatNormals) \
-    (frontface) \
+    ((doubleSided, "frontface")) \
     ((displacementEnable, "dispTex_enable")) \
     ((displacementTexture, "dispTex_texture")) \
     ((displacementOffset, "dispTex_offset")) \
@@ -557,7 +557,7 @@ EWrapMode HoudiniWrapModeToRpr(std::string const& wrapMode) {
 void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& surfaceNetwork, HdMaterialNetwork const& displacementNetwork) {
     auto& params = surfaceNetwork.nodes[0].parameters;
 
-    m_doublesided = GetParameter(HoudiniPrincipledShaderTokens->frontface, params, 1) == 0;
+    m_doublesided = GetParameter(HoudiniPrincipledShaderTokens->doubleSided, params, 1) == 1;
 
     // XXX: unused parameters:
     // reflectTint
