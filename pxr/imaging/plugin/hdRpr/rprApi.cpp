@@ -132,13 +132,14 @@ public:
         if (m_state != kStateUninitialized) {
             return;
         }
-        m_state = kStateRender;
 
         try {
             InitRpr();
             InitRif();
             InitScene();
             InitCamera();
+
+            m_state = kStateRender;
         } catch (rpr::Error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
         } catch (rif::Error& e) {
