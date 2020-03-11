@@ -16,6 +16,7 @@
 
 #include "pxr/base/gf/math.h"
 #include "pxr/base/gf/vec2f.h"
+#include "pxr/base/gf/rotation.h"
 #include "pxr/base/arch/fileSystem.h"
 #include "pxr/base/plug/plugin.h"
 #include "pxr/base/plug/thisPlugin.h"
@@ -647,6 +648,34 @@ public:
         if (!RPR_ERROR_CHECK(object->SetTransform(transform.GetArray(), false), "Fail set object transform")) {
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
+    }
+
+    void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples) {
+        if (numSamples == 1) {
+            return SetTransform(shape, GfMatrix4f(transformSamples[0]));
+        }
+
+        // XXX (RPR): there is no way to sample all transforms via current RPR API
+        auto startTransform = GfMatrix4f(transformSamples[0]);
+        auto endTransform = GfMatrix4f(transformSamples[numSamples - 1]);
+
+        auto motionTransform = endTransform * startTransform.GetInverse();
+
+        float scaleX = GfVec3d(motionTransform[0][0], motionTransform[1][0], motionTransform[2][0]).GetLength();
+        float scaleY = GfVec3d(motionTransform[0][1], motionTransform[1][1], motionTransform[2][1]).GetLength();
+        float scaleZ = GfVec3d(motionTransform[0][2], motionTransform[1][2], motionTransform[2][2]).GetLength();
+
+        motionTransform.Orthonormalize();
+        auto motionRotation = motionTransform.ExtractRotation();
+        auto& rotAxis = motionRotation.GetAxis();
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+
+        RPR_ERROR_CHECK(shape->SetTransform(startTransform.GetArray(), false), "Fail set shape transform");
+        RPR_ERROR_CHECK(shape->SetLinearMotion(motionTransform[3][0], motionTransform[3][1], motionTransform[3][2]), "Fail to set shape linear motion");
+        RPR_ERROR_CHECK(shape->SetScaleMotion(scaleX - 1.0f, scaleY - 1.0f, scaleZ - 1.0f), "Fail to set shape scale motion");
+        RPR_ERROR_CHECK(shape->SetAngularMotion(rotAxis[0], rotAxis[1], rotAxis[2], GfDegreesToRadians(motionRotation.GetAngle())), "Fail to set shape angular motion");
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
     HdRprApiMaterial* CreateMaterial(const MaterialAdapter& MaterialAdapter) {
@@ -1963,6 +1992,10 @@ void HdRprApi::SetTransform(HdRprApiEnvironmentLight* envLight, GfMatrix4f const
 
 void HdRprApi::SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
     m_impl->SetTransform(object, transform);
+}
+
+void HdRprApi::SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples) {
+    m_impl->SetTransform(shape, numSamples, timeSamples, transformSamples);
 }
 
 rpr::DirectionalLight* HdRprApi::CreateDirectionalLight() {

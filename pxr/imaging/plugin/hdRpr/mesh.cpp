@@ -277,7 +277,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     bool updateTransform = newMesh;
     if (*dirtyBits & HdChangeTracker::DirtyTransform) {
-        m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
+        sceneDelegate->SampleTransform(id, &m_transformSamples);
         updateTransform = true;
     }
 
@@ -474,7 +474,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     }
                 } else {
                     updateTransform = false;
-                    GfMatrix4d meshTransform(m_transform);
+                    // TODO: handle instancer animated transforms
+                    GfMatrix4d meshTransform(m_transformSamples.Resample((m_transformSamples.times[0] + m_transformSamples.times[m_transformSamples.count - 1]) * 0.5f));
                     for (auto& instanceTransform : transforms) {
                         instanceTransform = meshTransform * instanceTransform;
                     }
@@ -516,7 +517,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (updateTransform) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetTransform(rprMesh, m_transform);
+                rprApi->SetTransform(rprMesh, m_transformSamples.count, m_transformSamples.times.data(), m_transformSamples.values.data());
             }
         }
     }
