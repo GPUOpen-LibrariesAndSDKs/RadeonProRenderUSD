@@ -1,5 +1,7 @@
 #include "renderDelegate.h"
 
+#include"pxr/imaging/hd/extComputation.h"
+
 #include "pxr/base/tf/diagnosticMgr.h"
 #include "pxr/base/tf/getenv.h"
 
@@ -120,7 +122,8 @@ const TfTokenVector HdRprDelegate::SUPPORTED_SPRIM_TYPES = {
     HdPrimTypeTokens->cylinderLight,
     HdPrimTypeTokens->domeLight,
     HdPrimTypeTokens->diskLight,
-    HdPrimTypeTokens->distantLight
+    HdPrimTypeTokens->distantLight,
+    HdPrimTypeTokens->extComputation
 };
 
 const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
@@ -245,6 +248,8 @@ HdSprim* HdRprDelegate::CreateSprim(TfToken const& typeId,
         return new HdRprLight(sprimId, typeId);
     } else if (typeId == HdPrimTypeTokens->material) {
         return new HdRprMaterial(sprimId);
+    } else if (typeId == HdPrimTypeTokens->extComputation) {
+        return new HdExtComputation(sprimId);
     }
 
     TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
@@ -267,6 +272,8 @@ HdSprim* HdRprDelegate::CreateFallbackSprim(TfToken const& typeId) {
         return new HdRprDistantLight(SdfPath::EmptyPath());
     } else if (typeId == HdPrimTypeTokens->material) {
         return new HdRprMaterial(SdfPath::EmptyPath());
+    } else if (typeId == HdPrimTypeTokens->extComputation) {
+        return new HdExtComputation(SdfPath::EmptyPath());
     }
 
     TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());

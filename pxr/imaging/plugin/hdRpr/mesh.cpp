@@ -11,6 +11,7 @@
 #include "pxr/imaging/hd/meshUtil.h"
 #include "pxr/imaging/hd/sprim.h"
 #include "pxr/imaging/hd/smoothNormals.h"
+#include "pxr/imaging/hd/extComputationUtils.h"
 
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/vec4f.h"
@@ -146,7 +147,30 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     bool newMesh = false;
 
-    if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->points)) {
+    bool pointsIsComputed = false;
+    auto extComputationDescs = sceneDelegate->GetExtComputationPrimvarDescriptors(id, HdInterpolationVertex);
+    for (auto& desc : extComputationDescs) {
+        if (desc.name != HdTokens->points) {
+            continue;
+        }
+
+        if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, desc.name)) {
+            auto valueStore = HdExtComputationUtils::GetComputedPrimvarValues({desc}, sceneDelegate);
+            auto pointValueIt = valueStore.find(desc.name);
+            if (pointValueIt != valueStore.end()) {
+                m_points = pointValueIt->second.Get<VtVec3fArray>();
+                m_normalsValid = false;
+                pointsIsComputed = true;
+
+                newMesh = true;
+            }
+        }
+
+        break;
+    }
+
+    if (!pointsIsComputed &&
+        HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->points)) {
         VtValue pointsValue = sceneDelegate->Get(id, HdTokens->points);
         m_points = pointsValue.Get<VtVec3fArray>();
         m_normalsValid = false;
