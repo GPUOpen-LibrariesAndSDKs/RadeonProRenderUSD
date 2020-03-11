@@ -142,8 +142,10 @@ public:
             m_state = kStateRender;
         } catch (rpr::Error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
+            m_state = kStateInvalid;
         } catch (rif::Error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
+            m_state = kStateInvalid;
         }
 
         UpdateRestartRequiredMessageStatus();
@@ -1915,7 +1917,8 @@ private:
     enum State {
         kStateUninitialized,
         kStateRender,
-        kStateRestartRequired
+        kStateRestartRequired,
+        kStateInvalid
     };
     State m_state = kStateUninitialized;
 
