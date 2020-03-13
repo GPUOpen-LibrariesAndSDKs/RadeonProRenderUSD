@@ -1025,6 +1025,8 @@ public:
         }
         RPR_ERROR_CHECK(m_camera->SetExposure(std::max(shutterClose - shutterOpen, 0.0)), "Failed to set camera exposure");
 
+        m_cameraProjectionMatrix = CameraUtilConformedWindow(m_hdCamera->GetProjectionMatrix(), m_hdCamera->GetWindowPolicy(), aspectRatio);
+
         float sensorWidth;
         float sensorHeight;
         float focalLength;
@@ -1037,37 +1039,7 @@ public:
             ApplyAspectRatioPolicy(m_viewportSize, aspectRatioPolicy.value, apertureSize);
             sensorWidth = apertureSize[0];
             sensorHeight = apertureSize[1];
-
-            float zNear = clippingRange.GetMin();
-            float zFar = clippingRange.GetMax();
-            if (projectionType == UsdGeomTokens->orthographic) {
-                m_cameraProjectionMatrix.SetIdentity();
-                m_cameraProjectionMatrix[0][0] = 2.0f / apertureSize[0];
-                m_cameraProjectionMatrix[1][1] = 2.0f / apertureSize[1];
-                m_cameraProjectionMatrix[2][2] = -2.0f / (zFar - zNear);
-                m_cameraProjectionMatrix[3][2] = -(zFar + zNear) / (zFar - zNear);
-            } else {
-                if (projectionType != UsdGeomTokens->perspective) {
-                    TF_CODING_ERROR("Unexpected projection type: %s. Fallback value: perspective", projectionType.GetText());
-                    projectionType = UsdGeomTokens->perspective;
-                }
-
-                float range = (apertureSize[1] * 0.5f) / focalLength * zNear;
-                float left = -range * aspectRatio;
-                float right = range * aspectRatio;
-                float bottom = -range;
-                float top = range;
-
-                m_cameraProjectionMatrix.SetZero();
-                m_cameraProjectionMatrix[0][0] = (2.0f * zNear) / (right - left);
-                m_cameraProjectionMatrix[1][1] = (2.0f * zNear) / (top - bottom);
-                m_cameraProjectionMatrix[2][2] = -(zFar + zNear) / (zFar - zNear);
-                m_cameraProjectionMatrix[3][2] = -1.0f;
-                m_cameraProjectionMatrix[2][3] = -(2.0f * zFar * zNear) / (zFar - zNear);
-            }
         } else {
-            m_cameraProjectionMatrix = CameraUtilConformedWindow(m_hdCamera->GetProjectionMatrix(), m_hdCamera->GetWindowPolicy(), aspectRatio);
-
             bool isOrthographic = round(m_cameraProjectionMatrix[3][3]) == 1.0;
             if (isOrthographic) {
                 projectionType = UsdGeomTokens->orthographic;
