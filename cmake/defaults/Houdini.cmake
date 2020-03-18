@@ -16,6 +16,12 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "${HOUDINI_INSTALL_PREFIX}" CACHE PATH "..." FORCE)
 endif()
 
+find_program(HYTHON_EXECUTABLE hython
+    PATHS ${HOUDINI_ROOT}/bin)
+if(NOT HYTHON_EXECUTABLE)
+    message(FATAL "Could not find hython executable. Please check HOUDINI_ROOT: ${HOUDINI_ROOT}")
+endif()
+
 set(HOUDINI_INCLUDE_DIR ${HOUDINI_ROOT}/toolkit/include)
 set(HOUDINI_RESOURCE_DIR_RELPATH ".")
 if(WIN32)

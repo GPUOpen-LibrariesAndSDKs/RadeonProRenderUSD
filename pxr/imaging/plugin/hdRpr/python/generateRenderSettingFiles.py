@@ -14,7 +14,7 @@ import sys
 import argparse
 import platform
 
-dry_run = False
+from houdiniDsGenerator import generate_houdini_ds
 
 render_setting_categories = [
     {
@@ -215,7 +215,7 @@ render_setting_categories = [
 def camel_case_capitalize(w):
     return w[0].upper() + w[1:]
 
-def generate_files(install_path):
+def generate_render_setting_files(install_path, generate_ds_files):
     header_template = (
 '''
 #ifndef GENERATED_HDRPR_CONFIG_H
@@ -421,21 +421,6 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
 ''').strip()
 
-    houdini_ds_template = (
-'''
-#include "$HFS/houdini/soho/parameters/CommonMacros.ds"
-
-{{
-    name    "RPR"
-    label   "RPR"
-    parmtag {{ spare_opfilter    "!!SHOP/PROPERTIES!!" }}
-    parmtag {{ spare_classtags   "render" }}
-
-    {houdini_params}
-}}
-
-''').strip()
-
     dirty_flags_offset = 1
 
     rs_tokens_declaration = '#define HDRPR_RENDER_SETTINGS_TOKENS \\\n'
@@ -449,7 +434,6 @@ PXR_NAMESPACE_CLOSE_SCOPE
     rs_get_set_method_definitions = ''
     rs_set_default_values = ''
     rs_validate_values = ''
-    houdini_params = ''
     for category in render_setting_categories:
         disabled_category = False
         if 'disabled_platform' in category:
@@ -460,10 +444,6 @@ PXR_NAMESPACE_CLOSE_SCOPE
         dirty_flag = 'Dirty{}'.format(category_name)
         rs_category_dirty_flags += '        {} = 1 << {},\n'.format(dirty_flag, dirty_flags_offset)
         dirty_flags_offset += 1
-
-        category_hidewhen = None
-        if 'houdini' in category:
-            category_hidewhen = category['houdini'].get('hidewhen')
 
         for setting in category['settings']:
             name = setting['name']
@@ -535,89 +515,6 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
 
             rs_set_default_values += '    {name} = k{name_title}Default;\n'.format(name=name, name_title=name_title)
 
-            if not 'ui_name' in setting:
-                continue
-
-            houdini_settings = setting.get('houdini', {})
-            houdini_param_label = setting['ui_name']
-            houdini_hidewhen_conditions = []
-            if 'hidewhen' in houdini_settings or category_hidewhen:
-                houdini_hidewhen_conditions.append(houdini_settings.get('hidewhen', category_hidewhen))
-
-            def CreateHoudiniParam(name, label, htype, default, values=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None, is_controlling_param=False):
-                param = 'parm {\n'
-                param += '    name "{}"\n'.format(name)
-                param += '    label "{}"\n'.format(label)
-                param += '    type {}\n'.format(htype)
-                if size: param += '    size {}\n'.format(size)
-                param += '    default {{ {} }}\n'.format(default)
-                for tag in tags:
-                    param += '    parmtag {{ {} }}\n'.format(tag)
-                if values:
-                    param += '    {} {{\n'.format('menujoin' if is_controlling_param else 'menu')
-                    for value in values:
-                        param += '        "{}" "{}"\n'.format(value[0], value[1])
-                    param += '    }\n'
-                if disabled_category:
-                    param += '    invisible\n'
-                if houdini_hidewhen_conditions:
-                    param += '    hidewhen "'
-                    for condition in houdini_hidewhen_conditions:
-                        param += '{{ {} }} '.format(condition)
-                    param += '"\n'
-                if disablewhen_conditions:
-                    param += '    disablewhen "'
-                    for condition in disablewhen_conditions:
-                        param += '{{ {} }} '.format(condition)
-                    param += '"\n'
-                if valid_range:                    
-                    param += '    range {{ {}! {} }}\n'.format(valid_range[0], valid_range[1])
-                if help_msg:
-                    param += '    help "{}"\n'.format(help_msg)
-                param += '}\n'
-
-                return param
-
-            control_param_name = name + '_control'
-            houdini_params += CreateHoudiniParam(control_param_name, houdini_param_label, 'string', '"none"',
-                values=[
-                    ('set', 'Set or Create'),
-                    ('setexisting', 'Set if Exists'),
-                    ('block', 'Block'),
-                    ('none', 'Do Nothing'),
-                ],
-                is_controlling_param=True)
-
-            render_param_values = []
-            render_param_type = c_type_str
-            render_param_default = default_value
-            if isinstance(default_value, bool):
-                render_param_type = 'toggle'
-                render_param_default = 1 if default_value else 0
-            elif 'values' in setting:
-                render_param_type = 'ordinal'
-                for value in setting['values']:
-                    render_param_values.append((len(render_param_values), value))
-
-            render_param_range = None
-            if 'minValue' in setting and 'maxValue' in setting and not 'values' in setting:
-                render_param_range = (setting['minValue'], setting['maxValue'])
-
-            houdini_params += CreateHoudiniParam(name, houdini_param_label, render_param_type, render_param_default,
-                values=render_param_values,
-                tags=[
-                    '"spare_category" "{}"'.format(category_name),
-                    '"uiscope" "viewport"',
-                    '"usdvaluetype" "{}"'.format(c_type_str)
-                ] + houdini_settings.get('custom_tags', []),
-                disablewhen_conditions=[
-                    control_param_name + ' == block',
-                    control_param_name + ' == none',
-                ],
-                size=1,
-                valid_range=render_param_range,
-                help_msg=setting.get('help', None))
-
     rs_tokens_declaration += '\nTF_DECLARE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);'
 
     header_dst_path = os.path.join(install_path, 'config.h')
@@ -639,17 +536,14 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
         rs_set_default_values=rs_set_default_values,
         rs_validate_values=rs_validate_values))
 
-    houdini_ds_dst_path = os.path.join(install_path, 'HdRprPlugin_Global.ds')
-    houdini_ds_file = open(houdini_ds_dst_path, 'w')
-    houdini_ds_file.write(houdini_ds_template.format(houdini_params=houdini_params))
+    if generate_ds_files:
+        generate_houdini_ds(install_path, 'Global', render_setting_categories)
+
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="Generate config sources.")
+    p = argparse.ArgumentParser()
     p.add_argument("install", help="The install root for generated files.")
-    p.add_argument("-n", "--dry_run", dest="dry_run", action="store_true", help="Only summarize what would happen")
+    p.add_argument("--generate_ds_files", default=False, action='store_true')
     args = p.parse_args()
 
-    if args.dry_run:
-        dry_run = True
-
-    generate_files(args.install)
+    generate_render_setting_files(args.install, args.generate_ds_files)

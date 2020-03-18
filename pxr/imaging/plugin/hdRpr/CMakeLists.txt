@@ -66,16 +66,34 @@ else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Usdview.png${_sep}images/restartRequired.png)
 endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 
+set(GEN_SCRIPT_PYTHON ${PYTHON_EXECUTABLE})
+set(GENERATION_SCRIPTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/python)
+set(GEN_SCRIPT ${GENERATION_SCRIPTS_DIR}/generateFiles.py)
+set(GEN_SCRIPT_ARGS \"${GENERATION_SCRIPTS_DIR}\" \"${CMAKE_CURRENT_BINARY_DIR}\")
 set(GENERATED_FILES
     ${CMAKE_CURRENT_BINARY_DIR}/config.h
-    ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
-    ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds)
-set(GEN_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/python/generateRenderSettingFiles.py)
+    ${CMAKE_CURRENT_BINARY_DIR}/config.cpp)
+set(GENERATION_DEPENDENT_FILES ${GEN_SCRIPT}
+    ${GENERATION_SCRIPTS_DIR}/commonSettings.py
+    ${GENERATION_SCRIPTS_DIR}/generateLightSettingFiles.py
+    ${GENERATION_SCRIPTS_DIR}/generateRenderSettingFiles.py
+    ${GENERATION_SCRIPTS_DIR}/generateGeometrySettingFiles.py)
+if(RPR_BUILD_AS_HOUDINI_PLUGIN)
+    set(GEN_SCRIPT_PYTHON ${HYTHON_EXECUTABLE})
+    set(GEN_SCRIPT_ARGS --houdini_root \"${HOUDINI_ROOT}\" ${GEN_SCRIPT_ARGS})
+    set(GENERATED_FILES ${GENERATED_FILES}
+        ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Light.ds
+        ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
+        ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds)
+    set(GENERATION_DEPENDENT_FILES ${GENERATION_DEPENDENT_FILES}
+        ${GENERATION_SCRIPTS_DIR}/houdiniDsGenerator.py)
+endif()
+
 add_custom_command(
-    COMMAND ${PYTHON_EXECUTABLE} ${GEN_SCRIPT} ${CMAKE_CURRENT_BINARY_DIR}
-    DEPENDS ${GEN_SCRIPT}
+    COMMAND ${GEN_SCRIPT_PYTHON} ${GEN_SCRIPT} ${GEN_SCRIPT_ARGS}
+    DEPENDS ${GENERATION_DEPENDENT_FILES}
     OUTPUT ${GENERATED_FILES}
-    COMMENT "Generating RenderSetting files")
+    COMMENT "Generating files")
 
 file(GLOB_RECURSE RIF_MODEL_FILES "${RIF_MODELS_DIR}/*")
 foreach(file ${RIF_MODEL_FILES})
@@ -202,11 +220,11 @@ endforeach()
 
 if(RPR_BUILD_AS_HOUDINI_PLUGIN)
     install(
-        FILES ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
+        FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Light.ds
+            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
+            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds
         DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/soho/parameters")
-    install(
-        FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/rprmeshproperties1.hda
-        DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/otls")
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_install_dir(lib/python/rpr installPrefix)
 
