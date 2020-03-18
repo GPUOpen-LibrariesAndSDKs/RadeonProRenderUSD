@@ -15,6 +15,7 @@ limitations under the License.
 #include "materialAdapter.h"
 #include "material.h"
 #include "renderParam.h"
+#include "primvarUtil.h"
 #include "rprApi.h"
 
 #include "pxr/usd/usdUtils/pipeline.h"
@@ -75,7 +76,8 @@ bool IsValidPrimvarSize(size_t primvarSize, HdInterpolation primvarInterpolation
 
 HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id,
                                    SdfPath const& instancerId)
-    : HdBasisCurves(id, instancerId) {
+    : HdBasisCurves(id, instancerId)
+    , m_visibilityMask(kVisibleAll) {
 
 }
 
@@ -167,6 +169,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
         newCurve = true;
     }
 
+    bool isVisibilityMaskDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
         FillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
         auto stToken = UsdUtilsGetPrimaryUVSetName();
@@ -176,6 +179,24 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
             m_uvs = VtVec2fArray();
         }
         newCurve = true;
+
+        uint32_t visibilityMask = kVisibleAll;
+
+        auto& constantPrimvars = primvarDescsPerInterpolation.at(HdInterpolationConstant);
+        for (auto& primvarDesc : constantPrimvars) {
+            if (primvarDesc.name == HdRprPrimvarTokens->visibilityMask) {
+                std::string visibilityMaskStr;
+                if (HdRpr_GetConstantPrimvar(HdRprPrimvarTokens->visibilityMask, sceneDelegate, id, &visibilityMaskStr)) {
+                    visibilityMask = HdRpr_ParseVisibilityMask(visibilityMaskStr);
+                }
+                break;
+            }
+        }
+
+        if (m_visibilityMask != visibilityMask) {
+            m_visibilityMask = visibilityMask;
+            isVisibilityMaskDirty = true;
+        }
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyTransform) {
@@ -244,8 +265,13 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
-        if (newCurve || (*dirtyBits & HdChangeTracker::DirtyVisibility)) {
-            rprApi->SetCurveVisibility(m_rprCurve, _sharedData.visible);
+        if (newCurve || ((*dirtyBits & HdChangeTracker::DirtyVisibility) || isVisibilityMaskDirty)) {
+            auto visibilityMask = m_visibilityMask;
+            if (!_sharedData.visible) {
+                // Override m_visibilityMask
+                visibilityMask = 0;
+            }
+            rprApi->SetCurveVisibility(m_rprCurve, visibilityMask);
         }
 
         if (newCurve || (*dirtyBits & HdChangeTracker::DirtyTransform)) {

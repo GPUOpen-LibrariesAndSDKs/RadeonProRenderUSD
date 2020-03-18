@@ -89,6 +89,8 @@ private:
     HdDisplayStyle m_displayStyle;
     int m_refineLevel = 0;
     bool m_doublesided = false;
+
+    uint32_t m_visibilityMask;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

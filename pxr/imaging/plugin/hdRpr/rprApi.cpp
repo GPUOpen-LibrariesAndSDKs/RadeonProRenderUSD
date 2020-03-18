@@ -353,20 +353,27 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    void SetCurveVisibility(rpr::Curve* curve, bool isVisible) {
+    void SetCurveVisibility(rpr::Curve* curve, uint32_t visibilityMask) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
         if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
             // XXX (Hybrid): rprCurveSetVisibility not supported, emulate visibility using attach/detach
-            if (isVisible) {
+            if (visibilityMask) {
                 m_scene->Attach(curve);
             } else {
                 m_scene->Detach(curve);
             }
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         } else {
-            if (!RPR_ERROR_CHECK(curve->SetVisibility(isVisible), "Failed to set curve visibility")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
+            RPR_ERROR_CHECK(curve->SetVisibilityFlag(RPR_CURVE_VISIBILITY_PRIMARY_ONLY_FLAG, visibilityMask & kVisiblePrimary), "Failed to set curve primary visibility");
+            RPR_ERROR_CHECK(curve->SetVisibilityFlag(RPR_CURVE_VISIBILITY_SHADOW, visibilityMask & kVisibleShadow), "Failed to set curve shadow visibility");
+            RPR_ERROR_CHECK(curve->SetVisibilityFlag(RPR_CURVE_VISIBILITY_REFLECTION, visibilityMask & kVisibleReflection), "Failed to set curve reflection visibility");
+            RPR_ERROR_CHECK(curve->SetVisibilityFlag(RPR_CURVE_VISIBILITY_REFRACTION, visibilityMask & kVisibleRefraction), "Failed to set curve refraction visibility");
+            RPR_ERROR_CHECK(curve->SetVisibilityFlag(RPR_CURVE_VISIBILITY_TRANSPARENT, visibilityMask & kVisibleTransparent), "Failed to set curve transparent visibility");
+            RPR_ERROR_CHECK(curve->SetVisibilityFlag(RPR_CURVE_VISIBILITY_DIFFUSE, visibilityMask & kVisibleDiffuse), "Failed to set curve diffuse visibility");
+            RPR_ERROR_CHECK(curve->SetVisibilityFlag(RPR_CURVE_VISIBILITY_GLOSSY_REFLECTION, visibilityMask & kVisibleGlossyReflection), "Failed to set curve glossyReflection visibility");
+            RPR_ERROR_CHECK(curve->SetVisibilityFlag(RPR_CURVE_VISIBILITY_GLOSSY_REFRACTION, visibilityMask & kVisibleGlossyRefraction), "Failed to set curve glossyRefraction visibility");
+            RPR_ERROR_CHECK(curve->SetVisibilityFlag(RPR_CURVE_VISIBILITY_LIGHT, visibilityMask & kVisibleLight), "Failed to set curve light visibility");
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
 
@@ -392,47 +399,28 @@ public:
         }
     }
 
-    void SetMeshVisibility(rpr::Shape* mesh, bool isVisible) {
+    void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask) {
         RecursiveLockGuard rprLock(g_rprAccessMutex);
         if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
             // XXX (Hybrid): rprShapeSetVisibility not supported, emulate visibility using attach/detach
-            if (isVisible) {
+            if (visibilityMask) {
                 m_scene->Attach(mesh);
             } else {
                 m_scene->Detach(mesh);
             }
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         } else {
-            if (!RPR_ERROR_CHECK(mesh->SetVisibility(isVisible), "Failed to set mesh visibility")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        }
-    }
+            RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_PRIMARY_ONLY_FLAG, visibilityMask & kVisiblePrimary), "Failed to set mesh primary visibility");
+            RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_SHADOW, visibilityMask & kVisibleShadow), "Failed to set mesh shadow visibility");
+            RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_REFLECTION, visibilityMask & kVisibleReflection), "Failed to set mesh reflection visibility");
+            RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_REFRACTION, visibilityMask & kVisibleRefraction), "Failed to set mesh refraction visibility");
+            RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_TRANSPARENT, visibilityMask & kVisibleTransparent), "Failed to set mesh transparent visibility");
+            RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_DIFFUSE, visibilityMask & kVisibleDiffuse), "Failed to set mesh diffuse visibility");
+            RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_GLOSSY_REFLECTION, visibilityMask & kVisibleGlossyReflection), "Failed to set mesh glossyReflection visibility");
+            RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_GLOSSY_REFRACTION, visibilityMask & kVisibleGlossyRefraction), "Failed to set mesh glossyRefraction visibility");
+            RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_LIGHT, visibilityMask & kVisibleLight), "Failed to set mesh light visibility");
 
-    void SetMeshLightVisibility(rpr::Shape* mesh, bool isVisible) {
-        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
-            return;
-        }
-
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        if (isVisible) {
-            if (!RPR_ERROR_CHECK(mesh->SetVisibility(true), "Fail to set mesh visibility")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-            if (!RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_PRIMARY_ONLY_FLAG, false), "Fail to set mesh visibility")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-            if (!RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_LIGHT, false), "Fail to set mesh visibility")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-            if (!RPR_ERROR_CHECK(mesh->SetVisibilityFlag(RPR_SHAPE_VISIBILITY_SHADOW, false), "Fail to set mesh visibility")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        } else {
-            if (!RPR_ERROR_CHECK(mesh->SetVisibility(false), "Fail to set mesh visibility")) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
 
@@ -2016,20 +2004,16 @@ void HdRprApi::SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* materia
     m_impl->SetMeshMaterial(mesh, material, doublesided, displacementEnabled);
 }
 
-void HdRprApi::SetMeshVisibility(rpr::Shape* mesh, bool isVisible) {
-    m_impl->SetMeshVisibility(mesh, isVisible);
-}
-
-void HdRprApi::SetMeshLightVisibility(rpr::Shape* lightMesh, bool isVisible) {
-    m_impl->SetMeshLightVisibility(lightMesh, isVisible);
+void HdRprApi::SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask) {
+    m_impl->SetMeshVisibility(mesh, visibilityMask);
 }
 
 void HdRprApi::SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material) {
     m_impl->SetCurveMaterial(curve, material);
 }
 
-void HdRprApi::SetCurveVisibility(rpr::Curve* curve, bool isVisible) {
-    m_impl->SetCurveVisibility(curve, isVisible);
+void HdRprApi::SetCurveVisibility(rpr::Curve* curve, uint32_t visibilityMask) {
+    m_impl->SetCurveVisibility(curve, visibilityMask);
 }
 
 void HdRprApi::Release(HdRprApiEnvironmentLight* envLight) {

@@ -141,6 +141,7 @@ pxr_plugin(hdRpr
         imageCache
         camera
         debugCodes
+        primvarUtil
         
         ${OptClass}
 
