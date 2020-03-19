@@ -43,16 +43,6 @@ parm {{
 '''
 )
 
-# menureplace {
-#     R"(*)"                          "Visible to all"
-#     R"(primary)"                    "Visible only to primary rays"
-#     R"(primary|shadow)"         "Visible only to primary and shadow rays"
-#     R"(-primary)"                   "Invisible to primary rays (Phantom)"
-#     R"(-diffuse)"                   "Invisible to diffuse rays"
-#     R"(-diffuse&-reflect&-refract)" "Invisible to secondary rays"
-#     R"()"                           "Invisible (Unrenderable)"
-# }
-
 def generate_houdini_ds(install_path, ds_name, settings):
     import hou
 
