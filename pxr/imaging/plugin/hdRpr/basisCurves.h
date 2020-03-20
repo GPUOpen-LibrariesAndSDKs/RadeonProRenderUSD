@@ -67,6 +67,8 @@ private:
     HdInterpolation m_uvsInterpolation;
     VtVec3fArray m_points;
     GfMatrix4f m_transform;
+
+    uint32_t m_visibilityMask;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

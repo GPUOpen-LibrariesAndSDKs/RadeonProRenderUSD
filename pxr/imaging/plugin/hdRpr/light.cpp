@@ -14,6 +14,7 @@ limitations under the License.
 #include "light.h"
 #include "renderParam.h"
 #include "materialAdapter.h"
+#include "primvarUtil.h"
 #include "rprApi.h"
 
 #include "pxr/base/tf/envSetting.h"
@@ -29,8 +30,6 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 namespace {
-
-TF_DEFINE_ENV_SETTING(HDRPR_VISIBLE_LIGHTS, false, "Make lights visible for primary rays");
 
 float GetDiskLightNormalization(GfMatrix4f const& transform, float radius) {
     const double sx = GfVec3d(transform[0][0], transform[1][0], transform[2][0]).GetLength() * radius;
@@ -222,7 +221,7 @@ void HdRprLight::SyncAreaLightGeomParams(AreaLight* light, HdSceneDelegate* scen
     }
 }
 
-void HdRprLight::CreateAreaLightMesh(HdRprApi* rprApi) {
+void HdRprLight::CreateAreaLightMesh(HdRprApi* rprApi, HdSceneDelegate* sceneDelegate) {
     auto light = new AreaLight;
 
     if (rprApi->IsArbitraryShapedLightSupported()) {
@@ -283,10 +282,19 @@ void HdRprLight::CreateAreaLightMesh(HdRprApi* rprApi) {
         }
     }
 
-    if (!TfGetEnvSetting(HDRPR_VISIBLE_LIGHTS)) {
-        for (auto& mesh : light->meshes) {
-            rprApi->SetMeshLightVisibility(mesh, true);
-        }
+    HdRprGeometrySettings geomSettings = {};
+
+    // By default, conform to Karma's behavior - lights are invisible but still have an effect on the scene
+    geomSettings.visibilityMask = kVisibleAll;
+    geomSettings.visibilityMask &= ~kVisiblePrimary;
+    geomSettings.visibilityMask &= ~kVisibleShadow;
+    geomSettings.visibilityMask &= ~kVisibleLight;
+
+    auto constantPrimvars = sceneDelegate->GetPrimvarDescriptors(GetId(), HdInterpolationConstant);
+    HdRpr_ParseGeometrySettings(sceneDelegate, GetId(), constantPrimvars, &geomSettings);
+
+    for (auto& mesh : light->meshes) {
+        rprApi->SetMeshVisibility(mesh, geomSettings.visibilityMask);
     }
 
     m_light = light;
@@ -338,7 +346,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
                     m_light = light;
                 }
             } else {
-                CreateAreaLightMesh(rprApi);
+                CreateAreaLightMesh(rprApi, sceneDelegate);
             }
         }
 

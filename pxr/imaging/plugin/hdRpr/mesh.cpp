@@ -16,6 +16,7 @@ limitations under the License.
 #include "renderParam.h"
 #include "material.h"
 #include "materialAdapter.h"
+#include "primvarUtil.h"
 #include "rprApi.h"
 
 #include "pxr/imaging/pxOsd/tokens.h"
@@ -33,12 +34,9 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PRIVATE_TOKENS(HdRprMeshPrivateTokens,
-    ((subdivisionLevel, "rpr:subdivisionLevel"))
-);
-
 HdRprMesh::HdRprMesh(SdfPath const& id, SdfPath const& instancerId)
-    : HdMesh(id, instancerId) {
+    : HdMesh(id, instancerId)
+    , m_visibilityMask(kVisibleAll) {
 
 }
 
@@ -247,25 +245,22 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
     }
 
+    bool isVisibilityMaskDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
-        auto& constantPrimvars = primvarDescsPerInterpolation.at(HdInterpolationConstant);
-        if (!constantPrimvars.empty()) {
-            auto subdivisionLevelPrimvarIter = std::find_if(constantPrimvars.begin(), constantPrimvars.end(), [](HdPrimvarDescriptor const& desc) {
-                return desc.name == HdRprMeshPrivateTokens->subdivisionLevel;
-                });
-            if (subdivisionLevelPrimvarIter != constantPrimvars.end()) {
-                auto subdivisionLevelValue = sceneDelegate->Get(id, HdRprMeshPrivateTokens->subdivisionLevel);
-                if (subdivisionLevelValue.IsHolding<int>()) {
-                    int refineLevel = subdivisionLevelValue.UncheckedGet<int>();
-                    if (m_refineLevel != refineLevel) {
-                        isRefineLevelDirty = true;
-                        m_refineLevel = refineLevel;
-                    }
-                } else {
-                    auto typeName = subdivisionLevelValue.GetTypeName();
-                    TF_WARN("[%s] %s: unexpected type. %s != int", id.GetText(), HdRprMeshPrivateTokens->subdivisionLevel.GetText(), typeName.c_str());
-                }
-            }
+        uint32_t visibilityMask = kVisibleAll;
+
+        HdRprGeometrySettings geomSettings = {};
+        geomSettings.visibilityMask = kVisibleAll;
+        HdRpr_ParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
+
+        if (m_refineLevel != geomSettings.subdivisionLevel) {
+            m_refineLevel = geomSettings.subdivisionLevel;
+            isRefineLevelDirty = true;
+        }
+
+        if (m_visibilityMask != geomSettings.visibilityMask) {
+            m_visibilityMask = geomSettings.visibilityMask;
+            isVisibilityMaskDirty = true;
         }
     }
 
@@ -435,9 +430,14 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
-        if (newMesh || (*dirtyBits & HdChangeTracker::DirtyVisibility)) {
+        if (newMesh || ((*dirtyBits & HdChangeTracker::DirtyVisibility) || isVisibilityMaskDirty)) {
+            auto visibilityMask = m_visibilityMask;
+            if (!_sharedData.visible) {
+                // Override m_visibilityMask
+                visibilityMask = 0;
+            }
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshVisibility(rprMesh, _sharedData.visible);
+                rprApi->SetMeshVisibility(rprMesh, visibilityMask);
             }
         }
 

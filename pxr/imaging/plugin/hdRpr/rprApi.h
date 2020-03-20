@@ -49,6 +49,19 @@ std::unique_ptr<T> make_unique(Args&&... args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
+enum HdRprVisibilityFlag {
+    kVisiblePrimary = 1 << 0,
+    kVisibleShadow = 1 << 1,
+    kVisibleReflection = 1 << 2,
+    kVisibleRefraction = 1 << 3,
+    kVisibleTransparent = 1 << 4,
+    kVisibleDiffuse = 1 << 5,
+    kVisibleGlossyReflection = 1 << 6,
+    kVisibleGlossyRefraction = 1 << 7,
+    kVisibleLight = 1 << 8,
+    kVisibleAll = (kVisibleLight << 1) - 1
+};
+
 class HdRprApi final {
 public:
     HdRprApi(HdRenderDelegate* delegate);
@@ -86,13 +99,12 @@ public:
     void SetMeshRefineLevel(rpr::Shape* mesh, int level);
     void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation);
     void SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled);
-    void SetMeshVisibility(rpr::Shape* mesh, bool isVisible);
-    void SetMeshLightVisibility(rpr::Shape* lightMesh, bool isVisible);
+    void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask);
     void Release(rpr::Shape* shape);
 
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);
     void SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material);
-    void SetCurveVisibility(rpr::Curve* curve, bool isVisible);
+    void SetCurveVisibility(rpr::Curve* curve, uint32_t visibilityMask);
     void Release(rpr::Curve* curve);
 
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform);

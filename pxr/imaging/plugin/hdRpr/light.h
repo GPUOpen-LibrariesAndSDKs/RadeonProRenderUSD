@@ -48,7 +48,7 @@ public:
 private:
     void CreateIESLight(HdRprApi* rprApi, std::string const& path);
 
-    void CreateAreaLightMesh(HdRprApi* rprApi);
+    void CreateAreaLightMesh(HdRprApi* rprApi, HdSceneDelegate* sceneDelegate);
     rpr::Shape* CreateDiskLightMesh(HdRprApi* rprApi);
     rpr::Shape* CreateRectLightMesh(HdRprApi* rprApi, bool applyTransform = false, GfMatrix4f const& transform = GfMatrix4f(1.0f));
     rpr::Shape* CreateSphereLightMesh(HdRprApi* rprApi);
