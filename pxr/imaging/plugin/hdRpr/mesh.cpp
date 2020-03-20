@@ -349,6 +349,10 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 offset += numVerticesInFace;
             }
 
+            VtIntArray vertexIndexRemapping;
+            VtIntArray normalIndexRemapping;
+            VtIntArray uvIndexRemapping;
+
             for (auto it = m_geomSubsets.begin(); it != m_geomSubsets.end();) {
                 auto const& subset = *it;
                 if (subset.type != HdGeomSubset::TypeFaceSet) {
@@ -359,12 +363,24 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                 VtVec3fArray subsetPoints;
                 VtVec3fArray subsetNormals;
-                VtVec2fArray subsetSt;
+                VtVec2fArray subsetUv;
+                VtIntArray subsetNormalIndices;
+                VtIntArray subsetUvIndices;
                 VtIntArray subsetIndexes;
                 VtIntArray subsetVertexPerFace;
                 subsetVertexPerFace.reserve(subset.indices.size());
 
-                int count = 0;
+                vertexIndexRemapping.reserve(m_points.size());
+                std::fill(vertexIndexRemapping.begin(), vertexIndexRemapping.begin() + m_points.size(), -1);
+                if (!m_normalIndices.empty()) {
+                    normalIndexRemapping.reserve(m_normals.size());
+                    std::fill(normalIndexRemapping.begin(), normalIndexRemapping.begin() + m_normals.size(), -1);
+                }
+                if (!m_uvIndices.empty()) {
+                    uvIndexRemapping.reserve(m_uvs.size());
+                    std::fill(uvIndexRemapping.begin(), uvIndexRemapping.begin() + m_uvs.size(), -1);
+                }
+
                 for (auto faceIndex : subset.indices) {
                     int numVerticesInFace = m_faceVertexCounts[faceIndex];
                     subsetVertexPerFace.push_back(numVerticesInFace);
@@ -372,24 +388,51 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     int faceIndexesOffset = indexesOffsetPrefixSum[faceIndex];
 
                     for (int i = 0; i < numVerticesInFace; ++i) {
-                        subsetIndexes.push_back(count++);
+                        const int pointIndex = m_faceVertexIndices[faceIndexesOffset + i];
+                        int subsetPointIndex = vertexIndexRemapping[pointIndex];
+                        if (subsetPointIndex == -1) {
+                            subsetPointIndex = static_cast<int>(subsetPoints.size());
+                            vertexIndexRemapping[pointIndex] = subsetPointIndex;
 
-                        int pointIndex = m_faceVertexIndices[faceIndexesOffset + i];
-                        subsetPoints.push_back(m_points[pointIndex]);
+                            subsetPoints.push_back(m_points[pointIndex]);
+                        }
+                        subsetIndexes.push_back(subsetPointIndex);
 
                         if (!m_normals.empty()) {
-                            int normalIndex = m_normalIndices.empty() ? pointIndex : m_normalIndices[faceIndexesOffset + i];
-                            subsetNormals.push_back(m_normals[normalIndex]);
+                            if (m_normalIndices.empty()) {
+                                subsetNormals.push_back(m_normals[pointIndex]);
+                            } else {
+                                const int normalIndex = m_normalIndices[faceIndexesOffset + i];
+                                int subsetNormalIndex = normalIndexRemapping[normalIndex];
+                                if (subsetNormalIndex == -1) {
+                                    subsetNormalIndex = static_cast<int>(subsetNormals.size());
+                                    normalIndexRemapping[normalIndex] = subsetNormalIndex;
+
+                                    subsetNormals.push_back(m_normals[normalIndex]);
+                                }
+                                subsetNormalIndices.push_back(subsetNormalIndex);
+                            }
                         }
 
                         if (!m_uvs.empty()) {
-                            int stIndex = m_uvIndices.empty() ? pointIndex : m_uvIndices[faceIndexesOffset + i];
-                            subsetSt.push_back(m_uvs[stIndex]);
+                            if (m_uvIndices.empty()) {
+                                subsetUv.push_back(m_uvs[pointIndex]);
+                            } else {
+                                const int uvIndex = m_uvIndices[faceIndexesOffset + i];
+                                int subsetuvIndex = uvIndexRemapping[uvIndex];
+                                if (subsetuvIndex == -1) {
+                                    subsetuvIndex = static_cast<int>(subsetUv.size());
+                                    uvIndexRemapping[uvIndex] = subsetuvIndex;
+
+                                    subsetUv.push_back(m_uvs[uvIndex]);
+                                }
+                                subsetUvIndices.push_back(subsetuvIndex);
+                            }
                         }
                     }
                 }
 
-                if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, VtIntArray(), subsetSt, VtIntArray(), subsetVertexPerFace, m_topology.GetOrientation())) {
+                if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, subsetNormalIndices, subsetUv, subsetUvIndices, subsetVertexPerFace, m_topology.GetOrientation())) {
                     m_rprMeshes.push_back(rprMesh);
                     ++it;
                 } else {
