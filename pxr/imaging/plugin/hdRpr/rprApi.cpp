@@ -650,31 +650,122 @@ public:
         }
     }
 
+    void DecomposeTransform(GfMatrix4d const& transform, GfVec3f& scale, GfQuatf& orient, GfVec3f& translate) {
+        static constexpr float epsilon = 1e-6f;
+
+        translate = GfVec3f(transform.ExtractTranslation());
+
+        GfVec3f col[3], skew;
+
+        // Now get scale and shear.
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                col[i][j] = transform[i][j];
+            }
+        }
+
+        scale[0] = col[0].GetLength();
+        col[0] /= scale[0];
+
+        skew[2] = GfDot(col[0], col[1]);
+        // Make Y col orthogonal to X col
+        col[1] = col[1] - skew[2] * col[0];
+
+        scale[1] = col[1].GetLength();
+        col[1] /= scale[1];
+        skew[2] /= scale[1];
+
+        // Compute XZ and YZ shears, orthogonalize Z col
+        skew[1] = GfDot(col[0], col[2]);
+        col[2] = col[2] - skew[1] * col[0];
+        skew[0] = GfDot(col[1], col[2]);
+        col[2] = col[2] - skew[0] * col[1];
+
+        scale[2] = col[2].GetLength();
+        col[2] /= scale[2];
+        skew[1] /= scale[2];
+        skew[0] /= scale[2];
+
+        // At this point, the matrix is orthonormal.
+        // Check for a coordinate system flip. If the determinant
+        // is -1, then negate the matrix and the scaling factors.
+        if (GfDot(col[0], GfCross(col[1], col[2])) < 0.0f) {
+            for (int i = 0; i < 3; i++) {
+                scale[i] *= -1.0f;
+                col[i] *= -1.0f;
+            }
+        }
+
+        float trace = col[0][0] + col[1][1] + col[2][2];
+        if (trace > 0.0f) {
+            float root = std::sqrt(trace + 1.0f);
+            orient.SetReal(0.5f * root);
+            root = 0.5f / root;
+            orient.SetImaginary(
+                root * (col[1][2] - col[2][1]),
+                root * (col[2][0] - col[0][2]),
+                root * (col[0][1] - col[1][0]));
+        } else {
+            static int next[3] = {1, 2, 0};
+            int i, j, k = 0;
+            i = 0;
+            if (col[1][1] > col[0][0]) i = 1;
+            if (col[2][2] > col[i][i]) i = 2;
+            j = next[i];
+            k = next[j];
+
+            float root = std::sqrt(col[i][i] - col[j][j] - col[k][k] + 1.0f);
+
+            GfVec3f im;
+            im[i] = 0.5f * root;
+            root = 0.5f / root;
+            im[j] = root * (col[i][j] + col[j][i]);
+            im[k] = root * (col[i][k] + col[k][i]);
+            orient.SetImaginary(im);
+            orient.SetReal(root * (col[j][k] - col[k][j]));
+        }
+    }
+
     void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples) {
         if (numSamples == 1) {
             return SetTransform(shape, GfMatrix4f(transformSamples[0]));
         }
 
+        static constexpr float epsilon = 1e-6f;
+
         // XXX (RPR): there is no way to sample all transforms via current RPR API
-        auto startTransform = GfMatrix4f(transformSamples[0]);
-        auto endTransform = GfMatrix4f(transformSamples[numSamples - 1]);
+        auto& startTransform = transformSamples[0];
+        auto& endTransform = transformSamples[numSamples - 1];
 
-        auto motionTransform = endTransform * startTransform.GetInverse();
+        GfVec3f startScale, startTranslate; GfQuatf startRotation;
+        GfVec3f endScale, endTranslate; GfQuatf endRotation;
+        DecomposeTransform(startTransform, startScale, startRotation, startTranslate);
+        DecomposeTransform(endTransform, endScale, endRotation, endTranslate);
 
-        float scaleX = GfVec3d(motionTransform[0][0], motionTransform[1][0], motionTransform[2][0]).GetLength();
-        float scaleY = GfVec3d(motionTransform[0][1], motionTransform[1][1], motionTransform[2][1]).GetLength();
-        float scaleZ = GfVec3d(motionTransform[0][2], motionTransform[1][2], motionTransform[2][2]).GetLength();
+        auto translateMotion = endTranslate - startTranslate;
+        auto scaleMotion = endScale - startScale;
+        GfVec3f rotAxis(1, 0, 0);
+        float rotAngle = 0.0f;
 
-        motionTransform.Orthonormalize();
-        auto motionRotation = motionTransform.ExtractRotation();
-        auto& rotAxis = motionRotation.GetAxis();
+        auto rotateMotion = endRotation * startRotation.GetInverse();
+        auto imLen = rotateMotion.GetImaginary().GetLength();
+        if (imLen > epsilon) {
+            rotAxis = rotateMotion.GetImaginary() / imLen;
+            rotAngle = 2.0f * std::atan2(imLen, rotateMotion.GetReal());
+        }
+
+        if (rotAngle > M_PI) {
+            rotAngle -= 2 * M_PI;
+        }
+
+        auto rprStartTransform = GfMatrix4f(startTransform);
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
-        RPR_ERROR_CHECK(shape->SetTransform(startTransform.GetArray(), false), "Fail set shape transform");
-        RPR_ERROR_CHECK(shape->SetLinearMotion(motionTransform[3][0], motionTransform[3][1], motionTransform[3][2]), "Fail to set shape linear motion");
-        RPR_ERROR_CHECK(shape->SetScaleMotion(scaleX - 1.0f, scaleY - 1.0f, scaleZ - 1.0f), "Fail to set shape scale motion");
-        RPR_ERROR_CHECK(shape->SetAngularMotion(rotAxis[0], rotAxis[1], rotAxis[2], GfDegreesToRadians(motionRotation.GetAngle())), "Fail to set shape angular motion");
+        RPR_ERROR_CHECK(shape->SetTransform(rprStartTransform.GetArray(), false), "Fail set shape transform");
+        RPR_ERROR_CHECK(shape->SetLinearMotion(translateMotion[0], translateMotion[1], translateMotion[2]), "Fail to set shape linear motion");
+        RPR_ERROR_CHECK(shape->SetScaleMotion(scaleMotion[0], scaleMotion[1], scaleMotion[2]), "Fail to set shape scale motion");
+        RPR_ERROR_CHECK(shape->SetAngularMotion(rotAxis[0], rotAxis[1], rotAxis[2], rotAngle), "Fail to set shape angular motion");
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 

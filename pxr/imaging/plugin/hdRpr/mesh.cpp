@@ -459,8 +459,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyInstancer)) {
             if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()))) {
-                auto transforms = instancer->ComputeTransforms(id);
-                if (transforms.empty()) {
+                auto instanceTransforms = instancer->SampleInstanceTransforms(id);
+                auto newNumInstances = (instanceTransforms.count > 0) ? instanceTransforms.values[0].size() : 0;
+                if (newNumInstances == 0) {
                     // Reset to state without instances
                     for (auto instances : m_rprMeshInstances) {
                         for (auto instance : instances) {
@@ -474,10 +475,26 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     }
                 } else {
                     updateTransform = false;
-                    // TODO: handle instancer animated transforms
-                    GfMatrix4d meshTransform(m_transformSamples.Resample((m_transformSamples.times[0] + m_transformSamples.times[m_transformSamples.count - 1]) * 0.5f));
-                    for (auto& instanceTransform : transforms) {
-                        instanceTransform = meshTransform * instanceTransform;
+
+                    std::vector<TfSmallVector<GfMatrix4d, 2>> combinedTransforms;
+                    combinedTransforms.reserve(newNumInstances);
+                    for (size_t i = 0; i < newNumInstances; ++i) {
+                        // Convert transform
+                        // Apply prototype transform (m_transformSamples) to all the instances
+                        combinedTransforms.emplace_back(instanceTransforms.count);
+                        auto& instanceTransform = combinedTransforms.back();
+
+                        if (m_transformSamples.count == 0 ||
+                            (m_transformSamples.count == 1 && (m_transformSamples.values[0] == GfMatrix4d(1)))) {
+                            for (size_t j = 0; j < instanceTransforms.count; ++j) {
+                                instanceTransform[j] = instanceTransforms.values[j][i];
+                            }
+                        } else {
+                            for (size_t j = 0; j < instanceTransforms.count; ++j) {
+                                GfMatrix4d xf_j = m_transformSamples.Resample(instanceTransforms.times[j]);
+                                instanceTransform[j] = xf_j * instanceTransforms.values[j][i];
+                            }
+                        }
                     }
 
                     // Release excessive mesh instances if any
@@ -491,21 +508,21 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
                         auto& meshInstances = m_rprMeshInstances[i];
-                        if (meshInstances.size() != transforms.size()) {
-                            if (meshInstances.size() > transforms.size()) {
-                                for (size_t i = transforms.size(); i < meshInstances.size(); ++i) {
+                        if (meshInstances.size() != newNumInstances) {
+                            if (meshInstances.size() > newNumInstances) {
+                                for (size_t i = newNumInstances; i < meshInstances.size(); ++i) {
                                     rprApi->Release(meshInstances[i]);
                                 }
-                                meshInstances.resize(transforms.size());
+                                meshInstances.resize(newNumInstances);
                             } else {
-                                for (int j = meshInstances.size(); j < transforms.size(); ++j) {
+                                for (int j = meshInstances.size(); j < newNumInstances; ++j) {
                                     meshInstances.push_back(rprApi->CreateMeshInstance(m_rprMeshes[i]));
                                 }
                             }
                         }
 
-                        for (int j = 0; j < transforms.size(); ++j) {
-                            rprApi->SetTransform(meshInstances[j], GfMatrix4f(transforms[j]));
+                        for (int j = 0; j < newNumInstances; ++j) {
+                            rprApi->SetTransform(meshInstances[j], instanceTransforms.count, instanceTransforms.times.data(), combinedTransforms[j].data());
                         }
 
                         // Hide prototype
