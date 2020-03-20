@@ -619,33 +619,26 @@ function(_pxr_add_rpath rpathRef target)
 endfunction()
 
 function(_pxr_install_rpath rpathRef NAME)
-    # Get and remove the origin.
-    list(GET ${rpathRef} 0 origin)
-    set(rpath ${${rpathRef}})
-    list(REMOVE_AT rpath 0)
+    if(APPLE)
+        set(final "@loader_path/.")
+    else()
+        # Get and remove the origin.
+        list(GET ${rpathRef} 0 origin)
+        set(rpath ${${rpathRef}})
+        list(REMOVE_AT rpath 0)
 
-    # Canonicalize and uniquify paths.
-    set(final "")
-    foreach(path ${rpath})
-        # Absolutize on Mac.  SIP disallows relative rpaths.
-        if(APPLE)
-            if("${path}/" MATCHES "^[$]ORIGIN/")
-                # Replace with origin path.
-                string(REPLACE "$ORIGIN/" "${origin}/" path "${path}/")
+        set(final "")
+        # Canonicalize and uniquify paths.
+        foreach(path ${rpath})
+            # Strip trailing slashes.
+            string(REGEX REPLACE "/+$" "" path "${path}")
 
-                # Simplify.
-                get_filename_component(path "${path}" REALPATH)
+            # Ignore paths we already have.
+            if (NOT ";${final};" MATCHES ";${path};")
+                list(APPEND final "${path}")
             endif()
-        endif()
-
-        # Strip trailing slashes.
-        string(REGEX REPLACE "/+$" "" path "${path}")
-
-        # Ignore paths we already have.
-        if (NOT ";${final};" MATCHES ";${path};")
-            list(APPEND final "${path}")
-        endif()
-    endforeach()
+        endforeach()
+    endif()
 
     set_target_properties(${NAME}
         PROPERTIES 
@@ -1277,14 +1270,10 @@ function(_pxr_library NAME)
     # XXX -- May want some plugins to be baked into monolithic.
     _pxr_target_link_libraries(${NAME} ${args_LIBRARIES})
 
-    # Rpath has libraries under the third party prefix and the install prefix.
-    # The former is for helper libraries for a third party application and
-    # the latter for core USD libraries.
     _pxr_init_rpath(rpath "${libInstallPrefix}")
     if(RPR_BUILD_AS_HOUDINI_PLUGIN)
         _pxr_add_rpath(rpath "${HOUDINI_LIB}")
     else()
-        _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/${PXR_INSTALL_SUBDIR}/lib")
         _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/lib")
     endif()
     _pxr_install_rpath(rpath ${NAME})
