@@ -16,83 +16,63 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PUBLIC_TOKENS(HdRprPrimvarTokens, HDRPR_PRIMVAR_TOKENS);
-
-TF_DEFINE_PRIVATE_TOKENS(HdRprRayTypeTokens,
-    (primary)
-    (shadow)
-    (reflection)
-    (refraction)
-    (transparent)
-    (diffuse)
-    (glossyReflection)
-    (glossyRefraction)
-    (light)
+TF_DEFINE_PRIVATE_TOKENS(HdRprGeometryPrimvarTokens,
+    ((subdivisionLevel, "rpr:subdivisionLevel"))
+    ((visibilityPrimary, "rpr:visibilityPrimary"))
+    ((visibilityShadow, "rpr:visibilityShadow"))
+    ((visibilityReflection, "rpr:visibilityReflection"))
+    ((visibilityGlossyReflection, "rpr:visibilityGlossyReflection"))
+    ((visibilityRefraction, "rpr:visibilityRefraction"))
+    ((visibilityGlossyRefraction, "rpr:visibilityGlossyRefraction"))
+    ((visibilityDiffuse, "rpr:visibilityDiffuse"))
+    ((visibilityTransparent, "rpr:visibilityTransparent"))
+    ((visibilityLight, "rpr:visibilityLight"))
 );
 
-uint32_t HdRpr_ParseVisibilityMask(std::string const& visibilityMask) {
-    // The visibility mask is a comma-separated list of inclusive or exclusive ray visibility flags.
-    // For example, "primary,shadow" means that object is visible only for primary and shadow rays;
-    // "-primary,-light,-shadow" - visible for all ray types except primary, light and shadow rays.
-    // Mixing inclusion and exclusion do not make sense.
-    // Exclusion flag will be prioritized in case of mixing, i.e. inclusion flags ignored.
+void HdRpr_ParseGeometrySettings(
+    HdSceneDelegate* sceneDelegate, SdfPath const& id,
+    HdPrimvarDescriptorVector const& constantPrimvarDescs,
+    HdRprGeometrySettings* geomSettings) {
 
-    struct RayTypeDesc {
-        TfToken name;
-        HdRprVisibilityFlag flag;
-    };
-    static RayTypeDesc rayTypeDescs[] = {
-        {HdRprRayTypeTokens->primary, kVisiblePrimary},
-        {HdRprRayTypeTokens->shadow, kVisibleShadow},
-        {HdRprRayTypeTokens->reflection, kVisibleReflection},
-        {HdRprRayTypeTokens->refraction, kVisibleRefraction},
-        {HdRprRayTypeTokens->transparent, kVisibleTransparent},
-        {HdRprRayTypeTokens->diffuse, kVisibleDiffuse},
-        {HdRprRayTypeTokens->glossyReflection, kVisibleGlossyReflection},
-        {HdRprRayTypeTokens->glossyRefraction, kVisibleGlossyRefraction},
-        {HdRprRayTypeTokens->light, kVisibleLight},
-    };
-
-    if (visibilityMask == "*") {
-        return kVisibleAll;
-    }
-
-    uint32_t includedMask = 0;
-    uint32_t excludedMask = 0;
-    for (size_t offset = 0; offset < visibilityMask.size();) {
-        if (visibilityMask[offset] == ',') {
-            ++offset;
-        } else {
-            bool excludeFlag = false;
-            if (visibilityMask[offset] == '-') {
-                excludeFlag = true;
-                ++offset;
-            }
-
-            size_t next = visibilityMask.find(',', offset);
-
-            for (auto& desc : rayTypeDescs) {
-                if (!std::strncmp(desc.name.GetText(), visibilityMask.c_str() + offset, desc.name.size())) {
-                    if (excludeFlag) {
-                        excludedMask |= desc.flag;
-                    } else {
-                        includedMask |= desc.flag;
-                    }
-                    break;
-                }
-            }
-
-            size_t currentLen = (next == std::string::npos ? visibilityMask.size() : next) - offset;
-            offset += currentLen;
+    auto setVisibilityFlag = [&sceneDelegate, &id, &geomSettings]
+        (TfToken const& primvarName, HdRprVisibilityFlag flag) {
+        bool toggle;
+        if (!HdRpr_GetConstantPrimvar(primvarName, sceneDelegate, id, &toggle)) {
+            return;
         }
-    }
 
-    if (excludedMask) {
-        // Everything is included, exclude only those from excludedFlags
-        return (~excludedMask) & kVisibleAll;
-    } else {
-        // Everything is excluded, include only those from includedFlags
-        return includedMask;
+        if (toggle) {
+            geomSettings->visibilityMask |= flag;
+        } else {
+            geomSettings->visibilityMask &= ~flag;
+        }
+    };
+
+    for (auto& desc : constantPrimvarDescs) {
+        if (desc.name == HdRprGeometryPrimvarTokens->subdivisionLevel) {
+            int subdivisionLevel;
+            if (HdRpr_GetConstantPrimvar(HdRprGeometryPrimvarTokens->subdivisionLevel, sceneDelegate, id, &subdivisionLevel)) {
+                geomSettings->subdivisionLevel = std::max(0, std::min(subdivisionLevel, 7));
+            }
+        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityPrimary) {
+            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityPrimary, kVisiblePrimary);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityShadow) {
+            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityShadow, kVisibleShadow);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityReflection) {
+            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityReflection, kVisibleReflection);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityGlossyReflection) {
+            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityGlossyReflection, kVisibleGlossyReflection);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityRefraction) {
+            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityRefraction, kVisibleRefraction);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityGlossyRefraction) {
+            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityGlossyRefraction, kVisibleGlossyRefraction);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityDiffuse) {
+            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityDiffuse, kVisibleDiffuse);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityTransparent) {
+            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityTransparent, kVisibleTransparent);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityLight) {
+            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityLight, kVisibleLight);
+        }
     }
 }
 

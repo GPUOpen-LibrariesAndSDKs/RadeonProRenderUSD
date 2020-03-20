@@ -20,12 +20,15 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-#define HDRPR_PRIMVAR_TOKENS \
-    ((visibilityMask, "rpr:visibilityMask"))
+struct HdRprGeometrySettings {
+    uint32_t visibilityMask;
+    int subdivisionLevel;
+};
 
-TF_DECLARE_PUBLIC_TOKENS(HdRprPrimvarTokens, HDRPR_PRIMVAR_TOKENS);
-
-uint32_t HdRpr_ParseVisibilityMask(std::string const& visibilityMask);
+void HdRpr_ParseGeometrySettings(
+    HdSceneDelegate* sceneDelegate, SdfPath const& id,
+    HdPrimvarDescriptorVector const& constantPrimvarDescs,
+    HdRprGeometrySettings* geomSettings);
 
 template <typename T>
 bool HdRpr_GetConstantPrimvar(TfToken const& name, HdSceneDelegate* sceneDelegate, SdfPath const& id, T* out_value) {

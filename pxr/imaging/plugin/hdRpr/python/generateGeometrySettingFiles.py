@@ -11,7 +11,7 @@
 # 
 import argparse
 
-from commonSettings import visibility_mask_setting
+from commonSettings import visibility_flag_settings
 from houdiniDsGenerator import generate_houdini_ds
 
 geometry_settings = [
@@ -24,9 +24,8 @@ geometry_settings = [
                 'defaultValue': 0,
                 'minValue': 0,
                 'maxValue': 7
-            },
-            visibility_mask_setting
-        ]
+            }
+        ] + visibility_flag_settings
     }
 ]
 

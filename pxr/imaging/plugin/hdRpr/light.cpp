@@ -282,25 +282,19 @@ void HdRprLight::CreateAreaLightMesh(HdRprApi* rprApi, HdSceneDelegate* sceneDel
         }
     }
 
+    HdRprGeometrySettings geomSettings = {};
+
     // By default, conform to Karma's behavior - lights are invisible but still have an effect on the scene
-    uint32_t visibilityMask = kVisibleAll;
-    visibilityMask &= ~kVisiblePrimary;
-    visibilityMask &= ~kVisibleShadow;
-    visibilityMask &= ~kVisibleLight;
+    geomSettings.visibilityMask = kVisibleAll;
+    geomSettings.visibilityMask &= ~kVisiblePrimary;
+    geomSettings.visibilityMask &= ~kVisibleShadow;
+    geomSettings.visibilityMask &= ~kVisibleLight;
 
     auto constantPrimvars = sceneDelegate->GetPrimvarDescriptors(GetId(), HdInterpolationConstant);
-    for (auto& primvarDesc : constantPrimvars) {
-        if (primvarDesc.name == HdRprPrimvarTokens->visibilityMask) {
-            std::string visibilityMaskStr;
-            if (HdRpr_GetConstantPrimvar(HdRprPrimvarTokens->visibilityMask, sceneDelegate, GetId(), &visibilityMaskStr)) {
-                visibilityMask = HdRpr_ParseVisibilityMask(visibilityMaskStr);
-            }
-            break;
-        }
-    }
+    HdRpr_ParseGeometrySettings(sceneDelegate, GetId(), constantPrimvars, &geomSettings);
 
     for (auto& mesh : light->meshes) {
-        rprApi->SetMeshVisibility(mesh, visibilityMask);
+        rprApi->SetMeshVisibility(mesh, geomSettings.visibilityMask);
     }
 
     m_light = light;

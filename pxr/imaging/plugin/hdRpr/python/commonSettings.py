@@ -10,23 +10,66 @@
 # limitations under the License.
 # 
 
-visibility_mask_setting = {
-    'name': 'primvars:rpr:visibilityMask',
-    'ui_name': 'Render Visibility',
-    'defaultValue': '*',
-    'hints': [
-        ('*', 'Visible to all'),
-        ('primary', 'Visible only to primary rays'),
-        ('primary,shadow', 'Visible only to primary and shadow rays'),
-        ('-primary', 'Invisible to primary rays'),
-        ('-primary,-shadow,-light', 'Invisible emissive light'),
-        ('', 'Invisible'),
-    ],
-    'help': 'The visibility mask is a comma-separated list of inclusive or exclusive ray visibility flags.\\n' \
-            'For example, \"primary,shadow\" means that object is visible only for primary and shadow rays;\\n' \
-            '\"-primary,-light,-shadow\" - visible for all ray types except primary, light and shadow rays.\\n' \
-            'Mixing inclusion and exclusion do not make sense.\\n' \
-            'Exclusion flag will be prioritized in case of mixing, i.e. inclusion flags ignored.\\n' \
-            'Possible values: primary, shadow, reflection, refraction, transparent, diffuse, glossyReflection, glossyRefraction, light'
-}
-
+visibility_flag_settings = [
+    {
+        'name': 'primvars:rpr:visibilityPrimary',
+        'ui_name': 'Camera Visibility',
+        'defaultValue': True,
+        'help': 'Used to show or hide an object from the camera.\\n' \
+                'Disabling camera visibility is the most optimized way to hide ' \
+                'an object from the camera but still have it cast shadows, ' \
+                'be visible in reflections, etc.'
+    },
+    {
+        'name': 'primvars:rpr:visibilityShadow',
+        'ui_name': 'Shadow Visibility',
+        'defaultValue': True,
+        'help': 'Shadow visibility controls whether to show or to hide shadows cast by ' \
+                'the object onto other surfaces (including reflected shadows and shadows ' \
+                'seen through transparent objects). You might need this option to hide shadows ' \
+                'that darken other objects in the scene or create unwanted effects.'
+    },
+    {
+        'name': 'primvars:rpr:visibilityReflection',
+        'ui_name': 'Reflection Visibility',
+        'defaultValue': True,
+        'help': 'Reflection visibility makes an object visible or invisible in reflections on ' \
+                'specular surfaces. Note that hiding an object from specular reflections keeps ' \
+                'its shadows (including reflected shadows) visible.'
+    },
+    {
+        'name': 'primvars:rpr:visibilityGlossyReflection',
+        'ui_name': 'Glossy Reflection Visibility',
+        'defaultValue': True
+    },
+    {
+        'name': 'primvars:rpr:visibilityRefraction',
+        'ui_name': 'Refraction Visibility',
+        'defaultValue': True,
+        'help': 'Refraction visibility makes an object visible or invisible when seen through ' \
+                'transparent objects. Note that hiding an object from refractive rays keeps its ' \
+                'shadows (including refracted shadows) visible.'
+    },
+    {
+        'name': 'primvars:rpr:visibilityGlossyRefraction',
+        'ui_name': 'Glossy Refraction Visibility',
+        'defaultValue': True
+    },
+    {
+        'name': 'primvars:rpr:visibilityDiffuse',
+        'ui_name': 'Diffuse Visibility',
+        'defaultValue': True,
+        'help': 'Diffuse visibility affects indirect diffuse rays and makes an object visible ' \
+                'or invisible in reflections on diffuse surfaces.'
+    },
+    {
+        'name': 'primvars:rpr:visibilityTransparent',
+        'ui_name': 'Transparent Visibility',
+        'defaultValue': True
+    },
+    {
+        'name': 'primvars:rpr:visibilityLight',
+        'ui_name': 'Light Visibility',
+        'defaultValue': True
+    }
+]

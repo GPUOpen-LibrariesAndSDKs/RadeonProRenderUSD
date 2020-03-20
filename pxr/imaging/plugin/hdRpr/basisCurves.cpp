@@ -180,21 +180,12 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
         }
         newCurve = true;
 
-        uint32_t visibilityMask = kVisibleAll;
+        HdRprGeometrySettings geomSettings = {};
+        geomSettings.visibilityMask = kVisibleAll;
+        HdRpr_ParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
 
-        auto& constantPrimvars = primvarDescsPerInterpolation.at(HdInterpolationConstant);
-        for (auto& primvarDesc : constantPrimvars) {
-            if (primvarDesc.name == HdRprPrimvarTokens->visibilityMask) {
-                std::string visibilityMaskStr;
-                if (HdRpr_GetConstantPrimvar(HdRprPrimvarTokens->visibilityMask, sceneDelegate, id, &visibilityMaskStr)) {
-                    visibilityMask = HdRpr_ParseVisibilityMask(visibilityMaskStr);
-                }
-                break;
-            }
-        }
-
-        if (m_visibilityMask != visibilityMask) {
-            m_visibilityMask = visibilityMask;
+        if (m_visibilityMask != geomSettings.visibilityMask) {
+            m_visibilityMask = geomSettings.visibilityMask;
             isVisibilityMaskDirty = true;
         }
     }

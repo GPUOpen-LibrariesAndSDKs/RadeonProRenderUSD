@@ -115,10 +115,12 @@ def generate_houdini_ds(install_path, ds_name, settings):
 
             render_param_values = []
             default_value = setting['defaultValue']
-            render_param_type = type(default_value).__name__
-            if render_param_type == 'str':
-                render_param_type = 'string'
-            controlled_type = render_param_type
+            c_type_str = type(default_value).__name__
+            controlled_type = c_type_str
+            if c_type_str == 'str':
+                c_type_str = 'TfToken'
+                controlled_type = 'string'
+            render_param_type = c_type_str
             render_param_default = default_value
             if isinstance(default_value, bool):
                 render_param_type = 'toggle'
@@ -139,7 +141,7 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 tags=[
                     '"spare_category" "{}"'.format(category_name),
                     '"uiscope" "viewport"',
-                    '"usdvaluetype" "{}"'.format(render_param_type)
+                    '"usdvaluetype" "{}"'.format(c_type_str)
                 ] + houdini_settings.get('custom_tags', []),
                 disablewhen_conditions=[
                     control_param_name + ' == block',

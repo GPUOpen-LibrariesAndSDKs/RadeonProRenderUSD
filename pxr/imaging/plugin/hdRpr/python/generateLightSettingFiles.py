@@ -11,17 +11,20 @@
 # 
 import argparse
 
-from commonSettings import visibility_mask_setting
+from commonSettings import visibility_flag_settings
 from houdiniDsGenerator import generate_houdini_ds
 
-light_visibility_mask_setting = visibility_mask_setting
-light_visibility_mask_setting['defaultValue'] = '-primary,-shadow,-light'
+light_visibility_flag_settings = visibility_flag_settings
+for setting in light_visibility_flag_settings:
+    if setting['name'] == 'primvars:rpr:visibilityPrimary' or \
+       setting['name'] == 'primvars:rpr:visibilityShadow' or \
+       setting['name'] == 'primvars:rpr:visibilityLight':
+        setting['defaultValue'] = False
+
 light_settings = [
     {
         'name': 'Light',
-        'settings': [
-            light_visibility_mask_setting
-        ]
+        'settings': light_visibility_flag_settings
     }
 ]
 

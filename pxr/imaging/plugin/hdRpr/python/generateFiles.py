@@ -15,7 +15,6 @@ import sys
 import os
 
 if __name__ == "__main__":
-    print(sys.argv)
     p = argparse.ArgumentParser()
     p.add_argument('scripts_dir', help="Directory with scripts")
     p.add_argument("install", help="The install root for generated files.")

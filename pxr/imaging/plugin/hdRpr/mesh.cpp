@@ -34,10 +34,6 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PRIVATE_TOKENS(HdRprMeshPrivateTokens,
-    ((subdivisionLevel, "rpr:subdivisionLevel"))
-);
-
 HdRprMesh::HdRprMesh(SdfPath const& id, SdfPath const& instancerId)
     : HdMesh(id, instancerId)
     , m_visibilityMask(kVisibleAll) {
@@ -253,27 +249,17 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
         uint32_t visibilityMask = kVisibleAll;
 
-        auto& constantPrimvars = primvarDescsPerInterpolation.at(HdInterpolationConstant);
-        for (auto& primvarDesc : constantPrimvars) {
-            if (primvarDesc.name == HdRprMeshPrivateTokens->subdivisionLevel) {
-                int subdivisionLevel;
-                if (HdRpr_GetConstantPrimvar(HdRprMeshPrivateTokens->subdivisionLevel, sceneDelegate, id, &subdivisionLevel)) {
-                    subdivisionLevel = std::max(0, std::min(subdivisionLevel, 7));
-                    if (m_refineLevel != subdivisionLevel) {
-                        isRefineLevelDirty = true;
-                        m_refineLevel = subdivisionLevel;
-                    }
-                }
-            } else if (primvarDesc.name == HdRprPrimvarTokens->visibilityMask) {
-                std::string visibilityMaskStr;
-                if (HdRpr_GetConstantPrimvar(HdRprPrimvarTokens->visibilityMask, sceneDelegate, id, &visibilityMaskStr)) {
-                    visibilityMask = HdRpr_ParseVisibilityMask(visibilityMaskStr);
-                }
-            }
+        HdRprGeometrySettings geomSettings = {};
+        geomSettings.visibilityMask = kVisibleAll;
+        HdRpr_ParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
+
+        if (m_refineLevel != geomSettings.subdivisionLevel) {
+            m_refineLevel = geomSettings.subdivisionLevel;
+            isRefineLevelDirty = true;
         }
 
-        if (m_visibilityMask != visibilityMask) {
-            m_visibilityMask = visibilityMask;
+        if (m_visibilityMask != geomSettings.visibilityMask) {
+            m_visibilityMask = geomSettings.visibilityMask;
             isVisibilityMaskDirty = true;
         }
     }
