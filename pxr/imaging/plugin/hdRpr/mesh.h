@@ -65,7 +65,8 @@ private:
     HdRprApiMaterial* m_fallbackMaterial = nullptr;
 
     SdfPath m_cachedMaterialId;
-    GfMatrix4f m_transform;
+    static constexpr int kDefaultNumTimeSamples = 2;
+    HdTimeSampleArray<GfMatrix4d, kDefaultNumTimeSamples> m_transformSamples;
 
     HdMeshTopology m_topology;
     HdGeomSubsets m_geomSubsets;

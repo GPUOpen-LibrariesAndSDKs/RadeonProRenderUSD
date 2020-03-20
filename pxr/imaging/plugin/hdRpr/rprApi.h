@@ -96,6 +96,7 @@ public:
     void Release(rpr::Curve* curve);
 
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform);
+    void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples);
 
     GfMatrix4d GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;

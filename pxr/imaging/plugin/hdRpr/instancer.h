@@ -15,6 +15,7 @@ limitations under the License.
 #define HDRPR_INSTANCER_H
 
 #include "pxr/imaging/hd/instancer.h"
+#include "pxr/imaging/hd/timeSampleArray.h"
 
 #include "pxr/base/vt/array.h"
 #include "pxr/base/gf/vec3f.h"
@@ -37,6 +38,8 @@ public:
     }
 
     VtMatrix4dArray ComputeTransforms(SdfPath const& prototypeId);
+
+    HdTimeSampleArray<VtMatrix4dArray, 2> SampleInstanceTransforms(SdfPath const& prototypeId);
 
 private:
     void Sync();
