@@ -332,7 +332,7 @@ void HdRprConfig::Sync(HdRenderDelegate* renderDelegate) {{
             return defaultValue;
         }};
 
-        auto interactiveMode = renderDelegate->GetRenderSetting<std::string>(_tokens->houdiniInteractive, "");
+        auto interactiveMode = renderDelegate->GetRenderSetting<std::string>(_tokens->houdiniInteractive, "normal");
         SetInteractiveMode(interactiveMode != "normal");
 
 {rs_sync}
