@@ -95,7 +95,7 @@ def install_to_custom_dir(package):
         print('Invalid path. Please try again')
 
 valid_targets = ['Houdini']
-package_pattern = re.compile(r'hdRpr-(?P<target>.*?)-.*-(?P<platform_>.*?).tar.gz', re.VERBOSE)
+package_pattern = re.compile(r'hdRpr-.*-(?P<target>.*?)-.*-(?P<platform_>.*?).tar.gz', re.VERBOSE)
 def get_package_from_path(path):
     match = package_pattern.match(path)
 
