@@ -41,7 +41,7 @@ Build using cmake.
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
-| RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.4.2 or higher  |
+| RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.4.4 or higher  |
 
 ##### UsdView plugin Components
 
@@ -49,7 +49,7 @@ UsdView plugin is build by default (```RPR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
-| USD_ROOT                   | USD directory with include and lib dirs                                 | 19.11            |
+| USD_ROOT                   | USD directory with include and lib dirs                                 | 20.02            |
 
 ##### Houdini plugin Components
 
