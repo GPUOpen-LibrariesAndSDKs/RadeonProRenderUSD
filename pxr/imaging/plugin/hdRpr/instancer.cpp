@@ -14,7 +14,9 @@ limitations under the License.
 #include "instancer.h"
 
 #include "pxr/base/gf/quatd.h"
+#include "pxr/base/gf/quath.h"
 #include "pxr/base/gf/rotation.h"
+#include "pxr/base/gf/matrix4f.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -131,15 +133,125 @@ VtMatrix4dArray HdRprInstancer::ComputeTransforms(SdfPath const& prototypeId) {
     return wordTransform;
 }
 
+namespace {
+
 // Helper to accumulate sample times from the largest set of
 // samples seen, up to maxNumSamples.
 template <typename T1, typename T2, unsigned int C>
-static void AccumulateSampleTimes(HdTimeSampleArray<T1, C> const& in, HdTimeSampleArray<T2, C> *out) {
+void AccumulateSampleTimes(HdTimeSampleArray<T1, C> const& in, HdTimeSampleArray<T2, C> *out) {
     if (in.count > out->count) {
         out->Resize(in.count);
         out->times = in.times;
     }
 }
+
+// Apply transforms referenced by instanceIndices
+template <typename Op, typename T>
+void ApplyTransform(
+    VtValue const& allTransformsValue,
+    VtIntArray const& instanceIndices,
+    GfMatrix4d* transforms) {
+    auto& allTransforms = allTransformsValue.Get<VtArray<T>>();
+    if (allTransforms.empty()) {
+        TF_RUNTIME_ERROR("No transforms");
+        return;
+    }
+
+    for (size_t i = 0; i < instanceIndices.size(); ++i) {
+        transforms[i] = Op{}(allTransforms[instanceIndices[i]]) * transforms[i];
+    }
+}
+
+// Apply interpolated transforms referenced by instanceIndices
+template <typename Op, typename T>
+void ApplyTransform(
+    float alpha,
+    VtValue const& allTransformsValue0,
+    VtValue const& allTransformsValue1,
+    VtIntArray const& instanceIndices,
+    GfMatrix4d* transforms) {
+    auto& allTransforms0 = allTransformsValue0.Get<VtArray<T>>();
+    auto& allTransforms1 = allTransformsValue1.Get<VtArray<T>>();
+    if (allTransforms0.empty() ||
+        allTransforms1.empty()) {
+        TF_RUNTIME_ERROR("No transforms");
+        return;
+    }
+
+    for (size_t i = 0; i < instanceIndices.size(); ++i) {
+        auto transform = HdResampleNeighbors(alpha, allTransforms0[instanceIndices[i]], allTransforms1[instanceIndices[i]]);
+        transforms[i] = Op{}(transform) * transforms[i];
+    }
+}
+
+template <typename Op, typename T>
+void ApplyTransform(
+    HdTimeSampleArray<VtValue, 2> const& samples,
+    VtIntArray const& instanceIndices,
+    float time,
+    GfMatrix4d* transforms) {
+
+    size_t i = 0;
+    for (; i < samples.count; ++i) {
+        if (samples.times[i] == time) {
+            // Exact time match
+            return ApplyTransform<Op, T>(samples.values[i], instanceIndices, transforms);
+        }
+        if (samples.times[i] > time) {
+            break;
+        }
+    }
+
+    if (i == 0) {
+        // time is before the first sample.
+        return ApplyTransform<Op, T>(samples.values[0], instanceIndices, transforms);
+    } else if (i == samples.count) {
+        // time is after the last sample.
+        return ApplyTransform<Op, T>(samples.values[samples.count - 1], instanceIndices, transforms);
+    } else if (samples.times[i] == samples.times[i - 1]) {
+        // Neighboring samples have identical parameter.
+        // Arbitrarily choose a sample.
+        TF_WARN("overlapping samples at %f; using first sample", samples.times[i]);
+        return ApplyTransform<Op, T>(samples.values[i - 1], instanceIndices, transforms);
+    } else {
+        // Linear blend of neighboring samples.
+        float alpha = (samples.times[i] - time) / (samples.times[i] - samples.times[i - 1]);
+        return ApplyTransform<Op, T>(alpha, samples.values[i - 1], samples.values[i], instanceIndices, transforms);
+    }
+}
+
+struct TranslateOp {
+    template <typename T>
+    GfMatrix4d operator()(T const& translate) {
+        return GfMatrix4d(1).SetTranslate(GfVec3d(translate));
+    }
+};
+
+struct RotateOp {
+    template <typename T>
+    GfMatrix4d operator()(T const& rotate) {
+        return GfMatrix4d(1).SetRotate(GfRotation(GfQuatd(rotate)));
+    }
+};
+
+struct ScaleOp {
+    template <typename T>
+    GfMatrix4d operator()(T const& scale) {
+        return GfMatrix4d(1).SetScale(GfVec3d(scale));
+    }
+};
+
+struct TransformOp {
+    GfMatrix4d const& operator()(GfMatrix4d const& transform) {
+        return transform;
+    }
+
+    GfMatrix4d operator()(GfMatrix4f const& transform) {
+        return GfMatrix4d(transform);
+    }
+};
+
+} // namespace anonymous
 
 HdTimeSampleArray<VtMatrix4dArray, 2> HdRprInstancer::SampleInstanceTransforms(SdfPath const& prototypeId) {
     HdSceneDelegate *delegate = GetDelegate();
@@ -148,24 +260,30 @@ HdTimeSampleArray<VtMatrix4dArray, 2> HdRprInstancer::SampleInstanceTransforms(S
     VtIntArray instanceIndices = delegate->GetInstanceIndices(instancerId, prototypeId);
 
     HdTimeSampleArray<GfMatrix4d, 2> instancerXform;
-    HdTimeSampleArray<VtValue, 2> boxedInstanceXforms;
-    HdTimeSampleArray<VtValue, 2> boxedTranslates;
-    HdTimeSampleArray<VtValue, 2> boxedRotates;
-    HdTimeSampleArray<VtValue, 2> boxedScales;
+    HdTimeSampleArray<VtValue, 2> instanceXforms;
+    HdTimeSampleArray<VtValue, 2> translates;
+    HdTimeSampleArray<VtValue, 2> rotates;
+    HdTimeSampleArray<VtValue, 2> scales;
     delegate->SampleInstancerTransform(instancerId, &instancerXform);
-    delegate->SamplePrimvar(instancerId, _tokens->instanceTransform, &boxedInstanceXforms);
-    delegate->SamplePrimvar(instancerId, _tokens->translate, &boxedTranslates);
-    delegate->SamplePrimvar(instancerId, _tokens->scale, &boxedScales);
-    delegate->SamplePrimvar(instancerId, _tokens->rotate, &boxedRotates);
+    delegate->SamplePrimvar(instancerId, _tokens->instanceTransform, &instanceXforms);
+    delegate->SamplePrimvar(instancerId, _tokens->translate, &translates);
+    delegate->SamplePrimvar(instancerId, _tokens->scale, &scales);
+    delegate->SamplePrimvar(instancerId, _tokens->rotate, &rotates);
 
-    HdTimeSampleArray<VtMatrix4dArray, 2> instanceXforms;
-    HdTimeSampleArray<VtVec3fArray, 2> translates;
-    HdTimeSampleArray<VtQuatdArray, 2> rotates;
-    HdTimeSampleArray<VtVec3fArray, 2> scales;
-    instanceXforms.UnboxFrom(boxedInstanceXforms);
-    translates.UnboxFrom(boxedTranslates);
-    rotates.UnboxFrom(boxedRotates);
-    scales.UnboxFrom(boxedScales);
+    // Hydra might give us falsely varying instancerXform, i.e. more than one time sample with the sample matrix
+    // This will lead to huge over computation in case it's the only array with a few time samples
+    if (instancerXform.count > 1) {
+        size_t iSample = 1;
+        for (; iSample < instancerXform.values.size(); ++iSample) {
+            if (!GfIsClose(instancerXform.values[iSample - 1], instancerXform.values[iSample], 1e-6)) {
+                break;
+            }
+        }
+        // All samples the same
+        if (iSample == instancerXform.values.size()) {
+            instancerXform.Resize(1);
+        }
+    }
 
     // As a simple resampling strategy, find the input with the max #
     // of samples and use its sample placement.  In practice we expect
@@ -178,53 +296,56 @@ HdTimeSampleArray<VtMatrix4dArray, 2> HdRprInstancer::SampleInstanceTransforms(S
     AccumulateSampleTimes(scales, &sa);
     AccumulateSampleTimes(rotates, &sa);
 
-    // Resample inputs and concatenate transformations.
     for (size_t i = 0; i < sa.count; ++i) {
         const float t = sa.times[i];
+
         GfMatrix4d xf(1);
         if (instancerXform.count > 0) {
             xf = instancerXform.Resample(t);
         }
-        VtMatrix4dArray ixf;
-        if (instanceXforms.count > 0) {
-            ixf = instanceXforms.Resample(t);
-        }
-        VtVec3fArray trans;
-        if (translates.count > 0) {
-            trans = translates.Resample(t);
-        }
-        VtQuatdArray rot;
-        if (rotates.count > 0) {
-            rot = rotates.Resample(t);
-        }
-        VtVec3fArray scale;
-        if (scales.count > 0) {
-            scale = scales.Resample(t);
+
+        auto& transforms = sa.values[i];
+        transforms = VtMatrix4dArray(instanceIndices.size(), xf);
+
+        if (translates.count > 0 && translates.values[0].IsArrayValued()) {
+            auto& type = translates.values[0].GetElementTypeid();
+            if (type == typeid(GfVec3f)) {
+                ApplyTransform<TranslateOp, GfVec3f>(translates, instanceIndices, t, transforms.data());
+            } else if (type == typeid(GfVec3d)) {
+                ApplyTransform<TranslateOp, GfVec3d>(translates, instanceIndices, t, transforms.data());
+            } else if (type == typeid(GfVec3h)) {
+                ApplyTransform<TranslateOp, GfVec3h>(translates, instanceIndices, t, transforms.data());
+            }
         }
 
-        // Concatenate transformations and filter to just the instanceIndices.
-        VtMatrix4dArray &ma = sa.values[i];
-        ma.resize(instanceIndices.size());
-        for (size_t j = 0; j < instanceIndices.size(); ++j) {
-            ma[j] = xf;
-            size_t instanceIndex = instanceIndices[j];
-            if (trans.size() > instanceIndex) {
-                GfMatrix4d t(1);
-                t.SetTranslate(GfVec3d(trans[instanceIndex]));
-                ma[j] = t * ma[j];
+        if (rotates.count > 0 && rotates.values[0].IsArrayValued()) {
+            auto& type = rotates.values[0].GetElementTypeid();
+            if (type == typeid(GfQuath)) {
+                ApplyTransform<RotateOp, GfQuath>(rotates, instanceIndices, t, transforms.data());
+            } else if (type == typeid(GfQuatf)) {
+                ApplyTransform<RotateOp, GfQuatf>(rotates, instanceIndices, t, transforms.data());
+            } else if (type == typeid(GfQuatd)) {
+                ApplyTransform<RotateOp, GfQuatd>(rotates, instanceIndices, t, transforms.data());
             }
-            if (rot.size() > instanceIndex) {
-                GfMatrix4d r(1);
-                r.SetRotate(GfRotation(rot[instanceIndex]));
-                ma[j] = r * ma[j];
+        }
+
+        if (scales.count > 0 && scales.values[0].IsArrayValued()) {
+            auto& type = scales.values[0].GetElementTypeid();
+            if (type == typeid(GfVec3f)) {
+                ApplyTransform<ScaleOp, GfVec3f>(scales, instanceIndices, t, transforms.data());
+            } else if (type == typeid(GfVec3d)) {
+                ApplyTransform<ScaleOp, GfVec3d>(scales, instanceIndices, t, transforms.data());
+            } else if (type == typeid(GfVec3h)) {
+                ApplyTransform<ScaleOp, GfVec3h>(scales, instanceIndices, t, transforms.data());
             }
-            if (scale.size() > instanceIndex) {
-                GfMatrix4d s(1);
-                s.SetScale(GfVec3d(scale[instanceIndex]));
-                ma[j] = s * ma[j];
-            }
-            if (ixf.size() > instanceIndex) {
-                ma[j] = ixf[instanceIndex] * ma[j];
+        }
+
+        if (instanceXforms.count > 0 && instanceXforms.values[0].IsArrayValued()) {
+            auto& type = instanceXforms.values[0].GetElementTypeid();
+            if (type == typeid(GfMatrix4d)) {
+                ApplyTransform<TransformOp, GfMatrix4d>(instanceXforms, instanceIndices, t, transforms.data());
+            } else if (type == typeid(GfMatrix4f)) {
+                ApplyTransform<TransformOp, GfMatrix4f>(instanceXforms, instanceIndices, t, transforms.data());
             }
         }
     }
