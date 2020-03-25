@@ -49,7 +49,7 @@ inline GridType const* openvdbGridCast(openvdb::GridBase const* grid) {
 }
 
 const float defaultDensity = 100.f;      // RPR take density value of 100 as fully opaque
-GfVec3f defaultColor = GfVec3f(0.0f);    // Default color of black
+GfVec3f defaultColor = GfVec3f(0.18f);
 GfVec3f defaultEmission = GfVec3f(0.0f); // Default to no emission
 
 } // namespace anonymous
