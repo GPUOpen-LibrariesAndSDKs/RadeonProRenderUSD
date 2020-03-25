@@ -104,6 +104,8 @@ void HdRprVolume::Sync(
         m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
     }
 
+    bool newVolume = false;
+
     if (*dirtyBits & HdChangeTracker::DirtyTopology) {
         if (m_rprVolume) {
             rprApi->Release(m_rprVolume);
@@ -284,6 +286,13 @@ void HdRprVolume::Sync(
             pColorGridData->indices, pColorGridData->values, pColorGridData->valueLUT,
             pEmissiveGridData->indices, pEmissiveGridData->values, pEmissiveGridData->valueLUT,
             GfVec3i(gridOnBBSize.x(), gridOnBBSize.y(), gridOnBBSize.z()), GfVec3f((float)voxelSize[0], (float)voxelSize[1], (float)voxelSize[2]), gridBBLow);
+        newVolume = m_rprVolume != nullptr;
+    }
+
+    if (m_rprVolume) {
+        if (newVolume || (*dirtyBits & HdChangeTracker::DirtyTransform)) {
+            rprApi->SetTransform(m_rprVolume, m_transform);
+        }
     }
 
     *dirtyBits = HdChangeTracker::Clean;
