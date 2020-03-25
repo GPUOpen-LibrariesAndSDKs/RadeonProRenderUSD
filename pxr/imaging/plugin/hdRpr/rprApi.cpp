@@ -101,7 +101,7 @@ struct HdRprApiVolume {
     std::unique_ptr<rpr::Grid> emissionGrid;
     std::unique_ptr<rpr::Shape> cubeMesh;
     std::unique_ptr<HdRprApiMaterial> cubeMeshMaterial;
-    GfMatrix4f transform;
+    GfMatrix4f voxelsTransform;
 };
 
 struct HdRprApiEnvironmentLight {
@@ -843,15 +843,17 @@ public:
 
         SetMeshMaterial(rprApiVolume->cubeMesh.get(), rprApiVolume->cubeMeshMaterial.get(), true, false);
 
-        rprApiVolume->transform = GfMatrix4f(1.0f);
-        rprApiVolume->transform.SetScale(GfCompMult(voxelSize, gridSize));
-        rprApiVolume->transform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
+        rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
+        rprApiVolume->voxelsTransform.SetScale(GfCompMult(voxelSize, gridSize));
+        rprApiVolume->voxelsTransform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
 
         return rprApiVolume;
     }
 
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform) {
-        auto t = transform * volume->transform;
+        auto t = transform * volume->voxelsTransform;
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
         RPR_ERROR_CHECK(volume->cubeMesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
         RPR_ERROR_CHECK(volume->heteroVolume->SetTransform(t.data(), false), "Failed to set heteroVolume transform");
         m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -2060,6 +2062,10 @@ void HdRprApi::SetTransform(rpr::SceneObject* object, GfMatrix4f const& transfor
 
 void HdRprApi::SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples) {
     m_impl->SetTransform(shape, numSamples, timeSamples, transformSamples);
+}
+
+void HdRprApi::SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform) {
+    m_impl->SetTransform(volume, transform);
 }
 
 rpr::DirectionalLight* HdRprApi::CreateDirectionalLight() {
