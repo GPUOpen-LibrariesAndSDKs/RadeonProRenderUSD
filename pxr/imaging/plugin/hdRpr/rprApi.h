@@ -84,10 +84,18 @@ public:
 
     void Release(rpr::Light* light);
 
-    HdRprApiVolume* CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-                                const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
-                                const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-                                const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow);
+    struct VolumeMaterialParameters {
+        GfVec3f scatteringColor = GfVec3f(1.0f);
+        GfVec3f transmissionColor = GfVec3f(1.0f);
+        GfVec3f emissionColor = GfVec3f(1.0f);
+        float density = 1.0f;
+        float anisotropy = 0.0f;
+        bool multipleScattering = false;
+    };
+    HdRprApiVolume* CreateVolume(VtVec3iArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
+                                 VtVec3iArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
+                                 VtVec3iArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
+                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, VolumeMaterialParameters const& materialParams);
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform);
     void Release(HdRprApiVolume* volume);
 

@@ -27,6 +27,10 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_DECLARE_PUBLIC_TOKENS(HdRprMaterialNetworkSelectorTokens, HDRPR_MATERIAL_NETWORK_SELECTOR_TOKENS);
 
 class HdRprApi;
+class HdRprVolume;
+
+using HdRprVolumeFieldSubscription = std::shared_ptr<HdRprVolume>;
+using HdRprVolumeFieldSubscriptionHandle = std::weak_ptr<HdRprVolume>;
 
 class HdRprRenderParam final : public HdRenderParam {
 public:
@@ -52,6 +56,12 @@ public:
 
     TfToken const& GetMaterialNetworkSelector() const { return m_materialNetworkSelector; }
 
+    // Hydra does not mark HdVolume as changed if HdField used by it is changed
+    // We implement this volume-to-field dependency by ourself until it's implemented in Hydra
+    // More info: https://groups.google.com/forum/#!topic/usd-interest/pabUE0B_5X4
+    HdRprVolumeFieldSubscription SubscribeVolumeForFieldUpdates(HdRprVolume* volume, SdfPath const& fieldId);
+    void NotifyVolumesAboutFieldChange(HdSceneDelegate* sceneDelegate, SdfPath const& fieldId);
+
 private:
     void InitializeEnvParameters();
 
@@ -61,6 +71,9 @@ private:
     std::atomic<uint32_t> m_numLights;
 
     TfToken m_materialNetworkSelector;
+
+    std::mutex m_subscribedVolumesMutex;
+    std::map<SdfPath, std::vector<HdRprVolumeFieldSubscriptionHandle>> m_subscribedVolumes;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
