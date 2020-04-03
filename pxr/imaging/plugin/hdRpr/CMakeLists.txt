@@ -104,9 +104,6 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
 list(APPEND RIF_MODEL_RESOURCE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
 
-# Currently RPR SDK does not distribute correct c++ wrapper, we do it by ourself instead
-set(RPR_CPP_WRAPPER_LOCATION ${CMAKE_CURRENT_SOURCE_DIR})
-
 if(NOT DEFINED RPR_CPP_WRAPPER_LOCATION)
     set(RPR_CPP_WRAPPER_LOCATION ${RPR_TOOLS_LOCATION})
 endif()
