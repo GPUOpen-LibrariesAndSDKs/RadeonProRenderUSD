@@ -29,7 +29,7 @@ TF_DEFINE_PRIVATE_TOKENS(HdRprGeometryPrimvarTokens,
     ((visibilityLight, "rpr:visibilityLight"))
 );
 
-void HdRpr_ParseGeometrySettings(
+void HdRprParseGeometrySettings(
     HdSceneDelegate* sceneDelegate, SdfPath const& id,
     HdPrimvarDescriptorVector const& constantPrimvarDescs,
     HdRprGeometrySettings* geomSettings) {
@@ -37,7 +37,7 @@ void HdRpr_ParseGeometrySettings(
     auto setVisibilityFlag = [&sceneDelegate, &id, &geomSettings]
         (TfToken const& primvarName, HdRprVisibilityFlag flag) {
         bool toggle;
-        if (!HdRpr_GetConstantPrimvar(primvarName, sceneDelegate, id, &toggle)) {
+        if (!HdRprGetConstantPrimvar(primvarName, sceneDelegate, id, &toggle)) {
             return;
         }
 
@@ -51,7 +51,7 @@ void HdRpr_ParseGeometrySettings(
     for (auto& desc : constantPrimvarDescs) {
         if (desc.name == HdRprGeometryPrimvarTokens->subdivisionLevel) {
             int subdivisionLevel;
-            if (HdRpr_GetConstantPrimvar(HdRprGeometryPrimvarTokens->subdivisionLevel, sceneDelegate, id, &subdivisionLevel)) {
+            if (HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->subdivisionLevel, sceneDelegate, id, &subdivisionLevel)) {
                 geomSettings->subdivisionLevel = std::max(0, std::min(subdivisionLevel, 7));
             }
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityPrimary) {
@@ -73,6 +73,55 @@ void HdRpr_ParseGeometrySettings(
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityLight) {
             setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityLight, kVisibleLight);
         }
+    }
+}
+
+void HdRprFillPrimvarDescsPerInterpolation(
+    HdSceneDelegate* sceneDelegate,
+    SdfPath const& id,
+    std::map<HdInterpolation, HdPrimvarDescriptorVector>* primvarDescsPerInterpolation) {
+    if (!primvarDescsPerInterpolation->empty()) {
+        return;
+    }
+
+    auto interpolations = {
+        HdInterpolationConstant,
+        HdInterpolationUniform,
+        HdInterpolationVarying,
+        HdInterpolationVertex,
+        HdInterpolationFaceVarying,
+        HdInterpolationInstance,
+    };
+    for (auto& interpolation : interpolations) {
+        primvarDescsPerInterpolation->emplace(interpolation, sceneDelegate->GetPrimvarDescriptors(id, interpolation));
+    }
+}
+
+bool HdRprIsPrimvarExists(
+    TfToken const& primvarName,
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
+    HdInterpolation* interpolation) {
+    for (auto& entry : primvarDescsPerInterpolation) {
+        for (auto& pv : entry.second) {
+            if (pv.name == primvarName) {
+                if (interpolation) {
+                    *interpolation = entry.first;
+                }
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool HdRprIsValidPrimvarSize(size_t primvarSize, HdInterpolation primvarInterpolation, size_t uniformInterpSize, size_t vertexInterpSize) {
+    switch (primvarInterpolation) {
+    case HdInterpolationConstant:
+        return primvarSize > 0;
+    case HdInterpolationUniform:
+        return primvarSize == uniformInterpSize;
+    default:
+        return primvarSize == vertexInterpSize;
     }
 }
 

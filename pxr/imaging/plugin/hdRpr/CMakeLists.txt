@@ -157,6 +157,7 @@ pxr_plugin(hdRpr
         camera
         debugCodes
         primvarUtil
+        points
         
         ${OptClass}
 

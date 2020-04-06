@@ -425,6 +425,11 @@ public:
         }
     }
 
+    void SetMeshId(rpr::Shape* mesh, uint32_t id) {
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        RPR_ERROR_CHECK(mesh->SetObjectID(id), "Failed to set mesh id");
+    }
+
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
         if (!m_rprContext) {
             return nullptr;
@@ -777,6 +782,15 @@ public:
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
         return m_materialFactory->CreateMaterial(MaterialAdapter.GetType(), MaterialAdapter);
+    }
+
+    HdRprApiMaterial* CreatePointsMaterial(VtVec3fArray const& colors) {
+        if (!m_rprContext) {
+            return nullptr;
+        }
+
+        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        return m_materialFactory->CreatePointsMaterial(colors);
     }
 
     void Release(HdRprApiMaterial* material) {
@@ -2122,6 +2136,11 @@ HdRprApiMaterial* HdRprApi::CreateMaterial(MaterialAdapter& MaterialAdapter) {
     return m_impl->CreateMaterial(MaterialAdapter);
 }
 
+HdRprApiMaterial* HdRprApi::CreatePointsMaterial(VtVec3fArray const& colors) {
+    m_impl->InitIfNeeded();
+    return m_impl->CreatePointsMaterial(colors);
+}
+
 void HdRprApi::SetMeshRefineLevel(rpr::Shape* mesh, int level) {
     m_impl->SetMeshRefineLevel(mesh, level);
 }
@@ -2136,6 +2155,10 @@ void HdRprApi::SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* materia
 
 void HdRprApi::SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask) {
     m_impl->SetMeshVisibility(mesh, visibilityMask);
+}
+
+void HdRprApi::SetMeshId(rpr::Shape* mesh, uint32_t id) {
+    m_impl->SetMeshId(mesh, id);
 }
 
 void HdRprApi::SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material) {

@@ -22,58 +22,6 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-namespace {
-
-void FillPrimvarDescsPerInterpolation(
-    HdSceneDelegate* sceneDelegate,
-    SdfPath const& id,
-    std::map<HdInterpolation, HdPrimvarDescriptorVector>* primvarDescsPerInterpolation) {
-    if (!primvarDescsPerInterpolation->empty()) {
-        return;
-    }
-
-    auto interpolations = {
-        HdInterpolationConstant,
-        HdInterpolationUniform,
-        HdInterpolationVarying,
-        HdInterpolationVertex,
-        HdInterpolationFaceVarying,
-        HdInterpolationInstance,
-    };
-    for (auto& interpolation : interpolations) {
-        primvarDescsPerInterpolation->emplace(interpolation, sceneDelegate->GetPrimvarDescriptors(id, interpolation));
-    }
-}
-
-bool IsPrimvarExists(TfToken const& primvarName,
-                     std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
-                     HdInterpolation* interpolation = nullptr) {
-    for (auto& entry : primvarDescsPerInterpolation) {
-        for (auto& pv : entry.second) {
-            if (pv.name == primvarName) {
-                if (interpolation) {
-                    *interpolation = entry.first;
-                }
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-bool IsValidPrimvarSize(size_t primvarSize, HdInterpolation primvarInterpolation, size_t uniformInterpSize, size_t vertexInterpSize) {
-    switch (primvarInterpolation) {
-        case HdInterpolationConstant:
-            return primvarSize > 0;
-        case HdInterpolationUniform:
-            return primvarSize == uniformInterpSize;
-        default:
-            return primvarSize == vertexInterpSize;
-    }
-}
-
-} // anonymouse namespace
-
 HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id,
                                    SdfPath const& instancerId)
     : HdBasisCurves(id, instancerId)
@@ -116,8 +64,8 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
     bool newCurve = false;
 
     if (*dirtyBits & HdChangeTracker::DirtyPoints) {
-        FillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-        if (IsPrimvarExists(HdTokens->points, primvarDescsPerInterpolation)) {
+        HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
+        if (HdRprIsPrimvarExists(HdTokens->points, primvarDescsPerInterpolation)) {
             m_points = sceneDelegate->Get(id, HdTokens->points).Get<VtVec3fArray>();
         } else {
             m_points = VtVec3fArray();
@@ -158,8 +106,8 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyWidths) {
-        FillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-        if (IsPrimvarExists(HdTokens->widths, primvarDescsPerInterpolation, &m_widthsInterpolation)) {
+        HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
+        if (HdRprIsPrimvarExists(HdTokens->widths, primvarDescsPerInterpolation, &m_widthsInterpolation)) {
             m_widths = sceneDelegate->Get(id, HdTokens->widths).Get<VtFloatArray>();
         } else {
             m_widths = VtFloatArray(1, 1.0f);
@@ -171,9 +119,9 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
 
     bool isVisibilityMaskDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
-        FillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
+        HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
         auto stToken = UsdUtilsGetPrimaryUVSetName();
-        if (IsPrimvarExists(stToken, primvarDescsPerInterpolation, &m_uvsInterpolation)) {
+        if (HdRprIsPrimvarExists(stToken, primvarDescsPerInterpolation, &m_uvsInterpolation)) {
             m_uvs = sceneDelegate->Get(id, stToken).Get<VtVec2fArray>();
         } else {
             m_uvs = VtVec2fArray();
@@ -182,7 +130,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
 
         HdRprGeometrySettings geomSettings = {};
         geomSettings.visibilityMask = kVisibleAll;
-        HdRpr_ParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
+        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
 
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
@@ -214,13 +162,13 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
             TF_RUNTIME_ERROR("[%s] Curve could not be created: missing width", id.GetText());
         } else if (m_topology.GetCurveType() != HdTokens->linear) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: unsupported basis curve type - %s", id.GetText(), m_topology.GetCurveType().GetText());
-        } else if (!IsValidPrimvarSize(m_widths.size(), m_widthsInterpolation, m_topology.GetCurveVertexCounts().size(), m_points.size())) {
+        } else if (!HdRprIsValidPrimvarSize(m_widths.size(), m_widthsInterpolation, m_topology.GetCurveVertexCounts().size(), m_points.size())) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: mismatch in number of widths and requested interpolation type", id.GetText());
-        } else if (!m_uvs.empty() && !IsValidPrimvarSize(m_uvs.size(), m_uvsInterpolation, m_topology.GetCurveVertexCounts().size(), m_points.size())) {
+        } else if (!m_uvs.empty() && !HdRprIsValidPrimvarSize(m_uvs.size(), m_uvsInterpolation, m_topology.GetCurveVertexCounts().size(), m_points.size())) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: mismatch in number of uvs and requested interpolation type", id.GetText());
         } else {
-            FillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-            if (IsPrimvarExists(HdTokens->normals, primvarDescsPerInterpolation)) {
+            HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
+            if (HdRprIsPrimvarExists(HdTokens->normals, primvarDescsPerInterpolation)) {
                 TF_WARN("[%s] Ribbon curves are not supported. Curve of tube type will be created", id.GetText());
             }
 
@@ -239,7 +187,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
             } else {
                 GfVec3f color(0.18f);
 
-                if (IsPrimvarExists(HdTokens->displayColor, primvarDescsPerInterpolation)) {
+                if (HdRprIsPrimvarExists(HdTokens->displayColor, primvarDescsPerInterpolation)) {
                     VtValue val = sceneDelegate->Get(id, HdTokens->displayColor);
                     if (!val.IsEmpty() && val.IsHolding<VtVec3fArray>()) {
                         auto colors = val.UncheckedGet<VtVec3fArray>();

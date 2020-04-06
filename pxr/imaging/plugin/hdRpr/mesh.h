@@ -26,7 +26,6 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
 struct HdRprApiMaterial;
-class HdRprParam;
 
 class HdRprMesh final : public HdMesh {
 public:

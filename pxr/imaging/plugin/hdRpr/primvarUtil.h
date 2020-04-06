@@ -20,18 +20,33 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+void HdRprFillPrimvarDescsPerInterpolation(
+    HdSceneDelegate* sceneDelegate, SdfPath const& id,
+    std::map<HdInterpolation, HdPrimvarDescriptorVector>* primvarDescsPerInterpolation);
+
+bool HdRprIsPrimvarExists(
+    TfToken const& primvarName,
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
+    HdInterpolation* interpolation = nullptr);
+
+bool HdRprIsValidPrimvarSize(
+    size_t primvarSize,
+    HdInterpolation primvarInterpolation,
+    size_t uniformInterpolationSize,
+    size_t vertexInterpolationSize);
+
 struct HdRprGeometrySettings {
-    uint32_t visibilityMask;
-    int subdivisionLevel;
+    uint32_t visibilityMask = 0;
+    int subdivisionLevel = 0;
 };
 
-void HdRpr_ParseGeometrySettings(
+void HdRprParseGeometrySettings(
     HdSceneDelegate* sceneDelegate, SdfPath const& id,
     HdPrimvarDescriptorVector const& constantPrimvarDescs,
     HdRprGeometrySettings* geomSettings);
 
 template <typename T>
-bool HdRpr_GetConstantPrimvar(TfToken const& name, HdSceneDelegate* sceneDelegate, SdfPath const& id, T* out_value) {
+bool HdRprGetConstantPrimvar(TfToken const& name, HdSceneDelegate* sceneDelegate, SdfPath const& id, T* out_value) {
     auto value = sceneDelegate->Get(id, name);
     if (value.IsHolding<T>()) {
         *out_value = value.UncheckedGet<T>();
