@@ -34,6 +34,7 @@ parm {{
     label   "{label}"
     type    string
     default {{ "none" }}
+    {hidewhen}
     menujoin {{
         [ "import loputils" ]
         [ "return loputils.createEditPropertiesControlMenu(kwargs, '{controlled_type}[]')" ]
@@ -69,6 +70,12 @@ def generate_houdini_ds(install_path, ds_name, settings):
             houdini_hidewhen_conditions = []
             if 'hidewhen' in houdini_settings or category_hidewhen:
                 houdini_hidewhen_conditions.append(houdini_settings.get('hidewhen', category_hidewhen))
+            houdini_hidewhen = ''
+            if houdini_hidewhen_conditions:
+                houdini_hidewhen += 'hidewhen "'
+                for condition in houdini_hidewhen_conditions:
+                    houdini_hidewhen += '{{ {} }} '.format(condition)
+                houdini_hidewhen += '"'
 
             def CreateHoudiniParam(name, label, htype, default, values=[], hints=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None):
                 param = 'parm {\n'
@@ -91,11 +98,8 @@ def generate_houdini_ds(install_path, ds_name, settings):
                     param += '    }\n'
                 if disabled_category:
                     param += '    invisible\n'
-                if houdini_hidewhen_conditions:
-                    param += '    hidewhen "'
-                    for condition in houdini_hidewhen_conditions:
-                        param += '{{ {} }} '.format(condition)
-                    param += '"\n'
+                if houdini_hidewhen:
+                    param += '    {}\n'.format(houdini_hidewhen)
                 if disablewhen_conditions:
                     param += '    disablewhen "'
                     for condition in disablewhen_conditions:
@@ -134,7 +138,11 @@ def generate_houdini_ds(install_path, ds_name, settings):
             if 'minValue' in setting and 'maxValue' in setting and not 'values' in setting:
                 render_param_range = (setting['minValue'], setting['maxValue'])
 
-            houdini_params += control_param_template.format(name=control_param_name, label=houdini_param_label, controlled_type=controlled_type)
+            houdini_params += control_param_template.format(
+                name=control_param_name,
+                label=houdini_param_label,
+                controlled_type=controlled_type,
+                hidewhen=houdini_hidewhen)
             houdini_params += CreateHoudiniParam(name, houdini_param_label, render_param_type, render_param_default,
                 values=render_param_values,
                 hints=setting['hints'] if 'hints' in setting else [],
