@@ -14,6 +14,7 @@ limitations under the License.
 #ifndef HDRPR_CAMERA_H
 #define HDRPR_CAMERA_H
 
+#include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/imaging/hd/camera.h"
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/base/gf/range1f.h"
@@ -43,6 +44,7 @@ public:
     bool GetShutterClose(double* value) const;
     bool GetClippingRange(GfRange1f* value) const;
     bool GetProjectionType(TfToken* value) const;
+    HdTimeSampleArray<GfMatrix4d, 2> const& GetTransformSamples() const { return m_transform; }
 
     HdDirtyBits GetDirtyBits() const { return m_rprDirtyBits; }
     void CleanDirtyBits() const { m_rprDirtyBits = HdCamera::Clean; }
@@ -59,6 +61,7 @@ private:
     double m_shutterClose;
     GfRange1f m_clippingRange;
     TfToken m_projectionType;
+    HdTimeSampleArray<GfMatrix4d, 2> m_transform;
 
     mutable HdDirtyBits m_rprDirtyBits = HdCamera::AllDirty;
 };

@@ -727,46 +727,51 @@ public:
         }
     }
 
-    void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples) {
-        if (numSamples == 1) {
-            return SetTransform(shape, GfMatrix4f(transformSamples[0]));
-        }
-
-        static constexpr float epsilon = 1e-6f;
-
-        // XXX (RPR): there is no way to sample all transforms via current RPR API
-        auto& startTransform = transformSamples[0];
-        auto& endTransform = transformSamples[numSamples - 1];
-
+    void GetMotion(GfMatrix4d const& startTransform, GfMatrix4d const& endTransform,
+                   GfVec3f* linearMotion, GfVec3f* scaleMotion, GfVec3f* rotateAxis, float* rotateAngle) {
         GfVec3f startScale, startTranslate; GfQuatf startRotation;
         GfVec3f endScale, endTranslate; GfQuatf endRotation;
         DecomposeTransform(startTransform, startScale, startRotation, startTranslate);
         DecomposeTransform(endTransform, endScale, endRotation, endTranslate);
 
-        auto translateMotion = endTranslate - startTranslate;
-        auto scaleMotion = endScale - startScale;
-        GfVec3f rotAxis(1, 0, 0);
-        float rotAngle = 0.0f;
+        *linearMotion = endTranslate - startTranslate;
+        *scaleMotion = endScale - startScale;
+        *rotateAxis = GfVec3f(1, 0, 0);
+        *rotateAngle = 0.0f;
 
         auto rotateMotion = endRotation * startRotation.GetInverse();
         auto imLen = rotateMotion.GetImaginary().GetLength();
-        if (imLen > epsilon) {
-            rotAxis = rotateMotion.GetImaginary() / imLen;
-            rotAngle = 2.0f * std::atan2(imLen, rotateMotion.GetReal());
+        if (imLen > std::numeric_limits<float>::epsilon()) {
+            *rotateAxis = rotateMotion.GetImaginary() / imLen;
+            *rotateAngle = 2.0f * std::atan2(imLen, rotateMotion.GetReal());
         }
 
-        if (rotAngle > M_PI) {
-            rotAngle -= 2 * M_PI;
+        if (*rotateAngle > M_PI) {
+            *rotateAngle -= 2 * M_PI;
         }
+    }
+
+    void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples) {
+        if (numSamples == 1) {
+            return SetTransform(shape, GfMatrix4f(transformSamples[0]));
+        }
+
+        // XXX (RPR): there is no way to sample all transforms via current RPR API
+        auto& startTransform = transformSamples[0];
+        auto& endTransform = transformSamples[numSamples - 1];
+
+        GfVec3f linearMotion, scaleMotion, rotateAxis;
+        float rotateAngle;
+        GetMotion(startTransform, endTransform, &linearMotion, &scaleMotion, &rotateAxis, &rotateAngle);
 
         auto rprStartTransform = GfMatrix4f(startTransform);
 
         RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         RPR_ERROR_CHECK(shape->SetTransform(rprStartTransform.GetArray(), false), "Fail set shape transform");
-        RPR_ERROR_CHECK(shape->SetLinearMotion(translateMotion[0], translateMotion[1], translateMotion[2]), "Fail to set shape linear motion");
+        RPR_ERROR_CHECK(shape->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Fail to set shape linear motion");
         RPR_ERROR_CHECK(shape->SetScaleMotion(scaleMotion[0], scaleMotion[1], scaleMotion[2]), "Fail to set shape scale motion");
-        RPR_ERROR_CHECK(shape->SetAngularMotion(rotAxis[0], rotAxis[1], rotAxis[2], rotAngle), "Fail to set shape angular motion");
+        RPR_ERROR_CHECK(shape->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Fail to set shape angular motion");
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
@@ -1112,16 +1117,6 @@ public:
             return;
         }
 
-        auto& iwvm = m_hdCamera->GetViewInverseMatrix();
-        auto& wvm = m_hdCamera->GetViewMatrix();
-        auto aspectRatio = double(m_viewportSize[0]) / m_viewportSize[1];
-
-        GfVec3f eye(iwvm[3][0], iwvm[3][1], iwvm[3][2]);
-        GfVec3f up(wvm[0][1], wvm[1][1], wvm[2][1]);
-        GfVec3f n(wvm[0][2], wvm[1][2], wvm[2][2]);
-        GfVec3f at(eye - n);
-        RPR_ERROR_CHECK(m_camera->LookAt(eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]), "Fail to set camera Look At");
-
         GfRange1f clippingRange(0.01f, 100000000.0f);
         m_hdCamera->GetClippingRange(&clippingRange);
         RPR_ERROR_CHECK(m_camera->SetNearPlane(clippingRange.GetMin()), "Failed to set camera near plane");
@@ -1133,8 +1128,40 @@ public:
             m_hdCamera->GetShutterOpen(&shutterOpen);
             m_hdCamera->GetShutterClose(&shutterClose);
         }
-        RPR_ERROR_CHECK(m_camera->SetExposure(std::max(shutterClose - shutterOpen, 0.0)), "Failed to set camera exposure");
+        double exposure = std::max(shutterClose - shutterOpen, 0.0);
+        RPR_ERROR_CHECK(m_camera->SetExposure(exposure), "Failed to set camera exposure");
 
+        auto setCameraLookAt = [this](GfMatrix4d const& viewMatrix, GfMatrix4d const& inverseViewMatrix) {
+            auto& iwvm = inverseViewMatrix;
+            auto& wvm = viewMatrix;
+            GfVec3f eye(iwvm[3][0], iwvm[3][1], iwvm[3][2]);
+            GfVec3f up(wvm[0][1], wvm[1][1], wvm[2][1]);
+            GfVec3f n(wvm[0][2], wvm[1][2], wvm[2][2]);
+            GfVec3f at(eye - n);
+            RPR_ERROR_CHECK(m_camera->LookAt(eye[0], eye[1], eye[2], at[0], at[1], at[2], up[0], up[1], up[2]), "Failed to set camera Look At");
+        };
+
+        if (exposure != 0.0 && m_hdCamera->GetTransformSamples().count > 1) {
+            auto& transformSamples = m_hdCamera->GetTransformSamples();
+
+            // XXX (RPR): there is no way to sample all transforms via current RPR API
+            auto& startTransform = transformSamples.values.front();
+            auto& endTransform = transformSamples.values.back();
+
+            GfVec3f linearMotion, scaleMotion, rotateAxis;
+            float rotateAngle;
+            GetMotion(startTransform, endTransform, &linearMotion, &scaleMotion, &rotateAxis, &rotateAngle);
+
+            setCameraLookAt(startTransform.GetInverse(), startTransform);
+            RPR_ERROR_CHECK(m_camera->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Failed to set camera linear motion");
+            RPR_ERROR_CHECK(m_camera->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Failed to set camera angular motion");
+        } else {
+            setCameraLookAt(m_hdCamera->GetViewMatrix(), m_hdCamera->GetViewInverseMatrix());
+            RPR_ERROR_CHECK(m_camera->SetLinearMotion(0.0f, 0.0f, 0.0f), "Failed to set camera linear motion");
+            RPR_ERROR_CHECK(m_camera->SetAngularMotion(1.0f, 0.0f, 0.0f, 0.0f), "Failed to set camera angular motion");
+        }
+
+        auto aspectRatio = double(m_viewportSize[0]) / m_viewportSize[1];
         m_cameraProjectionMatrix = CameraUtilConformedWindow(m_hdCamera->GetProjectionMatrix(), m_hdCamera->GetWindowPolicy(), aspectRatio);
 
         float sensorWidth;
