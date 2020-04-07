@@ -52,6 +52,9 @@ public:
 
     TfToken const& GetMaterialNetworkSelector() const { return m_materialNetworkSelector; }
 
+    void RestartRender() { m_restartRender.store(true); }
+    bool IsRenderShouldBeRestarted() { return m_restartRender.exchange(false); }
+
 private:
     void InitializeEnvParameters();
 
@@ -61,6 +64,8 @@ private:
     std::atomic<uint32_t> m_numLights;
 
     TfToken m_materialNetworkSelector;
+
+    std::atomic<bool> m_restartRender;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
