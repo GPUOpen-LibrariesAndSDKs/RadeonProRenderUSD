@@ -25,6 +25,7 @@ limitations under the License.
 
 #include <unordered_map>
 #include <vector>
+#include <map>
 
 PXR_NAMESPACE_OPEN_SCOPE
 

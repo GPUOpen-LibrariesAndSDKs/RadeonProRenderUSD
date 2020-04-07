@@ -27,7 +27,7 @@ struct HdRprApiMaterial {
     rpr::MaterialNode* rootMaterial = nullptr;
     rpr::MaterialNode* twosidedNode = nullptr;
     rpr::MaterialNode* displacementMaterial = nullptr;
-    std::vector<rpr::MaterialNode*> materialNodes;
+    std::vector<rpr::ContextObject*> auxiliaryObjects;
     std::vector<std::shared_ptr<rpr::Image>> materialImages;
 };
 
@@ -38,6 +38,7 @@ public:
     RprMaterialFactory(ImageCache* imageCache);
 
     HdRprApiMaterial* CreateMaterial(EMaterialType type, MaterialAdapter const& materialAdapter);
+    HdRprApiMaterial* CreatePointsMaterial(VtVec3fArray const& colors);
     void Release(HdRprApiMaterial* material);
 
     void AttachMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled);
