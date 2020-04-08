@@ -78,6 +78,13 @@ public:
     bool IsPauseSupported() const override;
     bool Pause() override;
     bool Resume() override;
+
+#if PXR_VERSION >= 2005
+    bool IsStopSupported() const override;
+    bool Stop() override;
+    bool Restart() override;
+#endif // PXR_VERSION >= 2005
+
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;

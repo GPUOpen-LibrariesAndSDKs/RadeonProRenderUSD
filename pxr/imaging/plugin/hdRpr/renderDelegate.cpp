@@ -401,6 +401,25 @@ bool HdRprDelegate::Resume() {
     return true;
 }
 
+#if PXR_VERSION >= 2005
+
+bool HdRprDelegate::IsStopSupported() const {
+    return true;
+}
+
+bool HdRprDelegate::Stop() {
+    m_renderThread.StopRender();
+    return true;
+}
+
+bool HdRprDelegate::Restart() {
+    m_renderParam->RestartRender();
+    m_renderThread.StartRender();
+    return true;
+}
+
+#endif // PXR_VERSION >= 2005
+
 TfToken const& HdRprUtilsGetCameraDepthName() {
 #if PXR_VERSION < 2002
     return HdAovTokens->linearDepth;
