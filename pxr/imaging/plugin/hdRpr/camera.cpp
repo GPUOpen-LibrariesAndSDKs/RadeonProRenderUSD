@@ -14,7 +14,6 @@ limitations under the License.
 #include "camera.h"
 #include "renderParam.h"
 
-#include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/usdGeom/tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -96,6 +95,10 @@ void HdRprCamera::Sync(HdSceneDelegate* sceneDelegate,
         EvalCameraParam(&m_clippingRange, HdCameraTokens->clippingRange, sceneDelegate, id, GfRange1f(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN()));
 
         EvalCameraParam(&m_projectionType, UsdGeomTokens->projection, sceneDelegate, id, TfToken());
+    }
+
+    if (*dirtyBits & HdCamera::DirtyViewMatrix) {
+        sceneDelegate->SampleTransform(GetId(), &m_transform);
     }
 
     HdCamera::Sync(sceneDelegate, renderParam, dirtyBits);

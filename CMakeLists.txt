@@ -1,11 +1,6 @@
 project(hdRpr)
 
-# >=3.1 is required for CMAKE_CXX_STANDARD
-if (WIN32)
-    cmake_minimum_required(VERSION 3.1.1)
-else()
-    cmake_minimum_required(VERSION 2.8.8)
-endif()
+cmake_minimum_required(VERSION 3.12)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
                       ${CMAKE_SOURCE_DIR}/cmake/modules
@@ -37,14 +32,7 @@ set(CMAKE_CXX_FLAGS "${_PXR_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 include(Public)
 
-# add_compile_options(-Wall -DBUILD_OPTLEVEL_OPT -DBUILD_COMPONENT_SRC_PREFIX="")
-if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-	# We use HDK to load .rat images, it requires 14th standard
-	set(CMAKE_CXX_STANDARD 14)
-else()
-	set(CMAKE_CXX_STANDARD 11)
-endif()
-
+set(CMAKE_CXX_STANDARD 14)
 
 include_directories(${USD_INCLUDE_DIR})
 link_directories(${USD_LIBRARY_DIR})

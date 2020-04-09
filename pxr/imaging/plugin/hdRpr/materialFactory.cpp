@@ -87,6 +87,61 @@ RprMaterialFactory::RprMaterialFactory(ImageCache* imageCache)
 
 }
 
+HdRprApiMaterial* RprMaterialFactory::CreatePointsMaterial(VtVec3fArray const& colors) {
+    auto context = m_imageCache->GetContext();
+
+    auto setupPointsMaterial = [&colors, context](HdRprApiMaterial* material) -> bool {
+        rpr::Status status;
+        auto rootMaterialNode = context->CreateMaterialNode(RPR_MATERIAL_NODE_UBERV2, &status);
+        if (!rootMaterialNode) {
+            return !RPR_ERROR_CHECK(status, "Failed to create material node");
+        }
+        material->rootMaterial = rootMaterialNode;
+
+        rpr::BufferDesc bufferDesc;
+        bufferDesc.nb_element = colors.size();
+        bufferDesc.element_type = RPR_BUFFER_ELEMENT_TYPE_FLOAT32;
+        bufferDesc.element_channel_size = 3;
+
+        auto colorsBuffer = context->CreateBuffer(bufferDesc, colors.data(), &status);
+        if (!colorsBuffer) {
+            return !RPR_ERROR_CHECK(status, "Failed to create colors buffer");
+        }
+        material->auxiliaryObjects.push_back(colorsBuffer);
+
+        auto lookupIndex = context->CreateMaterialNode(RPR_MATERIAL_NODE_INPUT_LOOKUP, &status);
+        if (!lookupIndex) {
+            return !RPR_ERROR_CHECK(status, "Failed to create input lookup node");
+        }
+        material->auxiliaryObjects.push_back(lookupIndex);
+        if (RPR_ERROR_CHECK(lookupIndex->SetInput(RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_OBJECT_ID), "Failed to set lookup node input value")) {
+            return false;
+        }
+
+        auto bufferSampler = context->CreateMaterialNode(RPR_MATERIAL_NODE_BUFFER_SAMPLER, &status);
+        if (!bufferSampler) {
+            return !RPR_ERROR_CHECK(status, "Failed to create buffer sampler node");
+        }
+        material->auxiliaryObjects.push_back(bufferSampler);
+
+        if (RPR_ERROR_CHECK(bufferSampler->SetInput(RPR_MATERIAL_INPUT_DATA, colorsBuffer), "Failed to set buffer sampler node input data") ||
+            RPR_ERROR_CHECK(bufferSampler->SetInput(RPR_MATERIAL_INPUT_UV, lookupIndex), "Failed to set buffer sampler node input uv") ||
+            RPR_ERROR_CHECK(rootMaterialNode->SetInput(RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR, bufferSampler), "Failed to set root material diffuse color")) {
+            return false;
+        }
+
+        return true;
+    };
+
+    auto material = new HdRprApiMaterial;
+    if (!setupPointsMaterial(material)) {
+        Release(material);
+        material = nullptr;
+    }
+
+    return material;
+}
+
 HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const MaterialAdapter& materialAdapter) {
     rpr::MaterialNodeType materialType;
 
@@ -171,7 +226,7 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
         }
 
         RPR_ERROR_CHECK(materialNode->SetInput(RPR_MATERIAL_INPUT_DATA, rprImage), "Failed to set material node image data input");
-        material->materialNodes.push_back(materialNode);
+        material->auxiliaryObjects.push_back(materialNode);
 
         if (!GfIsEqual(matTex.uvTransform, GfMatrix3f(1.0f))) {
             rpr::MaterialNode* uvLookupNode = context->CreateMaterialNode(RPR_MATERIAL_NODE_INPUT_LOOKUP, &status);
@@ -196,9 +251,9 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
 
                         RPR_ERROR_CHECK(materialNode->SetInput(RPR_MATERIAL_INPUT_UV, transformUvNode), "Failed to set material node node input");
 
-                        material->materialNodes.push_back(transformUvNode);
-                        material->materialNodes.push_back(setZtoOneNode);
-                        material->materialNodes.push_back(uvLookupNode);
+                        material->auxiliaryObjects.push_back(transformUvNode);
+                        material->auxiliaryObjects.push_back(setZtoOneNode);
+                        material->auxiliaryObjects.push_back(uvLookupNode);
                     } else {
                         RPR_ERROR_CHECK(status, "Failed to create arithmetic material node");
                         delete uvLookupNode;
@@ -219,7 +274,7 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
                 RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL), "Failed to set material node uint input");
                 RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR0, materialNode), "Failed to set material node node input");
                 RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR1, matTex.scale[0], matTex.scale[1], matTex.scale[2], matTex.scale[3]), "Failed to set material node vec4 input");
-                material->materialNodes.push_back(arithmetic);
+                material->auxiliaryObjects.push_back(arithmetic);
 
                 materialNode = arithmetic;
             } else {
@@ -233,7 +288,7 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
                 RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_OP, rpr_uint(RPR_MATERIAL_NODE_OP_ADD)), "Failed to set material node uint input");
                 RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR0, materialNode), "Failed to set material node node input");
                 RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR1, matTex.bias[0], matTex.bias[1], matTex.bias[2], matTex.bias[3]), "Failed to set material node vec4 input");
-                material->materialNodes.push_back(arithmetic);
+                material->auxiliaryObjects.push_back(arithmetic);
 
                 materialNode = arithmetic;
             } else {
@@ -252,7 +307,7 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
                     RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR0, materialNode), "Failed to set material node node input");
                     RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR1, 0.0, 0.0, 0.0, 0.0), "Failed to set material node vec4 input");
                     RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_OP, selectedChannel), "Failed to set material node uint input");
-                    material->materialNodes.push_back(arithmetic);
+                    material->auxiliaryObjects.push_back(arithmetic);
 
                     outTexture = arithmetic;
                 } else {
@@ -264,7 +319,7 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
                     RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR0, materialNode), "Failed to set material node node input");
                     RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_COLOR1, 0.2126, 0.7152, 0.0722, 0.0), "Failed to set material node vec4 input");
                     RPR_ERROR_CHECK(arithmetic->SetInput(RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_DOT3), "Failed to set material node uint input");
-                    material->materialNodes.push_back(arithmetic);
+                    material->auxiliaryObjects.push_back(arithmetic);
 
                     outTexture = arithmetic;
                 } else {
@@ -306,7 +361,7 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
 
         auto normalMapNode = context->CreateMaterialNode(RPR_MATERIAL_NODE_NORMAL_MAP, &status);
         if (normalMapNode) {
-            material->materialNodes.push_back(normalMapNode);
+            material->auxiliaryObjects.push_back(normalMapNode);
             RPR_ERROR_CHECK(normalMapNode->SetInput(RPR_MATERIAL_INPUT_COLOR, textureNode), "Failed to set material node node input");
 
             auto s = normalMapParam.second.effectScale;
@@ -328,8 +383,8 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
 
             auto isBlackColorNode = context->CreateMaterialNode(RPR_MATERIAL_NODE_ARITHMETIC, &status);
             if (isBlackColorNode) {
-                material->materialNodes.push_back(averageNode);
-                material->materialNodes.push_back(isBlackColorNode);
+                material->auxiliaryObjects.push_back(averageNode);
+                material->auxiliaryObjects.push_back(isBlackColorNode);
 
                 isBlackColorNode->SetInput(RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_GREATER);
                 isBlackColorNode->SetInput(RPR_MATERIAL_INPUT_COLOR0, averageNode);
@@ -361,7 +416,7 @@ void RprMaterialFactory::Release(HdRprApiMaterial* material) {
 
     delete material->rootMaterial;
     delete material->twosidedNode;
-    for (auto node : material->materialNodes) {
+    for (auto node : material->auxiliaryObjects) {
         delete node;
     }
     delete material;

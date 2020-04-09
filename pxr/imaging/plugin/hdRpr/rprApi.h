@@ -61,6 +61,7 @@ enum HdRprVisibilityFlag {
     kVisibleLight = 1 << 8,
     kVisibleAll = (kVisibleLight << 1) - 1
 };
+const uint32_t kInvisible = 0u;
 
 class HdRprApi final {
 public:
@@ -100,6 +101,7 @@ public:
     void Release(HdRprApiVolume* volume);
 
     HdRprApiMaterial* CreateMaterial(MaterialAdapter& materialAdapter);
+    HdRprApiMaterial* CreatePointsMaterial(VtVec3fArray const& colors);
     void Release(HdRprApiMaterial* material);
 
     rpr::Shape* CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding);
@@ -108,6 +110,7 @@ public:
     void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation);
     void SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled);
     void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask);
+    void SetMeshId(rpr::Shape* mesh, uint32_t id);
     void Release(rpr::Shape* shape);
 
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);

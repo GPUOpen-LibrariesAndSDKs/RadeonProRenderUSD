@@ -62,6 +62,9 @@ public:
     HdRprVolumeFieldSubscription SubscribeVolumeForFieldUpdates(HdRprVolume* volume, SdfPath const& fieldId);
     void NotifyVolumesAboutFieldChange(HdSceneDelegate* sceneDelegate, SdfPath const& fieldId);
 
+    void RestartRender() { m_restartRender.store(true); }
+    bool IsRenderShouldBeRestarted() { return m_restartRender.exchange(false); }
+
 private:
     void InitializeEnvParameters();
 
@@ -74,6 +77,8 @@ private:
 
     std::mutex m_subscribedVolumesMutex;
     std::map<SdfPath, std::vector<HdRprVolumeFieldSubscriptionHandle>> m_subscribedVolumes;
+
+    std::atomic<bool> m_restartRender;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

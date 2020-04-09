@@ -68,20 +68,51 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
         NO_DEFAULT_PATH
         NO_SYSTEM_ENVIRONMENT_PATH)
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    find_package(PythonInterp 2.7 REQUIRED)
-    find_package(PythonLibs 2.7 REQUIRED)
+    # --Python.
+    if(PXR_USE_PYTHON_3)
+        find_package(PythonInterp 3.0 REQUIRED)
+        find_package(PythonLibs 3.0 REQUIRED)
+    else()
+        find_package(PythonInterp 2.7 REQUIRED)
+        find_package(PythonLibs 2.7 REQUIRED)
+    endif()
 
-    find_package(Boost
-        COMPONENTS
-            python
-        REQUIRED
-    )
+    # Set up a version string for comparisons. This is available
+    # as Boost_VERSION_STRING in CMake 3.14+
+    set(boost_version_string "${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION}.${Boost_SUBMINOR_VERSION}")
+
+    if (((${boost_version_string} VERSION_GREATER_EQUAL "1.67") AND
+         (${boost_version_string} VERSION_LESS "1.70")) OR
+        ((${boost_version_string} VERSION_GREATER_EQUAL "1.70") AND
+          Boost_NO_BOOST_CMAKE))
+        # As of boost 1.67 the boost_python component name includes the
+        # associated Python version (e.g. python27, python36). After boost 1.70
+        # the built-in cmake files will deal with this. If we are using boost
+        # that does not have working cmake files, or we are using a new boost
+        # and not using cmake's boost files, we need to do the below.
+        #
+        # Find the component under the versioned name and then set the generic
+        # Boost_PYTHON_LIBRARY variable so that we don't have to duplicate this
+        # logic in each library's CMakeLists.txt.
+        set(python_version_nodot "${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}")
+        find_package(Boost
+            COMPONENTS
+                python${python_version_nodot}
+            REQUIRED
+        )
+        set(Boost_PYTHON_LIBRARY "${Boost_PYTHON${python_version_nodot}_LIBRARY}")
+    else()
+        find_package(Boost
+            COMPONENTS
+                python
+            REQUIRED
+        )
+    endif()
 endif()
 
 find_package(TBB REQUIRED COMPONENTS tbb)
 add_definitions(${TBB_DEFINITIONS})
 
-find_package(OpenEXR REQUIRED COMPONENTS Half)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 
@@ -97,6 +128,7 @@ endif()
 
 if(RPR_ENABLE_OPENVDB_SUPPORT)
 	find_package(OpenVDB REQUIRED)
+    find_package(OpenEXR REQUIRED COMPONENTS Half)
 endif()
 
 # ----------------------------------------------

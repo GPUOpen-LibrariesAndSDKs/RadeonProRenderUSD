@@ -35,7 +35,7 @@ Build using cmake.
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
-| RPR_LOCATION               | Radeon Pro Render directory with include and lib dirs                   | 1.34.7 or higher |
+| RPR_LOCATION               | Radeon Pro Render directory with include and lib dirs                   | 1.35.0 or higher |
 
 ##### Radeon Image Filters
 

@@ -30,6 +30,7 @@ limitations under the License.
 #include "material.h"
 #include "renderBuffer.h"
 #include "basisCurves.h"
+#include "points.h"
 
 #ifdef USE_VOLUME
 #include "volume.h"
@@ -121,7 +122,7 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES = {
     HdPrimTypeTokens->mesh,
     HdPrimTypeTokens->basisCurves,
-
+    HdPrimTypeTokens->points,
 #ifdef USE_VOLUME
     HdPrimTypeTokens->volume,
 #endif
@@ -231,6 +232,8 @@ HdRprim* HdRprDelegate::CreateRprim(TfToken const& typeId,
         return new HdRprMesh(rprimId, instancerId);
     } else if (typeId == HdPrimTypeTokens->basisCurves) {
         return new HdRprBasisCurves(rprimId, instancerId);
+    } else if (typeId == HdPrimTypeTokens->points) {
+        return new HdRprPoints(rprimId, instancerId);
     }
 #ifdef USE_VOLUME
     else if (typeId == HdPrimTypeTokens->volume) {
@@ -397,6 +400,25 @@ bool HdRprDelegate::Resume() {
     m_renderThread.ResumeRender();
     return true;
 }
+
+#if PXR_VERSION >= 2005
+
+bool HdRprDelegate::IsStopSupported() const {
+    return true;
+}
+
+bool HdRprDelegate::Stop() {
+    m_renderThread.StopRender();
+    return true;
+}
+
+bool HdRprDelegate::Restart() {
+    m_renderParam->RestartRender();
+    m_renderThread.StartRender();
+    return true;
+}
+
+#endif // PXR_VERSION >= 2005
 
 TfToken const& HdRprUtilsGetCameraDepthName() {
 #if PXR_VERSION < 2002

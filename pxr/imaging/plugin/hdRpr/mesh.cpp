@@ -251,7 +251,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         HdRprGeometrySettings geomSettings = {};
         geomSettings.visibilityMask = kVisibleAll;
-        HdRpr_ParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
+        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
 
         if (m_refineLevel != geomSettings.subdivisionLevel) {
             m_refineLevel = geomSettings.subdivisionLevel;

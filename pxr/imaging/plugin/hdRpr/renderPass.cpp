@@ -71,7 +71,8 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
         m_renderParam->AcquireRprApiForEdit()->SetCamera(renderPassState->GetCamera());
     }
 
-    if (rprApiConst->IsChanged()) {
+    if (rprApiConst->IsChanged() ||
+        m_renderParam->IsRenderShouldBeRestarted()) {
         for (auto& aovBinding : renderPassState->GetAovBindings()) {
             if (aovBinding.renderBuffer) {
                 auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);

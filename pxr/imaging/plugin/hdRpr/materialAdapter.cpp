@@ -440,6 +440,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
         } else if (paramName == HdRprMaterialTokens->normal) {
             NormalMapParam param;
             param.texture = materialTexture;
+            param.texture.forceLinearSpace = true;
             m_normalMapParams.emplace_back(std::vector<rpr::MaterialNodeInput>{RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL}, param);
         } else if (paramName == HdRprMaterialTokens->displacement) {
             m_displacementTexture = materialTexture;
@@ -851,6 +852,7 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& s
             coatNormalMapParam.texture = getMaterialTexture(HoudiniPrincipledShaderTokens->coatNormal);
             if (!coatNormalMapParam.texture.path.empty()) {
                 coatNormalMapParam.effectScale = GetParameter(HoudiniPrincipledShaderTokens->coatNormalScale, params, 1.0f);
+                coatNormalMapParam.texture.forceLinearSpace = true;
                 m_normalMapParams.emplace_back(std::vector<rpr::MaterialNodeInput>{RPR_MATERIAL_INPUT_UBER_COATING_NORMAL}, coatNormalMapParam);
             }
         } else {
@@ -859,6 +861,7 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& s
 
         if (!baseNormalMapParam.texture.path.empty()) {
             baseNormalMapParam.effectScale = GetParameter(HoudiniPrincipledShaderTokens->baseNormalScale, params, 1.0f);
+            baseNormalMapParam.texture.forceLinearSpace = true;
             m_normalMapParams.emplace_back(rprInputs, baseNormalMapParam);
         }
     }
