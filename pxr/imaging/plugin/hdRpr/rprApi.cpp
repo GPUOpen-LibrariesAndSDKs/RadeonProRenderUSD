@@ -806,9 +806,9 @@ public:
         }
     }
 
-    HdRprApiVolume* CreateVolume(VtVec3iArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
-                                 VtVec3iArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
-                                 VtVec3iArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
+    HdRprApiVolume* CreateVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
+                                 VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
+                                 VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
                                  const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, HdRprApi::VolumeMaterialParameters const& materialParams) {
         if (!m_rprContext) {
             return nullptr;
@@ -825,17 +825,17 @@ public:
 
         rpr::Status densityGridStatus;
         rprApiVolume->densityGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-            &densityCoords[0], densityCoords.size(), RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &densityCoords[0], densityCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
             &densityValues[0], densityValues.size() * sizeof(densityValues[0]), 0, &densityGridStatus));
 
         rpr::Status albedoGridStatus;
         rprApiVolume->albedoGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-            &albedoCoords[0], albedoCoords.size(), RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &albedoCoords[0], albedoCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
             &albedoValues[0], albedoValues.size() * sizeof(albedoValues[0]), 0, &albedoGridStatus));
 
         rpr::Status emissionGridStatus;
         rprApiVolume->emissionGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-            &emissionCoords[0], emissionCoords.size(), RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &emissionCoords[0], emissionCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
             &emissionValues[0], emissionValues.size() * sizeof(emissionValues[0]), 0, &emissionGridStatus));
 
         rpr::Status status;
@@ -2179,9 +2179,9 @@ void HdRprApi::SetLightColor(rpr::IESLight* light, GfVec3f const& color) {
 }
 
 HdRprApiVolume* HdRprApi::CreateVolume(
-    VtVec3iArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
-    VtVec3iArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
-    VtVec3iArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
+    VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
+    VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
+    VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
     const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, VolumeMaterialParameters const& materialParams) {
     m_impl->InitIfNeeded();
     return m_impl->CreateVolume(

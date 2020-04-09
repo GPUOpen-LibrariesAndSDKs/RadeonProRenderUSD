@@ -19,6 +19,8 @@ using json = nlohmann::json;
 #include "rprApi.h"
 #include "renderParam.h"
 
+#include "RPRLibs/pluginUtils.hpp"
+
 #include "houdini/openvdb.h"
 
 #include "pxr/base/gf/range1f.h"
@@ -267,68 +269,37 @@ void ParseOpenvdbMetadata(GridInfo* grid) {
     }
 }
 
-class GridData {
-public:
-    GridData() : m_srcGrid(nullptr) {}
+VDBGrid<float> CopyGridTopology(VDBGrid<float> const& from) {
+    static const float kFillValue = 0.0f;
 
-    GridData& operator=(GridData const& copy) = default;
-    GridData& operator=(GridData&& move) = default;
+    VDBGrid<float> newGrid;
+    newGrid.gridSizeX = from.gridSizeX;
+    newGrid.gridSizeY = from.gridSizeY;
+    newGrid.gridSizeZ = from.gridSizeZ;
+    newGrid.coords = from.coords;
+    newGrid.values = VtFloatArray(from.values.size(), kFillValue);
+    newGrid.LUT = from.LUT;
+    newGrid.maxValue = kFillValue;
+    newGrid.minValue = kFillValue;
 
-    GridData(openvdb::FloatGrid const* grid, openvdb::Coord const& coordOffset) : m_srcGrid(grid) {
-        auto activeVoxelCount = grid->activeVoxelCount();
-        auto backgrondValue = grid->background();
-        m_coords.reserve(activeVoxelCount);
-        m_coords.reserve(activeVoxelCount);
-        for (auto iter = grid->beginValueOn(); iter; ++iter) {
-            openvdb::Coord curCoord = iter.getCoord() + coordOffset;
-            m_coords.push_back(GfVec3i(curCoord.x(), curCoord.y(), curCoord.z()));
-            m_values.push_back(*iter + backgrondValue);
-        }
+    return newGrid;
+}
+
+void NormalizeGrid(VDBGrid<float>* grid) {
+    if ((GfIsClose(grid->minValue, 0.0f, 1e-3f) && GfIsClose(grid->maxValue, 1.0f, 1e-3f)) ||
+        GfIsClose(grid->minValue, grid->maxValue, 1e-6f)) {
+        return;
     }
 
-    void CopyTopology(GridData const& from, float fillValue) {
-        m_srcGrid = nullptr;
-        m_coords = from.m_coords;
-        m_values = VtFloatArray(from.m_values.size(), fillValue);
-        m_valuesRange = GfRange1f(fillValue, fillValue);
+    float offset = -grid->minValue;
+    float scale = 1.0f / (grid->maxValue - grid->minValue);
+    for (auto& value : grid->values) {
+        value = value * scale + offset;
     }
 
-    GfRange1f const& GetValuesRange() {
-        if (m_valuesRange.IsEmpty() && m_srcGrid) {
-            float min, max;
-            m_srcGrid->evalMinMax(min, max);
-            m_valuesRange.SetMin(min);
-            m_valuesRange.SetMax(max);
-        }
-        return m_valuesRange;
-    }
-
-    void Normalize() {
-        auto& valuesRange = GetValuesRange();
-        if ((GfIsClose(valuesRange.GetMin(), 0.0f, 1e-3f) && GfIsClose(valuesRange.GetMax(), 1.0f, 1e-3f)) ||
-            GfIsClose(valuesRange.GetMin(), valuesRange.GetMax(), 1e-6f)) {
-            return;
-        }
-
-        float offset = -valuesRange.GetMin();
-        float scale = 1.0f / (valuesRange.GetMax() - valuesRange.GetMin());
-        for (auto& value : m_values) {
-            value = value * scale + offset;
-        }
-
-        m_valuesRange = GfRange1f(0.0f, 1.0f);
-    }
-
-    VtVec3iArray const& GetCoords() const { return m_coords; }
-    VtFloatArray const& GetValues() const { return m_values; }
-
-private:
-    openvdb::FloatGrid const* m_srcGrid;
-
-    VtVec3iArray m_coords;
-    VtFloatArray m_values;
-    GfRange1f m_valuesRange;
-};
+    grid->minValue = 0.0f;
+    grid->maxValue = 1.0f;
+}
 
 bool IsInMemoryVdb(std::string const& filepath) {
     static std::string opPrefix("op:");
@@ -476,27 +447,27 @@ void HdRprVolume::Sync(
         openvdb::CoordBBox activeVoxelsBB;
         if (densityGrid) activeVoxelsBB.expand(densityGrid->evalActiveVoxelBoundingBox());
         if (emissionGrid) activeVoxelsBB.expand(emissionGrid->evalActiveVoxelBoundingBox());
+        if (albedoGrid) activeVoxelsBB.expand(albedoGrid->evalActiveVoxelBoundingBox());
         openvdb::Coord activeVoxelsBBSize = activeVoxelsBB.extents();
 
-        GridData densityGridData;
-        GridData emissionGridData;
-        GridData albedoGridData;
+        VDBGrid<float> densityGridData;
+        VDBGrid<float> emissionGridData;
+        VDBGrid<float> albedoGridData;
 
         if (densityGrid) {
-            densityGridData = GridData(densityGridInfo.vdbGrid, -activeVoxelsBB.min());
+            ProcessVDBGrid(densityGridData, densityGridInfo.vdbGrid, activeVoxelsBB);
 
             if (densityGridInfo.params.ramp.empty()) {
                 if ((densityGridInfo.params.authoredParamsMask & GridParameters::kNormalizeAuthored) == 0) {
                     densityGridInfo.params.normalize = true;
                 }
 
-                auto& densityValuesRange = densityGridData.GetValuesRange();
-                densityGridInfo.params.ramp.push_back(GfVec3f(densityValuesRange.GetMin()));
-                densityGridInfo.params.ramp.push_back(GfVec3f(densityValuesRange.GetMax()));
+                densityGridInfo.params.ramp.push_back(GfVec3f(densityGridData.minValue));
+                densityGridInfo.params.ramp.push_back(GfVec3f(densityGridData.maxValue));
             }
 
             if (densityGridInfo.params.normalize) {
-                densityGridData.Normalize();
+                NormalizeGrid(&densityGridData);
             }
         }
 
@@ -524,35 +495,35 @@ void HdRprVolume::Sync(
                 emissionGridInfo.params.ramp.push_back(GfVec3f(1.0f));
             }
 
-            emissionGridData = GridData(emissionGridInfo.vdbGrid, -activeVoxelsBB.min());
+            ProcessVDBGrid(emissionGridData, emissionGridInfo.vdbGrid, activeVoxelsBB);
 
             if (emissionGridInfo.params.normalize) {
-                emissionGridData.Normalize();
+                NormalizeGrid(&emissionGridData);
             }
         }
 
         if (albedoGrid) {
-            albedoGridData = GridData(albedoGridInfo.vdbGrid, -activeVoxelsBB.min());
+            ProcessVDBGrid(albedoGridData, albedoGridInfo.vdbGrid, activeVoxelsBB);
             if (albedoGridInfo.params.normalize) {
-                albedoGridData.Normalize();
+                NormalizeGrid(&albedoGridData);
             }
             if (albedoGridInfo.params.ramp.empty()) {
                 albedoGridInfo.params.ramp.push_back(defaultColor);
             }
         }
 
-        if (densityGridData.GetCoords().empty()) {
-            densityGridData.CopyTopology(emissionGridData, 0.0f);
+        if (densityGridData.coords.empty()) {
+            densityGridData = CopyGridTopology(emissionGridData);
             densityGridInfo.params.ramp.push_back(GfVec3f(defaultDensity));
         }
 
-        if (emissionGridData.GetCoords().empty()) {
-            emissionGridData.CopyTopology(densityGridData, 0.0f);
+        if (emissionGridData.coords.empty()) {
+            emissionGridData = CopyGridTopology(densityGridData);
             emissionGridInfo.params.ramp.push_back(defaultEmission);
         }
 
-        if (albedoGridData.GetCoords().empty()) {
-            albedoGridData.CopyTopology(densityGrid ? densityGridData : emissionGridData, 0.0f);
+        if (albedoGridData.coords.empty()) {
+            albedoGridData = CopyGridTopology(densityGrid ? densityGridData : emissionGridData);
             albedoGridInfo.params.ramp.push_back(defaultColor);
         }
 
@@ -572,9 +543,9 @@ void HdRprVolume::Sync(
 
         auto volumeMaterialParams = ParseVolumeMaterialParameters(sceneDelegate, id);
         m_rprVolume = rprApi->CreateVolume(
-            densityGridData.GetCoords(), densityGridData.GetValues(), densityGridInfo.params.ramp, densityGridInfo.params.scale,
-            albedoGridData.GetCoords(), albedoGridData.GetValues(), albedoGridInfo.params.ramp, albedoGridInfo.params.scale, 
-            emissionGridData.GetCoords(), emissionGridData.GetValues(), emissionGridInfo.params.ramp, emissionGridInfo.params.scale,
+            densityGridData.coords, densityGridData.values, densityGridInfo.params.ramp, densityGridInfo.params.scale,
+            albedoGridData.coords, albedoGridData.values, albedoGridInfo.params.ramp, albedoGridInfo.params.scale, 
+            emissionGridData.coords, emissionGridData.values, emissionGridInfo.params.ramp, emissionGridInfo.params.scale,
             GfVec3i(activeVoxelsBBSize.asPointer()), voxelSizeGf, gridBBLow, volumeMaterialParams);
         newVolume = m_rprVolume != nullptr;
     }
