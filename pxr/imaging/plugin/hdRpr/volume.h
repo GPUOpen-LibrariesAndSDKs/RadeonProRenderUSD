@@ -46,6 +46,8 @@ protected:
 private:
     HdRprApiVolume* m_rprVolume = nullptr;
     GfMatrix4f m_transform;
+
+    std::map<SdfPath, std::shared_ptr<HdRprVolume>> m_fieldSubscriptions;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -96,6 +96,7 @@ struct RenderSetting {
 
 struct HdRprApiVolume {
     std::unique_ptr<rpr::HeteroVolume> heteroVolume;
+    std::unique_ptr<rpr::MaterialNode> volumeMaterial;
     std::unique_ptr<rpr::Grid> albedoGrid;
     std::unique_ptr<rpr::Grid> densityGrid;
     std::unique_ptr<rpr::Grid> emissionGrid;
@@ -805,10 +806,10 @@ public:
         }
     }
 
-    HdRprApiVolume* CreateVolume(const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-                                 const std::vector<uint32_t>& albedoGridOnIndices, const std::vector<float>& albedoGridOnValueIndices, const std::vector<float>& albedoGridValues,
-                                 const std::vector<uint32_t>& emissionGridOnIndices, const std::vector<float>& emissionGridOnValueIndices, const std::vector<float>& emissionGridValues,
-                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
+    HdRprApiVolume* CreateVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
+                                 VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
+                                 VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
+                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, HdRprApi::VolumeMaterialParameters const& materialParams) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -823,43 +824,75 @@ public:
         rprApiVolume->cubeMesh.reset(CreateCubeMesh(1.0f, 1.0f, 1.0f));
 
         rpr::Status densityGridStatus;
-        rprApiVolume->densityGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2], &densityGridOnIndices[0],
-            densityGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-            &densityGridOnValueIndices[0], densityGridOnValueIndices.size() * sizeof(densityGridOnValueIndices[0]), 0, &densityGridStatus));
+        rprApiVolume->densityGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
+            &densityCoords[0], densityCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &densityValues[0], densityValues.size() * sizeof(densityValues[0]), 0, &densityGridStatus));
 
         rpr::Status albedoGridStatus;
-        rprApiVolume->albedoGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2], &albedoGridOnIndices[0],
-            albedoGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-            &albedoGridOnValueIndices[0], albedoGridOnValueIndices.size() * sizeof(albedoGridOnValueIndices[0]), 0, &albedoGridStatus));
+        rprApiVolume->albedoGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
+            &albedoCoords[0], albedoCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &albedoValues[0], albedoValues.size() * sizeof(albedoValues[0]), 0, &albedoGridStatus));
 
         rpr::Status emissionGridStatus;
-        rprApiVolume->emissionGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2], &emissionGridOnIndices[0],
-            emissionGridOnIndices.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-            &emissionGridOnValueIndices[0], emissionGridOnValueIndices.size() * sizeof(emissionGridOnValueIndices[0]), 0, &emissionGridStatus));
+        rprApiVolume->emissionGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
+            &emissionCoords[0], emissionCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &emissionValues[0], emissionValues.size() * sizeof(emissionValues[0]), 0, &emissionGridStatus));
 
-        rpr::Status heteroVolumeStatus;
-        rprApiVolume->heteroVolume.reset(m_rprContext->CreateHeteroVolume(&heteroVolumeStatus));
+        rpr::Status status;
+        rprApiVolume->heteroVolume.reset(m_rprContext->CreateHeteroVolume(&status));
 
         if (!rprApiVolume->densityGrid || !rprApiVolume->albedoGrid || !rprApiVolume->emissionGrid ||
             !rprApiVolume->cubeMeshMaterial || !rprApiVolume->cubeMesh ||
             !rprApiVolume->heteroVolume ||
+
             RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityGrid(rprApiVolume->densityGrid.get()), "Failed to set density hetero volume grid") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityLookup(densityGridValues.data(), densityGridValues.size() / 3), "Failed to set density volume lookup values") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityLookup((float*)densityLUT.data(), densityLUT.size()), "Failed to set density volume lookup values") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityScale(densityScale), "Failed to set volume's density scale") ||
+
             RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoGrid(rprApiVolume->albedoGrid.get()), "Failed to set albedo hetero volume grid") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoLookup(albedoGridValues.data(), albedoGridValues.size() / 3), "Failed to set albedo volume lookup values") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoLookup((float*)albedoLUT.data(), albedoLUT.size()), "Failed to set albedo volume lookup values") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoScale(albedoScale), "Failed to set volume's albedo scale") ||
+
             RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionGrid(rprApiVolume->emissionGrid.get()), "Failed to set emission hetero volume grid") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionLookup(emissionGridValues.data(), emissionGridValues.size() / 3), "Failed to set emission volume lookup values") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionLookup((float*)emissionLUT.data(), emissionLUT.size()), "Failed to set emission volume lookup values") ||
+            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionScale(emissionScale), "Failed to set volume's emission scale") ||
+
             RPR_ERROR_CHECK(rprApiVolume->cubeMesh->SetHeteroVolume(rprApiVolume->heteroVolume.get()), "Failed to set hetero volume to mesh") ||
             RPR_ERROR_CHECK(m_scene->Attach(rprApiVolume->heteroVolume.get()), "Failed attach hetero volume")) {
 
             RPR_ERROR_CHECK(densityGridStatus, "Failed to create density grid");
             RPR_ERROR_CHECK(albedoGridStatus, "Failed to create albedo grid");
             RPR_ERROR_CHECK(emissionGridStatus, "Failed to create emission grid");
-            RPR_ERROR_CHECK(heteroVolumeStatus, "Failed to create hetero volume");
+            RPR_ERROR_CHECK(status, "Failed to create hetero volume");
             delete rprApiVolume;
             return nullptr;
         }
 
+        HdRprApi::VolumeMaterialParameters defaultVolumeMaterialParams;
+        if (defaultVolumeMaterialParams.transmissionColor != materialParams.transmissionColor ||
+            defaultVolumeMaterialParams.scatteringColor != materialParams.scatteringColor ||
+            defaultVolumeMaterialParams.emissionColor != materialParams.emissionColor ||
+            defaultVolumeMaterialParams.density != materialParams.density ||
+            defaultVolumeMaterialParams.anisotropy != materialParams.anisotropy ||
+            defaultVolumeMaterialParams.multipleScattering != materialParams.multipleScattering) {
+            rprApiVolume->volumeMaterial.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_VOLUME, &status));
+            if (rprApiVolume->volumeMaterial) {
+                auto scat = materialParams.scatteringColor * materialParams.density;
+                auto abs = (GfVec3f(1) - materialParams.transmissionColor) * materialParams.density;
+                auto emiss = materialParams.emissionColor * materialParams.density;
+                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_SCATTERING, scat[0], scat[1], scat[2], 1.0f);
+                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_ABSORBTION, abs[0], abs[1], abs[2], 1.0f);
+                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_EMISSION, emiss[0], emiss[1], emiss[2], 1.0f);
+                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_G, materialParams.anisotropy);
+                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_MULTISCATTER, static_cast<uint32_t>(materialParams.multipleScattering));
+            } else {
+                RPR_ERROR_CHECK(status, "Failed to create volume material");
+            }
+        }
+
+        if (rprApiVolume->volumeMaterial) {
+            RPR_ERROR_CHECK(rprApiVolume->cubeMesh->SetVolumeMaterial(rprApiVolume->volumeMaterial.get()), "Failed to set volume material");
+        }
         SetMeshMaterial(rprApiVolume->cubeMesh.get(), rprApiVolume->cubeMeshMaterial.get(), true, false);
 
         rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
@@ -2146,16 +2179,16 @@ void HdRprApi::SetLightColor(rpr::IESLight* light, GfVec3f const& color) {
 }
 
 HdRprApiVolume* HdRprApi::CreateVolume(
-    const std::vector<uint32_t>& densityGridOnIndices, const std::vector<float>& densityGridOnValueIndices, const std::vector<float>& densityGridValues,
-    const std::vector<uint32_t>& colorGridOnIndices, const std::vector<float>& colorGridOnValueIndices, const std::vector<float>& colorGridValues,
-    const std::vector<uint32_t>& emissiveGridOnIndices, const std::vector<float>& emissiveGridOnValueIndices, const std::vector<float>& emissiveGridValues,
-    const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
+    VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
+    VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
+    VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
+    const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, VolumeMaterialParameters const& materialParams) {
     m_impl->InitIfNeeded();
     return m_impl->CreateVolume(
-        densityGridOnIndices, densityGridOnValueIndices, densityGridValues,
-        colorGridOnIndices, colorGridOnValueIndices, colorGridValues,
-        emissiveGridOnIndices, emissiveGridOnValueIndices, emissiveGridValues,
-        gridSize, voxelSize, gridBBLow);
+        densityCoords, densityValues, densityLUT, densityScale,
+        albedoCoords, albedoValues, albedoLUT, albedoScale,
+        emissionCoords, emissionValues, emissionLUT, emissionScale,
+        gridSize, voxelSize, gridBBLow, materialParams);
 }
 
 HdRprApiMaterial* HdRprApi::CreateMaterial(MaterialAdapter& MaterialAdapter) {

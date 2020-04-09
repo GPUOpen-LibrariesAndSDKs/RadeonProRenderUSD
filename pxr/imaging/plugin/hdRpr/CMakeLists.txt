@@ -31,6 +31,7 @@ set(USD_LIBRARIES
     hd
     hdSt
     hdx
+    usdVol
     usdLux
     usdUtils
     usdRender
@@ -130,6 +131,7 @@ pxr_plugin(hdRpr
         ${TBB_INCLUDE_DIRS}
         ${GLEW_INCLUDE_DIR}
         ${CMAKE_CURRENT_BINARY_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
         ${OPENEXR_INCLUDE_DIRS}
         
         ${OptIncludeDir}
