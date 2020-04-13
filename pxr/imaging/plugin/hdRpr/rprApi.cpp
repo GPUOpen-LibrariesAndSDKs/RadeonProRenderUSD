@@ -47,6 +47,7 @@ limitations under the License.
 #include "notify/message.h"
 
 #include <RadeonProRender_Baikal.h>
+#include <RprLoadStore.h>
 
 #include <fstream>
 #include <vector>
@@ -1426,6 +1427,21 @@ public:
             return;
         }
 
+        if (!m_rprSceneExportPath.empty()) {
+            std::string exportPath;
+            {
+                std::lock_guard<std::mutex> lock(m_rprSceneExportPathMutex);
+                std::swap(m_rprSceneExportPath, exportPath);
+            }
+            if (!exportPath.empty()) {
+                auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
+                auto rprSceneHandle = rpr::GetRprObject(m_scene.get());
+                if (!RPR_ERROR_CHECK(rprsExport(exportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, 0), "Failed to export .rpr file")) {
+                    printf("Successfully exported \"%s\"\n", exportPath.c_str());
+                }
+            }
+        }
+
         std::vector<std::pair<void*, size_t>> outputRenderBuffers;
         for (auto& aovBinding : m_aovBindings) {
             if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
@@ -1542,6 +1558,11 @@ Don't show this message again?
 
     int GetCurrentRenderQuality() const {
         return m_currentRenderQuality;
+    }
+
+    void ExportRprSceneOnNextRender(const char* exportPath) {
+        std::lock_guard<std::mutex> lock(m_rprSceneExportPathMutex);
+        m_rprSceneExportPath = exportPath;
     }
 
 private:
@@ -2086,6 +2107,9 @@ private:
     State m_state = kStateUninitialized;
 
     bool m_showRestartRequiredWarning = true;
+
+    std::mutex m_rprSceneExportPathMutex;
+    std::string m_rprSceneExportPath;
 };
 
 HdRprApi::HdRprApi(HdRenderDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
@@ -2315,6 +2339,10 @@ bool HdRprApi::IsArbitraryShapedLightSupported() const {
 
 int HdRprApi::GetCurrentRenderQuality() const {
     return m_impl->GetCurrentRenderQuality();
+}
+
+void HdRprApi::ExportRprSceneOnNextRender(const char* exportPath) {
+    m_impl->ExportRprSceneOnNextRender(exportPath);
 }
 
 std::string HdRprApi::GetAppDataPath() {

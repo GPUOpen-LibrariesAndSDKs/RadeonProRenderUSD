@@ -448,3 +448,11 @@ int GetHdRprRenderQuality() {
     }
     return PXR_INTERNAL_NS::g_rprApi->GetCurrentRenderQuality();
 }
+
+int HdRprExportRprSceneOnNextRender(const char* exportPath) {
+    if (!PXR_INTERNAL_NS::g_rprApi) {
+        return -1;
+    }
+    PXR_INTERNAL_NS::g_rprApi->ExportRprSceneOnNextRender(exportPath);
+    return 0;
+}

@@ -111,6 +111,8 @@ HDRPR_API void SetHdRprRenderQuality(int quality);
 
 HDRPR_API int GetHdRprRenderQuality();
 
+HDRPR_API int HdRprExportRprSceneOnNextRender(const char* exportPath);
+
 } // extern "C"
 
 #endif // HDRPR_RENDER_DELEGATE_H
