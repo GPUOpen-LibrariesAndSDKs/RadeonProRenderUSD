@@ -15,6 +15,8 @@ endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
 include(ProjectDefaults)
 include(Packages)
 
+find_package(Vulkan REQUIRED)
+
 # This has to be defined after Packages is included, because it relies on the
 # discovered path to the python executable.
 set(PXR_PYTHON_SHEBANG "${PYTHON_EXECUTABLE}"
@@ -38,6 +40,8 @@ include_directories(${USD_INCLUDE_DIR})
 link_directories(${USD_LIBRARY_DIR})
 include_directories(${RPR_INCLUDE_DIR})
 link_directories(${RPR_LIBRARY_DIR})
+include_directories(${Vulkan_INCLUDE_DIRS})
+link_directories(${Vulkan_LIBRARIES})
 
 add_subdirectory(pxr/imaging/plugin/hdRpr)
 

@@ -13,8 +13,7 @@ limitations under the License.
 
 #include "renderDelegate.h"
 
-#include"pxr/imaging/hd/extComputation.h"
-
+#include "pxr/imaging/hd/extComputation.h"
 #include "pxr/base/tf/diagnosticMgr.h"
 #include "pxr/base/tf/getenv.h"
 
@@ -303,7 +302,7 @@ void HdRprDelegate::DestroySprim(HdSprim* sPrim) {
 HdBprim* HdRprDelegate::CreateBprim(TfToken const& typeId,
                                     SdfPath const& bprimId) {
     if (typeId == HdPrimTypeTokens->renderBuffer) {
-        return new HdRprRenderBuffer(bprimId);
+        return new HdRprRenderBuffer(bprimId, m_rprApi.get());
     }
 #ifdef USE_VOLUME
     else if (typeId == _tokens->openvdbAsset) {
@@ -399,6 +398,17 @@ bool HdRprDelegate::Pause() {
 bool HdRprDelegate::Resume() {
     m_renderThread.ResumeRender();
     return true;
+}
+
+void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
+	for (HdDriver* hdDriver : drivers) {
+		if (hdDriver->name == TfToken("RPR") && hdDriver->driver.IsHolding<VtDictionary>()) {
+			VtDictionary dictionary = hdDriver->driver.UncheckedGet<VtDictionary>();
+			void* interopInfo = dictionary["interop_info"].Get<void*>();
+			m_rprApi->SetInteropInfo(interopInfo);
+			break;
+		}
+	}
 }
 
 #if PXR_VERSION >= 2005

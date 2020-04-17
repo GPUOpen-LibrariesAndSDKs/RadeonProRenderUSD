@@ -79,6 +79,8 @@ public:
     bool Pause() override;
     bool Resume() override;
 
+    virtual void SetDrivers(HdDriverVector const& drivers);
+
 #if PXR_VERSION >= 2005
     bool IsStopSupported() const override;
     bool Stop() override;
