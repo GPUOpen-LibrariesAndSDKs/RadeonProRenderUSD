@@ -139,21 +139,19 @@ public:
         //InitIfNeeded();
     }
 
-	rpr::FrameBuffer* GetColorFramebuffer() {
-		auto aovIter = m_boundAovs.find(TfToken("color"));
-		if (aovIter == m_boundAovs.end())
-		{
-			return nullptr;
-		}
+    rpr::FrameBuffer* GetColorFramebuffer() {
+        auto aovIter = m_boundAovs.find(HdAovTokens->color);
+        if (aovIter == m_boundAovs.end()) {
+            return nullptr;
+        }
 
-		auto fb = (*aovIter).second->GetAovFb();
-		if (fb == nullptr)
-		{
-			return nullptr;
-		}
+        auto fb = (*aovIter).second->GetAovFb();
+        if (fb == nullptr) {
+            return nullptr;
+        }
 
-		return fb->GetRprObject();
-	}
+        return fb->GetRprObject();
+    }
 
     void InitIfNeeded() {
         if (m_state != kStateUninitialized) {
@@ -1392,15 +1390,15 @@ public:
     void RenderImpl(HdRprRenderThread* renderThread, std::vector<std::pair<void*, size_t>> const& outputRenderBuffers) {
         bool stopRequested = false;
 
-		// Made temporarily just to have working interop
-		if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
-			std::cout << "[Plugin] Render\n";
-			auto status = m_rprContext->Render();
-			rprContextFlushFrameBuffers_func rprContextFlushFrameBuffers;
-			rprContextGetFunctionPtr(m_rprContext->Handle(), RPR_CONTEXT_FLUSH_FRAMEBUFFERS_FUNC_NAME, (void**)(&rprContextFlushFrameBuffers));
-			rprContextFlushFrameBuffers(m_rprContext->Handle());
-			return;
-		}
+        // Made temporarily just to have working interop
+        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+            std::cout << "[Plugin] Render\n";
+            auto status = m_rprContext->Render();
+            rprContextFlushFrameBuffers_func rprContextFlushFrameBuffers;
+            rprContextGetFunctionPtr(m_rprContext->Handle(), RPR_CONTEXT_FLUSH_FRAMEBUFFERS_FUNC_NAME, (void**)(&rprContextFlushFrameBuffers));
+            rprContextFlushFrameBuffers(m_rprContext->Handle());
+            return;
+        }
 		
         while (!IsConverged() || stopRequested) {
             renderThread->WaitUntilPaused();
@@ -1577,13 +1575,13 @@ Don't show this message again?
         return m_currentRenderQuality;
     }
 
-	void SetInteropInfo(void* interopInfo) {
-		m_interopInfo = interopInfo;
-	}
+    void SetInteropInfo(void* interopInfo) {
+        m_interopInfo = interopInfo;
+    }
 
-	rpr::PluginType GetActivePluginType() {
-		return m_rprContextMetadata.pluginType;
-	}
+    rpr::PluginType GetActivePluginType() {
+        return m_rprContextMetadata.pluginType;
+    }
 
 private:
     void InitRpr() {
@@ -1594,24 +1592,23 @@ private:
             // Force sync to catch up the latest render quality and render device
             config->Sync(m_delegate);
 
-			renderQuality = config->GetRenderQuality();
+            renderQuality = config->GetRenderQuality();
             m_rprContextMetadata.renderDeviceType = static_cast<rpr::RenderDeviceType>(config->GetRenderDevice());
         }
 
         m_rprContextMetadata.pluginType = renderQuality == kRenderQualityFull ? rpr::kPluginTahoe : rpr::kPluginHybrid;
         auto cachePath = HdRprApi::GetCachePath();
-		m_rprContextMetadata.interopInfo = m_interopInfo;
+        m_rprContextMetadata.interopInfo = m_interopInfo;
         m_rprContext.reset(rpr::CreateContext(cachePath.c_str(), &m_rprContextMetadata));
         if (!m_rprContext) {
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
-		if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
-			RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 1), "Fail to set context Y FLIP parameter");
-		}
-		else if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe) {
-			RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Fail to set context Y FLIP parameter");
-		}
+        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 1), "Fail to set context Y FLIP parameter");
+        } else if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe) {
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Fail to set context Y FLIP parameter");
+        }
 
         {
             HdRprConfig* config;
@@ -2136,7 +2133,7 @@ private:
 
     bool m_showRestartRequiredWarning = true;
 
-	void* m_interopInfo = nullptr;
+    void* m_interopInfo = nullptr;
 };
 
 HdRprApi::HdRprApi(HdRenderDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
@@ -2415,18 +2412,18 @@ std::string HdRprApi::GetCachePath() {
 }
 
 rpr::FrameBuffer* HdRprApi::GetColorFramebuffer() {
-	return m_impl->GetColorFramebuffer();
+    return m_impl->GetColorFramebuffer();
 }
 
 rpr::PluginType HdRprApi::GetActivePluginType() const {
-	return m_impl->GetActivePluginType();
+    return m_impl->GetActivePluginType();
 }
 
 void HdRprApi::SetInteropInfo(void* interopInfo) {
-	m_impl->SetInteropInfo(interopInfo);
+    m_impl->SetInteropInfo(interopInfo);
 
-	// Temporary should be force inited here, because otherwise has issues with GPU synchronization
-	m_impl->InitIfNeeded();
+    // Temporary should be force inited here, because otherwise has issues with GPU synchronization
+    m_impl->InitIfNeeded();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

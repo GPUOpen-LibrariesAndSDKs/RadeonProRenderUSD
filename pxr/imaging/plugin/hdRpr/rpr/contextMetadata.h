@@ -35,7 +35,7 @@ struct ContextMetadata {
     PluginType pluginType = kPluginInvalid;
     RenderDeviceType renderDeviceType = kRenderDeviceInvalid;
     bool isGlInteropEnabled = false;
-	void* interopInfo = nullptr;
+    void* interopInfo = nullptr;
 };
 
 } // namespace rpr
