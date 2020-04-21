@@ -115,7 +115,8 @@ private:
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
-    (percentDone)
+    (percentDone) \
+    (RPR)
 );
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES = {
@@ -402,7 +403,7 @@ bool HdRprDelegate::Resume() {
 
 void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
 	for (HdDriver* hdDriver : drivers) {
-		if (hdDriver->name == TfToken("RPR") && hdDriver->driver.IsHolding<VtDictionary>()) {
+		if (hdDriver->name == _tokens->RPR && hdDriver->driver.IsHolding<VtDictionary>()) {
 			VtDictionary dictionary = hdDriver->driver.UncheckedGet<VtDictionary>();
 			void* interopInfo = dictionary["interop_info"].Get<void*>();
 			m_rprApi->SetInteropInfo(interopInfo);
