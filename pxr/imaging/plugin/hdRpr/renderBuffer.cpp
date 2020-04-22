@@ -19,10 +19,12 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id)
+HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id, HdRprApi* api)
     : HdRenderBuffer(id)
     , m_numMappers(0)
-    , m_isConverged(false) {
+    , m_isConverged(false)
+    , m_api(api)
+{
 
 }
 
@@ -107,6 +109,25 @@ bool HdRprRenderBuffer::IsConverged() const {
 
 void HdRprRenderBuffer::SetConverged(bool converged) {
     return m_isConverged.store(converged);
+}
+
+VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
+    if ("aov_color" == GetId().GetElementString()) {
+        rpr::FrameBuffer* color = m_api->GetColorFramebuffer();
+
+        rpr::PluginType type = m_api->GetActivePluginType();
+        bool isHybrid = false;
+        if (type == rpr::PluginType::kPluginHybrid) {
+            isHybrid = true;
+        }
+
+        VtDictionary dictionary;
+        dictionary["is_hybrid"] = isHybrid;
+        dictionary["framebuffer"] = color;
+
+        return VtValue(dictionary);
+    }
+    return VtValue();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -15,12 +15,14 @@ limitations under the License.
 #define HDRPR_RENDER_BUFFER_H
 
 #include "pxr/imaging/hd/renderBuffer.h"
+#include "RadeonProRender.hpp"
+#include "rprApi.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprRenderBuffer final : public HdRenderBuffer {
 public:
-    HdRprRenderBuffer(SdfPath const& id);
+    HdRprRenderBuffer(SdfPath const& id, HdRprApi* api = nullptr);
     ~HdRprRenderBuffer() override = default;
 
     void Sync(HdSceneDelegate* sceneDelegate,
@@ -55,6 +57,10 @@ public:
 
     void SetConverged(bool converged);
 
+    // HdRprRenderBuffer should hold actual framebuffer
+    // But for now just take it from HdRprApi in order to provide valid API
+    VtValue GetResource(bool multiSampled) const override;
+
 protected:
     void _Deallocate() override;
 
@@ -66,6 +72,8 @@ private:
     std::vector<uint8_t> m_mappedBuffer;
     std::atomic<int> m_numMappers;
     std::atomic<bool> m_isConverged;
+
+    HdRprApi* m_api = nullptr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
