@@ -53,6 +53,8 @@ limitations under the License.
 #include <mutex>
 #include <iostream>
 
+#include <iostream>
+
 #ifdef WIN32
 #include <shlobj_core.h>
 #pragma comment(lib,"Shell32.lib")
