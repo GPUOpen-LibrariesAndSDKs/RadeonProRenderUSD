@@ -1435,16 +1435,8 @@ public:
             return;
         }
 
-        bool stopRequested = false;
-
         // For now render 5 frames before each present
         for (int i = 0; i < 5; i++) {
-            renderThread->WaitUntilPaused();
-            stopRequested = renderThread->IsStopRequested();
-            if (stopRequested) {
-                break;
-            }
-
             rpr::Status status = m_rprContext->Render();
             if (status != rpr::Status::RPR_SUCCESS) {
                 TF_WARN("rprContextRender returns: %d", status);
