@@ -125,9 +125,7 @@ ContextOpenCL::ContextOpenCL(rpr::Context* rprContext, std::string const& modelP
     }
 
     std::vector<rpr_char> path = GetRprCachePath(rprContext);
-    #ifndef __APPLE__
     RIF_ERROR_CHECK_THROW(rifCreateContextFromOpenClContext(RIF_API_VERSION, clContext, clDevice, clCommandQueue, path.data(), &m_context), "Failed to create RIF context")
-    #endif
 }
 
 std::unique_ptr<Image> ContextOpenCL::CreateImage(HdRprApiFramebuffer* rprFrameBuffer) {

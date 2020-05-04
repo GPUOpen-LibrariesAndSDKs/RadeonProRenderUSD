@@ -1352,11 +1352,9 @@ public:
         }
 
         rif::FilterType filterType = rif::FilterType::EawDenoise;
-#ifndef __APPLE__
         if (m_rprContextMetadata.renderDeviceType == rpr::kRenderDeviceGPU) {
             filterType = rif::FilterType::AIDenoise;
         }
-#endif // __APPLE__
 
         if (filterType == rif::FilterType::EawDenoise) {
             colorAov->EnableEAWDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
@@ -1625,11 +1623,9 @@ private:
         // In such a way, when user enables denoising it will not require to rerender
         // but it requires more memory, obviously, it should be taken into an account
         rif::FilterType filterType = rif::FilterType::EawDenoise;
-#ifndef __APPLE__
         if (m_rprContextMetadata.renderDeviceType == rpr::kRenderDeviceGPU) {
             filterType = rif::FilterType::AIDenoise;
         }
-#endif // __APPLE__
 
         initInternalAov(HdRprUtilsGetCameraDepthName());
         initInternalAov(HdRprAovTokens->albedo);
