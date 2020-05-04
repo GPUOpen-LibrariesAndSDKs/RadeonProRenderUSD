@@ -247,8 +247,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     bool isVisibilityMaskDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
-        uint32_t visibilityMask = kVisibleAll;
-
         HdRprGeometrySettings geomSettings = {};
         geomSettings.visibilityMask = kVisibleAll;
         HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);

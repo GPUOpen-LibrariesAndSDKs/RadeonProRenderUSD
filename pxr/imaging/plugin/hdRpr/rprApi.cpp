@@ -658,8 +658,6 @@ public:
     }
 
     void DecomposeTransform(GfMatrix4d const& transform, GfVec3f& scale, GfQuatf& orient, GfVec3f& translate) {
-        static constexpr float epsilon = 1e-6f;
-
         translate = GfVec3f(transform.ExtractTranslation());
 
         GfVec3f col[3], skew;
