@@ -658,8 +658,6 @@ public:
     }
 
     void DecomposeTransform(GfMatrix4d const& transform, GfVec3f& scale, GfQuatf& orient, GfVec3f& translate) {
-        static constexpr float epsilon = 1e-6f;
-
         translate = GfVec3f(transform.ExtractTranslation());
 
         GfVec3f col[3], skew;
@@ -1352,11 +1350,9 @@ public:
         }
 
         rif::FilterType filterType = rif::FilterType::EawDenoise;
-#ifndef __APPLE__
         if (m_rprContextMetadata.renderDeviceType == rpr::kRenderDeviceGPU) {
             filterType = rif::FilterType::AIDenoise;
         }
-#endif // __APPLE__
 
         if (filterType == rif::FilterType::EawDenoise) {
             colorAov->EnableEAWDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
@@ -1625,11 +1621,9 @@ private:
         // In such a way, when user enables denoising it will not require to rerender
         // but it requires more memory, obviously, it should be taken into an account
         rif::FilterType filterType = rif::FilterType::EawDenoise;
-#ifndef __APPLE__
         if (m_rprContextMetadata.renderDeviceType == rpr::kRenderDeviceGPU) {
             filterType = rif::FilterType::AIDenoise;
         }
-#endif // __APPLE__
 
         initInternalAov(HdRprUtilsGetCameraDepthName());
         initInternalAov(HdRprAovTokens->albedo);
