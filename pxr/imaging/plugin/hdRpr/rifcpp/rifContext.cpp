@@ -63,7 +63,11 @@ public:
 
     void UpdateInputImage(HdRprApiFramebuffer* rprFrameBuffer, rif_image image) override;
 private:
+#ifdef __APPLE__
+    const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_METAL;
+#else
     const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_OPENCL;
+#endif
 };
 
 std::vector<rpr_char> GetRprCachePath(rpr::Context* rprContext) {
