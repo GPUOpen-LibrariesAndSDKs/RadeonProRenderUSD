@@ -168,13 +168,13 @@ else:
         install_to_houdini_dir(install_variants[0], package)
     else:
         print('Few Houdini installation has been found. Select the desired one.')
-        for i, path in enumerate(install_variants):
+        for i, path in enumerate(install_variants, start=1):
             print('{}. "{}"'.format(i, path))
         custom_path_idx = len(install_variants)
         print('{}. Custom path'.format(custom_path_idx))
         print('Enter number.')
         try:
-            idx = int(input())
+            idx = int(input()) - 1
             if idx == custom_path_idx:
                 install_to_custom_dir(package)
             else:
