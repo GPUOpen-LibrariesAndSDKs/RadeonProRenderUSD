@@ -30,6 +30,16 @@ find_library(RPR_LIBRARY
     NO_SYSTEM_ENVIRONMENT_PATH
 )
 
+find_library(RPR_LOADSTORE_LIBRARY
+    NAMES  libRprLoadStore64 RprLoadStore64
+    PATHS
+        "${RPR_LOCATION_LIB}"
+    DOC
+        "Radeon ProRender loadstore library path"
+    NO_DEFAULT_PATH
+    NO_SYSTEM_ENVIRONMENT_PATH
+)
+
 if(WIN32)
     if(NOT RPR_BIN_LOCATION)
         set(RPR_BIN_LOCATION ${RPR_LOCATION}/binWin64)
@@ -45,6 +55,7 @@ if(WIN32)
 
     set(RPR_BINARIES
         ${RPR_BIN_LOCATION}/RadeonProRender64.dll
+        ${RPR_BIN_LOCATION}/RprLoadStore64.dll
         ${RPR_TAHOE_BINARY}
         ${RPR_HYBRID_BINARY})
 else()
@@ -88,5 +99,6 @@ include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Rpr
     REQUIRED_VARS
         RPR_LOCATION_INCLUDE
+        RPR_LOADSTORE_LIBRARY
         RPR_LIBRARY
 )

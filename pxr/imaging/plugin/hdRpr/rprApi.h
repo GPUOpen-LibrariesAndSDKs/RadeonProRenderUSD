@@ -145,6 +145,7 @@ public:
     bool IsAovFormatConversionAvailable() const;
     bool IsArbitraryShapedLightSupported() const;
     int GetCurrentRenderQuality() const;
+    void ExportRprSceneOnNextRender(const char* exportPath);
 
     static std::string GetAppDataPath();
     static std::string GetCachePath();

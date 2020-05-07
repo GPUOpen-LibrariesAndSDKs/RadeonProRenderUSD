@@ -113,6 +113,7 @@ pxr_plugin(hdRpr
    LIBRARIES
         ${USD_LIBRARIES}
         ${RPR_LIBRARY}
+        ${RPR_LOADSTORE_LIBRARY}
         ${RIF_LIBRARY}
         ${Boost_LIBRARIES}
         ${TBB_tbb_LIBRARY}
@@ -225,6 +226,9 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
             ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
             ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds
         DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/soho/parameters")
+    install(
+        FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/rpr_exportRpr1.hda
+        DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/otls")
 else(RPR_BUILD_AS_HOUDINI_PLUGIN)
     _get_install_dir(lib/python/rpr installPrefix)
 
@@ -259,7 +263,7 @@ else(WIN32)
 
     # install() does not follow symlinks, so we do it manually
     set(RESOLVED_LIBRARIES "")
-    foreach (file ${RPR_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY} ${RIF_DEPENDENCY_LIBRARIES})
+    foreach (file ${RPR_LIBRARY} ${RPR_LOADSTORE_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY} ${RIF_DEPENDENCY_LIBRARIES})
         while(IS_SYMLINK ${file})
             file(READ_SYMLINK ${file} symfile)
             if(NOT IS_ABSOLUTE "${symfile}")
