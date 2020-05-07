@@ -11,6 +11,7 @@
 - Support Houdini's principled shader ([PR #234](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/234))
 - Update to USD 20.05 with USD 19.11 and USD 20.02 compatibility ([PR #274](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/274), [PR #236](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/236))
 - Unlock medium quality ([PR #222](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/222))
+- Enable ML Denoiser on macOS ([PR #279](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/279))
 
 
 ### Fixes
