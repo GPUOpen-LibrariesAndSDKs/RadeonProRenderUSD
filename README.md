@@ -42,6 +42,7 @@ Build using cmake.
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
 | RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.4.4 or higher  |
+| RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.5.1.2 or higher  |
 
 ##### UsdView plugin Components
 

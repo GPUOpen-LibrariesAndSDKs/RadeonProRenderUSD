@@ -31,7 +31,7 @@ void HdRprRenderParam::InitializeEnvParameters() {
 
 HdRprVolumeFieldSubscription HdRprRenderParam::SubscribeVolumeForFieldUpdates(
     HdRprVolume* volume, SdfPath const& fieldId) {
-    auto sub = HdRprVolumeFieldSubscription(volume, [this](HdRprVolume* volume) {});
+    auto sub = HdRprVolumeFieldSubscription(volume, [](HdRprVolume* volume) {});
     {
         std::lock_guard<std::mutex> lock(m_subscribedVolumesMutex);
         m_subscribedVolumes[fieldId].push_back(std::move(sub));

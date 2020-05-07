@@ -63,7 +63,11 @@ public:
 
     void UpdateInputImage(HdRprApiFramebuffer* rprFrameBuffer, rif_image image) override;
 private:
+#ifdef __APPLE__
+    const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_METAL;
+#else
     const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_OPENCL;
+#endif
 };
 
 std::vector<rpr_char> GetRprCachePath(rpr::Context* rprContext) {
@@ -125,9 +129,7 @@ ContextOpenCL::ContextOpenCL(rpr::Context* rprContext, std::string const& modelP
     }
 
     std::vector<rpr_char> path = GetRprCachePath(rprContext);
-    #ifndef __APPLE__
     RIF_ERROR_CHECK_THROW(rifCreateContextFromOpenClContext(RIF_API_VERSION, clContext, clDevice, clCommandQueue, path.data(), &m_context), "Failed to create RIF context")
-    #endif
 }
 
 std::unique_ptr<Image> ContextOpenCL::CreateImage(HdRprApiFramebuffer* rprFrameBuffer) {
