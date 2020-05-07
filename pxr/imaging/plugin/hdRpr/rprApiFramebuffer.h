@@ -23,7 +23,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApiFramebuffer {
 public:
-    static constexpr rpr::Aov kAovNone = RPR_AOV_MAX;
+    static constexpr rpr::Aov kAovNone = static_cast<rpr::Aov>(-1);
     static constexpr uint32_t kNumChannels = 4;
 
     HdRprApiFramebuffer(rpr::Context* context, uint32_t width, uint32_t height);

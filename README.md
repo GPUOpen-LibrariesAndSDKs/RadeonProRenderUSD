@@ -35,13 +35,12 @@ Build using cmake.
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
-| RPR_LOCATION               | Radeon Pro Render directory with include and lib dirs                   | 1.35.0 or higher |
+| RPR_LOCATION               | Radeon Pro Render directory with include and lib dirs                   | 1.35.1 or higher |
 
 ##### Radeon Image Filters
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
-| RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.4.4 or higher  |
 | RIF_LOCATION               | Radeon Image Filter Library directory with include and lib dirs         | 1.5.1.2 or higher  |
 
 ##### UsdView plugin Components
