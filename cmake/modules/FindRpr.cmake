@@ -1,3 +1,7 @@
+if(NOT RPR_LOCATION)
+    set(RPR_LOCATION ${PROJECT_SOURCE_DIR}/deps/RPR/RadeonProRender)
+endif()
+
 macro(SET_RPR_VARIABLES dirName)
     if(NOT RPR_LOCATION_LIB)
         set(RPR_LOCATION_LIB ${RPR_LOCATION}/${dirName})
