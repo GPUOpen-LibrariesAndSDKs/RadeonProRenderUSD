@@ -1,3 +1,7 @@
+if(NOT RIF_LOCATION)
+    set(RIF_LOCATION ${PROJECT_SOURCE_DIR}/deps/RIF)
+endif()
+
 macro(SET_RIF_VARIABLES dirName)
     if(NOT RIF_LOCATION_LIB)
         set(RIF_LOCATION_LIB ${RIF_LOCATION}/${dirName})
