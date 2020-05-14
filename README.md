@@ -7,29 +7,44 @@ You can build this plugin as usdview plugin or as houdini plugin.
 
 For more details on USD, please visit the web site [here](http://openusd.org).
 
-Prerequisites
+Getting and Building the Code
 -----------------------------
 
-#### For UsdView plugin
-* **USD build / tree**
+#### 1. Install prerequisites
 
-    As many USD users get the USD libraries from different places, or compile their own, we tried to keep this as flexible as possible. You can download USD to build yourself from [GitHub](https://www.github.com/PixarAnimationStudios/USD)
+- Required:
+    - C++ compiler:
+        - gcc
+        - Xcode
+        - Microsoft Visual Studio
+    - CMake
+    - Python
 
-#### For Houdini plugin
-* **Houdini 18**
+#### 2. Download the hdRpr source code
 
-    You can download Houdini installer from [Daily Builds | SideFX](https://www.sidefx.com/download/daily-builds/#category-gold)
+You can use ```git``` to clone the repository.
 
-Building
------------------------------
+```
+> git clone --recurse-submodules -j2 https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD
+Cloning into 'RadeonProRenderUSD'...
+```
 
-Build using cmake.
+or
 
-#### Required Components
+```
+> git clone https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD
+Cloning into 'RadeonProRenderUSD'...
+> cd RadeonProRenderUSD
+> git submodule update --init
+```
+
+#### 3. Configure project using cmake
+
+##### Required Components
 
 ##### UsdView plugin Components
 
-UsdView plugin is build by default (```RPR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
+As many USD users get the USD libraries from different places, or compile their own, we tried to keep this as flexible as possible. You can download USD to build yourself from [GitHub](https://www.github.com/PixarAnimationStudios/USD). UsdView plugin is build by default (```RPR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
@@ -37,13 +52,13 @@ UsdView plugin is build by default (```RPR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
 
 ##### Houdini plugin Components
 
-To build houdini plugin set cmake flag ```RPR_BUILD_AS_HOUDINI_PLUGIN=TRUE```. `HOUDINI_ROOT` is the directory containing the `houdini_setup` file.
+To build houdini plugin set cmake flag ```RPR_BUILD_AS_HOUDINI_PLUGIN=TRUE```. `HOUDINI_ROOT` is the directory containing the `houdini_setup` file. You can download Houdini installer from [Daily Builds | SideFX](https://www.sidefx.com/download/daily-builds/#category-gold).
 
 | Dependency Name            | Description                                                             | Version          |
 | ------------------         |-----------------------------------------------------------------------  | -------          |
 | HOUDINI_ROOT               | Houdini toolkit directory                                               | 18               |
 
-#### Optional Components
+##### Optional Components
 
 ##### OpenVDB
 
@@ -56,19 +71,19 @@ specifying the cmake flag ```RPR_ENABLE_OPENVDB_SUPPORT=TRUE```.
 | ------------------         |-----------------------------------------------------------------------  | -------          |
 | OPENVDB_LOCATION           | OpenVDB directory with include and lib dirs                             |                  |
 
-#### Utility cmake options
+##### Utility cmake options
 
 ##### `RPR_SDK_PLATFORM` - Forcing build against specific platform libraries
 
 Let's say you are on centos 7 and want to force it to use the centos6 build,
 then you need to specify ```RPR_SDK_PLATFORM=centos6``` cmake flag
 
-#### Example
+##### Example
 
 ```
 mkdir build
 cd build
-cmake -DUSD_ROOT=/data/usd_build -DRPR_LOCATION=/data/RPR_SDK/RadeonProRender -DCMAKE_INSTALL_PREFIX=/data/usd_build ..
+cmake -DUSD_ROOT=/data/usd_build -DCMAKE_INSTALL_PREFIX=/data/usd_build ..
 make
 make install
 ```
