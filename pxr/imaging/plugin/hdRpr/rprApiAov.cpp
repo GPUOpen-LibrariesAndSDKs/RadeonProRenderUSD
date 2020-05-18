@@ -277,6 +277,37 @@ void HdRprApiColorAov::DisableDenoise(rif::Context* rifContext) {
     }
 }
 
+void HdRprApiColorAov::SetTonemap(TonemapParams const& params) {
+    bool isTonemapEnabled = m_enabledFilters & kFilterTonemap;
+    bool tonemapEnableDirty = params.enable != isTonemapEnabled;
+
+    SetFilter(kFilterTonemap, params.enable);
+
+    if (m_tonemap != params) {
+        m_tonemap = params;
+
+        if (!tonemapEnableDirty && isTonemapEnabled) {
+            if (m_mainFilterType == kFilterTonemap) {
+                SetTonemapFilterParams(m_filter.get());
+            } else {
+                for (auto& entry : m_auxFilters) {
+                    if (entry.first == kFilterTonemap) {
+                        SetTonemapFilterParams(entry.second.get());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void HdRprApiColorAov::SetTonemapFilterParams(rif::Filter* filter) {
+    filter->SetParam("exposure", m_tonemap.exposure);
+    filter->SetParam("sensitivity", m_tonemap.sensitivity);
+    filter->SetParam("fstop", m_tonemap.fstop);
+    filter->SetParam("gamma", m_tonemap.gamma);
+}
+
 void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
     if (m_dirtyBits & ChangeTracker::DirtyFormat) {
         OnFormatChange(rifContext);
@@ -294,22 +325,34 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
 
         if ((m_enabledFilters & kFilterAIDenoise) ||
             (m_enabledFilters & kFilterEAWDenoise) ||
-            (m_enabledFilters & kFilterComposeOpacity)) {
+            (m_enabledFilters & kFilterComposeOpacity) ||
+            (m_enabledFilters & kFilterTonemap)) {
+
+            auto addFilter = [this](Filter type, std::unique_ptr<rif::Filter> filter) {
+                if (m_filter) {
+                    m_auxFilters.emplace_back(m_mainFilterType, std::move(m_filter));
+                }
+
+                m_filter = std::move(filter);
+                m_mainFilterType = type;
+            };
+
+            if (m_enabledFilters & kFilterTonemap) {
+                addFilter(kFilterTonemap, rif::Filter::CreateCustom(RIF_IMAGE_FILTER_PHOTO_LINEAR_TONEMAP, rifContext));
+            }
 
             if ((m_enabledFilters & kFilterAIDenoise) ||
                 (m_enabledFilters & kFilterEAWDenoise)) {
                 auto denoiseFilterType = (m_enabledFilters & kFilterAIDenoise) ? rif::FilterType::AIDenoise : rif::FilterType::EawDenoise;
                 auto fbDesc = m_aov->GetDesc();
-                m_filter = rif::Filter::Create(denoiseFilterType, rifContext, fbDesc.fb_width, fbDesc.fb_height);
-                m_mainFilterType = (m_enabledFilters & kFilterAIDenoise) ? kFilterAIDenoise : kFilterEAWDenoise;
+
+                auto type = (m_enabledFilters & kFilterAIDenoise) ? kFilterAIDenoise : kFilterEAWDenoise;
+                auto filter = rif::Filter::Create(denoiseFilterType, rifContext, fbDesc.fb_width, fbDesc.fb_height);
+                addFilter(type, std::move(filter));
             }
 
             if (m_enabledFilters & kFilterComposeOpacity) {
-                if (m_filter) {
-                    m_auxFilters.emplace_back(m_mainFilterType, std::move(m_filter));
-                }
-
-                m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, rifContext);
+                auto filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, rifContext);
                 auto opacityComposingKernelCode = std::string(R"(
                     int2 coord;
                     GET_COORD_OR_RETURN(coord, GET_BUFFER_SIZE(inputImage));
@@ -317,8 +360,8 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
                     vec4 color = ReadPixelTyped(inputImage, coord.x, coord.y) * alpha.x;
                     WritePixelTyped(outputImage, coord.x, coord.y, make_vec4(color.x, color.y, color.z, alpha.x));
                 )");
-                m_filter->SetParam("code", opacityComposingKernelCode);
-                m_mainFilterType = kFilterComposeOpacity;
+                filter->SetParam("code", opacityComposingKernelCode);
+                addFilter(kFilterComposeOpacity, std::move(filter));
             }
         } else if (m_enabledFilters & kFilterResample) {
             m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
@@ -371,6 +414,8 @@ void HdRprApiColorAov::ResizeFilter(int width, int height, Filter filterType, ri
         filter->SetInput("alphaImage", m_retainedOpacity->GetResolvedFb());
     } else if (filterType == kFilterResample) {
         filter->SetParam("outSize", GfVec2i(width, height));
+    } else if (filterType == kFilterTonemap) {
+        SetTonemapFilterParams(filter);
     }
 }
 

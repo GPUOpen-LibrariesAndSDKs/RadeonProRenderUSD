@@ -87,6 +87,25 @@ public:
                           std::shared_ptr<HdRprApiAov> worldCoordinate);
     void DisableDenoise(rif::Context* rifContext);
 
+    struct TonemapParams {
+        bool enable;
+        float exposure;
+        float sensitivity;
+        float fstop;
+        float gamma;
+
+        bool operator==(TonemapParams const& lhs) {
+            return exposure == lhs.exposure &&
+                sensitivity == lhs.sensitivity &&
+                fstop == lhs.fstop &&
+                gamma == lhs.gamma;
+        }
+        bool operator!=(TonemapParams const& lhs) {
+            return !(*this == lhs);
+        }
+    };
+    void SetTonemap(TonemapParams const& params);
+
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
     void OnSizeChange(rif::Context* rifContext) override;
@@ -98,11 +117,14 @@ private:
         kFilterAIDenoise = 1 << 1,
         kFilterEAWDenoise = 1 << 2,
         kFilterComposeOpacity = 1 << 3,
+        kFilterTonemap = 1 << 4,
     };
     void SetFilter(Filter filter, bool enable);
     
     template <typename T>
     void ResizeFilter(int width, int height, Filter filterType, rif::Filter* filter, T input);
+
+    void SetTonemapFilterParams(rif::Filter* filter);
 
 private:
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
@@ -113,6 +135,8 @@ private:
 
     uint32_t m_enabledFilters = kFilterNone;
     bool m_isEnabledFiltersDirty = true;
+
+    TonemapParams m_tonemap;
 };
 
 class HdRprApiNormalAov : public HdRprApiAov {
