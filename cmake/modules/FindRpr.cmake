@@ -18,10 +18,10 @@ elseif(WIN32)
     SET_RPR_VARIABLES(libWin64)
 elseif(RPR_SDK_PLATFORM STREQUAL "ubuntu18.04")
     SET_RPR_VARIABLES(binUbuntu18)
-elseif(RPR_SDK_PLATFORM STREQUAL "centos6")
-    SET_RPR_VARIABLES(binCentOS69)
 elseif(RPR_SDK_PLATFORM STREQUAL "centos7")
     SET_RPR_VARIABLES(binCentOS7)
+else()
+    message(FATAL_ERROR "Unknown platform: ${RPR_SDK_PLATFORM}")
 endif()
 
 find_library(RPR_LIBRARY
