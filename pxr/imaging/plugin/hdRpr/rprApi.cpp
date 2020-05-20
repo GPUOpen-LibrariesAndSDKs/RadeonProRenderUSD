@@ -1011,6 +1011,7 @@ public:
 
         bool clearAovs = false;
         RenderSetting<bool> enableDenoise;
+        RenderSetting<HdRprApiColorAov::TonemapParams> tonemap;
         RenderSetting<bool> instantaneousShutter;
         RenderSetting<TfToken> aspectRatioPolicy;
         {
@@ -1020,6 +1021,15 @@ public:
             enableDenoise.isDirty = config->IsDirty(HdRprConfig::DirtyDenoise);
             if (enableDenoise.isDirty) {
                 enableDenoise.value = config->GetEnableDenoising();
+            }
+
+            tonemap.isDirty = config->IsDirty(HdRprConfig::DirtyTonemapping);
+            if (tonemap.isDirty) {
+                tonemap.value.enable = config->GetEnableTonemap();
+                tonemap.value.exposure = config->GetTonemapExposure();
+                tonemap.value.sensitivity = config->GetTonemapSensitivity();
+                tonemap.value.fstop = config->GetTonemapFstop();
+                tonemap.value.gamma = config->GetTonemapGamma();
             }
 
             aspectRatioPolicy.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
@@ -1067,7 +1077,7 @@ public:
             config->ResetDirty();
         }
         UpdateCamera(aspectRatioPolicy, instantaneousShutter);
-        UpdateAovs(rprRenderParam, enableDenoise, clearAovs);
+        UpdateAovs(rprRenderParam, enableDenoise, tonemap, clearAovs);
 
         m_dirtyFlags = ChangeTracker::Clean;
         if (m_hdCamera) {
@@ -1262,7 +1272,7 @@ public:
         }
     }
 
-    void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, bool clearAovs) {
+    void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, bool clearAovs) {
         if (m_dirtyFlags & ChangeTracker::DirtyAOVBindings) {
             auto retainedBoundAovs = std::move(m_boundAovs);
             for (auto& aovBinding : m_aovBindings) {
@@ -1304,7 +1314,14 @@ public:
             clearAovs = true;
         }
 
-        UpdateDenoising(enableDenoise);
+        auto colorAov = GetColorAov();
+        if (colorAov) {
+            UpdateDenoising(enableDenoise, colorAov);
+
+            if (tonemap.isDirty) {
+                colorAov->SetTonemap(tonemap.value);
+            }
+        }
 
         auto rprApi = rprRenderParam->GetRprApi();
         for (auto it = m_aovRegistry.begin(); it != m_aovRegistry.end();) {
@@ -1325,7 +1342,7 @@ public:
         }
     }
 
-    void UpdateDenoising(RenderSetting<bool> enableDenoise) {
+    void UpdateDenoising(RenderSetting<bool> enableDenoise, HdRprApiColorAov* colorAov) {
         // Disable denoiser to prevent possible crashes due to incorrect AI models
         if (!m_rifContext || m_rifContext->GetModelPath().empty()) {
             return;
@@ -1334,16 +1351,6 @@ public:
         if (!enableDenoise.isDirty) {
             return;
         }
-
-        HdRprApiAov* aov = nullptr;
-        auto colorAovIter = m_aovRegistry.find(HdAovTokens->color);
-        if (colorAovIter == m_aovRegistry.end() ||
-            !(aov = colorAovIter->second.lock().get())) {
-            return;
-        }
-
-        assert(dynamic_cast<HdRprApiColorAov*>(aov));
-        auto colorAov = static_cast<HdRprApiColorAov*>(aov);
 
         if (!enableDenoise.value) {
             colorAov->DisableDenoise(m_rifContext.get());
@@ -1915,6 +1922,19 @@ private:
         }
 
         return aov;
+    }
+
+    HdRprApiColorAov* GetColorAov() {
+        std::shared_ptr<HdRprApiAov> retainedAov;
+        auto colorAovIter = m_aovRegistry.find(HdAovTokens->color);
+        if (colorAovIter == m_aovRegistry.end() ||
+            !(retainedAov = colorAovIter->second.lock())) {
+            return nullptr;
+        }
+
+        HdRprApiAov* aov = retainedAov.get();
+        assert(dynamic_cast<HdRprApiColorAov*>(aov));
+        return static_cast<HdRprApiColorAov*>(aov);
     }
 
     bool RenderImage(std::string const& path) {
