@@ -30,20 +30,27 @@ set(build_shared_libs "${BUILD_SHARED_LIBS}")
 # USD Arnold Requirements
 # ----------------------------------------------
 
-find_package(pxr CONFIG)
+# Try to find monolithic USD
+find_package(USDMonolithic QUIET)
 
-if(NOT pxr_FOUND)
-    # Try to find USD as part of Houdini.
-    find_package(HoudiniUSD)
+if(NOT USDMonolithic_FOUND)
+    find_package(pxr CONFIG)
 
-    if(HoudiniUSD_FOUND)
-        message(STATUS "Configuring Houdini plugin")
+    if(NOT pxr_FOUND)
+        # Try to find USD as part of Houdini.
+        find_package(HoudiniUSD)
+
+        if(HoudiniUSD_FOUND)
+            message(STATUS "Configuring Houdini plugin")
+        endif()
+    else()
+        message(STATUS "Configuring usdview plugin")
     endif()
 else()
-    message(STATUS "Configuring usdview plugin")
+    message(STATUS "Configuring usdview plugin: monolithic USD")
 endif()
 
-if(NOT pxr_FOUND AND NOT HoudiniUSD_FOUND)
+if(NOT pxr_FOUND AND NOT HoudiniUSD_FOUND AND NOT USDMonolithic_FOUND)
     message(FATAL_ERROR "Required: USD install or Houdini with included USD.")
 endif()
 
