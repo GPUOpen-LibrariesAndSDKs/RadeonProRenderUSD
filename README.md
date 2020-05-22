@@ -42,28 +42,16 @@ Cloning into 'RadeonProRenderUSD'...
 
 ##### Required Components
 
-##### UsdView plugin Components
+##### USD Component
 
-As many USD users get the USD libraries from different places, or compile their own, we tried to keep this as flexible as possible. You can download USD to build yourself from [GitHub](https://www.github.com/PixarAnimationStudios/USD). UsdView plugin is build by default (```RPR_BUILD_AS_HOUDINI_PLUGIN=FALSE```).
+Provide USD in one of two ways:
 
-| Dependency Name            | Description                                                             | Version          |
-| ------------------         |-----------------------------------------------------------------------  | -------          |
-| USD_ROOT                   | USD directory with include and lib dirs                                 | 20.02            |
-
-##### Houdini plugin Components
-
-To build houdini plugin set cmake flag ```RPR_BUILD_AS_HOUDINI_PLUGIN=TRUE```. `HOUDINI_ROOT` is the directory containing the `houdini_setup` file. You can download Houdini installer from [Daily Builds | SideFX](https://www.sidefx.com/download/daily-builds/#category-gold).
-
-| Dependency Name            | Description                                                             | Version          |
-| ------------------         |-----------------------------------------------------------------------  | -------          |
-| HOUDINI_ROOT               | Houdini toolkit directory                                               | 18               |
+* An installation of USD. Define pxr_DIR to point to it when running cmake, if required. You can download USD to build yourself from [GitHub](https://www.github.com/PixarAnimationStudios/USD).
+* The USD which is provided with Houdini. The HFS environment variable should point to the Houdini installation (the correct way is to run cmake from Houdini's `Command Line Tools` or by sourcing `houdini_setup`). You can download Houdini installer from [Downloads | SideFX](https://www.sidefx.com/download).
 
 ##### Optional Components
 
 ##### OpenVDB
-
-Support for OpenVDB is disabled by default, and can optionally be enabled by
-specifying the cmake flag ```RPR_ENABLE_OPENVDB_SUPPORT=TRUE```.
 
 **Following dependency required only for usdview plugin, houdini is shipped with own build of openvdb**
 
@@ -83,9 +71,8 @@ then you need to specify ```RPR_SDK_PLATFORM=centos6``` cmake flag
 ```
 mkdir build
 cd build
-cmake -DUSD_ROOT=/data/usd_build -DCMAKE_INSTALL_PREFIX=/data/usd_build ..
-make
-make install
+cmake -Dpxr_DIR=/data/usd_build -DCMAKE_INSTALL_PREFIX=/data/usd_build ..
+cmake --build . --config Release --target install
 ```
 
 Supported Platforms
@@ -97,20 +84,10 @@ Supported Platforms
 Try it out
 -----------------------------
 
-Set the environment variables specified by the script when it finishes and
-launch ```usdview``` with a sample asset.
-
-```
-> usdview extras/usd/tutorials/convertingLayerFormats/Sphere.usda
-```
-
-And select RPR as the render delegate.
+Follow instruction from INSTALL.md to activate the plugin.
+Launch either usdview or Houdini's Solaris viewport and select RPR as the render delegate.
 
 #### Environment Variables
-
-*   `PXR_PLUGINPATH_NAME`
-
-    If you want the RPR menu added to USDView (allows selecting device, and render quality). Set it to ``` PXR_PLUGINPATH_NAME=${USD_ROOT}/lib/python/rpr ```, where USD_ROOT is your USD install directory.
 
 *   `HDRPR_ENABLE_TRACING`
 

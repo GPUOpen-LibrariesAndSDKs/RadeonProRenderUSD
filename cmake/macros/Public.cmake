@@ -274,10 +274,6 @@ function(pxr_library NAME)
         set(prefix "")
         set(suffix ${CMAKE_SHARED_LIBRARY_SUFFIX})
 
-        if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-            set(subdir "usd_plugins")
-        endif()
-
         # Katana plugins install into a specific sub directory structure.
         # In particular, shared objects install into plugin/Libs
         if(args_KATANA_PLUGIN)

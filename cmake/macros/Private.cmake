@@ -1142,15 +1142,11 @@ function(_pxr_library NAME)
     _get_install_dir("include/${PXR_PREFIX}/${NAME}" headerInstallPrefix)
     _get_install_dir("lib" libInstallPrefix)
     if(isPlugin)
-        if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-            _get_install_dir("${HOUDINI_PLUGIN_INSTALL_RELPATH}" pluginInstallPrefix)
-        else(RPR_BUILD_AS_HOUDINI_PLUGIN)
-            _get_install_dir("plugin" pluginInstallPrefix)
-            if(NOT PXR_INSTALL_SUBDIR)
-                # XXX -- Why this difference?
-                _get_install_dir("plugin/usd" pluginInstallPrefix)
-            endif()
-        endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
+        _get_install_dir("plugin" pluginInstallPrefix)
+        if(NOT PXR_INSTALL_SUBDIR)
+            # XXX -- Why this difference?
+            _get_install_dir("plugin/usd" pluginInstallPrefix)
+        endif()
 
         if(NOT isObject)
             # A plugin embedded in the monolithic library is found in
@@ -1271,11 +1267,7 @@ function(_pxr_library NAME)
     _pxr_target_link_libraries(${NAME} ${args_LIBRARIES})
 
     _pxr_init_rpath(rpath "${libInstallPrefix}")
-    if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-        _pxr_add_rpath(rpath "${HOUDINI_LIB}")
-    else()
-        _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/lib")
-    endif()
+    _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/lib")
     _pxr_install_rpath(rpath ${NAME})
 
     #

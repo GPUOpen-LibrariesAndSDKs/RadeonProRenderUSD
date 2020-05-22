@@ -7,11 +7,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
                       ${CMAKE_SOURCE_DIR}/cmake/macros)
 
 include(Options)
-
-if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    include(Houdini)
-endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
-
 include(ProjectDefaults)
 include(Packages)
 
@@ -41,5 +36,6 @@ link_directories(${RPR_LIBRARY_DIR})
 
 add_subdirectory(pxr/imaging/plugin/hdRpr)
 
-# install(FILES README.md DESTINATION .)
-# install(FILES LICENSE.md DESTINATION .)
+install(FILES README.md DESTINATION .)
+install(FILES INSTALL.md DESTINATION .)
+install(FILES LICENSE.md DESTINATION .)

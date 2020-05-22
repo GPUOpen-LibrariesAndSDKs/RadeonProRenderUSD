@@ -76,6 +76,7 @@ foreach(OPENEXR_LIB ${OpenEXR_FIND_COMPONENTS})
         HINTS
             "${OPENEXR_LOCATION}"
             "$ENV{OPENEXR_LOCATION}"
+            "${OPENEXR_LIB_LOCATION}"
         PATH_SUFFIXES
             lib/
         DOC
