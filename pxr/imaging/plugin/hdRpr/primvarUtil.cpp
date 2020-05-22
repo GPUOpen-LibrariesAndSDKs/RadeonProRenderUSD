@@ -120,8 +120,12 @@ bool HdRprIsValidPrimvarSize(size_t primvarSize, HdInterpolation primvarInterpol
         return primvarSize > 0;
     case HdInterpolationUniform:
         return primvarSize == uniformInterpSize;
-    default:
+    case HdInterpolationVertex:
         return primvarSize == vertexInterpSize;
+    case HdInterpolationVarying:
+        return true;
+    default:
+        return false;
     }
 }
 
