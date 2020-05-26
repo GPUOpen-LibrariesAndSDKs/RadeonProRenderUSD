@@ -198,6 +198,61 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'Tonemapping',
+        'settings': [
+            {
+                'name': 'enableTonemap',
+                'ui_name': 'Enable Tone Mapping',
+                'help': 'Enable linear photographic tone mapping filter. More info in RIF documentation',
+                'defaultValue': False
+            },
+            {
+                'name': 'tonemapExposure',
+                'ui_name': 'Tone Mapping Exposure',
+                'help': 'Film exposure time',
+                'defaultValue': 0.125,
+                'minValue': 0.0,
+                'maxValue': 10.0,
+                'houdini': {
+                    'hidewhen': 'enableTonemap == 0'
+                }
+            },
+            {
+                'name': 'tonemapSensitivity',
+                'ui_name': 'Tone Mapping Sensitivity',
+                'help': 'Luminance of the scene (in candela per m^2)',
+                'defaultValue': 1.0,
+                'minValue': 0.0,
+                'maxValue': 10.0,
+                'houdini': {
+                    'hidewhen': 'enableTonemap == 0'
+                }
+            },
+            {
+                'name': 'tonemapFstop',
+                'ui_name': 'Tone Mapping Fstop',
+                'help': 'Aperture f-number',
+                'defaultValue': 1.0,
+                'minValue': 0.0,
+                'maxValue': 100.0,
+                'houdini': {
+                    'hidewhen': 'enableTonemap == 0'
+                }
+            },
+            {
+                'name': 'tonemapGamma',
+                'ui_name': 'Tone Mapping Gamma',
+                'help': 'Gamma correction value',
+                'defaultValue': 1.0,
+                'minValue': 0.0,
+                'maxValue': 5.0,
+                'houdini': {
+                    'hidewhen': 'enableTonemap == 0'
+                }
+            }
+        ]
+    },
+    {
         'name': 'UsdNativeCamera',
         'settings': [
             {

@@ -77,30 +77,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
         m_topology = sceneDelegate->GetBasisCurvesTopology(id);
         m_indices = VtIntArray();
         if (m_topology.HasIndices()) {
-            if (m_topology.GetCurveWrap() == HdTokens->nonperiodic || // GL_LINE_STRIP
-                m_topology.GetCurveWrap() == HdTokens->periodic) { // GL_LINE_LOOP
-                bool isPeriodic = m_topology.GetCurveWrap() == HdTokens->periodic;
-
-                auto indices = m_topology.GetCurveIndices();
-                m_indices.reserve(indices.size() * 2 + isPeriodic ? 2 : 0);
-                for (size_t i = 0; i < indices.size() - 1; ++i) {
-                    m_indices.push_back(indices[i]);
-                    m_indices.push_back(indices[i + 1]);
-                }
-                if (isPeriodic) {
-                    m_indices.push_back(indices.back());
-                    m_indices.push_back(indices.front());
-                }
-            } else if (m_topology.GetCurveWrap() == HdTokens->segmented) {
-                m_indices = m_topology.GetCurveIndices();
-            } else {
-                TF_RUNTIME_ERROR("[%s] Curve could not be created: unsupported curve wrap type - %s", id.GetText(), m_topology.GetCurveWrap().GetText());
-            }
-        } else {
-            m_indices.reserve(m_points.size());
-            for (int i = 0; i < m_points.size(); ++i) {
-                m_indices.push_back(i);
-            }
+            m_indices = m_topology.GetCurveIndices();
         }
         newCurve = true;
     }
@@ -156,11 +133,14 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
 
         if (m_points.empty()) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: missing points", id.GetText());
-        } else if (m_indices.empty()) {
-            TF_RUNTIME_ERROR("[%s] Curve could not be created: missing indices", id.GetText());
         } else if (m_widths.empty()) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: missing width", id.GetText());
-        } else if (m_topology.GetCurveType() != HdTokens->linear) {
+        } else if (m_topology.GetCurveWrap() != HdTokens->segmented &&
+                   m_topology.GetCurveWrap() != HdTokens->nonperiodic &&
+                   m_topology.GetCurveWrap() != HdTokens->periodic) {
+            TF_RUNTIME_ERROR("[%s] Curve could not be created: unsupported curve wrap type - %s", id.GetText(), m_topology.GetCurveWrap().GetText());
+        } else if (m_topology.GetCurveType() != HdTokens->linear &&
+                   m_topology.GetCurveType() != HdTokens->cubic) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: unsupported basis curve type - %s", id.GetText(), m_topology.GetCurveType().GetText());
         } else if (!HdRprIsValidPrimvarSize(m_widths.size(), m_widthsInterpolation, m_topology.GetCurveVertexCounts().size(), m_points.size())) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: mismatch in number of widths and requested interpolation type", id.GetText());
@@ -176,7 +156,21 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                 TF_WARN("[%s] Unsupported uv interpolation type", id.GetText());
             }
 
-            m_rprCurve = CreateRprCurve(rprApi);
+            bool isLinear = m_topology.GetCurveType() == HdTokens->linear;
+
+            if (m_topology.GetCurveType() == HdTokens->cubic &&
+                (m_topology.GetCurveBasis() == HdTokens->catmullRom||
+                 m_topology.GetCurveBasis() == HdTokens->bSpline)) {
+                // XXX: There is no way to natively support catmullrom and bspline bases in RPR, try to render them as linear ones
+                isLinear = true;
+            }
+
+            if (isLinear) {
+                m_rprCurve = CreateLinearRprCurve(rprApi);
+            } else if (m_topology.GetCurveType() == HdTokens->cubic &&
+                       m_topology.GetCurveBasis() == HdTokens->bezier) {
+                m_rprCurve = CreateBezierRprCurve(rprApi);
+            }
         }
     }
 
@@ -221,14 +215,147 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
     *dirtyBits = HdChangeTracker::Clean;
 }
 
-rpr::Curve* HdRprBasisCurves::CreateRprCurve(HdRprApi* rprApi) {
-    bool isCurveTapered = m_widthsInterpolation != HdInterpolationConstant && m_widthsInterpolation != HdInterpolationUniform;
+static const int kRprNumPointsPerSegment = 4;
+
+rpr::Curve* HdRprBasisCurves::CreateLinearRprCurve(HdRprApi* rprApi) {
     // Each segment of USD linear curves defined by two vertices
     // For tapered curve we need to convert it to RPR representation:
     //   4 vertices and 2 radiuses per segment
     // For cylindrical curve we can leave indices data in the same format as in USD,
-    //   but we have to ensure that number of indices in each curve multiple of kNumPointsPerSegment
-    const int kNumPointsPerSegment = 4;
+    //   but we have to ensure that number of indices in each curve multiple of kRprNumPointsPerSegment
+
+    const bool periodic = m_topology.GetCurveWrap() == HdTokens->periodic;
+    const bool strip = periodic || m_topology.GetCurveWrap() == HdTokens->nonperiodic;
+    const bool isCurveTapered = m_widthsInterpolation != HdInterpolationConstant && m_widthsInterpolation != HdInterpolationUniform;
+
+    const int kNumPointsPerSegment = 2;
+    const int kVstep = strip ? 1 : 2;
+
+    VtIntArray rprIndices;
+    VtIntArray rprSegmentPerCurve;
+    VtFloatArray rprRadiuses;
+    VtVec2fArray rprUvs;
+
+    std::function<float(int, bool)> sampleTaperRadius;
+    if (isCurveTapered) {
+        if (m_widthsInterpolation == HdInterpolationVarying) {
+            sampleTaperRadius = [this](int iSegment, bool front) {
+                return 0.5f * m_widths[iSegment + (front ? 0 : 1)];
+            };
+        } else if (m_widthsInterpolation == HdInterpolationVertex) {
+            sampleTaperRadius = [=](int iSegment, bool front) {
+                return 0.5f * m_widths[iSegment * kVstep + (front ? 0 : (kNumPointsPerSegment - 1))];
+            };
+        }
+    }
+
+    std::function<int(int)> indexSampler;
+    if (m_indices.empty()) {
+        indexSampler = [](int idx) { return idx; };
+    } else {
+        indexSampler = [this](int idx) { return m_indices.cdata()[idx]; };
+    }
+
+    auto& curveCounts = m_topology.GetCurveVertexCounts();
+    rprSegmentPerCurve.reserve(curveCounts.size());
+
+    int curveSegmentOffset = 0;
+    int curveIndicesOffset = 0;
+    for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
+        auto numVertices = curveCounts[iCurve];
+        if (numVertices < 2) {
+            continue;
+        }
+
+        if (!strip && numVertices % 2 != 0) {
+            TF_RUNTIME_ERROR("[%s] corrupted curve data: segmented linear curve should contain even number of vertices", GetId().GetText());
+            return nullptr;
+        }
+
+        int numSegments = (numVertices - (kNumPointsPerSegment - kVstep)) / kVstep;
+        if (periodic) numSegments++;
+
+        if ((m_widthsInterpolation == HdInterpolationVarying && m_widths.size() < (curveSegmentOffset + numSegments)) ||
+            (m_widthsInterpolation == HdInterpolationVertex && m_widths.size() < (curveIndicesOffset + numVertices))) {
+            TF_RUNTIME_ERROR("[%s] corrupted curve data: insufficient amount of widths", GetId().GetText());
+            return nullptr;
+        }
+
+        int numNewRprIndices = numSegments * kNumPointsPerSegment;
+        if (isCurveTapered) {
+            rprRadiuses.reserve(rprRadiuses.size() + numNewRprIndices);
+            numNewRprIndices *= 2;
+        }
+        rprIndices.reserve(rprIndices.size() + numNewRprIndices);
+
+        if (isCurveTapered) {
+            rprSegmentPerCurve.push_back(numVertices - 1);
+            for (int iSegment = 0; iSegment < numSegments; ++iSegment) {
+                const int segmentIndicesOffset = iSegment * kVstep;
+
+                const int i0 = indexSampler(curveIndicesOffset + segmentIndicesOffset);
+                const int i1 = indexSampler(curveIndicesOffset + (segmentIndicesOffset + 1) % numVertices);
+
+                // Each 2 vertices of USD curve corresponds to 1 tapered RPR curve segment
+                rprIndices.push_back(i0);
+                rprIndices.push_back(i0);
+                rprIndices.push_back(i1);
+                rprIndices.push_back(i1);
+
+                // Each segment of tapered curve have 2 radiuses
+                rprRadiuses.push_back(sampleTaperRadius(iSegment, true));
+                rprRadiuses.push_back(sampleTaperRadius(iSegment, false));
+            }
+        } else {
+            for (int iSegment = 0; iSegment < numSegments; ++iSegment) {
+                const int segmentIndicesOffset = iSegment * kVstep;
+
+                rprIndices.push_back(indexSampler(curveIndicesOffset + segmentIndicesOffset));
+                rprIndices.push_back(indexSampler(curveIndicesOffset + (segmentIndicesOffset + 1) % numVertices));
+            }
+
+            // RPR requires curves to consist only of segments of kRprNumPointsPerSegment length
+            auto numPointsInCurve = (numVertices - 1) * 2;
+            auto extraPoints = numPointsInCurve % kRprNumPointsPerSegment;
+            if (extraPoints) {
+                extraPoints = kRprNumPointsPerSegment - extraPoints;
+
+                auto lastPointIndex = indexSampler(curveIndicesOffset + numVertices - 1);
+                for (int i = 0; i < extraPoints; ++i) {
+                    rprIndices.push_back(lastPointIndex);
+                }
+            }
+
+            // Each cylindrical curve must have 1 radius
+            if (m_widthsInterpolation == HdInterpolationUniform) {
+                rprRadiuses.push_back(m_widths[iCurve] * 0.5f);
+            } else if (m_widthsInterpolation == HdInterpolationConstant) {
+                rprRadiuses.push_back(m_widths[0] * 0.5f);
+            }
+
+            rprSegmentPerCurve.push_back((numPointsInCurve + extraPoints) / kRprNumPointsPerSegment);
+        }
+
+        curveSegmentOffset += numSegments;
+        curveIndicesOffset += numVertices;
+    }
+
+    if (!m_uvs.empty()) {
+        if (m_uvsInterpolation == HdInterpolationUniform) {
+            rprUvs = m_uvs;
+        } else if (m_uvsInterpolation == HdInterpolationConstant) {
+            rprUvs = VtVec2fArray(rprSegmentPerCurve.size(), m_uvs[0]);
+        }
+    }
+
+    return rprApi->CreateCurve(m_points, rprIndices, rprRadiuses, rprUvs, rprSegmentPerCurve);
+}
+
+rpr::Curve* HdRprBasisCurves::CreateBezierRprCurve(HdRprApi* rprApi) {
+    if (m_topology.GetCurveWrap() == HdTokens->segmented) {
+        TF_RUNTIME_ERROR("[%s] corrupted curve data: bezier curve can not be of segmented wrap type", GetId().GetText());
+        return nullptr;
+    }
 
     VtIntArray rprIndices;
     VtIntArray rprSegmentPerCurve;
@@ -238,59 +365,95 @@ rpr::Curve* HdRprBasisCurves::CreateRprCurve(HdRprApi* rprApi) {
     auto& curveCounts = m_topology.GetCurveVertexCounts();
     rprSegmentPerCurve.reserve(curveCounts.size());
 
-    size_t indicesOffset = 0;
+    const int kNumPointsPerSegment = 4;
+    const int kVstep = 3;
+
+    const bool periodic = m_topology.GetCurveWrap() == HdTokens->periodic;
+    const bool isCurveTapered = m_widthsInterpolation != HdInterpolationConstant && m_widthsInterpolation != HdInterpolationUniform;
+
+    std::function<float(int, bool)> sampleTaperRadius;
+    if (isCurveTapered) {
+        if (m_widthsInterpolation == HdInterpolationVarying) {
+            sampleTaperRadius = [this](int iSegment, bool front) {
+                return 0.5f * m_widths[iSegment + (front ? 0 : 1)];
+            };
+        } else if (m_widthsInterpolation == HdInterpolationVertex) {
+            sampleTaperRadius = [=](int iSegment, bool front) {
+                return 0.5f * m_widths[iSegment * kVstep + (front ? 0 : (kNumPointsPerSegment - 1))];
+            };
+        }
+    }
+
+    std::function<int(int)> indexSampler;
+    if (m_indices.empty()) {
+        indexSampler = [](int idx) { return idx; };
+    } else {
+        indexSampler = [this](int idx) { return m_indices.cdata()[idx]; };
+    }
+
+    int curveSegmentOffset = 0;
+    int curveIndicesOffset = 0;
     for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
         auto numVertices = curveCounts[iCurve];
+        if (numVertices < kNumPointsPerSegment) {
+            continue;
+        }
 
-        if (numVertices > 1) {
-            auto curveIndices = &m_indices[indicesOffset];
-            for (int i = 0; i < numVertices - 1; ++i) {
-                auto i0 = curveIndices[i + 0];
-                auto i1 = curveIndices[i + 1];
+        // Validity check from the USD docs
+        if ((periodic && numVertices % kVstep != 0) ||
+            (!periodic && (numVertices - 4) % kVstep != 0)) {
+            TF_RUNTIME_ERROR("[%s] corrupted curve data: invalid topology", GetId().GetText());
+            return nullptr;
+        }
 
-                if (isCurveTapered) {
-                    // Each 2 vertices of USD curve corresponds to 1 tapered RPR curve segment
-                    rprIndices.push_back(i0);
-                    rprIndices.push_back(i0);
-                    rprIndices.push_back(i1);
-                    rprIndices.push_back(i1);
 
-                    // Each segment of tapered curve have 2 radiuses
-                    rprRadiuses.push_back(m_widths[i0] * 0.5f);
-                    rprRadiuses.push_back(m_widths[i1] * 0.5f);
-                } else {
-                    rprIndices.push_back(i0);
-                    rprIndices.push_back(i1);
-                }
-            }
+        int numSegments = (numVertices - (kNumPointsPerSegment - kVstep)) / kVstep;
+        if (periodic) numSegments++;
 
-            if (!isCurveTapered) {
-                // RPR requires curves to consist only of segments of kNumPointsPerSegment length
-                auto numPointsInCurve = (numVertices - 1) * 2;
-                auto extraPoints = numPointsInCurve % kNumPointsPerSegment;
-                if (extraPoints) {
-                    extraPoints = kNumPointsPerSegment - extraPoints;
+        if ((m_widthsInterpolation == HdInterpolationVarying && m_widths.size() < (curveSegmentOffset + numSegments)) ||
+            (m_widthsInterpolation == HdInterpolationVertex && m_widths.size() < (curveIndicesOffset + numVertices))) {
+            TF_RUNTIME_ERROR("[%s] corrupted curve data: insufficient amount of widths", GetId().GetText());
+            return nullptr;
+        }
 
-                    auto lastPointIndex = curveIndices[numVertices - 1];
-                    for (int i = 0; i < extraPoints; ++i) {
-                        rprIndices.push_back(lastPointIndex);
-                    }
-                }
+        rprIndices.reserve(rprIndices.size() + numSegments * kNumPointsPerSegment);
+        if (isCurveTapered) {
+            rprRadiuses.reserve(rprRadiuses.size() + numSegments * 2);
+        }
 
-                // Each cylindrical curve must have 1 radius
-                if (m_widthsInterpolation == HdInterpolationUniform) {
-                    rprRadiuses.push_back(m_widths[iCurve] * 0.5f);
-                } else if (m_widthsInterpolation == HdInterpolationConstant) {
-                    rprRadiuses.push_back(m_widths[0] * 0.5f);
-                }
+        rprSegmentPerCurve.push_back(numSegments);
 
-                rprSegmentPerCurve.push_back((numPointsInCurve + extraPoints) / kNumPointsPerSegment);
-            } else {
-                rprSegmentPerCurve.push_back(numVertices - 1);
+        for (int iSegment = 0; iSegment < numSegments; ++iSegment) {
+            const int segmentIndicesOffset = iSegment * kVstep;
+
+            const int i0 = indexSampler(curveIndicesOffset + segmentIndicesOffset + 0);
+            const int i1 = indexSampler(curveIndicesOffset + segmentIndicesOffset + 1);
+            const int i2 = indexSampler(curveIndicesOffset + segmentIndicesOffset + 2);
+            const int i3 = indexSampler(curveIndicesOffset + (segmentIndicesOffset + 3) % numVertices);
+
+            rprIndices.push_back(i0);
+            rprIndices.push_back(i1);
+            rprIndices.push_back(i2);
+            rprIndices.push_back(i3);
+
+            if (isCurveTapered) {
+                // XXX: We consciously losing data here because RPR supports only two radius samples per segment
+                rprRadiuses.push_back(sampleTaperRadius(iSegment, true));
+                rprRadiuses.push_back(sampleTaperRadius(iSegment, false));
             }
         }
 
-        indicesOffset += numVertices;
+        if (!isCurveTapered) {
+            // Each cylindrical curve must have 1 radius
+            if (m_widthsInterpolation == HdInterpolationUniform) {
+                rprRadiuses.push_back(m_widths[iCurve] * 0.5f);
+            } else if (m_widthsInterpolation == HdInterpolationConstant) {
+                rprRadiuses.push_back(m_widths[0] * 0.5f);
+            }
+        }
+
+        curveSegmentOffset += numSegments;
+        curveIndicesOffset += numVertices;
     }
 
     if (!m_uvs.empty()) {

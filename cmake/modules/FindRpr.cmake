@@ -1,3 +1,7 @@
+if(NOT RPR_LOCATION)
+    set(RPR_LOCATION ${PROJECT_SOURCE_DIR}/deps/RPR/RadeonProRender)
+endif()
+
 macro(SET_RPR_VARIABLES dirName)
     if(NOT RPR_LOCATION_LIB)
         set(RPR_LOCATION_LIB ${RPR_LOCATION}/${dirName})
@@ -14,10 +18,10 @@ elseif(WIN32)
     SET_RPR_VARIABLES(libWin64)
 elseif(RPR_SDK_PLATFORM STREQUAL "ubuntu18.04")
     SET_RPR_VARIABLES(binUbuntu18)
-elseif(RPR_SDK_PLATFORM STREQUAL "centos6")
-    SET_RPR_VARIABLES(binCentOS69)
 elseif(RPR_SDK_PLATFORM STREQUAL "centos7")
     SET_RPR_VARIABLES(binCentOS7)
+else()
+    message(FATAL_ERROR "Unknown platform: ${RPR_SDK_PLATFORM}")
 endif()
 
 find_library(RPR_LIBRARY

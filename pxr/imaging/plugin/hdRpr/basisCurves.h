@@ -51,7 +51,8 @@ protected:
                    HdDirtyBits* dirtyBits) override;
 
 private:
-    rpr::Curve* CreateRprCurve(HdRprApi* rprApi);
+    rpr::Curve* CreateLinearRprCurve(HdRprApi* rprApi);
+    rpr::Curve* CreateBezierRprCurve(HdRprApi* rprApi);
 
 private:
     rpr::Curve* m_rprCurve = nullptr;
