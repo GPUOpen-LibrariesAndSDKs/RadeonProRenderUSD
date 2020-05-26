@@ -1088,8 +1088,9 @@ public:
     void UpdateTahoeSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
             m_varianceThreshold = preferences.GetVarianceThreshold();
+            m_minSamples = preferences.GetMinAdaptiveSamples();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, m_varianceThreshold), "Failed to set as.threshold");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinAdaptiveSamples()), "Failed to set as.minspp");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, m_minSamples), "Failed to set as.minspp");
 
             if (m_varianceThreshold > 0.0f) {
                 if (!m_internalAovs.count(HdRprAovTokens->variance)) {
@@ -1376,7 +1377,20 @@ public:
     }
 
     void RenderImpl(HdRprRenderThread* renderThread, std::vector<std::pair<void*, size_t>> const& outputRenderBuffers) {
+        int numSamplesPerIter = 1;
+
         const bool isBatch = m_delegate->IsBatch();
+        const bool isProgressive = m_delegate->IsProgressive();
+        if (isBatch && !isProgressive) {
+            // Render as many samples as possible per Render call
+            if (m_varianceThreshold > 0.0f) {
+                numSamplesPerIter = m_minSamples;
+            } else {
+                numSamplesPerIter = m_maxSamples;
+            }
+            m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
+        }
+
         bool stopRequested = false;
         while (!IsConverged() || stopRequested) {
             renderThread->WaitUntilPaused();
@@ -1397,8 +1411,13 @@ public:
                 break;
             }
 
-            m_iter++;
+            m_iter += numSamplesPerIter;
             if (m_varianceThreshold > 0.0f) {
+                if (isBatch && !isProgressive && m_iter == m_minSamples) {
+                    numSamplesPerIter = 1;
+                    m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
+                }
+
                 if (RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                     m_activePixels = -1;
                 }
@@ -2116,6 +2135,7 @@ private:
     int m_iter = 0;
     int m_activePixels = -1;
     int m_maxSamples = 0;
+    int m_minSamples = 0;
     float m_varianceThreshold = 0.0f;
     RenderQualityType m_currentRenderQuality = kRenderQualityFull;
 

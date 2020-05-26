@@ -118,7 +118,8 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
     (percentDone) \
     (renderMode) \
-    (batch)
+    (batch) \
+    (progressive)
 );
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES = {
@@ -155,6 +156,7 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
     }
 
     m_isBatch = GetRenderSetting(_tokens->renderMode) == _tokens->batch;
+    m_isProgressive = GetRenderSetting(_tokens->progressive).GetWithDefault(true);
 
     m_rprApi.reset(new HdRprApi(this));
     g_rprApi = m_rprApi.get();
