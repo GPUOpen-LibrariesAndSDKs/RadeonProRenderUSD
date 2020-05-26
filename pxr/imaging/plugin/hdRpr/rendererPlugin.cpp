@@ -46,15 +46,11 @@ TF_REGISTRY_FUNCTION(TfType) {
 }
 
 HdRenderDelegate* HdRprPlugin::CreateRenderDelegate() {
-    return new HdRprDelegate();
+    return new HdRprDelegate(HdRenderSettingsMap());
 }
 
 HdRenderDelegate* HdRprPlugin::CreateRenderDelegate(HdRenderSettingsMap const& settingsMap) {
-    auto renderDelegate = new HdRprDelegate();
-    for (auto& entry : settingsMap) {
-        renderDelegate->SetRenderSetting(entry.first, entry.second);
-    }
-    return renderDelegate;
+    return new HdRprDelegate(settingsMap);
 }
 
 void HdRprPlugin::DeleteRenderDelegate(HdRenderDelegate* renderDelegate) {

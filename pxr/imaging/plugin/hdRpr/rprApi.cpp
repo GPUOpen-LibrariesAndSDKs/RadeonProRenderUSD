@@ -132,7 +132,7 @@ static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
 
 class HdRprApiImpl {
 public:
-    HdRprApiImpl(HdRenderDelegate* delegate)
+    HdRprApiImpl(HdRprDelegate* delegate)
         : m_delegate(delegate) {
         // Postpone initialization as further as possible to allow Hydra user to set custom render settings before creating a context
         //InitIfNeeded();
@@ -1376,6 +1376,7 @@ public:
     }
 
     void RenderImpl(HdRprRenderThread* renderThread, std::vector<std::pair<void*, size_t>> const& outputRenderBuffers) {
+        const bool isBatch = m_delegate->IsBatch();
         bool stopRequested = false;
         while (!IsConverged() || stopRequested) {
             renderThread->WaitUntilPaused();
@@ -1403,7 +1404,7 @@ public:
                 }
             }
 
-            if (!IsConverged()) {
+            if (!isBatch && !IsConverged()) {
                 // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
                 // We do not resolve framebuffers in case user requested render stop
                 ResolveFramebuffers(outputRenderBuffers);
@@ -2078,7 +2079,7 @@ private:
     }
 
 private:
-    HdRenderDelegate* m_delegate;
+    HdRprDelegate* m_delegate;
 
     enum ChangeTracker : uint32_t {
         Clean = 0,
@@ -2132,7 +2133,7 @@ private:
     std::string m_rprSceneExportPath;
 };
 
-HdRprApi::HdRprApi(HdRenderDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
+HdRprApi::HdRprApi(HdRprDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
 
 }
 
