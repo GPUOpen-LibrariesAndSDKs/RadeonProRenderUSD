@@ -35,6 +35,7 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprDelegate;
 class HdRprRenderThread;
 class MaterialAdapter;
 
@@ -65,7 +66,7 @@ const uint32_t kInvisible = 0u;
 
 class HdRprApi final {
 public:
-    HdRprApi(HdRenderDelegate* delegate);
+    HdRprApi(HdRprDelegate* delegate);
     ~HdRprApi();
 
     HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& pathTotexture, float intensity);

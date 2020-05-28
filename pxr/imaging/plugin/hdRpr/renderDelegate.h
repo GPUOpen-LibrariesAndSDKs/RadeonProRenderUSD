@@ -28,7 +28,7 @@ class HdRprApi;
 class HdRprDelegate final : public HdRenderDelegate {
 public:
 
-    HdRprDelegate();
+    HdRprDelegate(HdRenderSettingsMap const& renderSettings);
     ~HdRprDelegate() override;
 
     HdRprDelegate(const HdRprDelegate&) = delete;
@@ -85,10 +85,16 @@ public:
     bool Restart() override;
 #endif // PXR_VERSION >= 2005
 
+    bool IsBatch() const { return m_isBatch; }
+    bool IsProgressive() const { return m_isProgressive; }
+
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
     static const TfTokenVector SUPPORTED_BPRIM_TYPES;
+
+    bool m_isBatch;
+    bool m_isProgressive;
 
     std::unique_ptr<HdRprApi> m_rprApi;
     std::unique_ptr<HdRprRenderParam> m_renderParam;

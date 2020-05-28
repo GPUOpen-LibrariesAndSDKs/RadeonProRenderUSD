@@ -13,7 +13,7 @@ limitations under the License.
 
 #include "renderDelegate.h"
 
-#include"pxr/imaging/hd/extComputation.h"
+#include "pxr/imaging/hd/extComputation.h"
 
 #include "pxr/base/tf/diagnosticMgr.h"
 #include "pxr/base/tf/getenv.h"
@@ -116,7 +116,10 @@ private:
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
-    (percentDone)
+    (percentDone) \
+    (renderMode) \
+    (batch) \
+    (progressive)
 );
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES = {
@@ -147,7 +150,14 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
     HdPrimTypeTokens->renderBuffer
 };
 
-HdRprDelegate::HdRprDelegate() {
+HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
+    for (auto& entry : renderSettings) {
+        SetRenderSetting(entry.first, entry.second);
+    }
+
+    m_isBatch = GetRenderSetting(_tokens->renderMode) == _tokens->batch;
+    m_isProgressive = GetRenderSetting(_tokens->progressive).GetWithDefault(true);
+
     m_rprApi.reset(new HdRprApi(this));
     g_rprApi = m_rprApi.get();
 
