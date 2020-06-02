@@ -350,6 +350,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
     m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_REFLECTION_WEIGHT] = GfVec4f(1.0f);
     m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_COLOR] = GfVec4f(1.0f);
 
+    int useFakeCaustics = 0;
     int useSpecular = 0;
     GfVec4f albedoColor = GfVec4f(1.0f);
     MaterialTexture albedoTex;
@@ -373,6 +374,8 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
                 m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_EMISSION_WEIGHT] = GfVec4f(1.0f);
                 m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_EMISSION_COLOR] = emmisionColor;
             }
+        } else if (paramName == HdRprMaterialTokens->useFakeCaustics) {
+            useFakeCaustics = paramValue.Get<int>();
         } else if (paramName == HdRprMaterialTokens->useSpecularWorkflow) {
             useSpecular = paramValue.Get<int>();
         } else if (paramName == HdRprMaterialTokens->specularColor) {
@@ -395,6 +398,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
             m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = refractionWeight;
 
             if (refractionWeight[0] != 0.0f || refractionWeight[1] != 0.0f || refractionWeight[2] != 0.0f) {
+                m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 1;
                 m_doublesided = false;
             }
         }
@@ -437,6 +441,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
             m_texRpr[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = materialTexture;
 
             m_doublesided = false;
+            m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 1;
         } else if (paramName == HdRprMaterialTokens->normal) {
             NormalMapParam param;
             param.texture = materialTexture;
@@ -465,6 +470,10 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
         } else {
             m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_REFLECTION_COLOR] = albedoColor;
         }
+    }
+
+    if (useFakeCaustics) {
+        m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 0;
     }
 }
 
@@ -509,7 +518,8 @@ TF_DEFINE_PRIVATE_TOKENS(HoudiniPrincipledShaderTokens,
     ((displacementColorSpace, "dispTex_colorSpace")) \
     ((displacementChannel, "dispTex_channel")) \
     ((displacementWrap, "dispTex_wrap")) \
-    ((displacementType, "dispTex_type"))
+    ((displacementType, "dispTex_type")) \
+    ((enableFakeCaustics, "fakecausticsenabled"))
 );
 
 std::map<TfToken, VtValue> g_houdiniPrincipledShaderParameterDefaultValues = {
@@ -577,6 +587,7 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& s
     // reflectTint
     // reflectivity
 
+    auto useFakeCaustics = GetParameter(HoudiniPrincipledShaderTokens->enableFakeCaustics, params, 0);
     auto albedoMultiplier = GetParameter(HoudiniPrincipledShaderTokens->albedomult, params, 1.0f);
     auto opacity = GetParameter(HoudiniPrincipledShaderTokens->opacity, params, 1.0f);
     auto emissionIntensity = GetParameter(HoudiniPrincipledShaderTokens->emissionIntensity, params, 1.0f);
@@ -868,6 +879,9 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& s
 
     m_vec4fRprParams[RPR_MATERIAL_INPUT_UBER_REFLECTION_WEIGHT] = GfVec4f(1.0f);
 
+    if (useFakeCaustics) {
+        m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 0;
+    }
     m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFLECTION_MODE] = iorMode;
 
     if (!displacementNetwork.nodes.empty()) {
