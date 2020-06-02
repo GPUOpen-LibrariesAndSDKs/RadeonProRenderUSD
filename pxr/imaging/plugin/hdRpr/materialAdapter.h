@@ -42,6 +42,7 @@ PXR_NAMESPACE_OPEN_SCOPE
     (diffuseColor) \
     (emissiveColor) \
     (useSpecularWorkflow) \
+    (useFakeCaustics) \
     (specularColor) \
     (metallic) \
     (roughness) \
