@@ -326,12 +326,14 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
             return;
         }
 
+        bool newLight = false;
         auto iesFile = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->shapingIesFile);
         if (iesFile.IsHolding<SdfAssetPath>()) {
             auto& path = iesFile.UncheckedGet<SdfAssetPath>();
             if (!path.GetResolvedPath().empty()) {
                 if (auto light = rprApi->CreateIESLight(path.GetResolvedPath())) {
                     m_light = light;
+                    newLight = true;
                 }
             }
         } else {
@@ -340,13 +342,16 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
             if (coneAngle.IsHolding<float>() && coneSoftness.IsHolding<float>()) {
                 if (auto light = rprApi->CreateSpotLight(coneAngle.UncheckedGet<float>(), coneSoftness.UncheckedGet<float>())) {
                     m_light = light;
+                    newLight = true;
                 }
             } else if (sceneDelegate->GetLightParamValue(id, UsdLuxTokens->treatAsPoint).GetWithDefault(false)) {
                 if (auto light = rprApi->CreatePointLight()) {
                     m_light = light;
+                    newLight = true;
                 }
             } else {
                 CreateAreaLightMesh(rprApi, sceneDelegate);
+                newLight = true;
             }
         }
 
@@ -372,10 +377,10 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         auto emissionColor = color * intensity;
-        bool isEmissionColorDirty = m_emisionColor != emissionColor;
+        bool isEmissionColorDirty = newLight || m_emisionColor != emissionColor;
         if (isEmissionColorDirty) { m_emisionColor = emissionColor; }
 
-        struct LightParameterSetter : public BOOST_NS::static_visitor<bool> {
+        struct LightParameterSetter : public BOOST_NS::static_visitor<void> {
             HdRprApi* rprApi;
             GfVec3f const& emissionColor;
             bool emissionColorIsDirty;
@@ -385,43 +390,36 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
 
             }
 
-            bool operator()(LightVariantEmpty) const { return false; }
-            bool operator()(AreaLight* light) const {
+            void operator()(LightVariantEmpty) const { /*no-op*/ }
+            void operator()(AreaLight* light) const {
                 if (emissionColorIsDirty || !light->material) {
-                    MaterialAdapter matAdapter(EMaterialType::EMISSIVE, MaterialParams{{HdLightTokens->color, VtValue(emissionColor)}});
-                    light->material = std::move(rprApi->CreateMaterial(matAdapter));
+                    if (light->material) {
+                        rprApi->ReleaseGeometryLightMaterial(light->material);
+                    }
+                    light->material = rprApi->CreateGeometryLightMaterial(emissionColor);
                 }
 
                 if (light->material) {
                     for (auto& mesh : light->meshes) {
                         rprApi->SetMeshMaterial(mesh, light->material, false, false);
                     }
-                    return true;
                 }
-
-                return false;
             }
 
-            bool operator()(rpr::SpotLight* light) const {
+            void operator()(rpr::SpotLight* light) const {
                 if (emissionColorIsDirty) { rprApi->SetLightColor(light, emissionColor); }
-                return true;
             }
 
-            bool operator()(rpr::PointLight* light) const {
+            void operator()(rpr::PointLight* light) const {
                 if (emissionColorIsDirty) { rprApi->SetLightColor(light, emissionColor); }
-                return true;
             }
 
-            bool operator()(rpr::IESLight* light) const {
+            void operator()(rpr::IESLight* light) const {
                 if (emissionColorIsDirty) { rprApi->SetLightColor(light, emissionColor); }
-                return true;
             }
         };
 
-        if (BOOST_NS::apply_visitor(LightParameterSetter{rprApi, emissionColor, isEmissionColorDirty}, m_light) && !m_created) {
-            m_created = true;
-            rprRenderParam->AddLight();
-        }
+        BOOST_NS::apply_visitor(LightParameterSetter{rprApi, emissionColor, isEmissionColorDirty}, m_light);
     }
 
     if (bits & (DirtyTransform | DirtyParams)) {
@@ -472,7 +470,7 @@ void HdRprLight::ReleaseLight(HdRprApi* rprApi) {
             for (auto& mesh : light->meshes) {
                 rprApi->Release(mesh);
             }
-            rprApi->Release(light->material);
+            rprApi->ReleaseGeometryLightMaterial(light->material);
             delete light;
         }
     };
@@ -482,13 +480,7 @@ void HdRprLight::ReleaseLight(HdRprApi* rprApi) {
 }
 
 void HdRprLight::Finalize(HdRenderParam* renderParam) {
-    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
-    if (m_created) {
-        m_created = false;
-        rprRenderParam->RemoveLight();
-    }
-
-    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
+    auto rprApi = static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
     ReleaseLight(rprApi);
 
     HdLight::Finalize(renderParam);

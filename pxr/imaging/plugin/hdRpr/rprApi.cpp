@@ -495,6 +495,7 @@ public:
         }
 
         m_dirtyFlags |= ChangeTracker::DirtyScene;
+        m_numLights++;
         return light;
     }
 
@@ -561,10 +562,28 @@ public:
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
             delete light;
+            m_numLights--;
+        }
+    }
+
+    HdRprApiMaterial* CreateGeometryLightMaterial(GfVec3f const& emissionColor) {
+        MaterialAdapter matAdapter(EMaterialType::EMISSIVE, MaterialParams{ {HdAovTokens->color, VtValue(emissionColor)} });
+        auto material = CreateMaterial(matAdapter);
+        if (material) m_numLights++;
+        return material;
+    }
+
+    void ReleaseGeometryLightMaterial(HdRprApiMaterial* material) {
+        if (material) {
+            m_numLights--;
+            Release(material);
         }
     }
 
     HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
+        // XXX (RPR): default environment light should be removed before creating a new one - RPR limitation
+        RemoveDefaultLight();
+
         auto envLight = new HdRprApiEnvironmentLight;
 
         rpr::Status status;
@@ -595,6 +614,7 @@ public:
         }
 
         m_dirtyFlags |= ChangeTracker::DirtyScene;
+        m_numLights++;
         return envLight;
     }
 
@@ -613,6 +633,7 @@ public:
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
             delete envLight;
+            m_numLights--;
         }
     }
 
@@ -1000,13 +1021,10 @@ public:
         auto rprRenderParam = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam());
 
         // In case there is no Lights in scene - create default
-        if (!rprRenderParam->HasLights()) {
-            if (!m_defaultLightObject) {
-                const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
-                m_defaultLightObject.reset(CreateEnvironmentLight(k_defaultLightColor, 1.f));
-            }
+        if (m_numLights == 0) {
+            AddDefaultLight();
         } else {
-            m_defaultLightObject = nullptr;
+            RemoveDefaultLight();
         }
 
         bool clearAovs = false;
@@ -1720,6 +1738,26 @@ private:
         m_showRestartRequiredWarning = !fileExists;
     }
 
+    void AddDefaultLight() {
+        if (!m_defaultLightObject) {
+            const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
+            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
+
+            // Do not count default light object
+            m_numLights--;
+        }
+    }
+
+    void RemoveDefaultLight() {
+        if (m_defaultLightObject) {
+            Release(m_defaultLightObject);
+            m_defaultLightObject = nullptr;
+
+            // Do not count default light object
+            m_numLights++;
+        }
+    }
+
     void SplitPolygons(const VtIntArray& indexes, const VtIntArray& vpf, VtIntArray& out_newIndexes, VtIntArray& out_newVpf) {
         out_newIndexes.clear();
         out_newVpf.clear();
@@ -2130,7 +2168,8 @@ private:
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
     HdRprCamera const* m_hdCamera;
 
-    std::unique_ptr<HdRprApiEnvironmentLight> m_defaultLightObject;
+    std::atomic<int> m_numLights{0};
+    HdRprApiEnvironmentLight* m_defaultLightObject = nullptr;
 
     int m_iter = 0;
     int m_activePixels = -1;
@@ -2235,6 +2274,14 @@ void HdRprApi::SetLightColor(rpr::PointLight* light, GfVec3f const& color) {
 
 void HdRprApi::SetLightColor(rpr::IESLight* light, GfVec3f const& color) {
     m_impl->SetLightColor(light, color);
+}
+
+HdRprApiMaterial* HdRprApi::CreateGeometryLightMaterial(GfVec3f const& emissionColor) {
+    return m_impl->CreateGeometryLightMaterial(emissionColor);
+}
+
+void HdRprApi::ReleaseGeometryLightMaterial(HdRprApiMaterial* material) {
+    return m_impl->ReleaseGeometryLightMaterial(material);
 }
 
 HdRprApiVolume* HdRprApi::CreateVolume(

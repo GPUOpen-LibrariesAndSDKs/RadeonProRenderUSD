@@ -81,8 +81,6 @@ private:
 
     GfVec3f m_emisionColor = GfVec3f(0.0f);
     GfMatrix4f m_transform;
-
-    bool m_created = false;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
