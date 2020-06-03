@@ -71,13 +71,11 @@ if(HoudiniUSD_FOUND)
     set(HOUDINI_ROOT "$ENV{HFS}" CACHE PATH "Houdini installation dir")
     find_package(Houdini REQUIRED CONFIG PATHS ${HOUDINI_ROOT}/toolkit/cmake)
 
-    set(PYTHON_INCLUDE_DIRS ${Houdini_Python_INCLUDE_DIR})
-    set(PYTHON_LIBRARY ${Houdini_Python_LIB})
-    find_package(PythonLibs 2.7 REQUIRED)
-    find_package(PythonInterp 2.7 REQUIRED)
-
     set(OPENEXR_LOCATION ${Houdini_USD_INCLUDE_DIR})
     set(OPENEXR_LIB_LOCATION ${Houdini_LIB_DIR})
+else()
+    # We are using python to generate source files
+    find_package(PythonInterp 2.7 REQUIRED)
 endif()
 
 if (NOT PXR_MALLOC_LIBRARY)
