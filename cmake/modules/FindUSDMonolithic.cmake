@@ -82,6 +82,8 @@ if(USDMonolithic_FOUND)
         ${USD_MONOLITHIC_LIBRARY}
         ${Boost_LIBRARIES}
         ${PYTHON_LIBRARIES})
+    target_link_directories(usd_ms INTERFACE
+        ${USD_LIBRARY_DIR})
     target_include_directories(usd_ms INTERFACE
         ${USD_INCLUDE_DIR}
         ${Boost_INCLUDE_DIRS})

@@ -29,10 +29,6 @@ include(Public)
 
 set(CMAKE_CXX_STANDARD 14)
 
-include_directories(${USD_INCLUDE_DIR})
-link_directories(${USD_LIBRARY_DIR})
-include_directories(${RPR_INCLUDE_DIR})
-link_directories(${RPR_LIBRARY_DIR})
 
 add_subdirectory(pxr/imaging/plugin/hdRpr)
 
