@@ -14,6 +14,7 @@ limitations under the License.
 #ifndef HDRPR_RPR_API_AOV_H
 #define HDRPR_RPR_API_AOV_H
 
+#include "aovDescriptor.h"
 #include "rprApiFramebuffer.h"
 #include "rifcpp/rifFilter.h"
 #include "rpr/contextMetadata.h"
@@ -40,16 +41,20 @@ public:
     void Clear();
 
     HdFormat GetFormat() const { return m_format; }
+    HdRprAovDescriptor const& GetDesc() const { return m_aovDescriptor; }
+
     HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); };
     HdRprApiFramebuffer* GetResolvedFb();
 
 protected:
-    HdRprApiAov() = default;
+    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor) : m_aovDescriptor(aovDescriptor) {};
 
     virtual void OnFormatChange(rif::Context* rifContext);
     virtual void OnSizeChange(rif::Context* rifContext);
 
 protected:
+    HdRprAovDescriptor const& m_aovDescriptor;
+
     std::unique_ptr<HdRprApiFramebuffer> m_aov;
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
     std::unique_ptr<rif::Filter> m_filter;

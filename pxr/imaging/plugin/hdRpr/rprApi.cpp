@@ -13,6 +13,7 @@ limitations under the License.
 
 #include "rprApi.h"
 #include "rprApiAov.h"
+#include "aovDescriptor.h"
 #include "materialFactory.h"
 
 #include "rifcpp/rifFilter.h"
@@ -66,14 +67,6 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_ENV_SETTING(HDRPR_DISABLE_ALPHA, false,
     "Disable alpha in color AOV. All alpha values would be 1.0");
 
-TF_DEFINE_PRIVATE_TOKENS(HdRprAovTokens,
-    (albedo) \
-    (variance) \
-    (worldCoordinate) \
-    (opacity) \
-    ((primvarsSt, "primvars:st"))
-);
-
 namespace {
 
 using LockGuard = std::lock_guard<std::mutex>;
@@ -114,19 +107,6 @@ struct HdRprApiEnvironmentLight {
         kAttachedAsLight,
         kAttachedAsEnvLight
     } state = kDetached;
-};
-
-static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
-    {HdAovTokens->color, RPR_AOV_COLOR},
-    {HdAovTokens->depth, RPR_AOV_DEPTH},
-    {HdAovTokens->primId, RPR_AOV_OBJECT_ID},
-    {HdAovTokens->normal, RPR_AOV_SHADING_NORMAL},
-    {HdRprUtilsGetCameraDepthName(), RPR_AOV_DEPTH},
-    {HdRprAovTokens->albedo, RPR_AOV_DIFFUSE_ALBEDO},
-    {HdRprAovTokens->variance, RPR_AOV_VARIANCE},
-    {HdRprAovTokens->worldCoordinate, RPR_AOV_WORLD_COORDINATE},
-    {HdRprAovTokens->primvarsSt, RPR_AOV_UV},
-    {HdRprAovTokens->opacity, RPR_AOV_OPACITY},
 };
 
 class HdRprApiImpl {
@@ -1004,11 +984,13 @@ public:
         return m_aovBindings;
     }
 
-    void ResolveFramebuffers(std::vector<std::pair<void*, size_t>> const& outputRenderBuffers) {
+    void ResolveFramebuffers(std::vector<std::pair<void*, size_t>> const& outputRenderBuffers, bool* firstResolve) {
         for (auto& aovEntry : m_aovRegistry) {
             auto aov = aovEntry.second.lock();
             if (TF_VERIFY(aov)) {
-                aov->Resolve();
+                if (*firstResolve || aov->GetDesc().multiSampled) {
+                    aov->Resolve();
+                }
             }
         }
 
@@ -1020,10 +1002,14 @@ public:
             if (outputRenderBuffers[i].first) {
                 auto aovIter = m_boundAovs.find(m_aovBindings[i].aovName);
                 if (aovIter != m_boundAovs.end()) {
-                    aovIter->second->GetData(outputRenderBuffers[i].first, outputRenderBuffers[i].second);
+                    if (*firstResolve || aovIter->second->GetDesc().multiSampled) {
+                        aovIter->second->GetData(outputRenderBuffers[i].first, outputRenderBuffers[i].second);
+                    }
                 }
             }
         }
+
+        *firstResolve = false;
     }
 
     void Update() {
@@ -1422,13 +1408,13 @@ public:
         if (filterType == rif::FilterType::EawDenoise) {
             colorAov->EnableEAWDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
                                        m_internalAovs.at(HdAovTokens->normal),
-                                       m_internalAovs.at(HdRprUtilsGetCameraDepthName()),
+                                       m_internalAovs.at(HdRprGetCameraDepthAovName()),
                                        m_internalAovs.at(HdAovTokens->primId),
                                        m_internalAovs.at(HdRprAovTokens->worldCoordinate));
         } else {
             colorAov->EnableAIDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
                                       m_internalAovs.at(HdAovTokens->normal),
-                                      m_internalAovs.at(HdRprUtilsGetCameraDepthName()));
+                                      m_internalAovs.at(HdRprGetCameraDepthAovName()));
         }
     }
 
@@ -1436,7 +1422,8 @@ public:
         int numSamplesPerIter = 1;
 
         const bool isBatch = m_delegate->IsBatch();
-        const bool isProgressive = m_delegate->IsProgressive();
+        // XXX(RPR): until FIR-1681 is not resolved we should stick to progressive renders otherwise singlesampled AOV output will be broken
+        const bool isProgressive = true /*m_delegate->IsProgressive()*/;
         if (isBatch && !isProgressive) {
             // Render as many samples as possible per Render call
             if (m_varianceThreshold > 0.0f) {
@@ -1446,6 +1433,8 @@ public:
             }
             m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
         }
+
+        bool firstResolve = true;
 
         bool stopRequested = false;
         while (!IsConverged() || stopRequested) {
@@ -1482,14 +1471,14 @@ public:
             if (!isBatch && !IsConverged()) {
                 // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
                 // We do not resolve framebuffers in case user requested render stop
-                ResolveFramebuffers(outputRenderBuffers);
+                ResolveFramebuffers(outputRenderBuffers, &firstResolve);
             }
 
             stopRequested = renderThread->IsStopRequested();
         }
 
         if (!stopRequested) {
-            ResolveFramebuffers(outputRenderBuffers);
+            ResolveFramebuffers(outputRenderBuffers, &firstResolve);
         }
     }
 
@@ -1631,10 +1620,6 @@ Don't show this message again?
         return m_rprContext && m_rprContextMetadata.isGlInteropEnabled;
     }
 
-    bool IsAovFormatConversionAvailable() const {
-        return m_rifContext != nullptr;
-    }
-
     bool IsArbitraryShapedLightSupported() const {
         return m_rprContextMetadata.pluginType != rpr::kPluginHybrid;
     }
@@ -1709,7 +1694,8 @@ private:
         }
 
         auto initInternalAov = [this](TfToken const& name) {
-            if (auto aov = CreateAov(name)) {
+            auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(name);
+            if (auto aov = CreateAov(name, 0, 0, aovDesc.format)) {
                 m_internalAovs.emplace(name, std::move(aov));
             }
         };
@@ -1729,7 +1715,7 @@ private:
             filterType = rif::FilterType::AIDenoise;
         }
 
-        initInternalAov(HdRprUtilsGetCameraDepthName());
+        initInternalAov(HdRprGetCameraDepthAovName());
         initInternalAov(HdRprAovTokens->albedo);
         initInternalAov(HdAovTokens->color);
         initInternalAov(HdAovTokens->normal);
@@ -1965,9 +1951,16 @@ private:
             return nullptr;
         }
 
-        auto rprAovIt = kAovTokenToRprAov.find(aovName);
-        if (rprAovIt == kAovTokenToRprAov.end()) {
+        auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(aovName);
+        if (aovDesc.id == kAovNone ||
+            aovDesc.format == HdFormatInvalid) {
             TF_WARN("Unsupported aov type: %s", aovName.GetText());
+            return nullptr;
+        }
+
+        if (aovDesc.format != format) {
+            TF_RUNTIME_ERROR("Invalid format for %s AOV: expected - %s, got - %s",
+                aovName.GetText(), TfEnum::GetName(aovDesc.format).c_str(), TfEnum::GetName(format).c_str());
             return nullptr;
         }
 
@@ -1982,7 +1975,7 @@ private:
             if (!aov) {
                 if (aovName == HdAovTokens->color) {
                     auto colorAov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get(), m_rprContextMetadata);
-                    
+
                     auto opacityAovIter = m_aovRegistry.find(HdRprAovTokens->opacity);
                     if (opacityAovIter != m_aovRegistry.end()) {
                         if (auto opacityAov = opacityAovIter->second.lock()) {
@@ -2005,7 +1998,12 @@ private:
                     }
                     aov = std::make_shared<HdRprApiDepthAov>(format, worldCoordinateAovIter->second, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else {
-                    aov = std::make_shared<HdRprApiAov>(rprAovIt->second, width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    if (!aovDesc.computed) {
+                        aov = std::make_shared<HdRprApiAov>(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    } else {
+                        TF_CODING_ERROR("Failed to create %s AOV: unprocessed computed AOV", aovName.GetText());
+                        return nullptr;
+                    }
                 }
 
                 m_aovRegistry[aovName] = aov;
@@ -2452,10 +2450,6 @@ int HdRprApi::GetNumActivePixels() const {
 
 bool HdRprApi::IsGlInteropEnabled() const {
     return m_impl->IsGlInteropEnabled();
-}
-
-bool HdRprApi::IsAovFormatConversionAvailable() const {
-    return m_impl->IsAovFormatConversionAvailable();
 }
 
 bool HdRprApi::IsArbitraryShapedLightSupported() const {

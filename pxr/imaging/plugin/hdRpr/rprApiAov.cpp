@@ -53,14 +53,11 @@ bool ReadRifImage(rif_image image, void* dstBuffer, size_t dstBufferSize) {
 
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
                          rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter)
-    : m_format(format),
+    : m_aovDescriptor(HdRprAovRegistry::GetInstance().GetAovDesc(rprAovType, false))
+    , m_format(format),
     m_filter(std::move(filter)) {
-    auto componentType = HdGetComponentFormat(format);
-    if (componentType != HdFormatUNorm8 &&
-        componentType != HdFormatFloat16 &&
-        componentType != HdFormatFloat32) {
-        TF_CODING_ERROR("Unsupported component type: %d", componentType);
-        m_format = HdFormatFloat32Vec4;
+    if (rif::Image::GetDesc(0, 0, format).type == 0) {
+        RIF_THROW_ERROR_MSG("Unsupported format: " + TfEnum::GetName(format));
     }
 
     m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height);
@@ -81,9 +78,11 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
         }
 
         auto filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
-        if (filter) {
-            filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
+        if (!filter) {
+            RPR_THROW_ERROR_MSG("Failed to create resample filter");
         }
+
+        filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
         return filter;
     }()) {
 
@@ -101,7 +100,8 @@ void HdRprApiAov::Resolve() {
 
 void HdRprApiAov::Clear() {
     if (m_aov) {
-        m_aov->Clear();
+        auto& v = m_aovDescriptor.clearValue;
+        m_aov->Clear(v[0], v[1], v[2], v[3]);
     }
 }
 
@@ -469,7 +469,8 @@ HdRprApiDepthAov::HdRprApiDepthAov(
     HdFormat format,
     std::shared_ptr<HdRprApiAov> worldCoordinateAov,
     rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, rif::Context* rifContext)
-    : m_retainedWorldCoordinateAov(worldCoordinateAov) {
+    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true))
+    , m_retainedWorldCoordinateAov(worldCoordinateAov) {
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create depth AOV: RIF context required");
     }
