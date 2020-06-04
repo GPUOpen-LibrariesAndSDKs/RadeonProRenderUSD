@@ -193,8 +193,9 @@ void HdRprApiAov::OnSizeChange(rif::Context* rifContext) {
     }
 }
 
-HdRprApiColorAov::HdRprApiColorAov(int width, int height, HdFormat format, rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata)
-    : HdRprApiAov(RPR_AOV_COLOR, width, height, format, rprContext, rprContextMetadata, nullptr) {
+HdRprApiColorAov::HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata)
+    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kColorAlpha), true))
+    , m_retainedRawColor(std::move(rawColorAov)) {
 
 }
 
@@ -344,7 +345,7 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
             if ((m_enabledFilters & kFilterAIDenoise) ||
                 (m_enabledFilters & kFilterEAWDenoise)) {
                 auto denoiseFilterType = (m_enabledFilters & kFilterAIDenoise) ? rif::FilterType::AIDenoise : rif::FilterType::EawDenoise;
-                auto fbDesc = m_aov->GetDesc();
+                auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
 
                 auto type = (m_enabledFilters & kFilterAIDenoise) ? kFilterAIDenoise : kFilterEAWDenoise;
                 auto filter = rif::Filter::Create(denoiseFilterType, rifContext, fbDesc.fb_width, fbDesc.fb_height);
@@ -382,6 +383,14 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     }
     if (m_filter) {
         m_filter->Update();
+    }
+}
+
+bool HdRprApiColorAov::GetData(void* dstBuffer, size_t dstBufferSize) {
+    if (!m_filter) {
+        return m_retainedRawColor->GetData(dstBuffer, dstBufferSize);
+    } else {
+        return HdRprApiAov::GetData(dstBuffer, dstBufferSize);
     }
 }
 
@@ -424,15 +433,15 @@ void HdRprApiColorAov::OnSizeChange(rif::Context* rifContext) {
         return;
     }
 
-    auto fbDesc = m_aov->GetDesc();
+    auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
     if (m_auxFilters.empty()) {
-        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_mainFilterType, m_filter.get(), GetResolvedFb());
+        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_mainFilterType, m_filter.get(), m_retainedRawColor->GetResolvedFb());
     } else {
         // Ideally we would use "Filter combining" functionality, but it does not work with user-defined filter
         // So we attach each filter separately
 
         auto filter = m_auxFilters.front().second.get();
-        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters.front().first, filter, GetResolvedFb());
+        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters.front().first, filter, m_retainedRawColor->GetResolvedFb());
         for (int i = 1; i < m_auxFilters.size(); ++i) {
             auto filterInput = m_auxFilters[i - 1].second->GetOutput();
             ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters[i].first, m_auxFilters[i].second.get(), filterInput);

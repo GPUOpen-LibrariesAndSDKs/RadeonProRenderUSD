@@ -27,6 +27,7 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 #define HDRPR_AOV_TOKENS \
+    (rawColor) \
     (albedo) \
     (variance) \
     (worldCoordinate) \
@@ -62,6 +63,7 @@ const rpr::Aov kAovNone = static_cast<rpr::Aov>(-1);
 
 enum ComputedAovs {
     kNdcDepth = 0,
+    kColorAlpha,
     kComputedAovsCount
 };
 

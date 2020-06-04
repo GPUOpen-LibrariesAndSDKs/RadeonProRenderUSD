@@ -985,13 +985,22 @@ public:
     }
 
     void ResolveFramebuffers(std::vector<std::pair<void*, size_t>> const& outputRenderBuffers, bool* firstResolve) {
+        std::vector<std::shared_ptr<HdRprApiAov>> computedAovsToResolve;
         for (auto& aovEntry : m_aovRegistry) {
             auto aov = aovEntry.second.lock();
             if (TF_VERIFY(aov)) {
                 if (*firstResolve || aov->GetDesc().multiSampled) {
-                    aov->Resolve();
+                    if (aov->GetDesc().computed) {
+                        // Computed AOVs depend on raw AOVs
+                        computedAovsToResolve.push_back(aov);
+                    } else {
+                        aov->Resolve();
+                    }
                 }
             }
+        }
+        for (auto& aov : computedAovsToResolve) {
+            aov->Resolve();
         }
 
         if (m_rifContext) {
@@ -1336,18 +1345,14 @@ public:
         }
 
         if (m_dirtyFlags & ChangeTracker::DirtyViewport) {
-            for (auto& aovEntry : m_internalAovs) {
-                aovEntry.second->Resize(m_viewportSize[0], m_viewportSize[1], aovEntry.second->GetFormat());
-            }
-            for (auto& aovBinding : m_aovBindings) {
-                if (auto rb = aovBinding.renderBuffer) {
-                    auto boundAovIter = m_boundAovs.find(aovBinding.aovName);
-                    if (boundAovIter != m_boundAovs.end()) {
-                        boundAovIter->second->Resize(rb->GetWidth(), rb->GetHeight(), rb->GetFormat());
-                    }
+            for (auto it = m_aovRegistry.begin(); it != m_aovRegistry.end();) {
+                if (auto aov = it->second.lock()) {
+                    aov->Resize(m_viewportSize[0], m_viewportSize[1], aov->GetFormat());
+                    ++it;
+                } else {
+                    it = m_aovRegistry.erase(it);
                 }
             }
-            // Size of bound AOVs controled by aovBinding's renderBuffer
         }
 
         if (m_dirtyFlags & ChangeTracker::DirtyScene ||
@@ -1451,7 +1456,7 @@ public:
             auto status = m_rprContext->Render();
 
             if (status == RPR_ERROR_ABORTED ||
-                RPR_ERROR_CHECK(status, "Fail contex render framebuffer")) {
+                RPR_ERROR_CHECK(status, "Fail context render framebuffer", m_rprContext.get())) {
                 stopRequested = true;
                 break;
             }
@@ -1700,13 +1705,6 @@ private:
             }
         };
 
-        // In case we have RIF we can use it to combine opacity and color AOVs
-        // into image that can be used for alpha compositing,
-        // without it color AOV always have 1.0 in alpha channel
-        if (!TfGetEnvSetting(HDRPR_DISABLE_ALPHA)) {
-            initInternalAov(HdRprAovTokens->opacity);
-        }
-
         // We create separate AOVs needed for denoising ASAP
         // In such a way, when user enables denoising it will not require to rerender
         // but it requires more memory, obviously, it should be taken into an account
@@ -1944,6 +1942,17 @@ private:
         return CreateMesh(position, indexes, normals, VtIntArray(), VtVec2fArray(), VtIntArray(), vpf);
     }
 
+    std::shared_ptr<HdRprApiAov> GetAov(TfToken const& aovName, int width, int height, HdFormat format) {
+        std::shared_ptr<HdRprApiAov> aov;
+        auto aovIter = m_aovRegistry.find(aovName);
+        if (aovIter == m_aovRegistry.end() ||
+            !(aov = aovIter->second.lock())) {
+
+            aov = CreateAov(aovName, width, height, format);
+        }
+        return aov;
+    }
+
     std::shared_ptr<HdRprApiAov> CreateAov(TfToken const& aovName, int width = 0, int height = 0, HdFormat format = HdFormatFloat32Vec4) {
         if (!m_rprContext ||
             width < 0 || height < 0 ||
@@ -1974,12 +1983,20 @@ private:
         try {
             if (!aov) {
                 if (aovName == HdAovTokens->color) {
-                    auto colorAov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get(), m_rprContextMetadata);
+                    auto rawColorAov = GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4);
+                    if (!rawColorAov) {
+                        TF_RUNTIME_ERROR("Failed to create color AOV: can't create rawColor AOV");
+                        return nullptr;
+                    }
 
-                    auto opacityAovIter = m_aovRegistry.find(HdRprAovTokens->opacity);
-                    if (opacityAovIter != m_aovRegistry.end()) {
-                        if (auto opacityAov = opacityAovIter->second.lock()) {
+                    auto colorAov = std::make_shared<HdRprApiColorAov>(format, std::move(rawColorAov), m_rprContext.get(), m_rprContextMetadata);
+
+                    if (!TfGetEnvSetting(HDRPR_DISABLE_ALPHA)) {
+                        auto opacityAov = GetAov(HdRprAovTokens->opacity, width, height, HdFormatFloat32Vec4);
+                        if (opacityAov) {
                             colorAov->SetOpacityAov(opacityAov);
+                        } else {
+                            TF_WARN("Color AOV: cannot create opacity AOV. Color AOV will be without alpha channel");
                         }
                     }
 
@@ -1987,16 +2004,13 @@ private:
                 } else if (aovName == HdAovTokens->normal) {
                     aov = std::make_shared<HdRprApiNormalAov>(width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else if (aovName == HdAovTokens->depth) {
-                    auto worldCoordinateAovIter = m_internalAovs.find(HdRprAovTokens->worldCoordinate);
-                    if (worldCoordinateAovIter == m_internalAovs.end()) {
-                        if (auto worldCoordinateAov = CreateAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4)) {
-                            worldCoordinateAovIter = m_internalAovs.emplace(HdRprAovTokens->worldCoordinate, worldCoordinateAov).first;
-                        } else {
-                            TF_CODING_ERROR("Failed to create depth AOV: can't create worldCoordinate AOV");
-                            return nullptr;
-                        }
+                    auto worldCoordinateAov = GetAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4);
+                    if (!worldCoordinateAov) {
+                        TF_RUNTIME_ERROR("Failed to create depth AOV: can't create worldCoordinate AOV");
+                        return nullptr;
                     }
-                    aov = std::make_shared<HdRprApiDepthAov>(format, worldCoordinateAovIter->second, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+
+                    aov = std::make_shared<HdRprApiDepthAov>(format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else {
                     if (!aovDesc.computed) {
                         aov = std::make_shared<HdRprApiAov>(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());

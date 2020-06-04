@@ -37,7 +37,7 @@ public:
     virtual void Update(HdRprApi const* rprApi, rif::Context* rifContext);
     virtual void Resolve();
 
-    bool GetData(void* dstBuffer, size_t dstBufferSize);
+    virtual bool GetData(void* dstBuffer, size_t dstBufferSize);
     void Clear();
 
     HdFormat GetFormat() const { return m_format; }
@@ -74,10 +74,11 @@ private:
 
 class HdRprApiColorAov : public HdRprApiAov {
 public:
-    HdRprApiColorAov(int width, int height, HdFormat format, rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata);
+    HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata);
     ~HdRprApiColorAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+    bool GetData(void* dstBuffer, size_t dstBufferSize) override;
     void Resolve() override;
 
     void SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity);
@@ -132,6 +133,7 @@ private:
     void SetTonemapFilterParams(rif::Filter* filter);
 
 private:
+    std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
     std::shared_ptr<HdRprApiAov> m_retainedDenoiseInputs[rif::MaxInput];
 

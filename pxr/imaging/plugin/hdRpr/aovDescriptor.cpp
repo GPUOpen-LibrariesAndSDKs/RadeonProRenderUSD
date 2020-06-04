@@ -65,6 +65,7 @@ HdRprAovRegistry::HdRprAovRegistry() {
 
     m_computedAovDescriptors.resize(kComputedAovsCount);
     m_computedAovDescriptors[kNdcDepth] = HdRprAovDescriptor(kNdcDepth, false, HdFormatFloat32, GfVec4f(std::numeric_limits<float>::infinity()), true);
+    m_computedAovDescriptors[kColorAlpha] = HdRprAovDescriptor(kColorAlpha);
 
     auto addAovNameLookup = [this](TfToken const& name, HdRprAovDescriptor const& descriptor) {
         auto status = m_aovNameLookup.emplace(name, AovNameLookupValue(descriptor.id, descriptor.computed));
@@ -73,13 +74,14 @@ HdRprAovRegistry::HdRprAovRegistry() {
         }
     };
 
-    addAovNameLookup(HdAovTokens->color, m_aovDescriptors[RPR_AOV_COLOR]);
+    addAovNameLookup(HdAovTokens->color, m_computedAovDescriptors[kColorAlpha]);
     addAovNameLookup(HdAovTokens->normal, m_aovDescriptors[RPR_AOV_SHADING_NORMAL]);
     addAovNameLookup(HdAovTokens->primId, m_aovDescriptors[RPR_AOV_OBJECT_ID]);
     addAovNameLookup(HdAovTokens->Neye, m_aovDescriptors[RPR_AOV_VIEW_SHADING_NORMAL]);
     addAovNameLookup(HdAovTokens->depth, m_computedAovDescriptors[kNdcDepth]);
     addAovNameLookup(HdRprGetCameraDepthAovName(), m_aovDescriptors[RPR_AOV_DEPTH]);
 
+    addAovNameLookup(HdRprAovTokens->rawColor, m_aovDescriptors[RPR_AOV_COLOR]);
     addAovNameLookup(HdRprAovTokens->albedo, m_aovDescriptors[RPR_AOV_DIFFUSE_ALBEDO]);
     addAovNameLookup(HdRprAovTokens->variance, m_aovDescriptors[RPR_AOV_VARIANCE]);
     addAovNameLookup(HdRprAovTokens->opacity, m_aovDescriptors[RPR_AOV_OPACITY]);
