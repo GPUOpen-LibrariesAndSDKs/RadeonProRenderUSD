@@ -294,6 +294,8 @@ MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& su
             MaterialParams materialParameters;
             GetParameters(surfaceNetwork, previewNode, materialParameters);
 
+            ParseCommonParams(materialParameters);
+
             auto setFallbackValue = [&materialParameters](TfToken const& name, VtValue value) {
                 // TODO: change to try_emplace when it will be available
                 materialParameters.emplace(name, value);
@@ -890,6 +892,13 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& s
             }
         }
     }
+
+    ParseCommonParams(params);
+}
+
+void MaterialAdapter::ParseCommonParams(std::map<TfToken, VtValue> const& params) {
+    m_isShadowCatcher = GetParameter(HdRprMaterialTokens->shadowCatcher, params, false);
+    m_isReflectionCatcher = GetParameter(HdRprMaterialTokens->reflectionCatcher, params, false);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

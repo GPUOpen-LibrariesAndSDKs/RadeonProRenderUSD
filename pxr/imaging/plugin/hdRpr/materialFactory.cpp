@@ -172,6 +172,8 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
 
     auto material = new HdRprApiMaterial;
     material->rootMaterial = rootMaterialNode;
+    material->isShadowCatcher = materialAdapter.IsShadowCatcher();
+    material->isReflectionCatcher = materialAdapter.IsReflectionCatcher();
 
     if (materialAdapter.IsDoublesided()) {
         material->twosidedNode = context->CreateMaterialNode(RPR_MATERIAL_NODE_TWOSIDED, &status);
@@ -450,9 +452,14 @@ void RprMaterialFactory::AttachMaterial(rpr::Shape* mesh, HdRprApiMaterial const
         } else {
             RPR_ERROR_CHECK(mesh->SetDisplacementMaterial(nullptr), "Failed to unset shape displacement material");
         }
+
+        RPR_ERROR_CHECK(mesh->SetShadowCatcher(material->isShadowCatcher), "Failed to set shape shadow catcher");
+        RPR_ERROR_CHECK(mesh->SetReflectionCatcher(material->isReflectionCatcher), "Failed to set shape reflection catcher");
     } else {
         RPR_ERROR_CHECK(mesh->SetMaterial(nullptr), "Failed to unset shape material");
         RPR_ERROR_CHECK(mesh->SetDisplacementMaterial(nullptr), "Failed to unset shape displacement material");
+        RPR_ERROR_CHECK(mesh->SetShadowCatcher(false), "Failed to unset shape shadow catcher");
+        RPR_ERROR_CHECK(mesh->SetReflectionCatcher(false), "Failed to unset shape reflection catcher");
     }
 }
 
