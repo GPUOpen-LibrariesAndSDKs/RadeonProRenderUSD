@@ -61,20 +61,22 @@ def generate_houdini_ds(install_path, ds_name, settings):
             if not 'ui_name' in setting:
                 continue
 
-            category_hidewhen = None
+            houdini_hidewhen_conditions = []
             if 'houdini' in category:
-                category_hidewhen = category['houdini'].get('hidewhen')
+                houdini_hidewhen_conditions.append(category['houdini'].get('hidewhen'))
 
             houdini_settings = setting.get('houdini', {})
             houdini_param_label = setting['ui_name']
-            houdini_hidewhen_conditions = []
-            if 'hidewhen' in houdini_settings or category_hidewhen:
-                houdini_hidewhen_conditions.append(houdini_settings.get('hidewhen', category_hidewhen))
+            if 'hidewhen' in houdini_settings:
+                houdini_hidewhen_conditions.append(houdini_settings.get('hidewhen'))
             houdini_hidewhen = ''
             if houdini_hidewhen_conditions:
                 houdini_hidewhen += 'hidewhen "'
                 for condition in houdini_hidewhen_conditions:
-                    houdini_hidewhen += '{{ {} }} '.format(condition)
+                    if condition:
+                        if callable(condition):
+                            condition = condition(settings)
+                        houdini_hidewhen += '{{ {} }} '.format(condition)
                 houdini_hidewhen += '"'
 
             def CreateHoudiniParam(name, label, htype, default, values=[], hints=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None):
@@ -130,6 +132,9 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 render_param_type = 'toggle'
                 render_param_default = 1 if default_value else 0
             elif 'values' in setting:
+                default_value = setting['values'].index(default_value)
+                render_param_default = default_value
+                c_type_str = type(default_value).__name__
                 render_param_type = 'ordinal'
                 for value in setting['values']:
                     render_param_values.append((len(render_param_values), value))

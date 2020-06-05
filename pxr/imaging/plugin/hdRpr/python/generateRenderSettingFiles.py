@@ -16,6 +16,19 @@ import platform
 
 from houdiniDsGenerator import generate_houdini_ds
 
+def get_render_setting(render_setting_categories, category_name, name):
+    for category in render_setting_categories:
+        if category['name'] != category_name:
+            continue
+
+        for setting in category['settings']:
+            if setting['name'] == name:
+                return setting
+
+def hidewhen_not_ambient_occlusion_mode(render_setting_categories):
+    renderMode = get_render_setting(render_setting_categories, 'RenderMode', 'renderMode')
+    return 'renderMode != {}'.format(renderMode['values'].index('Ambient Occlusion'))
+
 render_setting_categories = [
     {
         'name': 'RenderQuality',
@@ -25,7 +38,7 @@ render_setting_categories = [
                 'name': 'renderQuality',
                 'ui_name': 'Render Quality',
                 'help': 'Render restart might be required',
-                'defaultValue': 3,
+                'defaultValue': 'Full',
                 'values': [
                     "Low",
                     "Medium",
@@ -34,6 +47,40 @@ render_setting_categories = [
                 ]
             }
         ]
+    },
+    {
+        'name': 'RenderMode',
+        'settings': [
+            {
+                'name': 'renderMode',
+                'ui_name': 'Render Mode',
+                'defaultValue': 'Global Illumination',
+                'values': [
+                    'Global Illumination',
+                    'Direct Illumination',
+                    'Wireframe',
+                    'Material Index',
+                    'Position',
+                    'Normal',
+                    'Texcoord',
+                    'Ambient Occlusion',
+                    'Diffuse'
+                ]
+            },
+            {
+                'name': 'aoRadius',
+                'ui_name': 'Ambient Occlusion Radius',
+                'defaultValue': 1.0,
+                'minValue': 0.0,
+                'maxValue': 100.0,
+                'houdini': {
+                    'hidewhen': hidewhen_not_ambient_occlusion_mode
+                }
+            }
+        ],
+        'houdini': {
+            'hidewhen': 'renderQuality < 3'
+        }
     },
     {
         'name': 'Device',
@@ -45,7 +92,7 @@ render_setting_categories = [
                 'name': 'renderDevice',
                 'ui_name': 'Render Device',
                 'help': 'Restart required.',
-                'defaultValue': 1,
+                'defaultValue': 'GPU',
                 'values': [
                     "CPU",
                     "GPU",
@@ -518,9 +565,11 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 setting['maxValue'] = len(setting['values']) - 1
                 rs_mapped_values_enum += 'enum {name_title}Type {{\n'.format(name_title=name_title)
                 for value in setting['values']:
-                    rs_mapped_values_enum += '    k{name_title}{value},\n'.format(name_title=name_title, value=value)
+                    rs_mapped_values_enum += '    k{name_title}{value},\n'.format(name_title=name_title, value=value.replace(' ', ''))
                 rs_mapped_values_enum += '};\n'
+                default_value = setting['values'].index(default_value)
                 type_str = '{name_title}Type'.format(name_title=name_title)
+                c_type_str = type(default_value).__name__
 
             rs_get_set_method_declarations += '    void Set{}({} {});\n'.format(name_title, c_type_str, name)
             rs_get_set_method_declarations += '    {} Get{}() const {{ return m_prefData.{}; }}\n\n'.format(type_str, name_title, name)

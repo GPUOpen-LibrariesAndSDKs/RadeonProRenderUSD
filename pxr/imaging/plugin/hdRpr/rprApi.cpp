@@ -1099,6 +1099,24 @@ public:
         }
     }
 
+    rpr_uint GetRprRenderMode(RenderModeType mode) {
+        static std::map<RenderModeType, rpr_render_mode> s_mapping = {
+            {kRenderModeGlobalIllumination, RPR_RENDER_MODE_GLOBAL_ILLUMINATION},
+            {kRenderModeDirectIllumination, RPR_RENDER_MODE_DIRECT_ILLUMINATION},
+            {kRenderModeWireframe, RPR_RENDER_MODE_WIREFRAME},
+            {kRenderModeMaterialIndex, RPR_RENDER_MODE_MATERIAL_INDEX},
+            {kRenderModePosition, RPR_RENDER_MODE_POSITION},
+            {kRenderModeNormal, RPR_RENDER_MODE_NORMAL},
+            {kRenderModeTexcoord, RPR_RENDER_MODE_TEXCOORD},
+            {kRenderModeAmbientOcclusion, RPR_RENDER_MODE_AMBIENT_OCCLUSION},
+            {kRenderModeDiffuse, RPR_RENDER_MODE_DIFFUSE},
+        };
+
+        auto it = s_mapping.find(mode);
+        if (it == s_mapping.end()) return RPR_RENDER_MODE_GLOBAL_ILLUMINATION;
+        return it->second;
+    }
+
     void UpdateTahoeSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
             m_varianceThreshold = preferences.GetVarianceThreshold();
@@ -1142,6 +1160,15 @@ public:
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, int(is_interactive)), "Failed to set preview mode");
 
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyRenderMode)) {
+            auto renderMode = preferences.GetRenderMode();
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, GetRprRenderMode(renderMode)), "Failed to set render mode");
+            if (renderMode == kRenderModeAmbientOcclusion) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_AO_RAY_LENGTH, preferences.GetAoRadius()), "Failed to set ambient occlusion radius");
+            }
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
