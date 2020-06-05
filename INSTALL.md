@@ -30,8 +30,9 @@ More info here https://www.sidefx.com/docs/houdini/ref/plugins.html
 
 ### Usdview plugin
 
-Add hdRpr package path entry to the `PXR_PLUGINPATH_NAME` environment variable.
-Also, for windows you need to add the bin folder of the package to the `PATH` environment variable.
+* Add `HDRPR_PACKAGE_DIR/plugin` path entry to the `PXR_PLUGINPATH_NAME` environment variable
+* Add `HDRPR_PACKAGE_DIR/lib/python` path entry to the `PYTHONPATH` environment variable
+* Windows only: add the `HDRPR_PACKAGE_DIR/bin` path entry to the `PATH` environment variable
 
 OR
 

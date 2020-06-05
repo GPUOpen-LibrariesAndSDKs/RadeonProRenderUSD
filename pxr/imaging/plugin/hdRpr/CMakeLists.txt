@@ -90,12 +90,10 @@ if(NOT DEFINED RPR_CPP_WRAPPER_LOCATION)
     set(RPR_CPP_WRAPPER_LOCATION ${RPR_TOOLS_LOCATION})
 endif()
 
-pxr_plugin(hdRpr
-   LIBRARIES
-        ${RPR_LIBRARY}
-        ${RPR_LOADSTORE_LIBRARY}
-        ${RIF_LIBRARY}
-        ${OPENEXR_LIBRARIES}
+if(USDMonolithic_FOUND)
+    set(USD_LIBRARIES usd_ms)
+else()
+    set(USD_LIBRARIES
         ar
         arch
         sdf
@@ -117,7 +115,16 @@ pxr_plugin(hdRpr
         usdGeom
         usdImaging
         pxOsd
-        cameraUtil
+        cameraUtil)
+endif()
+
+pxr_plugin(hdRpr
+   LIBRARIES
+        ${RPR_LIBRARY}
+        ${RPR_LOADSTORE_LIBRARY}
+        ${RIF_LIBRARY}
+        ${OPENEXR_LIBRARIES}
+        ${USD_LIBRARIES}
 
         ${OptLibs}
 
@@ -195,6 +202,9 @@ target_sources(hdRpr PRIVATE
 add_subdirectory(rpr)
 add_subdirectory(rifcpp)
 add_subdirectory(houdini)
+if(NOT HoudiniUSD_FOUND)
+    add_subdirectory(usdviewMenu)
+endif()
 
 get_target_property(hdRpr_SOURCES hdRpr SOURCES)
 foreach(FILE ${hdRpr_SOURCES}) 
@@ -213,14 +223,6 @@ foreach(FILE ${hdRpr_SOURCES})
     endif()
 endforeach()
 
-_get_install_dir(plugin/usd/rprUsdviewMenu/resources rprMenuInstallPrefix)
-install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/rpr.py
-    DESTINATION ${rprMenuInstallPrefix}
-    RENAME "__init__.py")
-install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/plugInfo.json
-    DESTINATION ${rprMenuInstallPrefix})
 install(
     CODE
     "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/plugin/plugInfo.json\"

@@ -2,10 +2,10 @@
     "Plugins": [
         {
             "Type": "python",
-            "Name": "rprMenu",
+            "Name": "rprUsdviewMenu",
             "Info": {
                 "Types": {
-                    "rpr.RprPluginContainer": {
+                    "rprUsdviewMenu.RprPluginContainer": {
                         "bases": ["pxr.Usdviewq.plugin.PluginContainer"],
                         "displayName": "Usdview Radeon ProRender Plugin Menu"
                     }

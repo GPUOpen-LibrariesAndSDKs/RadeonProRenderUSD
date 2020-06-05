@@ -30,20 +30,27 @@ set(build_shared_libs "${BUILD_SHARED_LIBS}")
 # USD Arnold Requirements
 # ----------------------------------------------
 
-find_package(pxr CONFIG)
+# Try to find monolithic USD
+find_package(USDMonolithic QUIET)
 
-if(NOT pxr_FOUND)
-    # Try to find USD as part of Houdini.
-    find_package(HoudiniUSD)
+if(NOT USDMonolithic_FOUND)
+    find_package(pxr CONFIG)
 
-    if(HoudiniUSD_FOUND)
-        message(STATUS "Configuring Houdini plugin")
+    if(NOT pxr_FOUND)
+        # Try to find USD as part of Houdini.
+        find_package(HoudiniUSD)
+
+        if(HoudiniUSD_FOUND)
+            message(STATUS "Configuring Houdini plugin")
+        endif()
+    else()
+        message(STATUS "Configuring usdview plugin")
     endif()
 else()
-    message(STATUS "Configuring usdview plugin")
+    message(STATUS "Configuring usdview plugin: monolithic USD")
 endif()
 
-if(NOT pxr_FOUND AND NOT HoudiniUSD_FOUND)
+if(NOT pxr_FOUND AND NOT HoudiniUSD_FOUND AND NOT USDMonolithic_FOUND)
     message(FATAL_ERROR "Required: USD install or Houdini with included USD.")
 endif()
 
@@ -64,13 +71,11 @@ if(HoudiniUSD_FOUND)
     set(HOUDINI_ROOT "$ENV{HFS}" CACHE PATH "Houdini installation dir")
     find_package(Houdini REQUIRED CONFIG PATHS ${HOUDINI_ROOT}/toolkit/cmake)
 
-    set(PYTHON_INCLUDE_DIRS ${Houdini_Python_INCLUDE_DIR})
-    set(PYTHON_LIBRARY ${Houdini_Python_LIB})
-    find_package(PythonLibs 2.7 REQUIRED)
-    find_package(PythonInterp 2.7 REQUIRED)
-
     set(OPENEXR_LOCATION ${Houdini_USD_INCLUDE_DIR})
     set(OPENEXR_LIB_LOCATION ${Houdini_LIB_DIR})
+else()
+    # We are using python to generate source files
+    find_package(PythonInterp 2.7 REQUIRED)
 endif()
 
 if (NOT PXR_MALLOC_LIBRARY)
