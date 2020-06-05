@@ -64,9 +64,6 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_ENV_SETTING(HDRPR_DISABLE_ALPHA, false,
-    "Disable alpha in color AOV. All alpha values would be 1.0");
-
 namespace {
 
 using LockGuard = std::lock_guard<std::mutex>;
@@ -1201,6 +1198,11 @@ public:
             }
         }
 
+        if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force) {
+            m_isAlphaEnabled = preferences.GetEnableAlpha();
+            UpdateColorAlpha();
+        }
+
         m_currentRenderQuality = preferences.GetRenderQuality();
 
         if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe) {
@@ -1942,6 +1944,24 @@ private:
         return CreateMesh(position, indexes, normals, VtIntArray(), VtVec2fArray(), VtIntArray(), vpf);
     }
 
+    void UpdateColorAlpha(HdRprApiColorAov* colorAov = nullptr) {
+        if (!colorAov) {
+            colorAov = GetColorAov();
+            if (!colorAov) return;
+        }
+
+        if (m_isAlphaEnabled) {
+            auto opacityAov = GetAov(HdRprAovTokens->opacity, m_viewportSize[0], m_viewportSize[1], HdFormatFloat32Vec4);
+            if (opacityAov) {
+                colorAov->SetOpacityAov(opacityAov);
+            } else {
+                TF_WARN("Cannot enable alpha");
+            }
+        } else {
+            colorAov->SetOpacityAov(nullptr);
+        }
+    }
+
     std::shared_ptr<HdRprApiAov> GetAov(TfToken const& aovName, int width, int height, HdFormat format) {
         std::shared_ptr<HdRprApiAov> aov;
         auto aovIter = m_aovRegistry.find(aovName);
@@ -1990,15 +2010,7 @@ private:
                     }
 
                     auto colorAov = std::make_shared<HdRprApiColorAov>(format, std::move(rawColorAov), m_rprContext.get(), m_rprContextMetadata);
-
-                    if (!TfGetEnvSetting(HDRPR_DISABLE_ALPHA)) {
-                        auto opacityAov = GetAov(HdRprAovTokens->opacity, width, height, HdFormatFloat32Vec4);
-                        if (opacityAov) {
-                            colorAov->SetOpacityAov(opacityAov);
-                        } else {
-                            TF_WARN("Color AOV: cannot create opacity AOV. Color AOV will be without alpha channel");
-                        }
-                    }
+                    UpdateColorAlpha(colorAov.get());
 
                     aov = colorAov;
                 } else if (aovName == HdAovTokens->normal) {
@@ -2217,6 +2229,7 @@ private:
     GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
     HdRprCamera const* m_hdCamera;
+    bool m_isAlphaEnabled;
 
     std::atomic<int> m_numLights{0};
     HdRprApiEnvironmentLight* m_defaultLightObject = nullptr;

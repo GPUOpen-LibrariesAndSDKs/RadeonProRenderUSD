@@ -300,6 +300,19 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'Alpha',
+        'settings': [
+            {
+                'name': 'enableAlpha',
+                'ui_name': 'Enable Color Alpha',
+                'defaultValue': True,
+                'houdini': {
+                    'hidewhen': 'renderQuality != 3'
+                }
+            }
+        ]
+    },
+    {
         'name': 'UsdNativeCamera',
         'settings': [
             {
@@ -474,7 +487,7 @@ bool HdRprConfig::PrefData::Load() {{
 
     if (FILE* f = fopen(rprPreferencePath.c_str(), "rb")) {{
         if (!fread(this, sizeof(PrefData), 1, f)) {{
-            TF_CODING_ERROR("Fail to read rpr preferences dat file");
+            TF_RUNTIME_ERROR("Fail to read rpr preferences dat file");
         }}
         fclose(f);
         return IsValid();
