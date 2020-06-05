@@ -37,7 +37,6 @@ public:
     HdRprRenderParam(HdRprApi* rprApi, HdRprRenderThread* renderThread)
         : m_rprApi(rprApi)
         , m_renderThread(renderThread) {
-        m_numLights.store(0);
         InitializeEnvParameters();
     }
     ~HdRprRenderParam() override = default;
@@ -49,10 +48,6 @@ public:
     }
 
     HdRprRenderThread* GetRenderThread() { return m_renderThread; }
-
-    void AddLight() { ++m_numLights; }
-    void RemoveLight() { --m_numLights; }
-    bool HasLights() const { return m_numLights != 0; }
 
     TfToken const& GetMaterialNetworkSelector() const { return m_materialNetworkSelector; }
 
@@ -70,8 +65,6 @@ private:
 
     HdRprApi* m_rprApi;
     HdRprRenderThread* m_renderThread;
-
-    std::atomic<uint32_t> m_numLights;
 
     TfToken m_materialNetworkSelector;
 

@@ -86,6 +86,9 @@ public:
 
     void Release(rpr::Light* light);
 
+    HdRprApiMaterial* CreateGeometryLightMaterial(GfVec3f const& emissionColor);
+    void ReleaseGeometryLightMaterial(HdRprApiMaterial* material);
+
     struct VolumeMaterialParameters {
         GfVec3f scatteringColor = GfVec3f(1.0f);
         GfVec3f transmissionColor = GfVec3f(1.0f);

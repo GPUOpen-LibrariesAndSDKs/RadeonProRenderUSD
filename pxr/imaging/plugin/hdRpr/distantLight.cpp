@@ -61,7 +61,6 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
                 *dirtyBits = HdLight::Clean;
                 return;
             }
-            rprRenderParam->AddLight();
         }
 
         float angle = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->angle).Get<float>();
@@ -88,8 +87,6 @@ void HdRprDistantLight::Finalize(HdRenderParam* renderParam) {
         auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
         rprRenderParam->AcquireRprApiForEdit()->Release(m_rprLight);
         m_rprLight = nullptr;
-
-        rprRenderParam->RemoveLight();
     }
 
     HdSprim::Finalize(renderParam);
