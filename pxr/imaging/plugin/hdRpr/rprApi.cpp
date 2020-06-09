@@ -131,15 +131,13 @@ public:
             InitRif();
             InitScene();
             InitCamera();
+            InitAovs();
 
             m_state = kStateRender;
         } catch (rpr::Error& e) {
             TF_RUNTIME_ERROR("%s", e.what());
             m_state = kStateInvalid;
-        } catch (rif::Error& e) {
-            TF_RUNTIME_ERROR("%s", e.what());
-            m_state = kStateInvalid;
-        }
+        } 
 
         UpdateRestartRequiredMessageStatus();
     }
@@ -1069,10 +1067,9 @@ public:
 
                 if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                     auto quality = config->GetRenderQuality();
-
+                    auto newPlugin = GetPluginType(quality);
                     auto activePlugin = m_rprContextMetadata.pluginType;
-                    if ((activePlugin == rpr::kPluginTahoe && quality < kRenderQualityFull) ||
-                        (activePlugin == rpr::kPluginHybrid && quality == kRenderQualityFull)) {
+                    if (newPlugin != activePlugin) {
                         restartRequired = true;
                     }
                 }
@@ -1084,6 +1081,8 @@ public:
                 RenderQualityType currentRenderQuality;
                 if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe) {
                     currentRenderQuality = kRenderQualityFull;
+                } else if (m_rprContextMetadata.pluginType == rpr::kPluginNorthStar) {
+                    currentRenderQuality = static_cast<RenderQualityType>(int(kRenderQualityFull) + 1);
                 } else {
                     rpr_uint currentHybridQuality = RPR_RENDER_QUALITY_HIGH;
                     size_t dummy;
@@ -1205,7 +1204,8 @@ public:
 
         m_currentRenderQuality = preferences.GetRenderQuality();
 
-        if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe) {
+        if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe ||
+            m_rprContextMetadata.pluginType == rpr::kPluginNorthStar) {
             UpdateTahoeSettings(preferences, force);
         } else if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
             UpdateHybridSettings(preferences, force);
@@ -1641,6 +1641,16 @@ Don't show this message again?
     }
 
 private:
+    static rpr::PluginType GetPluginType(RenderQualityType renderQuality) {
+        if (renderQuality == kRenderQualityFull) {
+            return rpr::kPluginTahoe;
+        } else if (renderQuality == int(kRenderQualityFull) + 1) {
+            return rpr::kPluginNorthStar;
+        } else {
+            return rpr::kPluginHybrid;
+        }
+    }
+
     void InitRpr() {
         RenderQualityType renderQuality;
         {
@@ -1653,7 +1663,8 @@ private:
             m_rprContextMetadata.renderDeviceType = static_cast<rpr::RenderDeviceType>(config->GetRenderDevice());
         }
 
-        m_rprContextMetadata.pluginType = renderQuality == kRenderQualityFull ? rpr::kPluginTahoe : rpr::kPluginHybrid;
+        m_rprContextMetadata.pluginType = GetPluginType(renderQuality);
+
         auto cachePath = HdRprApi::GetCachePath();
         m_rprContext.reset(rpr::CreateContext(cachePath.c_str(), &m_rprContextMetadata));
         if (!m_rprContext) {
@@ -1696,10 +1707,9 @@ private:
         }
 
         m_rifContext = rif::Context::Create(m_rprContext.get(), m_rprContextMetadata, modelsPath);
-        if (!m_rifContext) {
-            return;
-        }
+    }
 
+    void InitAovs() {
         auto initInternalAov = [this](TfToken const& name) {
             auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(name);
             if (auto aov = CreateAov(name, 0, 0, aovDesc.format)) {

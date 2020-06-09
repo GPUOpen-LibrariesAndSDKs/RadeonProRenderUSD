@@ -148,6 +148,7 @@ rpr::CreationFlags getAllCompatibleGpuFlags(rpr_int pluginID, const char* cacheP
             }
             if (infoStatus != RPR_SUCCESS) {
                 PRINT_CONTEXT_CREATION_DEBUG_INFO("Failed to query device name: %d\n", infoStatus);
+                return false;
             }
 
             rprObjectDelete(temporaryContext);

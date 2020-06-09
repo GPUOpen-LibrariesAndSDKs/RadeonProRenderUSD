@@ -85,7 +85,7 @@ render_setting_categories = [
     {
         'name': 'Device',
         'houdini': {
-            'hidewhen': 'renderQuality != 3'
+            'hidewhen': 'renderQuality < 3'
         },
         'settings': [
             {
@@ -138,7 +138,7 @@ render_setting_categories = [
     {
         'name': 'AdaptiveSampling',
         'houdini': {
-            'hidewhen': 'renderQuality != 3'
+            'hidewhen': 'renderQuality < 3'
         },
         'settings': [
             {
@@ -162,7 +162,7 @@ render_setting_categories = [
     {
         'name': 'Quality',
         'houdini': {
-            'hidewhen': 'renderQuality != 3'
+            'hidewhen': 'renderQuality < 3'
         },
         'settings': [
             {
@@ -661,6 +661,17 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("install", help="The install root for generated files.")
     p.add_argument("--generate_ds_files", default=False, action='store_true')
+    p.add_argument('--northstar', default=False, action='store_true', help='Whether enable northstar render setting or not')
     args = p.parse_args()
+
+    if args.northstar:
+        for category in render_setting_categories:
+            if category['name']  == 'RenderQuality':
+                for setting in category['settings']:
+                    if setting['name'] == 'renderQuality':
+                        setting['values'].append('Northstar')
+                        break
+                break
+        print(render_setting_categories)
 
     generate_render_setting_files(args.install, args.generate_ds_files)
