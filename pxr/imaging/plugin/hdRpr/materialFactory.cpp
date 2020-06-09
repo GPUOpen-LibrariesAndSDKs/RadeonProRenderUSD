@@ -15,6 +15,7 @@ limitations under the License.
 #include "imageCache.h"
 
 #include "rpr/error.h"
+#include "rpr/imageHelpers.h"
 
 #include <RadeonProRender.hpp>
 
@@ -227,7 +228,7 @@ HdRprApiMaterial* RprMaterialFactory::CreateMaterial(EMaterialType type, const M
             return nullptr;
         }
 
-        RPR_ERROR_CHECK(materialNode->SetInput(RPR_MATERIAL_INPUT_DATA, rprImage), "Failed to set material node image data input");
+        RPR_ERROR_CHECK(materialNode->SetInput(RPR_MATERIAL_INPUT_DATA, rprImage->GetRootImage()), "Failed to set material node image data input");
         material->auxiliaryObjects.push_back(materialNode);
 
         if (!GfIsEqual(matTex.uvTransform, GfMatrix3f(1.0f))) {

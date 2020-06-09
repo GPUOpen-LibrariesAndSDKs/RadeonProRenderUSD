@@ -16,13 +16,38 @@ limitations under the License.
 
 #include <RadeonProRender.hpp>
 
+#include <vector>
+
 namespace rpr {
 
-Image* CreateImage(Context* context, char const* path, bool forceLinearSpace = false);
-Image* CreateImage(Context* context, uint32_t width, uint32_t height, ImageFormat format, void const* data, rpr::Status* status = nullptr);
+class CoreImage {
+public:
+    static CoreImage* Create(Context* context, char const* path, bool forceLinearSpace = false);
+    static CoreImage* Create(Context* context, uint32_t width, uint32_t height, ImageFormat format, void const* data, rpr::Status* status = nullptr);
 
-ImageFormat GetImageFormat(Image* image);
-ImageDesc GetImageDesc(Image* image);
+    ~CoreImage();
+
+    rpr::Image* GetRootImage() { return m_rootImage; }
+    ImageFormat GetFormat(CoreImage const& image);
+    ImageDesc GetDesc(CoreImage const& image);
+    Status GetInfo(ImageInfo imageInfo, size_t size, void* data, size_t* size_ret);
+
+    Status SetWrap(ImageWrapType type);
+    Status SetGamma(float gamma);
+    Status SetMipmapEnabled(bool enabled);
+    Status SetFilter(ImageFilterType type);
+
+private:
+    CoreImage(Image* rootImage = nullptr) : m_rootImage(rootImage) {};
+    Image* GetBaseImage();
+
+    template <typename F>
+    Status ForEachImage(F f);
+
+private:
+    Image* m_rootImage = nullptr;
+    std::vector<Image*> m_subImages;
+};
 
 } // namespace rpr
 

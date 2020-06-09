@@ -19,7 +19,6 @@ limitations under the License.
 #include "pxr/base/gf/vec3f.h"
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/usd/sdf/assetPath.h"
-#include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/usdUtils/pipeline.h"
 
 #include <RadeonProRender.hpp>
@@ -217,7 +216,7 @@ void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& ou
         if (param.IsHolding<SdfAssetPath>()) {
             auto& assetPath = param.UncheckedGet<SdfAssetPath>();
             if (assetPath.GetResolvedPath().empty()) {
-                materialNode.path = ArGetResolver().Resolve(assetPath.GetAssetPath());
+                materialNode.path = assetPath.GetAssetPath();
             } else {
                 materialNode.path = assetPath.GetResolvedPath();
             }
@@ -627,7 +626,11 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& s
                 if (*texturePropertyName == '\0') {
                     if (it->second.IsHolding<SdfAssetPath>()) {
                         auto& assetPath = it->second.UncheckedGet<SdfAssetPath>();
-                        texture.path = assetPath.GetResolvedPath();
+                        if (assetPath.GetResolvedPath().empty()) {
+                            texture.path = assetPath.GetResolvedPath();
+                        } else {
+                            texture.path = assetPath.GetAssetPath();
+                        }
                     }
                 } else if (std::strcmp(texturePropertyName, "Intensity") == 0) {
                     if (it->second.IsHolding<float>()) {
