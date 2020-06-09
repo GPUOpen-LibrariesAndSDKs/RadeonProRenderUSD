@@ -400,6 +400,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
             if (refractionWeight[0] != 0.0f || refractionWeight[1] != 0.0f || refractionWeight[2] != 0.0f) {
                 m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 1;
                 m_doublesided = false;
+                useSpecular = 1;
             }
         }
     }
@@ -440,6 +441,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
             materialTexture.scale *= -1.0f;
             m_texRpr[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = materialTexture;
 
+            useSpecular = 1;
             m_doublesided = false;
             m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 1;
         } else if (paramName == HdRprMaterialTokens->normal) {
