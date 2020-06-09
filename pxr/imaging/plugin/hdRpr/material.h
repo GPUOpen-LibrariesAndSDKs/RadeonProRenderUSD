@@ -39,8 +39,11 @@ public:
     /// In case material сreation failure return nullptr
     HdRprApiMaterial const* GetRprMaterialObject() const;
 
+    TfToken const& GetStName() const { return m_stName; }
+
 private:
     HdRprApiMaterial* m_rprMaterial = nullptr;
+    TfToken m_stName;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

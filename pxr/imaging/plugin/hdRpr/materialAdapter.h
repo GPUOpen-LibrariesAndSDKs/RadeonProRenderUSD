@@ -55,7 +55,8 @@ PXR_NAMESPACE_OPEN_SCOPE
     (displacement) \
     (transparency) \
     (rotation) \
-    (translation)
+    (translation) \
+    (varname)
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprMaterialTokens, HDRPR_MATERIAL_TOKENS);
 
@@ -149,6 +150,10 @@ public:
         return m_doublesided;
     }
 
+    TfToken GetStName() const {
+        return m_stName;
+    }
+
 private:
     void PopulateRprColor(const MaterialParams& params);
     void PopulateEmissive(const MaterialParams& params);
@@ -165,6 +170,8 @@ private:
 
     MaterialTexture m_displacementTexture;
     bool m_doublesided = false;
+
+    TfToken m_stName;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
