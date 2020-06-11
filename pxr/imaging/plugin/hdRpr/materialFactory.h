@@ -19,7 +19,7 @@ limitations under the License.
 
 #include <vector>
 
-namespace rpr { class MaterialNode; class Image; class Shape; class Curve; }
+namespace rpr { class MaterialNode; class CoreImage; class Shape; class Curve; }
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -28,7 +28,7 @@ struct HdRprApiMaterial {
     rpr::MaterialNode* twosidedNode = nullptr;
     rpr::MaterialNode* displacementMaterial = nullptr;
     std::vector<rpr::ContextObject*> auxiliaryObjects;
-    std::vector<std::shared_ptr<rpr::Image>> materialImages;
+    std::vector<std::shared_ptr<rpr::CoreImage>> materialImages;
     bool isShadowCatcher = false;
     bool isReflectionCatcher = false;
 };

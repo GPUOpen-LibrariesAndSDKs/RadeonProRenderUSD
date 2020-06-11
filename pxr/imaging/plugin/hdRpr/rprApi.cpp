@@ -97,7 +97,7 @@ struct HdRprApiVolume {
 
 struct HdRprApiEnvironmentLight {
     std::unique_ptr<rpr::EnvironmentLight> light;
-    std::unique_ptr<rpr::Image> image;
+    std::unique_ptr<rpr::CoreImage> image;
 
     enum {
         kDetached,
@@ -557,7 +557,7 @@ public:
         }
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<rpr::CoreImage>&& image, float intensity) {
         // XXX (RPR): default environment light should be removed before creating a new one - RPR limitation
         RemoveDefaultLight();
 
@@ -568,7 +568,7 @@ public:
         envLight->image = std::move(image);
 
         if (!envLight ||
-            RPR_ERROR_CHECK(envLight->light->SetImage(envLight->image.get()), "Failed to set env light image", m_rprContext.get()) ||
+            RPR_ERROR_CHECK(envLight->light->SetImage(envLight->image->GetRootImage()), "Failed to set env light image", m_rprContext.get()) ||
             RPR_ERROR_CHECK(envLight->light->SetIntensityScale(intensity), "Failed to set env light intensity", m_rprContext.get())) {
             RPR_ERROR_CHECK(status, "Failed to create environment light");
             delete envLight;
@@ -621,7 +621,7 @@ public:
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
-        auto image = std::unique_ptr<rpr::Image>(rpr::CreateImage(m_rprContext.get(), path.c_str()));
+        auto image = std::unique_ptr<rpr::CoreImage>(rpr::CoreImage::Create(m_rprContext.get(), path.c_str()));
         if (!image) {
             return nullptr;
         }
@@ -642,7 +642,7 @@ public:
         LockGuard rprLock(m_rprContext->GetMutex());
 
         rpr::Status status;
-        auto image = std::unique_ptr<rpr::Image>(rpr::CreateImage(m_rprContext.get(), imageSize, imageSize, format, imageData.data(), &status));
+        auto image = std::unique_ptr<rpr::CoreImage>(rpr::CoreImage::Create(m_rprContext.get(), imageSize, imageSize, format, imageData.data(), &status));
         if (!image) {
             RPR_ERROR_CHECK(status, "Failed to create image", m_rprContext.get());
             return nullptr;
@@ -939,8 +939,6 @@ public:
             return;
         }
 
-        LockGuard rprLock(m_rprContext->GetMutex());
-
         if (m_hdCamera != hdRprCamera) {
             m_hdCamera = hdRprCamera;
             m_dirtyFlags |= ChangeTracker::DirtyHdCamera;
@@ -964,15 +962,11 @@ public:
     }
 
     void SetViewportSize(GfVec2i const& size) {
-        LockGuard rprLock(m_rprContext->GetMutex());
-
         m_viewportSize = size;
         m_dirtyFlags |= ChangeTracker::DirtyViewport;
     }
 
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings) {
-        LockGuard rprLock(m_rprContext->GetMutex());
-
         m_aovBindings = aovBindings;
         m_dirtyFlags |= ChangeTracker::DirtyAOVBindings;
     }
@@ -2228,7 +2222,7 @@ private:
 
     GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
-    HdRprCamera const* m_hdCamera;
+    HdRprCamera const* m_hdCamera = nullptr;
     bool m_isAlphaEnabled;
 
     std::atomic<int> m_numLights{0};

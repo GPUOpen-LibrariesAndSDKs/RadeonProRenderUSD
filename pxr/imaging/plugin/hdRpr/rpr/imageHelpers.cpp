@@ -14,10 +14,12 @@ limitations under the License.
 #include "imageHelpers.h"
 #include "helpers.h"
 
+#include "pxr/base/tf/stringUtils.h"
+#include "pxr/base/arch/fileSystem.h"
+
 #include "pxr/imaging/glf/glew.h"
 #include "pxr/imaging/glf/uvTextureData.h"
 #include "pxr/imaging/glf/image.h"
-#include "pxr/base/arch/fileSystem.h"
 
 #ifdef ENABLE_RAT
 #include <IMG/IMG_File.h>
@@ -50,13 +52,7 @@ ImageDesc GetRprImageDesc(ImageFormat format, uint32_t width, uint32_t height, u
     return desc;
 }
 
-} // namespace anonymous
-
-Image* CreateImage(Context* context, uint32_t width, uint32_t height, ImageFormat format, void const* data, rpr::Status* status) {
-    return context->CreateImage(format, GetRprImageDesc(format, width, height), data, status);
-}
-
-Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
+Image* CreateRprImage(Context* context, char const* path, bool forceLinearSpace) {
     PXR_NAMESPACE_USING_DIRECTIVE
 
 #ifdef ENABLE_RAT
@@ -65,6 +61,7 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
         auto ratImage = std::unique_ptr<IMG_File>(IMG_File::open(path));
         if (!ratImage) {
             TF_RUNTIME_ERROR("Failed to load image %s", path);
+            return nullptr;
         }
 
         UT_Array<PXL_Raster*> images;
@@ -76,6 +73,7 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
         if (!ratImage->readImages(images) ||
             images.isEmpty()) {
             TF_RUNTIME_ERROR("Failed to load image %s", path);
+            return nullptr;
         }
 
         // XXX: use the only first image, find out what to do with other images
@@ -92,6 +90,7 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
             format.num_components = 4;
         } else {
             TF_RUNTIME_ERROR("Failed to load image %s: unsupported RAT packing", path);
+            return nullptr;
         }
 
         if (image->getFormat() == PXL_INT8) {
@@ -102,12 +101,14 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
             format.type = RPR_COMPONENT_TYPE_FLOAT32;
         } else {
             TF_RUNTIME_ERROR("Failed to load image %s: unsupported RAT format", path);
+            return nullptr;
         }
 
         ImageDesc desc = GetRprImageDesc(format, image->getXres(), image->getYres());
         if (desc.image_height < 1 ||
             desc.image_width < 1) {
             TF_RUNTIME_ERROR("Failed to load image %s: incorrect dimensions", path);
+            return nullptr;
         }
 
         // RAT image is flipped in Y axis
@@ -128,7 +129,7 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
 
         if (!forceLinearSpace &&
             (image->getColorSpace() == PXL_CS_LINEAR ||
-            image->getColorSpace() == PXL_CS_GAMMA2_2 || 
+            image->getColorSpace() == PXL_CS_GAMMA2_2 ||
             image->getColorSpace() == PXL_CS_CUSTOM_GAMMA)) {
             RPR_ERROR_CHECK(rprImage->SetGamma(image->getColorSpaceGamma()), "Failed to set image gamma", context);
         }
@@ -137,8 +138,9 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
     }
 #endif
 
-    if (GlfImage::IsSupportedImageFile(path)) {
-        auto textureData = GlfUVTextureData::New(path, INT_MAX, 0, 0, 0, 0);
+    std::string pathStr(path);
+    if (GlfImage::IsSupportedImageFile(pathStr)) {
+        auto textureData = GlfUVTextureData::New(pathStr, INT_MAX, 0, 0, 0, 0);
         if (textureData && textureData->Read(0, false)) {
             ImageFormat format = {};
             switch (textureData->GLType()) {
@@ -153,6 +155,7 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
                 break;
             default:
                 TF_RUNTIME_ERROR("Failed to create image %s. Unsupported pixel data GLtype: %#x", path, textureData->GLType());
+                return nullptr;
             }
 
             switch (textureData->GLFormat()) {
@@ -167,6 +170,7 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
                 break;
             default:
                 TF_RUNTIME_ERROR("Failed to create image %s. Unsupported pixel data GLformat: %#x", path, textureData->GLFormat());
+                return nullptr;
             }
             ImageDesc desc = GetRprImageDesc(format, textureData->ResizedWidth(), textureData->ResizedHeight());
 
@@ -194,12 +198,125 @@ Image* CreateImage(Context* context, char const* path, bool forceLinearSpace) {
     return context->CreateImageFromFile(path);
 }
 
-ImageFormat GetImageFormat(Image* image) {
-    return GetInfo<ImageFormat>(image, RPR_IMAGE_FORMAT);
+} // namespace anonymous
+
+CoreImage* CoreImage::Create(Context* context, uint32_t width, uint32_t height, ImageFormat format, void const* data, rpr::Status* status) {
+    auto rootImage = context->CreateImage(format, GetRprImageDesc(format, width, height), data, status);
+    if (!rootImage) {
+        return nullptr;
+    }
+
+    return new CoreImage(rootImage);
 }
 
-ImageDesc GetImageDesc(Image* image) {
-    return GetInfo<ImageDesc>(image, RPR_IMAGE_DESC);
+CoreImage* CoreImage::Create(Context* context, char const* path, bool forceLinearSpace) {
+    PXR_NAMESPACE_USING_DIRECTIVE
+
+    auto udimStr = std::strstr(path, "<UDIM>");
+    if (udimStr) {
+        std::string formatString = path;
+        formatString.replace(udimStr - path, 6, "%i");
+
+        constexpr uint32_t kStartTile = 1001;
+        constexpr uint32_t kEndTile = 1100;
+
+        CoreImage* coreImage = nullptr;
+
+        for (uint32_t t = kStartTile; t <= kEndTile; ++t) {
+            auto path = TfStringPrintf(formatString.c_str(), t);
+            auto rprImage = CreateRprImage(context, path.c_str(), forceLinearSpace);
+            if (!rprImage) {
+                continue;
+            }
+
+            if (!coreImage) {
+                coreImage = new CoreImage;
+
+                ImageFormat rootImageFormat = {};
+                rootImageFormat.num_components = 0;
+                rootImageFormat.type = RPR_COMPONENT_TYPE_UINT8;
+                ImageDesc rootImageDesc = {};
+
+                Status status;
+                coreImage->m_rootImage = context->CreateImage(rootImageFormat, rootImageDesc, nullptr, &status);
+                if (!coreImage->m_rootImage) {
+                    delete coreImage;
+                    delete rprImage;
+                    RPR_ERROR_CHECK(status, "Failed to create UDIM root image", context);
+                    return nullptr;
+                }
+            }
+
+            coreImage->m_rootImage->SetUDIM(t, rprImage);
+            coreImage->m_subImages.push_back(rprImage);
+        }
+
+        return coreImage;
+    } else {
+        auto rprImage = CreateRprImage(context, path, forceLinearSpace);
+        if (!rprImage) {
+            return nullptr;
+        }
+
+        return new CoreImage(rprImage);
+    }
+}
+
+CoreImage::~CoreImage() {
+    delete m_rootImage;
+    for (auto image : m_subImages) {
+        delete image;
+    }
+
+    m_rootImage = nullptr;
+    m_subImages.clear();
+}
+
+Image* CoreImage::GetBaseImage() {
+    return m_subImages.empty() ? m_rootImage : m_subImages[0];
+}
+
+template <typename F>
+Status CoreImage::ForEachImage(F f) {
+    if (m_subImages.empty()) {
+        return f(m_rootImage);
+    } else {
+        for (auto image : m_subImages) {
+            auto status = f(image);
+            if (status != RPR_SUCCESS) {
+                return status;
+            }
+        }
+        return RPR_SUCCESS;
+    }
+}
+
+ImageFormat CoreImage::GetFormat(CoreImage const& image) {
+    return rpr::GetInfo<ImageFormat>(GetBaseImage(), RPR_IMAGE_FORMAT);
+}
+
+ImageDesc CoreImage::GetDesc(CoreImage const& image) {
+    return rpr::GetInfo<ImageDesc>(GetBaseImage(), RPR_IMAGE_DESC);
+}
+
+Status CoreImage::GetInfo(ImageInfo imageInfo, size_t size, void* data, size_t* size_ret) {
+    return GetBaseImage()->GetInfo(imageInfo, size, data, size_ret);
+}
+
+Status CoreImage::SetWrap(ImageWrapType type) {
+    return ForEachImage([type](Image* image) { return image->SetWrap(type); });
+}
+
+Status CoreImage::SetGamma(float gamma) {
+    return ForEachImage([gamma](Image* image) { return image->SetGamma(gamma); });
+}
+
+Status CoreImage::SetMipmapEnabled(bool enabled) {
+    return ForEachImage([enabled](Image* image) { return image->SetMipmapEnabled(enabled); });
+}
+
+Status CoreImage::SetFilter(ImageFilterType type) {
+    return ForEachImage([type](Image* image) { return image->SetFilter(type); });
 }
 
 } // namespace rpr

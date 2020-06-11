@@ -24,7 +24,7 @@ ImageCache::ImageCache(rpr::Context* context)
 
 }
 
-std::shared_ptr<rpr::Image> ImageCache::GetImage(std::string const& path, bool forceLinearSpace) {
+std::shared_ptr<rpr::CoreImage> ImageCache::GetImage(std::string const& path, bool forceLinearSpace) {
     ImageMetadata md(path);
 
     auto cacheKey = path;
@@ -41,7 +41,7 @@ std::shared_ptr<rpr::Image> ImageCache::GetImage(std::string const& path, bool f
         }
     }
 
-    auto image = std::shared_ptr<rpr::Image>(rpr::CreateImage(m_context, path.c_str(), forceLinearSpace));
+    auto image = std::shared_ptr<rpr::CoreImage>(rpr::CoreImage::Create(m_context, path.c_str(), forceLinearSpace));
     if (image) {
         md.handle = image;
         m_cache.emplace(cacheKey, md);

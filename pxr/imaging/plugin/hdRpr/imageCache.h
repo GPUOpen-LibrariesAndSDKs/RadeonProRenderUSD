@@ -23,7 +23,7 @@ limitations under the License.
 namespace rpr {
 
 class Context;
-class Image;
+class CoreImage;
 
 } // namespace rpr
 
@@ -33,7 +33,7 @@ class ImageCache {
 public:
     ImageCache(rpr::Context* context);
 
-    std::shared_ptr<rpr::Image> GetImage(std::string const& path, bool forceLinearSpace = false);
+    std::shared_ptr<rpr::CoreImage> GetImage(std::string const& path, bool forceLinearSpace = false);
 
     void RequireGarbageCollection();
     void GarbageCollectIfNeeded();
@@ -49,7 +49,7 @@ private:
         bool IsMetadataEqual(ImageMetadata const& md);
 
     public:
-        std::weak_ptr<rpr::Image> handle;
+        std::weak_ptr<rpr::CoreImage> handle;
 
     private:
         size_t m_size = 0u;
