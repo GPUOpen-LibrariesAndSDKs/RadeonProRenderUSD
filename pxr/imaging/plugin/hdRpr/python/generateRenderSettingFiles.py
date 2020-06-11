@@ -672,6 +672,5 @@ if __name__ == "__main__":
                         setting['values'].append('Northstar')
                         break
                 break
-        print(render_setting_categories)
 
     generate_render_setting_files(args.install, args.generate_ds_files)
