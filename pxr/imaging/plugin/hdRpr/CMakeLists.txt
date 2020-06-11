@@ -139,6 +139,7 @@ pxr_plugin(hdRpr
         ${OptIncludeDir}
 
     PRIVATE_CLASSES
+        aovDescriptor
         rendererPlugin
         renderDelegate
         renderPass

@@ -146,7 +146,6 @@ public:
 
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
-    bool IsAovFormatConversionAvailable() const;
     bool IsArbitraryShapedLightSupported() const;
     int GetCurrentRenderQuality() const;
     void ExportRprSceneOnNextRender(const char* exportPath);
