@@ -56,7 +56,9 @@ PXR_NAMESPACE_OPEN_SCOPE
     (transparency) \
     (rotation) \
     (translation) \
-    (varname)
+    (varname) \
+    ((shadowCatcher, "rpr:shadowCatcher")) \
+    ((reflectionCatcher, "rpr:reflectionCatcher"))
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprMaterialTokens, HDRPR_MATERIAL_TOKENS);
 
@@ -154,7 +156,16 @@ public:
         return m_stName;
     }
 
+    bool IsShadowCatcher() const {
+        return m_isShadowCatcher;
+    }
+
+    bool IsReflectionCatcher() const {
+        return m_isReflectionCatcher;
+    }
+
 private:
+    void ParseCommonParams(std::map<TfToken, VtValue> const& params);
     void PopulateRprColor(const MaterialParams& params);
     void PopulateEmissive(const MaterialParams& params);
     void PopulateTransparent(const MaterialParams& params);
@@ -172,6 +183,9 @@ private:
     bool m_doublesided = false;
 
     TfToken m_stName;
+
+    bool m_isShadowCatcher = false;
+    bool m_isReflectionCatcher = false;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -12,6 +12,7 @@ limitations under the License.
 ************************************************************************/
 
 #include "rprApiFramebuffer.h"
+#include "aovDescriptor.h"
 #include "rpr/helpers.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -63,11 +64,19 @@ void HdRprApiFramebuffer::AttachAs(rpr::Aov aov) {
     m_aov = aov;
 }
 
-void HdRprApiFramebuffer::Clear() {
+void HdRprApiFramebuffer::Clear(float r, float g, float b, float a) {
     if (m_width == 0 || m_height == 0) {
         return;
     }
     RPR_ERROR_CHECK(m_rprFb->Clear(), "Failed to clear framebuffer");
+
+    // XXX (FIR-1681): We can not rely on clear values because every AOV in RPR is multisampled, i.e.
+    // value of singlesampled AOV (any ID AOV, worldCoordinate, etc) is always equals to `clearValue + renderedValue`
+    /*if (r == 0.0f && g == 0.0f && b == 0.0f && a == 0.0f) {
+        RPR_ERROR_CHECK(m_rprFb->Clear(), "Failed to clear framebuffer");
+    } else {
+        RPR_ERROR_CHECK(m_rprFb->FillWithColor(r, g, b, a), "Failed to clear framebuffer");
+    }*/
 }
 
 void HdRprApiFramebuffer::Resolve(HdRprApiFramebuffer* dstFrameBuffer) {

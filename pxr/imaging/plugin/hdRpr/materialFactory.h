@@ -29,6 +29,8 @@ struct HdRprApiMaterial {
     rpr::MaterialNode* displacementMaterial = nullptr;
     std::vector<rpr::ContextObject*> auxiliaryObjects;
     std::vector<std::shared_ptr<rpr::Image>> materialImages;
+    bool isShadowCatcher = false;
+    bool isReflectionCatcher = false;
 };
 
 class ImageCache;

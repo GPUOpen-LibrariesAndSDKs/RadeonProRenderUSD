@@ -307,6 +307,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_geomSubsets = m_topology.GetGeomSubsets();
         if (m_geomSubsets.empty()) {
             if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
+                rprApi->SetMeshId(rprMesh, GetPrimId());
                 m_rprMeshes.push_back(rprMesh);
             }
         } else {
@@ -433,6 +434,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 }
 
                 if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, subsetNormalIndices, subsetUv, subsetUvIndices, subsetVertexPerFace, m_topology.GetOrientation())) {
+                    rprApi->SetMeshId(rprMesh, GetPrimId());
                     m_rprMeshes.push_back(rprMesh);
                     ++it;
                 } else {

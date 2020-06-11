@@ -302,6 +302,8 @@ MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& su
             MaterialParams materialParameters;
             GetParameters(surfaceNetwork, previewNode, materialParameters);
 
+            ParseCommonParams(materialParameters);
+
             auto setFallbackValue = [&materialParameters](TfToken const& name, VtValue value) {
                 // TODO: change to try_emplace when it will be available
                 materialParameters.emplace(name, value);
@@ -409,6 +411,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
             if (refractionWeight[0] != 0.0f || refractionWeight[1] != 0.0f || refractionWeight[2] != 0.0f) {
                 m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 1;
                 m_doublesided = false;
+                useSpecular = 1;
             }
         }
     }
@@ -449,6 +452,7 @@ void MaterialAdapter::PopulateUsdPreviewSurface(const MaterialParams& params, co
             materialTexture.scale *= -1.0f;
             m_texRpr[RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT] = materialTexture;
 
+            useSpecular = 1;
             m_doublesided = false;
             m_uRprParams[RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS] = 1;
         } else if (paramName == HdRprMaterialTokens->normal) {
@@ -913,6 +917,13 @@ void MaterialAdapter::PopulateHoudiniPrincipledShader(HdMaterialNetwork const& s
             }
         }
     }
+
+    ParseCommonParams(params);
+}
+
+void MaterialAdapter::ParseCommonParams(std::map<TfToken, VtValue> const& params) {
+    m_isShadowCatcher = GetParameter(HdRprMaterialTokens->shadowCatcher, params, false);
+    m_isReflectionCatcher = GetParameter(HdRprMaterialTokens->reflectionCatcher, params, false);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

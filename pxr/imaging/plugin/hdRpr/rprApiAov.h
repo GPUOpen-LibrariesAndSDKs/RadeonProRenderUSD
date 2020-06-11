@@ -14,6 +14,7 @@ limitations under the License.
 #ifndef HDRPR_RPR_API_AOV_H
 #define HDRPR_RPR_API_AOV_H
 
+#include "aovDescriptor.h"
 #include "rprApiFramebuffer.h"
 #include "rifcpp/rifFilter.h"
 #include "rpr/contextMetadata.h"
@@ -36,20 +37,24 @@ public:
     virtual void Update(HdRprApi const* rprApi, rif::Context* rifContext);
     virtual void Resolve();
 
-    bool GetData(void* dstBuffer, size_t dstBufferSize);
+    virtual bool GetData(void* dstBuffer, size_t dstBufferSize);
     void Clear();
 
     HdFormat GetFormat() const { return m_format; }
+    HdRprAovDescriptor const& GetDesc() const { return m_aovDescriptor; }
+
     HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); };
     HdRprApiFramebuffer* GetResolvedFb();
 
 protected:
-    HdRprApiAov() = default;
+    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor) : m_aovDescriptor(aovDescriptor) {};
 
     virtual void OnFormatChange(rif::Context* rifContext);
     virtual void OnSizeChange(rif::Context* rifContext);
 
 protected:
+    HdRprAovDescriptor const& m_aovDescriptor;
+
     std::unique_ptr<HdRprApiFramebuffer> m_aov;
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
     std::unique_ptr<rif::Filter> m_filter;
@@ -69,10 +74,11 @@ private:
 
 class HdRprApiColorAov : public HdRprApiAov {
 public:
-    HdRprApiColorAov(int width, int height, HdFormat format, rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata);
+    HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata);
     ~HdRprApiColorAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+    bool GetData(void* dstBuffer, size_t dstBufferSize) override;
     void Resolve() override;
 
     void SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity);
@@ -127,6 +133,7 @@ private:
     void SetTonemapFilterParams(rif::Filter* filter);
 
 private:
+    std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
     std::shared_ptr<HdRprApiAov> m_retainedDenoiseInputs[rif::MaxInput];
 

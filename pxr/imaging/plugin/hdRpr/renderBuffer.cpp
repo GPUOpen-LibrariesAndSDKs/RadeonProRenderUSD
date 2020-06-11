@@ -49,7 +49,6 @@ void HdRprRenderBuffer::Finalize(HdRenderParam* renderParam) {
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
                                  HdFormat format,
                                  bool multiSampled) {
-    TF_VERIFY(!IsMapped());
     TF_UNUSED(multiSampled);
 
     if (dimensions[2] != 1) {
@@ -69,8 +68,6 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
 }
 
 void HdRprRenderBuffer::_Deallocate() {
-    TF_VERIFY(!IsMapped());
-
     m_width = 0u;
     m_height = 0u;
     m_format = HdFormatInvalid;
