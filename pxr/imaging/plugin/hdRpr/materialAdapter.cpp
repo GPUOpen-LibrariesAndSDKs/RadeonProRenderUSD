@@ -125,7 +125,7 @@ void GetParameters(const  HdMaterialNetwork& materialNetwork, const HdMaterialNo
     out_materialParams.insert(previewNode.parameters.begin(), previewNode.parameters.end());
 }
 
-void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& out_materialTextures) {
+void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& out_materialTextures, TfToken* stName) {
     out_materialTextures.clear();
 
     auto stToken = UsdUtilsGetPrimaryUVSetName();
@@ -161,6 +161,14 @@ void GetTextures(const  HdMaterialNetwork& materialNetwork, MaterialTextures& ou
                 TF_RUNTIME_ERROR("Invalid material network. Relationship %s does not match to any node", stRel.outputName.GetText());
                 continue;
             }
+
+            if (stName->IsEmpty()) {
+                if (GetParam(HdRprMaterialTokens->varname, *stNodeIter, param) &&
+                    param.IsHolding<TfToken>()) {
+                    *stName = param.UncheckedGet<TfToken>();
+                }
+            }
+
             // Actually some much more complex node graph could exists
             // But we support only direct UsdUvTexture<->UsdTransform2d relationship for now
             if (stNodeIter->identifier == HdRprMaterialTokens->UsdTransform2d) {
@@ -314,13 +322,14 @@ MaterialAdapter::MaterialAdapter(EMaterialType type, const HdMaterialNetwork& su
             setFallbackValue(HdRprMaterialTokens->opacityThreshold, VtValue(0.0f));
 
             MaterialTextures materialTextures;
-            GetTextures(surfaceNetwork, materialTextures);
+            GetTextures(surfaceNetwork, materialTextures, &m_stName);
 
             PopulateUsdPreviewSurface(materialParameters, materialTextures);
             break;
         }
         case EMaterialType::HOUDINI_PRINCIPLED_SHADER: {
             PopulateHoudiniPrincipledShader(surfaceNetwork, displacementNetwork);
+            m_stName = UsdUtilsGetPrimaryUVSetName();
             break;
         }
         default:

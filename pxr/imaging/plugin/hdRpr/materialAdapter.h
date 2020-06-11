@@ -56,6 +56,7 @@ PXR_NAMESPACE_OPEN_SCOPE
     (transparency) \
     (rotation) \
     (translation) \
+    (varname) \
     ((shadowCatcher, "rpr:shadowCatcher")) \
     ((reflectionCatcher, "rpr:reflectionCatcher"))
 
@@ -151,6 +152,10 @@ public:
         return m_doublesided;
     }
 
+    TfToken GetStName() const {
+        return m_stName;
+    }
+
     bool IsShadowCatcher() const {
         return m_isShadowCatcher;
     }
@@ -176,6 +181,9 @@ private:
 
     MaterialTexture m_displacementTexture;
     bool m_doublesided = false;
+
+    TfToken m_stName;
+
     bool m_isShadowCatcher = false;
     bool m_isReflectionCatcher = false;
 };

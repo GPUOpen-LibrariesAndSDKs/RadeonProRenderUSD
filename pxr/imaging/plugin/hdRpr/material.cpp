@@ -102,6 +102,7 @@ void HdRprMaterial::Sync(HdSceneDelegate* sceneDelegate,
                 }
 
                 MaterialAdapter matAdapter(surfaceType, *surface, displacement ? *displacement : HdMaterialNetwork{});
+                m_stName = matAdapter.GetStName();
                 m_rprMaterial = rprApi->CreateMaterial(matAdapter);
             } else {
                 TF_CODING_WARNING("Material type not supported");

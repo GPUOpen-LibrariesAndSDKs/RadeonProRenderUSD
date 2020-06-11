@@ -214,15 +214,17 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         newMesh = true;
     }
 
-    auto stToken = UsdUtilsGetPrimaryUVSetName();
-    if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, stToken)) {
-        GetPrimvarData(stToken, sceneDelegate, primvarDescsPerInterpolation, m_uvs, m_uvIndices);
-
-        newMesh = true;
-    }
-
     if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
         m_cachedMaterialId = sceneDelegate->GetMaterialId(id);
+    }
+
+    auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_cachedMaterialId));
+    if (material) {
+        if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, material->GetStName())) {
+            GetPrimvarData(material->GetStName(), sceneDelegate, primvarDescsPerInterpolation, m_uvs, m_uvIndices);
+
+            newMesh = true;
+        }
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
