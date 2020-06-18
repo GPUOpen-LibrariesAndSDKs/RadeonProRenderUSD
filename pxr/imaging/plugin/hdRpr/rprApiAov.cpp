@@ -214,7 +214,7 @@ void HdRprApiColorAov::SetFilter(Filter filter, bool enable) {
 void HdRprApiColorAov::SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity) {
     if (m_retainedOpacity != opacity) {
         m_retainedOpacity = opacity;
-        SetFilter(kFilterComposeOpacity, m_retainedOpacity != nullptr);
+        SetFilter(kFilterComposeOpacity, CanComposeAlpha());
     }
 }
 
@@ -309,6 +309,11 @@ void HdRprApiColorAov::SetTonemapFilterParams(rif::Filter* filter) {
     filter->SetParam("gamma", m_tonemap.gamma);
 }
 
+bool HdRprApiColorAov::CanComposeAlpha() {
+    // Compositing alpha into framebuffer with less than 4 components is a no-op
+    return HdGetComponentCount(m_format) == 4 && m_retainedOpacity;
+}
+
 void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
     if (m_dirtyBits & ChangeTracker::DirtyFormat) {
         OnFormatChange(rifContext);
@@ -367,6 +372,7 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
         } else if (m_enabledFilters & kFilterResample) {
             m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
             m_filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
+            m_mainFilterType = kFilterResample;
         }
 
         // Signal to update inputs
@@ -388,7 +394,11 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
 
 bool HdRprApiColorAov::GetData(void* dstBuffer, size_t dstBufferSize) {
     if (!m_filter) {
-        return m_retainedRawColor->GetData(dstBuffer, dstBufferSize);
+        if (auto resolvedRawColorFb = m_retainedRawColor->GetResolvedFb()) {
+            return resolvedRawColorFb->GetData(dstBuffer, dstBufferSize);
+        } else {
+            return false;
+        }
     } else {
         return HdRprApiAov::GetData(dstBuffer, dstBufferSize);
     }
@@ -404,6 +414,7 @@ void HdRprApiColorAov::Resolve() {
 
 void HdRprApiColorAov::OnFormatChange(rif::Context* rifContext) {
     SetFilter(kFilterResample, m_format != HdFormatFloat32Vec4);
+    SetFilter(kFilterComposeOpacity, CanComposeAlpha());
     m_dirtyBits |= ChangeTracker::DirtySize;
 }
 

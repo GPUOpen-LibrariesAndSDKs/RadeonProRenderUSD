@@ -132,6 +132,8 @@ private:
 
     void SetTonemapFilterParams(rif::Filter* filter);
 
+    bool CanComposeAlpha();
+
 private:
     std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;

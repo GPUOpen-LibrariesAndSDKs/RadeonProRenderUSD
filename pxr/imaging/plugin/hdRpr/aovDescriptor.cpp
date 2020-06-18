@@ -65,7 +65,7 @@ HdRprAovRegistry::HdRprAovRegistry() {
 
     m_computedAovDescriptors.resize(kComputedAovsCount);
     m_computedAovDescriptors[kNdcDepth] = HdRprAovDescriptor(kNdcDepth, false, HdFormatFloat32, GfVec4f(std::numeric_limits<float>::infinity()), true);
-    m_computedAovDescriptors[kColorAlpha] = HdRprAovDescriptor(kColorAlpha);
+    m_computedAovDescriptors[kColorAlpha] = HdRprAovDescriptor(kColorAlpha, true, HdFormatFloat32Vec4, GfVec4f(0.0f), true);
 
     auto addAovNameLookup = [this](TfToken const& name, HdRprAovDescriptor const& descriptor) {
         auto status = m_aovNameLookup.emplace(name, AovNameLookupValue(descriptor.id, descriptor.computed));
