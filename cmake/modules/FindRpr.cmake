@@ -57,11 +57,16 @@ if(WIN32)
         set(RPR_HYBRID_BINARY ${RPR_BIN_LOCATION}/Hybrid.dll)
     endif()
 
+    if (EXISTS "${RPR_BIN_LOCATION}/Northstar64.dll")
+        set(RPR_NORTHSTAR_BINARY ${RPR_BIN_LOCATION}/Northstar64.dll)
+    endif()
+
     set(RPR_BINARIES
         ${RPR_BIN_LOCATION}/RadeonProRender64.dll
         ${RPR_BIN_LOCATION}/RprLoadStore64.dll
         ${RPR_TAHOE_BINARY}
-        ${RPR_HYBRID_BINARY})
+        ${RPR_HYBRID_BINARY}
+        ${RPR_NORTHSTAR_BINARY})
 else()
     find_library(RPR_HYBRID_BINARY
         NAMES Hybrid${CMAKE_SHARED_LIBRARY_SUFFIX}
@@ -90,7 +95,7 @@ else()
     endif()
 endif(WIN32)
 
-if(NOT RPR_TAHOE_BINARY AND NOT RPR_HYBRID_BINARY)
+if(NOT RPR_TAHOE_BINARY AND NOT RPR_HYBRID_BINARY AND NOT RPR_NORTHSTAR_BINARY)
     message(FATAL_ERROR "At least one RPR plugin required")
 endif()
 
