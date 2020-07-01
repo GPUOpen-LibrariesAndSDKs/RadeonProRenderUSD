@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_transparent" node="rpr_transparent" uiname="RPR Transparent" doc="Represents transparent diffuse surfaces, transmits light with no attenuation based on IOR or absorption.">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Transparent color. White is perfectly transparent."/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

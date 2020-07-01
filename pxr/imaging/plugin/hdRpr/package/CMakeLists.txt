@@ -2,11 +2,9 @@ if(HoudiniUSD_FOUND)
     install(FILES activateHoudiniPlugin.py DESTINATION .)
 endif()
 
-list(GET USD_LIBRARIES 0 USD_LIB)
-
 set(USD_MINOR_VERSION "0")
 set(USD_MAJOR_VERSION "0")
-get_target_property(USD_INCLUDE_DIRS ${USD_LIB} INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(USD_INCLUDE_DIRS ar INTERFACE_INCLUDE_DIRECTORIES)
 if(USD_INCLUDE_DIRS)
     foreach(dir ${USD_INCLUDE_DIRS})
         if(EXISTS "${dir}/pxr/pxr.h")

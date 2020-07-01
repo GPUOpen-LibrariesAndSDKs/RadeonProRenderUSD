@@ -13,7 +13,6 @@ limitations under the License.
 
 #include "light.h"
 #include "renderParam.h"
-#include "materialAdapter.h"
 #include "primvarUtil.h"
 #include "rprApi.h"
 
@@ -401,7 +400,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
 
                 if (light->material) {
                     for (auto& mesh : light->meshes) {
-                        rprApi->SetMeshMaterial(mesh, light->material, false, false);
+                        rprApi->SetMeshMaterial(mesh, light->material, false);
                     }
                 }
             }

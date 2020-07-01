@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_normal_map" node="rpr_normal_map" uiname="RPR Normal Map" doc="Creates a normal map out of a color input usually a texture to a normal map.">
+      <input name="color" type="color3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Input normal map color (usually read in from image texture with normal map)."/>
+      <input name="scale" type="float" value="1" uimin="0" uimax="1" uiname="Scale" doc="Amount to apply normal map to surface normal."/>
+      <output name="out" type="vector3" />
+  </nodedef>
+</materialx>

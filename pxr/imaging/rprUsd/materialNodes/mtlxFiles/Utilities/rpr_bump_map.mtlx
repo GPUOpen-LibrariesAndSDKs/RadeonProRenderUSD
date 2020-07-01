@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_bump_map" node="rpr_bump_map" uiname="RPR Bump Map" doc="Performs bump mapping based on a height map hooked up to color.">
+      <input name="color" type="color3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Height map texture."/>
+      <input name="scale" type="float" value="1" uimin="0" uimax="1" uiname="Scale" doc="Height of bump scale by."/>
+      <output name="out" type="vector3" />
+  </nodedef>
+</materialx>

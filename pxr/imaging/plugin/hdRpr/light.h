@@ -26,7 +26,7 @@ namespace rpr { class Shape; class PointLight; class SpotLight; class IESLight; 
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
-struct HdRprApiMaterial;
+class RprUsdMaterial;
 
 class HdRprLight : public HdLight {
 public:
@@ -63,7 +63,7 @@ private:
     const TfToken m_lightType;
 
     struct AreaLight {
-        HdRprApiMaterial* material = nullptr;
+        RprUsdMaterial* material = nullptr;
         std::vector<rpr::Shape*> meshes;
         GfMatrix4f localTransform;
     };

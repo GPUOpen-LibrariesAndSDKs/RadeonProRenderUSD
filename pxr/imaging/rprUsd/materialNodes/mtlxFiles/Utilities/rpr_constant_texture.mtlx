@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_constant_texture" node="rpr_constant_texture" doc="Use it to emulate material node that outputs single color" uiname="RPR Constant Texture">
+      <input name="value" type="vector3" value="0,0,0" uisoftmin="0,0,0" uisoftmax="1,1,1" uiname="Color"/>
+      <output name="out" type="vector3" />
+  </nodedef>
+</materialx>

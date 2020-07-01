@@ -12,13 +12,12 @@ limitations under the License.
 ************************************************************************/
 
 #include "basisCurves.h"
-#include "materialAdapter.h"
 #include "material.h"
 #include "renderParam.h"
 #include "primvarUtil.h"
 #include "rprApi.h"
 
-#include "pxr/usd/usdUtils/pipeline.h"
+#include "pxr/imaging/rprUsd/material.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -94,12 +93,24 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
         newCurve = true;
     }
 
+    if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
+        m_cachedMaterial = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(id)));
+    }
+
     bool isVisibilityMaskDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
         HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-        auto stToken = UsdUtilsGetPrimaryUVSetName();
-        if (HdRprIsPrimvarExists(stToken, primvarDescsPerInterpolation, &m_uvsInterpolation)) {
-            m_uvs = sceneDelegate->Get(id, stToken).Get<VtVec2fArray>();
+
+        static TfToken st("st", TfToken::Immortal);
+        TfToken const* uvPrimvarName = &st;
+        if (m_cachedMaterial) {
+            if (auto rprMaterial = m_cachedMaterial->GetRprMaterialObject()) {
+                uvPrimvarName = &rprMaterial->GetUvPrimvarName();
+            }
+        }
+
+        if (HdRprIsPrimvarExists(*uvPrimvarName, primvarDescsPerInterpolation, &m_uvsInterpolation)) {
+            m_uvs = sceneDelegate->Get(id, *uvPrimvarName).Get<VtVec2fArray>();
         } else {
             m_uvs = VtVec2fArray();
         }
@@ -118,10 +129,6 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
     if (*dirtyBits & HdChangeTracker::DirtyTransform) {
         m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
         newCurve = true;
-    }
-
-    if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
-        m_cachedMaterial = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(id)));
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
@@ -191,9 +198,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                     }
                 }
 
-                MaterialAdapter matAdapter(EMaterialType::COLOR, MaterialParams{{HdRprMaterialTokens->color, VtValue(color)}});
-                m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
-
+                m_fallbackMaterial = rprApi->CreateDiffuseMaterial(color);
                 rprApi->SetCurveMaterial(m_rprCurve, m_fallbackMaterial);
             }
         }

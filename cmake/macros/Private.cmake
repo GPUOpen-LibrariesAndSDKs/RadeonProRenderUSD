@@ -51,7 +51,7 @@ function(_copy_headers LIBRARY_NAME)
                 OUTPUT ${outfile}
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${dir_to_create}"
                 COMMAND ${CMAKE_COMMAND} -Dinfile="${infile}" -Doutfile="${outfile}" -P "${PROJECT_SOURCE_DIR}/cmake/macros/copyHeaderForBuild.cmake"
-                MAIN_DEPENDENCY "${infile}"
+                DEPENDS "${infile}"
                 COMMENT "Copying ${f} ..."
                 VERBATIM
             )
@@ -1256,10 +1256,9 @@ function(_pxr_library NAME)
             ${PXR_PREFIX}
     )
     target_include_directories(${NAME}
-        PRIVATE
+        PUBLIC
             "${CMAKE_BINARY_DIR}/include"
             "${CMAKE_BINARY_DIR}/${PXR_INSTALL_SUBDIR}/include"
-        PUBLIC
             ${args_INCLUDE_DIRS}
     )
 

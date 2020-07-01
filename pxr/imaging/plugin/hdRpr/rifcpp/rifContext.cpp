@@ -15,8 +15,8 @@ limitations under the License.
 #include "rifError.h"
 
 #include "rprApiFramebuffer.h"
-#include "rpr/contextMetadata.h"
-#include "rpr/helpers.h"
+#include "pxr/imaging/rprUsd/contextMetadata.h"
+#include "pxr/imaging/rprUsd/helpers.h"
 
 #include <RadeonProRender_CL.h>
 #include <RadeonProRender_GL.h>
@@ -312,7 +312,7 @@ bool HasGpuContext(rpr_creation_flags contextFlags) {
 
 } // namespace anonymous
 
-std::unique_ptr<Context> Context::Create(rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, std::string const& modelPath) {
+std::unique_ptr<Context> Context::Create(rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::string const& modelPath) {
     if (!rprContext) {
         return nullptr;
     }
@@ -325,7 +325,7 @@ std::unique_ptr<Context> Context::Create(rpr::Context* rprContext, rpr::ContextM
     try {
         std::unique_ptr<Context> rifContext;
         if (HasGpuContext(contextFlags) &&
-            rprContextMetadata.pluginType == rpr::kPluginTahoe &&
+            rprContextMetadata.pluginType == kPluginTahoe &&
             !(contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL)) {
             rifContext.reset(new ContextOpenCL(rprContext, modelPath));
         } else {

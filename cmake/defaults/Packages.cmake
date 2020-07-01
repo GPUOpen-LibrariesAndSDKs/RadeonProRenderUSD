@@ -99,6 +99,8 @@ else()
     message(STATUS "Skipping OpenVDB support")
 endif()
 
+find_package(MaterialX REQUIRED)
+
 # ----------------------------------------------
 
 set(BUILD_SHARED_LIBS "${build_shared_libs}")

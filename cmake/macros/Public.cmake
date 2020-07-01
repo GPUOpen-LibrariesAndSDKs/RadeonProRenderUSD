@@ -23,6 +23,24 @@
 #
 include(Private)
 
+function(GroupSources target)
+    get_target_property(${target}_SOURCES ${target} SOURCES)
+    foreach(FILE ${${target}_SOURCES}) 
+        get_filename_component(ABS_FILE ${FILE} ABSOLUTE)
+        file(RELATIVE_PATH relPath ${CMAKE_CURRENT_SOURCE_DIR} ${ABS_FILE})
+
+        string(FIND "${relPath}" ".." out)
+        if("${out}" EQUAL 0)
+            source_group("external" FILES "${FILE}")
+        else()
+            get_filename_component(PARENT_DIR "${FILE}" DIRECTORY)
+            string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" GROUP "${PARENT_DIR}")
+            string(REPLACE "/" "\\" GROUP "${GROUP}")
+            source_group("${GROUP}" FILES "${FILE}")
+        endif()
+    endforeach()
+endfunction()
+
 macro(GetAppDataPath retVal)
     if(WIN32)
         if(DEFINED ENV{PROGRAMDATA})

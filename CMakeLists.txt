@@ -2,6 +2,9 @@ project(hdRpr)
 
 cmake_minimum_required(VERSION 3.12)
 
+# Shut up 'Up-to-date' install messages.
+set(CMAKE_INSTALL_MESSAGE LAZY)
+
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
                       ${CMAKE_SOURCE_DIR}/cmake/modules
                       ${CMAKE_SOURCE_DIR}/cmake/macros)
@@ -30,7 +33,7 @@ include(Public)
 set(CMAKE_CXX_STANDARD 14)
 
 
-add_subdirectory(pxr/imaging/plugin/hdRpr)
+add_subdirectory(pxr/imaging)
 
 install(FILES README.md DESTINATION .)
 install(FILES INSTALL.md DESTINATION .)

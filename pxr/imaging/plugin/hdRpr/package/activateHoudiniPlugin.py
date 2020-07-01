@@ -120,7 +120,7 @@ else:
         {"HOUDINI_PATH": "$RPR/houdini"}
     ]
     if platform.system() == 'Windows':
-        env += [{"PATH": "$RPR/bin"}]
+        env += [{"PATH": "$RPR/lib"}]
 
     with open(package_desc_filepath, 'w') as desc_file:
         desc_file.write(json.dumps({"env":env}))
