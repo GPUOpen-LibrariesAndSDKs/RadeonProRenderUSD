@@ -23,7 +23,7 @@ RprUsd_RprNodeInfo* GetNodeInfo() {
 
     // Take `RPR_MATERIAL_NODE_OP_OPERATION`-like name and convert it into `operation`
     std::string name(Node::kOpName + sizeof("RPR_MATERIAL_NODE_OP"));
-    for (int i = 0; i < name.size(); ++i) {
+    for (size_t i = 0; i < name.size(); ++i) {
         name[i] = std::tolower(name[i], std::locale());
     }
 
@@ -161,7 +161,7 @@ DEFINE_ARITHMETIC_NODE(RPR_MATERIAL_NODE_OP_DIV, 2, {
     auto lhs = GetRprFloat(m_args[0]);
     auto rhs = GetRprFloat(m_args[1]);
     decltype(lhs) out;
-    for (int i = 0; i < out.dimension; ++i) {
+    for (size_t i = 0; i < out.dimension; ++i) {
         out[i] = lhs[i] / rhs[i];
     }
     return VtValue(out);
@@ -197,7 +197,7 @@ DEFINE_ARITHMETIC_NODE(RPR_MATERIAL_NODE_OP_CROSS3, 2, {
 
 #define PER_COMPONENT_UNARY_IMPL(mathFunc) \
     auto in = GetRprFloat(m_args[0]); \
-    for (int i = 0; i < in.dimension; ++i) in[i] = mathFunc(in[i]); \
+    for (size_t i = 0; i < in.dimension; ++i) in[i] = mathFunc(in[i]); \
     return VtValue(in);
 
 DEFINE_ARITHMETIC_NODE(RPR_MATERIAL_NODE_OP_SIN, 1, {
@@ -245,7 +245,7 @@ DEFINE_ARITHMETIC_NODE(RPR_MATERIAL_NODE_OP_AVERAGE_XYZ, 1, {
     auto in0 = GetRprFloat(m_args[0]); \
     auto in1 = GetRprFloat(m_args[1]); \
     decltype(in0) out; \
-    for (int i = 0; i < in0.dimension; ++i) out[i] = mathFunc(in0[i], in1[i]); \
+    for (size_t i = 0; i < in0.dimension; ++i) out[i] = mathFunc(in0[i], in1[i]); \
     return VtValue(out);
 
 static float GetAverage(float v0, float v1) { return 0.5f * (v0 + v1); }
@@ -274,7 +274,7 @@ DEFINE_ARITHMETIC_NODE(RPR_MATERIAL_NODE_OP_POW, 2, {
     auto lhs = GetRprFloat(m_args[0]); \
     auto rhs = GetRprFloat(m_args[1]); \
     decltype(lhs) out; \
-    for (int i = 0; i < lhs.dimension; ++i) { \
+    for (size_t i = 0; i < lhs.dimension; ++i) { \
         out[i] = (lhs[i] OP rhs[i]) ? 1.0f : 0.0f; \
     } \
     return VtValue(out);
@@ -316,7 +316,7 @@ DEFINE_ARITHMETIC_NODE(RPR_MATERIAL_NODE_OP_TERNARY, 3, {
     auto in1 = GetRprFloat(m_args[1]);
     auto in2 = GetRprFloat(m_args[2]);
     decltype(in0) out;
-    for (int i = 0; i < in0.dimension; ++i) {
+    for (size_t i = 0; i < in0.dimension; ++i) {
         out[i] = in0[i] ? in1[i] : in2[i];
     }
     return VtValue(out);
@@ -356,9 +356,9 @@ DEFINE_ARITHMETIC_NODE(RPR_MATERIAL_NODE_OP_SHUFFLE_WXYZ, 1, {
 
 DEFINE_ARITHMETIC_NODE(RPR_MATERIAL_NODE_OP_MAT_MUL, 4, {
     GfMatrix3f mat;
-    for (int i = 0; i < mat.numRows; ++i) {
+    for (size_t i = 0; i < mat.numRows; ++i) {
         auto input = GetRprFloat(m_args[i]);
-        for (int j = 0; j < mat.numColumns; ++j) {
+        for (size_t j = 0; j < mat.numColumns; ++j) {
             mat[i][j] = input[j];
         }
     }

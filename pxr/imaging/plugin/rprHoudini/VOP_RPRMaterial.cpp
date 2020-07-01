@@ -19,8 +19,6 @@ limitations under the License.
 #include <PRM/PRM_Include.h>
 #include <PRM/PRM_SpareData.h>
 
-#include <MaterialXRender/Util.h>
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 /**

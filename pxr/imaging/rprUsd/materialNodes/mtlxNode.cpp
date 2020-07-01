@@ -105,7 +105,7 @@ bool GetTokenParameterMapping(
 
     if (ToRpr(inputId, &out_mappings->rprInput)) {
         out_mappings->values.reserve(tokenValues.size());
-        for (int i = 0; i < tokenValues.size(); ++i) {
+        for (size_t i = 0; i < tokenValues.size(); ++i) {
             uint32_t value;
             if (!ToRpr(tokenValues[i], &value)) {
                 isValid = false;
@@ -136,7 +136,7 @@ VtValue RemapTokenInput(VtValue const& input, TokenParameterMapping const& mappi
     }
 
     int idx = input.UncheckedGet<int>();
-    if (idx < 0 || idx >= mapping.values.size()) {
+    if (idx < 0 || size_t(idx) >= mapping.values.size()) {
         return VtValue();
     }
 
