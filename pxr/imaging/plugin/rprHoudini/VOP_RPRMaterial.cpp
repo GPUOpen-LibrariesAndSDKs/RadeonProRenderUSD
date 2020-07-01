@@ -53,9 +53,9 @@ static VOP_Type GetVOPType(RprUsdMaterialNodeInput::Type rprType) {
             return VOP_SURFACE_SHADER;
         case RprUsdMaterialNodeElement::kDisplacementShader:
             return VOP_DISPLACEMENT_SHADER;
+        default:
+            return VOP_TYPE_UNDEF;
     }
-
-    return VOP_TYPE_UNDEF;
 }
 
 static PRM_Type const& GetPRMType(RprUsdMaterialNodeInput::Type rprType) {
@@ -76,8 +76,9 @@ static PRM_Type const& GetPRMType(RprUsdMaterialNodeInput::Type rprType) {
             return PRM_TOGGLE;
         case RprUsdMaterialNodeElement::kToken:
             return PRM_ORD_E;
+        default:
+            return PRM_LIST_TERMINATOR;
     }
-    return PRM_LIST_TERMINATOR;
 }
 
 static PRM_Range* NewPRMRange(RprUsdMaterialNodeInput const* input) {
@@ -190,6 +191,7 @@ static unsigned GetNumChannels(RprUsdMaterialNodeInput const* input) {
     return 1;
 }
 
+/*
 static void AddSubPageHeading(
     std::vector<PRM_Template>* templates,
     std::string const& headingName) {
@@ -200,6 +202,7 @@ static void AddSubPageHeading(
     PRM_Name* name = LEAKED(new PRM_Name(label_name, label_string));
     templates->push_back(PRM_Template(PRM_HEADING, 0, name));
 }
+*/
 
 OP_Node* VOP_RPRMaterial::Create(OP_Network* net, const char* name, OP_Operator* entry) {
     auto rpr_entry = dynamic_cast<VOP_RPRMaterialOperator*>(entry);
@@ -267,7 +270,7 @@ PRM_Template* VOP_RPRMaterial::GetTemplates(RprUsdMaterialNodeInfo const* shader
             }
 
             auto docString = input->GetDocString();
-            const char* doc = docString ? nullptr : LEAKED(strdup(docString));
+            const char* doc = docString ? LEAKED(strdup(docString)) : nullptr;
 
             auto name = LEAKED(new PRM_Name(PRM_Name::COPY, input->GetName(), uiName));
             auto& type = GetPRMType(input->GetType());

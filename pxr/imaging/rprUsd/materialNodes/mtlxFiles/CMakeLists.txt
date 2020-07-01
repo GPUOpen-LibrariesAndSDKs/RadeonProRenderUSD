@@ -1,6 +1,4 @@
 set(MTLX_FILES
-    rpr_uber.mtlx
-
     Patterns/rpr_noise2d_texture.mtlx
     Patterns/rpr_checker_texture.mtlx
     Patterns/rpr_gradient_texture.mtlx
@@ -26,6 +24,7 @@ set(MTLX_FILES
     Shaders/rpr_add.mtlx
     Shaders/rpr_blend.mtlx
 
+    Shaders/rpr_uber.mtlx
     Shaders/rpr_diffuse.mtlx
     Shaders/rpr_diffuse_refraction.mtlx
     Shaders/rpr_emissive.mtlx
