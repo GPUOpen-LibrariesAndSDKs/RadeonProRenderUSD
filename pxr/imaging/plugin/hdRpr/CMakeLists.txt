@@ -61,14 +61,12 @@ if(HoudiniUSD_FOUND)
         FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/rpr_exportRpr1.hda
         DESTINATION "houdini/otls")
 
-    set(PLUG_INFO_ROOT "../../../plugin/usd/hdRpr")
-    set(PLUG_INFO_LIBRARY_PATH "../hdRpr${CMAKE_SHARED_LIBRARY_SUFFIX}")
-    set(PLUG_INFO_RESOURCE_PATH "resources")
-    configure_file(plugInfo.json ${CMAKE_CURRENT_BINARY_DIR}/houdiniPlugInfo.json)
     install(
-        FILES ${CMAKE_CURRENT_BINARY_DIR}/houdiniPlugInfo.json
-        DESTINATION houdini/dso/usd_plugins
-        RENAME plugInfo.json)
+        CODE
+        "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/houdini/dso/usd_plugins/plugInfo.json\"
+        \"{
+        \\\"Includes\\\": [ \\\"../../../plugin/\\\" ]
+    }\")")
 endif()
 
 if(RPR_NORTHSTAR_BINARY)
