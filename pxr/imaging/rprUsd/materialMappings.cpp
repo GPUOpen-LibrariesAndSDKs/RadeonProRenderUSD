@@ -178,7 +178,6 @@ bool ToRpr(TfToken const& id, rpr::MaterialNodeInput* out, bool pedantic) {
     auto it = s_mapping.find(id);
     if (it == s_mapping.end()) {
         if (pedantic) {
-            auto t = id.GetText();
             TF_CODING_ERROR("Invalid rpr::MaterialNodeInput id: %s", id.GetText());
         }
         return false;
@@ -211,7 +210,6 @@ bool ToRpr(TfToken const& id, uint32_t* out, bool pedantic) {
     auto it = s_mapping.find(id);
     if (it == s_mapping.end()) {
         if (pedantic) {
-            auto t = id.GetText();
             TF_CODING_ERROR("Invalid rpr mode id: %s", id.GetText());
         }
         return false;

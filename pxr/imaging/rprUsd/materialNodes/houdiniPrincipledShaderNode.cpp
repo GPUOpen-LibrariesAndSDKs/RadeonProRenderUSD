@@ -271,7 +271,6 @@ RprUsd_HoudiniPrincipledNode::RprUsd_HoudiniPrincipledNode(
         }
 
         // Check for default parameter
-        bool isDefault = false;
         if (param.value.IsEmpty()) {
             auto parameterIt = g_houdiniPrincipledShaderParameterDefaultValues.find(paramName);
             if (parameterIt != g_houdiniPrincipledShaderParameterDefaultValues.end()) {

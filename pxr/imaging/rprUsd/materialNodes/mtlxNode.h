@@ -38,7 +38,7 @@ public:
     const char* GetUIFolder() const override { return GetCStr(m_mtlx->getAttribute(MaterialX::ValueElement::UI_FOLDER_ATTRIBUTE)); }
     const char* GetDocString() const override { return GetCStr(m_mtlx->getAttribute(MaterialX::ValueElement::DOC_ATTRIBUTE)); }
     const char* GetValueString() const override { return GetCStr(m_mtlx->getValueString()); }
-    std::vector<TfToken> const& GetTokenValues() const { return m_tokenValues; }
+    std::vector<TfToken> const& GetTokenValues() const override { return m_tokenValues; }
 
 private:
     MaterialX::ValueElementPtr m_mtlx;
@@ -61,15 +61,15 @@ public:
         std::string const& uiFolder);
     ~RprUsd_MtlxNodeInfo() override = default;
 
-    const char* RprUsd_MtlxNodeInfo::GetName() const override { return GetCStr(m_mtlxNodeDef->getNodeString()); }
-    const char* RprUsd_MtlxNodeInfo::GetUIName() const override { return GetCStr(m_mtlxNodeDef->getAttribute(MaterialX::ValueElement::UI_NAME_ATTRIBUTE)); }
-    const char* RprUsd_MtlxNodeInfo::GetUIFolder() const override { return GetCStr(m_uiFolder); }
+    const char* GetName() const override { return GetCStr(m_mtlxNodeDef->getNodeString()); }
+    const char* GetUIName() const override { return GetCStr(m_mtlxNodeDef->getAttribute(MaterialX::ValueElement::UI_NAME_ATTRIBUTE)); }
+    const char* GetUIFolder() const override { return GetCStr(m_uiFolder); }
 
-    size_t RprUsd_MtlxNodeInfo::GetNumInputs() const override { return m_mtlxInputs.size(); }
-    RprUsdMaterialNodeInput const* RprUsd_MtlxNodeInfo::GetInput(size_t idx) const override { return &m_mtlxInputs[idx]; }
+    size_t GetNumInputs() const override { return m_mtlxInputs.size(); }
+    RprUsdMaterialNodeInput const* GetInput(size_t idx) const override { return &m_mtlxInputs[idx]; }
 
-    size_t RprUsd_MtlxNodeInfo::GetNumOutputs() const override { return m_mtlxOutputs.size(); }
-    RprUsdMaterialNodeElement const* RprUsd_MtlxNodeInfo::GetOutput(size_t idx) const override { return &m_mtlxOutputs[idx]; }
+    size_t GetNumOutputs() const override { return m_mtlxOutputs.size(); }
+    RprUsdMaterialNodeElement const* GetOutput(size_t idx) const override { return &m_mtlxOutputs[idx]; }
 
     RprUsdMaterialNodeFactoryFnc GetFactory() const;
 

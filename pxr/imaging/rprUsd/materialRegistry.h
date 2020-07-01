@@ -127,6 +127,7 @@ public:
         kVector2,
         kVector3,
         kColor3,
+        kNormal,
         kBoolean,
         kInteger,
         kToken,

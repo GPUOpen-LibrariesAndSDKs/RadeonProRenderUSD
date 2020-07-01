@@ -1858,7 +1858,7 @@ private:
     static RprUsdPluginType GetPluginType(RenderQualityType renderQuality) {
         if (renderQuality == kRenderQualityFull) {
             return kPluginTahoe;
-        } else if (renderQuality == int(kRenderQualityFull) + 1) {
+        } else if (+renderQuality == int(kRenderQualityFull) + 1) {
             return kPluginNorthStar;
         } else {
             return kPluginHybrid;

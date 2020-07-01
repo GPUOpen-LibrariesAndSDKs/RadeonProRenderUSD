@@ -56,8 +56,8 @@ bool ReadRifImage(rif_image image, void* dstBuffer, size_t dstBufferSize) {
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
                          rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter)
     : m_aovDescriptor(HdRprAovRegistry::GetInstance().GetAovDesc(rprAovType, false))
-    , m_format(format),
-    m_filter(std::move(filter)) {
+    , m_filter(std::move(filter))
+    , m_format(format) {
     if (rif::Image::GetDesc(0, 0, format).type == 0) {
         RIF_THROW_ERROR_MSG("Unsupported format: " + TfEnum::GetName(format));
     }

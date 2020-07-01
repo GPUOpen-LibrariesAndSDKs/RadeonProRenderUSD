@@ -9,13 +9,44 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-namespace {
-
 template<typename T>
 RprUsd_MaterialNode* RprUsd_CreateRprNode(
     RprUsd_MaterialBuilderContext* ctx,
     std::map<TfToken, VtValue> const& parameters) {
     return new T(ctx, parameters);
+}
+
+template <typename Node>
+RprUsd_RprNodeInfo* GetNodeInfo() {
+    auto ret = new RprUsd_RprNodeInfo;
+    auto& nodeInfo = *ret;
+
+    // Take `RPR_MATERIAL_NODE_OP_OPERATION`-like name and convert it into `operation`
+    std::string name(Node::kOpName + sizeof("RPR_MATERIAL_NODE_OP"));
+    for (int i = 0; i < name.size(); ++i) {
+        name[i] = std::tolower(name[i], std::locale());
+    }
+
+    nodeInfo.name = "rpr_arithmetic_" + name;
+    nodeInfo.uiName = std::string("RPR ") + Node::kUiName;
+    nodeInfo.uiFolder = "Arithmetics";
+
+    for (int i = 0; i < Node::kArity; ++i) {
+        RprUsd_RprNodeInput input(RprUsd_RprNodeInput::kColor3);
+        input.name = TfStringPrintf("color%d", i);
+        input.uiName = TfStringPrintf("Color %d", i);
+        input.valueString = "0,0,0";
+        input.uiSoftMin = "0";
+        input.uiSoftMax = "1";
+        nodeInfo.inputs.push_back(std::move(input));
+    }
+
+    RprUsd_RprNodeOutput output(RprUsdMaterialNodeElement::kColor3);
+    output.name = "out";
+    output.uiName = "out";
+    nodeInfo.outputs.push_back(std::move(output));
+
+    return ret;
 }
 
 /// \class RprUsd_RprArithmeticNodeRegistry
@@ -80,38 +111,7 @@ private:
 
 TF_INSTANTIATE_SINGLETON(RprUsd_RprArithmeticNodeRegistry);
 
-template <typename Node>
-RprUsd_RprNodeInfo* GetNodeInfo() {
-    auto ret = new RprUsd_RprNodeInfo;
-    auto& nodeInfo = *ret;
-
-    // Take `RPR_MATERIAL_NODE_OP_OPERATION`-like name and convert it into `operation`
-    std::string name(Node::kOpName + sizeof("RPR_MATERIAL_NODE_OP"));
-    for (int i = 0; i < name.size(); ++i) {
-        name[i] = std::tolower(name[i], std::locale());
-    }
-
-    nodeInfo.name = "rpr_arithmetic_" + name;
-    nodeInfo.uiName = std::string("RPR ") + Node::kUiName;
-    nodeInfo.uiFolder = "Arithmetics";
-
-    for (int i = 0; i < Node::kArity; ++i) {
-        RprUsd_RprNodeInput input(RprUsd_RprNodeInput::kColor3);
-        input.name = TfStringPrintf("color%d", i);
-        input.uiName = TfStringPrintf("Color %d", i);
-        input.valueString = "0,0,0";
-        input.uiSoftMin = "0";
-        input.uiSoftMax = "1";
-        nodeInfo.inputs.push_back(std::move(input));
-    }
-
-    RprUsd_RprNodeOutput output(RprUsdMaterialNodeElement::kColor3);
-    output.name = "out";
-    output.uiName = "out";
-    nodeInfo.outputs.push_back(std::move(output));
-
-    return ret;
-}
+namespace {
 
 /// There are roughly 42 arithmetic operations, each of them defines a C++ class.
 /// The following define allows us to minimize code required to define these classes.
@@ -135,7 +135,7 @@ public: \
     static constexpr rpr::MaterialNodeArithmeticOperation kOp = op; \
     static constexpr const char* kOpName = #op; \
     static constexpr const char* kUiName = uiName; \
-    static constexpr const char* kDoc = doc; \
+    /*static constexpr const char* kDoc = doc;*/ \
 protected: \
     int GetNumArguments() const final { return kArity; } \
     rpr::MaterialNodeArithmeticOperation GetOp() const final { return kOp; } \

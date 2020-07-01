@@ -29,7 +29,7 @@ struct RprUsd_RprNodeInput : public RprUsdMaterialNodeInput {
     const char* GetUIFolder() const override { return GetCStr(uiFolder); }
     const char* GetDocString() const override { return GetCStr(docString); }
     const char* GetValueString() const override { return GetCStr(valueString); }
-    std::vector<TfToken> const& GetTokenValues() const { return m_tokenValues; }
+    std::vector<TfToken> const& GetTokenValues() const override { return m_tokenValues; }
 
     std::string name;
     std::string uiName;

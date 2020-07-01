@@ -33,12 +33,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 ///
 class RprUsd_RprCombineShadersNode : public RprUsd_MaterialNode {
 public:
-    RprUsd_RprCombineShadersNode(
-        RprUsd_MaterialBuilderContext* ctx)
-        : m_ctx(ctx) {
-
-    }
-
+    RprUsd_RprCombineShadersNode() = default;
     ~RprUsd_RprCombineShadersNode() override = default;
 
     VtValue GetOutput(TfToken const& outputId) override {
@@ -107,7 +102,6 @@ public:
     }
 
 private:
-    RprUsd_MaterialBuilderContext* m_ctx;
     std::map<TfToken, VtValue> m_outputs;
 };
 
@@ -117,7 +111,7 @@ ARCH_CONSTRUCTOR(RprUsd_InitCombineShadersNode, 255, void) {
         TfToken(nodeInfo->name, TfToken::Immortal),
         [](RprUsd_MaterialBuilderContext* context,
         std::map<TfToken, VtValue> const& parameters) {
-            auto node = new RprUsd_RprCombineShadersNode(context);
+            auto node = new RprUsd_RprCombineShadersNode();
             for (auto& entry : parameters) node->SetInput(entry.first, entry.second);
             return node;
         },
