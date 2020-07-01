@@ -15,7 +15,7 @@ Add a new Houdini package with such configuration json:
             "HOUDINI_PATH":"$RPR/houdini"
         },
         {
-            "PATH":"$RPR/bin"
+            "PATH":"$RPR/lib"
         }
     ]
 }
@@ -32,11 +32,11 @@ More info here https://www.sidefx.com/docs/houdini/ref/plugins.html
 
 * Add `HDRPR_PACKAGE_DIR/plugin` path entry to the `PXR_PLUGINPATH_NAME` environment variable
 * Add `HDRPR_PACKAGE_DIR/lib/python` path entry to the `PYTHONPATH` environment variable
-* Windows only: add the `HDRPR_PACKAGE_DIR/bin` path entry to the `PATH` environment variable
+* Windows only: add the `HDRPR_PACKAGE_DIR/lib` path entry to the `PATH` environment variable
 
 OR
 
-You can copy hdRpr package directories (bin, lib and plugin) directly to the root of your USD package.
+You can copy hdRpr package directories (lib and plugin) directly to the root of your USD package.
 
 ## Installation from sources
 
