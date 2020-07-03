@@ -13,6 +13,8 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/materialMappings.h"
 
+#include <map>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PUBLIC_TOKENS(RprUsdMaterialNodeInputTokens, RPRUSD_MATERIAL_NODE_INPUT_TOKENS);

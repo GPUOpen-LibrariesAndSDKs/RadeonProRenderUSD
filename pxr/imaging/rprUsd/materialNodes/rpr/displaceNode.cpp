@@ -11,10 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#include "../materialNode.h"
+#include "baseNode.h"
 #include "nodeInfo.h"
 
-#include "pxr/imaging/rprUsd/materialRegistry.h"
+#include "pxr/imaging/rprUsd/materialHelpers.h"
 #include "pxr/base/arch/attributes.h"
 #include "pxr/base/gf/vec2f.h"
 
@@ -71,11 +71,22 @@ public:
                 return false;
             }
         } else if (inputId == RprUsdRprDisplaceNodeTokens->in) {
-            if (!value.IsHolding<std::shared_ptr<rpr::MaterialNode>>()) {
-                TF_RUNTIME_ERROR("Input `in` has invalid type: %s, expected - MaterialNode", value.GetTypeName().c_str());
-                return false;
+            if (value.IsHolding<std::shared_ptr<rpr::MaterialNode>>()) {
+                m_output = value;
+            } else {
+                auto vec = GetRprFloat(value);
+                if (!GfIsEqual(vec, GfVec4f(0.0f))) {
+                    if (!m_scalarDisplaceNode) {
+                        m_scalarDisplaceNode.reset(new RprUsd_BaseRuntimeNode(RPR_MATERIAL_NODE_CONSTANT_TEXTURE, m_ctx));
+                    }
+
+                    m_scalarDisplaceNode->SetInput(RPR_MATERIAL_INPUT_VALUE, value);
+                    m_output = VtValue(m_scalarDisplaceNode);
+                } else {
+                    m_scalarDisplaceNode = nullptr;
+                    m_output = VtValue();
+                }
             }
-            m_output = value;
         }
 
         return true;
@@ -117,6 +128,7 @@ public:
 private:
     RprUsd_MaterialBuilderContext* m_ctx;
     GfVec2f m_displacementScale;
+    std::shared_ptr<RprUsd_BaseRuntimeNode> m_scalarDisplaceNode;
     VtValue m_output;
 };
 

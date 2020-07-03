@@ -51,6 +51,9 @@ RprUsd_UsdPreviewSurface::RprUsd_UsdPreviewSurface(
     std::map<TfToken, VtValue> const& hydraParameters)
     : RprUsd_BaseRuntimeNode(RPR_MATERIAL_NODE_UBERV2, ctx) {
 
+    m_albedo = VtValue(GfVec4f(1.0f));
+    m_reflection = VtValue(GfVec4f(1.0f));
+
     auto setInput = [&hydraParameters, this](TfToken const& id, VtValue defaultValue) {
         auto it = hydraParameters.find(id);
         if (it == hydraParameters.end()) {
@@ -72,8 +75,7 @@ RprUsd_UsdPreviewSurface::RprUsd_UsdPreviewSurface(
     setInput(UsdPreviewSurfaceTokens->ior, VtValue(1.5f));
     setInput(UsdPreviewSurfaceTokens->displacement, VtValue(0.0f));
 
-    m_albedo = VtValue(GfVec4f(1.0f));
-    m_reflection = VtValue(GfVec4f(1.0f));
+    m_rprNode->SetInput(RPR_MATERIAL_INPUT_UBER_REFLECTION_WEIGHT, 1.0f, 1.0f, 1.0f, 1.0f);
 }
 
 bool RprUsd_UsdPreviewSurface::SetInput(
@@ -125,7 +127,18 @@ bool RprUsd_UsdPreviewSurface::SetInput(
         if (value.IsHolding<RprMaterialNodePtr>()) {
             m_displacementOutput = value;
         } else {
-            TF_WARN("Displacement should be a node");
+            auto vec = GetRprFloat(value);
+            if (!GfIsEqual(vec, GfVec4f(0.0f))) {
+                if (!m_displaceNode) {
+                    m_displaceNode.reset(new RprUsd_BaseRuntimeNode(RPR_MATERIAL_NODE_CONSTANT_TEXTURE, m_ctx));
+                }
+
+                m_displaceNode->SetInput(RPR_MATERIAL_INPUT_VALUE, value);
+                m_displacementOutput = VtValue(m_displaceNode);
+            } else {
+                m_displaceNode = nullptr;
+                m_displacementOutput = VtValue();
+            }
         }
     } else {
         TF_CODING_ERROR("Unknown UsdPreviewSurface parameter %s: %s", inputId.GetText(), value.GetTypeName().c_str());
@@ -178,13 +191,6 @@ rpr::ImageWrapType GetWrapType(VtValue const& value) {
     }
 
     return {};
-}
-
-bool GfIsEqual(GfVec4f const& v1, GfVec4f const& v2, float tolerance = 1e-5f) {
-    return std::abs(v1[0] - v2[0]) <= tolerance &&
-        std::abs(v1[1] - v2[1]) <= tolerance &&
-        std::abs(v1[2] - v2[2]) <= tolerance &&
-        std::abs(v1[3] - v2[3]) <= tolerance;
 }
 
 } // namespace anonymous

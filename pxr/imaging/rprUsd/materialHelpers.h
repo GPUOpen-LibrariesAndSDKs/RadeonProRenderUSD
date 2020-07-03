@@ -67,6 +67,13 @@ inline GfVec4f GetRprFloat(VtValue const& value) {
     }
 }
 
+inline bool GfIsEqual(GfVec4f const& v1, GfVec4f const& v2, float tolerance = 1e-5f) {
+    return std::abs(v1[0] - v2[0]) <= tolerance &&
+        std::abs(v1[1] - v2[1]) <= tolerance &&
+        std::abs(v1[2] - v2[2]) <= tolerance &&
+        std::abs(v1[3] - v2[3]) <= tolerance;
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // RPRUSD_MATERIAL_HELPERS_H
