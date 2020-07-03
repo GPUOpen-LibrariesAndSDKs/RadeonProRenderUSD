@@ -196,7 +196,7 @@ void HdRprApiAov::OnSizeChange(rif::Context* rifContext) {
 }
 
 HdRprApiColorAov::HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata)
-    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kColorAlpha), true))
+    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kColorAlpha), true), format)
     , m_retainedRawColor(std::move(rawColorAov)) {
 
 }
@@ -501,7 +501,7 @@ HdRprApiDepthAov::HdRprApiDepthAov(
     HdFormat format,
     std::shared_ptr<HdRprApiAov> worldCoordinateAov,
     rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
-    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true))
+    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true), format)
     , m_retainedWorldCoordinateAov(worldCoordinateAov) {
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create depth AOV: RIF context required");
@@ -526,7 +526,6 @@ HdRprApiDepthAov::HdRprApiDepthAov(
     auto fbDesc = m_retainedWorldCoordinateAov->GetAovFb()->GetDesc();
     m_width = fbDesc.fb_width;
     m_height = fbDesc.fb_height;
-    m_format = format;
 }
 
 void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {

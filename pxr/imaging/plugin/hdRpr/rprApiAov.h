@@ -47,18 +47,19 @@ public:
     HdRprApiFramebuffer* GetResolvedFb();
 
 protected:
-    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor) : m_aovDescriptor(aovDescriptor) {};
+    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
+        : m_aovDescriptor(aovDescriptor), m_format(format) {};
 
     virtual void OnFormatChange(rif::Context* rifContext);
     virtual void OnSizeChange(rif::Context* rifContext);
 
 protected:
     HdRprAovDescriptor const& m_aovDescriptor;
+    HdFormat m_format;
 
     std::unique_ptr<HdRprApiFramebuffer> m_aov;
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
     std::unique_ptr<rif::Filter> m_filter;
-    HdFormat m_format = HdFormatInvalid;
 
     enum ChangeTracker {
         Clean = 0,
