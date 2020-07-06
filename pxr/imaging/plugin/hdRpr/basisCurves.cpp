@@ -259,6 +259,10 @@ rpr::Curve* HdRprBasisCurves::CreateLinearRprCurve(HdRprApi* rprApi) {
     auto& curveCounts = m_topology.GetCurveVertexCounts();
     rprSegmentPerCurve.reserve(curveCounts.size());
 
+    // Validate Hydra curve data and calculate amount of required memory.
+    //
+    size_t numRadiuses = 0;
+    size_t numIndices = 0;
     int curveSegmentOffset = 0;
     int curveIndicesOffset = 0;
     for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
@@ -281,12 +285,41 @@ rpr::Curve* HdRprBasisCurves::CreateLinearRprCurve(HdRprApi* rprApi) {
             return nullptr;
         }
 
-        int numNewRprIndices = numSegments * kNumPointsPerSegment;
         if (isCurveTapered) {
-            rprRadiuses.reserve(rprRadiuses.size() + numNewRprIndices);
-            numNewRprIndices *= 2;
+            numRadiuses += numSegments * 2;
+            numIndices += numSegments * 4;
+        } else {
+            if (m_widthsInterpolation == HdInterpolationUniform ||
+                m_widthsInterpolation == HdInterpolationConstant) {
+                ++numRadiuses;
+            }
+            numIndices += numSegments * 2;
+
+            // RPR requires curves to consist only of segments of kRprNumPointsPerSegment length
+            auto numPointsInCurve = (numVertices - 1) * 2;
+            auto numTrailingPoints = numPointsInCurve % kRprNumPointsPerSegment;
+            if (numTrailingPoints > 0) {
+                numIndices += kRprNumPointsPerSegment - numTrailingPoints;
+            }
         }
-        rprIndices.reserve(rprIndices.size() + numNewRprIndices);
+
+        curveSegmentOffset += numSegments;
+        curveIndicesOffset += numVertices;
+    }
+    rprRadiuses.reserve(numRadiuses);
+    rprIndices.reserve(numIndices);
+
+    // Convert Hydra curve data to RPR data.
+    //
+    curveIndicesOffset = 0;
+    for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
+        auto numVertices = curveCounts[iCurve];
+        if (numVertices < 2) {
+            continue;
+        }
+
+        int numSegments = (numVertices - (kNumPointsPerSegment - kVstep)) / kVstep;
+        if (periodic) numSegments++;
 
         if (isCurveTapered) {
             rprSegmentPerCurve.push_back(numVertices - 1);
@@ -336,7 +369,6 @@ rpr::Curve* HdRprBasisCurves::CreateLinearRprCurve(HdRprApi* rprApi) {
             rprSegmentPerCurve.push_back((numPointsInCurve + extraPoints) / kRprNumPointsPerSegment);
         }
 
-        curveSegmentOffset += numSegments;
         curveIndicesOffset += numVertices;
     }
 
@@ -391,6 +423,10 @@ rpr::Curve* HdRprBasisCurves::CreateBezierRprCurve(HdRprApi* rprApi) {
         indexSampler = [this](int idx) { return m_indices.cdata()[idx]; };
     }
 
+    // Validate Hydra curve data and calculate amount of required memory.
+    //
+    size_t numRadiuses = 0;
+    size_t numIndices = 0;
     int curveSegmentOffset = 0;
     int curveIndicesOffset = 0;
     for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
@@ -406,7 +442,6 @@ rpr::Curve* HdRprBasisCurves::CreateBezierRprCurve(HdRprApi* rprApi) {
             return nullptr;
         }
 
-
         int numSegments = (numVertices - (kNumPointsPerSegment - kVstep)) / kVstep;
         if (periodic) numSegments++;
 
@@ -416,10 +451,33 @@ rpr::Curve* HdRprBasisCurves::CreateBezierRprCurve(HdRprApi* rprApi) {
             return nullptr;
         }
 
-        rprIndices.reserve(rprIndices.size() + numSegments * kNumPointsPerSegment);
+        numIndices += numSegments * kNumPointsPerSegment;
         if (isCurveTapered) {
-            rprRadiuses.reserve(rprRadiuses.size() + numSegments * 2);
+            numRadiuses += numSegments * 2;
+        } else {
+            if (m_widthsInterpolation == HdInterpolationUniform ||
+                m_widthsInterpolation == HdInterpolationConstant) {
+                numRadiuses++;
+            }
         }
+
+        curveSegmentOffset += numSegments;
+        curveIndicesOffset += numVertices;
+    }
+    rprRadiuses.reserve(numRadiuses);
+    rprIndices.reserve(numIndices);
+
+    // Convert Hydra curve data to RPR data.
+    //
+    curveIndicesOffset = 0;
+    for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
+        auto numVertices = curveCounts[iCurve];
+        if (numVertices < kNumPointsPerSegment) {
+            continue;
+        }
+
+        int numSegments = (numVertices - (kNumPointsPerSegment - kVstep)) / kVstep;
+        if (periodic) numSegments++;
 
         rprSegmentPerCurve.push_back(numSegments);
 
@@ -452,7 +510,6 @@ rpr::Curve* HdRprBasisCurves::CreateBezierRprCurve(HdRprApi* rprApi) {
             }
         }
 
-        curveSegmentOffset += numSegments;
         curveIndicesOffset += numVertices;
     }
 
