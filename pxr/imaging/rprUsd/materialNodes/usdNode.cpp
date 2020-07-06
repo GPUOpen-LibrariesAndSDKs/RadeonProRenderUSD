@@ -44,6 +44,7 @@ TF_DEFINE_PRIVATE_TOKENS(UsdPreviewSurfaceTokens,
     (opacityThreshold)
     (ior)
     (displacement)
+    (normal)
 );
 
 RprUsd_UsdPreviewSurface::RprUsd_UsdPreviewSurface(
@@ -139,6 +140,20 @@ bool RprUsd_UsdPreviewSurface::SetInput(
                 m_displaceNode = nullptr;
                 m_displacementOutput = VtValue();
             }
+        }
+    } else if (UsdPreviewSurfaceTokens->normal == inputId) {
+        if (value.IsHolding<RprMaterialNodePtr>()) {
+            if (!m_normalMapNode) {
+                m_normalMapNode.reset(new RprUsd_BaseRuntimeNode(RPR_MATERIAL_NODE_NORMAL_MAP, m_ctx));
+            }
+            m_normalMapNode->SetInput(RPR_MATERIAL_INPUT_COLOR, value);
+
+            auto normalMapOutput = m_normalMapNode->GetOutput(TfToken());
+            return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, normalMapOutput) &&
+                   SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL, normalMapOutput);
+        } else {
+            TF_RUNTIME_ERROR("`normal` input should be of material node type - %s", value.GetTypeName().c_str());
+            return false;
         }
     } else {
         TF_CODING_ERROR("Unknown UsdPreviewSurface parameter %s: %s", inputId.GetText(), value.GetTypeName().c_str());
