@@ -3,9 +3,9 @@ if(NOT TARGET Houdini)
 endif()
 
 set(PXR_PREFIX pxr/imaging)
-set(PXR_PACKAGE ratImage)
+set(PXR_PACKAGE glfRatImage)
 
-pxr_plugin(ratImage
+pxr_plugin(glfRatImage
     DISABLE_PRECOMPILED_HEADERS
     LIBRARIES
         tf
@@ -14,10 +14,10 @@ pxr_plugin(ratImage
         Houdini
 
     CPPFILES
-        ratImage.cpp
+        glfRatImage.cpp
 
     RESOURCE_FILES
         plugInfo.json
 )
 
-GroupSources(ratImage)
+GroupSources(glfRatImage)

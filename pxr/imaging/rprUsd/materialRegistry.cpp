@@ -11,6 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
+#include "pxr/imaging/glf/glew.h"
+#include "pxr/imaging/glf/uvTextureData.h"
+#include "pxr/imaging/glf/image.h"
 #include "pxr/imaging/rprUsd/materialRegistry.h"
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
@@ -20,6 +23,7 @@ limitations under the License.
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/pathUtils.h"
 #include "pxr/base/tf/getenv.h"
+#include "pxr/base/work/loops.h"
 
 #include "materialNodes/usdNode.h"
 #include "materialNodes/houdiniPrincipledShaderNode.h"
@@ -89,6 +93,98 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
     }
 
     return m_registeredNodes;
+}
+
+void RprUsdMaterialRegistry::CommitResources(
+    RprUsdImageCache* imageCache) {
+    if (m_textureCommits.empty()) {
+        return;
+    }
+
+    using CommitUniqueTextureIndices = std::vector<size_t>;
+    auto uniqueTextureIndicesPerCommit = std::make_unique<CommitUniqueTextureIndices[]>(m_textureCommits.size());
+
+    struct UniqueTextureInfo {
+        std::string path;
+        uint32_t udimTileId;
+
+        GlfUVTextureDataRefPtr data;
+
+        UniqueTextureInfo(std::string const& path, uint32_t udimTileId)
+            : path(path), udimTileId(udimTileId), data(nullptr) {}
+    };
+    std::vector<UniqueTextureInfo> uniqueTextures;
+    std::map<std::string, size_t> uniqueTexturesMapping;
+    auto getUniqueTextureIndex = [&uniqueTexturesMapping, &uniqueTextures](std::string const& path, uint32_t udimTileId = 0) {
+        auto status = uniqueTexturesMapping.emplace(path, uniqueTexturesMapping.size());
+        if (status.second) {
+            uniqueTextures.emplace_back(path, udimTileId);
+        }
+        return status.first->second;
+    };
+
+    // Iterate over all texture commits and collect unique textures including UDIM tiles
+    //
+    for (size_t i = 0; i < m_textureCommits.size(); ++i) {
+        auto& commit = m_textureCommits[i];
+        auto& commitTexIndices = uniqueTextureIndicesPerCommit[i];
+
+        const char* path = commit.filepath.c_str();
+
+        auto udimStr = std::strstr(path, "<UDIM>");
+        if (udimStr) {
+            std::string formatString = path;
+            formatString.replace(udimStr - path, 6, "%i");
+
+            constexpr uint32_t kStartTile = 1001;
+            constexpr uint32_t kEndTile = 1100;
+
+            for (uint32_t tileId = kStartTile; tileId <= kEndTile; ++tileId) {
+                auto tilePath = TfStringPrintf(formatString.c_str(), tileId);
+                if (ArchFileAccess(tilePath.c_str(), F_OK) == 0) {
+                    commitTexIndices.push_back(getUniqueTextureIndex(tilePath, tileId));
+                }
+            }
+        } else {
+            commitTexIndices.push_back(getUniqueTextureIndex(commit.filepath));
+        }
+    }
+
+    // Read all textures from disk from multi threads
+    //
+    WorkParallelForN(uniqueTextures.size(),
+        [&uniqueTextures](size_t begin, size_t end) {
+            for (size_t i = begin; i < end; ++i) {
+                auto textureData = GlfUVTextureData::New(uniqueTextures[i].path, INT_MAX, 0, 0, 0, 0);
+                if (textureData && textureData->Read(0, false)) {
+                    uniqueTextures[i].data = textureData;
+                }
+            }
+        }
+    );
+
+    // Create rpr::Image for each previously read unique texture
+    // XXX(RPR): so as RPR API is single-threaded we cannot parallelize this
+    //
+    for (size_t i = 0; i < m_textureCommits.size(); ++i) {
+        auto& commitTexIndices = uniqueTextureIndicesPerCommit[i];
+        if (commitTexIndices.empty()) continue;
+
+        std::vector<RprUsdCoreImage::UDIMTile> tiles;
+        tiles.reserve(commitTexIndices.size());
+        for (auto uniqueTextureIdx : commitTexIndices) {
+            auto& texture = uniqueTextures[uniqueTextureIdx];
+            if (!texture.data) continue;
+
+            tiles.emplace_back(texture.udimTileId, texture.data.operator->());
+        }
+
+        auto& commit = m_textureCommits[i];
+        auto coreImage = imageCache->GetImage(commit.filepath, commit.forceLinearSpace, commit.wrapType, tiles);
+        commit.setTextureCallback(coreImage);
+    }
+
+    m_textureCommits.clear();
 }
 
 namespace {

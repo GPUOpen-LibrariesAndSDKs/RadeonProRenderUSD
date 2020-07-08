@@ -14,7 +14,6 @@ limitations under the License.
 #ifndef RPRUSD_MATERIAL_NODES_USD_NODE_H
 #define RPRUSD_MATERIAL_NODES_USD_NODE_H
 
-#include "pxr/imaging/rprUsd/imageCache.h"
 #include "rpr/baseNode.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -86,7 +85,7 @@ public:
 private:
     RprUsd_MaterialBuilderContext* m_ctx;
 
-    std::shared_ptr<RprUsdImageCache::CachedImage> m_image;
+    std::shared_ptr<RprUsdCoreImage> m_image;
     std::shared_ptr<rpr::MaterialNode> m_imageNode;
     std::shared_ptr<RprUsd_RprArithmeticNode> m_scaleNode;
     std::shared_ptr<RprUsd_RprArithmeticNode> m_biasNode;
