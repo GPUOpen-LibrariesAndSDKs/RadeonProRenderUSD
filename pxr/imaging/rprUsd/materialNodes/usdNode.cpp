@@ -243,7 +243,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
         forceLinearSpace = true;
     }
 
-    auto m_image = ctx->imageCache->GetImage(filepath, forceLinearSpace);
+    m_image = ctx->imageCache->GetImage(filepath, forceLinearSpace);
     if (!m_image) {
         throw RprUsd_NodeError("UsdUVTexture: failed to load texture");
     }
