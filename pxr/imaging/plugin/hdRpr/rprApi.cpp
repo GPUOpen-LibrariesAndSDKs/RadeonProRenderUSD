@@ -51,9 +51,6 @@ limitations under the License.
 #include <fstream>
 #include <vector>
 #include <mutex>
-#include <iostream>
-
-#include <iostream>
 
 #ifdef WIN32
 #include <shlobj_core.h>
