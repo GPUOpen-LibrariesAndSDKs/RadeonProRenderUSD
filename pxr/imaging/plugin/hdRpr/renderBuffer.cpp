@@ -130,7 +130,6 @@ VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
         VtDictionary dictionary;
         dictionary["is_hybrid"] = isHybrid;
         dictionary["framebuffer"] = color;
-        dictionary["mutex_ptr"] = &color->GetContext().GetMutex();
 
         return VtValue(dictionary);
     }
