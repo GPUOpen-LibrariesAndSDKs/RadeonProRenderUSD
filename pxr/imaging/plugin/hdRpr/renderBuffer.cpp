@@ -115,6 +115,12 @@ VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
     if ("aov_color" == GetId().GetElementString()) {
         rpr::FrameBuffer* color = m_api->GetColorFramebuffer();
 
+        // RPR framebuffer not created yet
+        if (color == nullptr)
+        {
+            return VtValue();
+        }
+
         rpr::PluginType type = m_api->GetActivePluginType();
         bool isHybrid = false;
         if (type == rpr::PluginType::kPluginHybrid) {

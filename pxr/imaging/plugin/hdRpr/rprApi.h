@@ -153,7 +153,7 @@ public:
 
     rpr::PluginType GetActivePluginType() const;
     rpr::FrameBuffer* GetColorFramebuffer();
-    void SetInteropInfo(void* interopInfo);
+    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);
 
 private:
     HdRprApiImpl* m_impl = nullptr;
