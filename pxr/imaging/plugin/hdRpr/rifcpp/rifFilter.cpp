@@ -23,10 +23,12 @@ namespace {
 class FilterAIDenoise final : public Filter {
     enum {
         RemapDepthFilter,
+        RemapNormalFilter,
         AuxFilterMax
     };
     enum {
         RemappedDepthImage,
+        RemappedNormalImage,
         AuxImageMax
     };
 public:
@@ -82,26 +84,31 @@ FilterAIDenoise::FilterAIDenoise(Context* rifContext, std::uint32_t width, std::
     // auxillary filters
     m_auxFilters.resize(AuxFilterMax, nullptr);
     m_auxFilters[RemapDepthFilter] = rifContext->CreateImageFilter(RIF_IMAGE_FILTER_REMAP_RANGE);
+    m_auxFilters[RemapNormalFilter] = rifContext->CreateImageFilter(RIF_IMAGE_FILTER_REMAP_RANGE);
 
     // setup remapping filters
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1f(m_auxFilters[RemapDepthFilter], "dstLo", 0.0f), "Failed to set filter parameter");
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1f(m_auxFilters[RemapDepthFilter], "dstHi", 1.0f), "Failed to set filter parameter");
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1f(m_auxFilters[RemapNormalFilter], "dstLo", 0.0f), "Failed to set filter parameter");
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1f(m_auxFilters[RemapNormalFilter], "dstHi", 1.0f), "Failed to set filter parameter");
 
     // auxillary rif images
     auto desc = Image::GetDesc(width, height, HdFormatFloat32Vec4);
 
     m_auxImages.resize(AuxImageMax);
     m_auxImages[RemappedDepthImage] = rifContext->CreateImage(desc);
+    m_auxImages[RemappedNormalImage] = rifContext->CreateImage(desc);
 }
 
 void FilterAIDenoise::AttachFilter(rif_image inputImage) {
     // setup inputs
-    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_rifFilter, "normalsImg", m_inputs.at(Normal).rifImage), "Failed to set filter parameter");
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_rifFilter, "normalsImg", m_auxImages[RemappedNormalImage]->GetHandle()), "Failed to set filter parameter");
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_rifFilter, "depthImg", m_auxImages[RemappedDepthImage]->GetHandle()), "Failed to set filter parameter");
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_rifFilter, "colorImg", m_inputs.at(Color).rifImage), "Failed to set filter parameter");
     RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterImage(m_rifFilter, "albedoImg", m_inputs.at(Albedo).rifImage), "Failed to set filter parameter");
 
     m_rifContext->AttachFilter(m_auxFilters[RemapDepthFilter], m_inputs.at(LinearDepth).rifImage, m_auxImages[RemappedDepthImage]->GetHandle());
+    m_rifContext->AttachFilter(m_auxFilters[RemapNormalFilter], m_inputs.at(Normal).rifImage, m_auxImages[RemappedNormalImage]->GetHandle());
 
     Filter::AttachFilter(inputImage);
 }
