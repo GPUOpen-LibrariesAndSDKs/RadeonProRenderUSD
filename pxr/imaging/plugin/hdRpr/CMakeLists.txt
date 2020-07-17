@@ -96,6 +96,7 @@ pxr_plugin(hdRpr
         tf
         gf
         hf
+        ndr
         usdVol
         usdLux
         usdUtils
@@ -154,6 +155,8 @@ pxr_plugin(hdRpr
 
     CPPFILES
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
+        ndrDiscoveryPlugin.cpp
+        ndrParserPlugin.cpp
 )
 
 target_sources(hdRpr PRIVATE
