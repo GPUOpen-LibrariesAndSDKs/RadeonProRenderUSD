@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_emissive" node="rpr_emissive" uiname="RPR Emissive" doc="Light emitting surfaces. Used to area light sources.">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Emissive color. For area light sources, multiply this color by intensity."/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_dot_texture" node="rpr_dot_texture" uiname="RPR Dot Texture" doc="Creates a circle at the center of UV with radius 1/2 UV.">
+      <input name="uv" type="vector2" value="0,0" uimin="0,0" uimax="1,1" uiname="UV" doc="UV value for lookup."/>
+      <output name="out" type="color3" />
+  </nodedef>
+</materialx>

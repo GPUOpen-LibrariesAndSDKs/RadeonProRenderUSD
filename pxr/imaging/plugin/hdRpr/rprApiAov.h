@@ -17,20 +17,20 @@ limitations under the License.
 #include "aovDescriptor.h"
 #include "rprApiFramebuffer.h"
 #include "rifcpp/rifFilter.h"
-#include "rpr/contextMetadata.h"
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/imaging/hd/types.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
+struct RprUsdContextMetadata;
 
 class HdRprApiAov {
 public:
     HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter);
+                rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter);
     HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+                rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     virtual ~HdRprApiAov() = default;
 
     virtual void Resize(int width, int height, HdFormat format);
@@ -47,18 +47,19 @@ public:
     HdRprApiFramebuffer* GetResolvedFb();
 
 protected:
-    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor) : m_aovDescriptor(aovDescriptor) {};
+    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
+        : m_aovDescriptor(aovDescriptor), m_format(format) {};
 
     virtual void OnFormatChange(rif::Context* rifContext);
     virtual void OnSizeChange(rif::Context* rifContext);
 
 protected:
     HdRprAovDescriptor const& m_aovDescriptor;
+    HdFormat m_format;
 
     std::unique_ptr<HdRprApiFramebuffer> m_aov;
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
     std::unique_ptr<rif::Filter> m_filter;
-    HdFormat m_format = HdFormatInvalid;
 
     enum ChangeTracker {
         Clean = 0,
@@ -74,9 +75,10 @@ private:
 
 class HdRprApiColorAov : public HdRprApiAov {
 public:
-    HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata);
+    HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata);
     ~HdRprApiColorAov() override = default;
 
+    void Resize(int width, int height, HdFormat format) override;
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
     bool GetData(void* dstBuffer, size_t dstBufferSize) override;
     void Resolve() override;
@@ -146,12 +148,15 @@ private:
     bool m_isEnabledFiltersDirty = true;
 
     TonemapParams m_tonemap;
+
+    int m_width = 0;
+    int m_height = 0;
 };
 
 class HdRprApiNormalAov : public HdRprApiAov {
 public:
     HdRprApiNormalAov(int width, int height, HdFormat format,
-                      rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     ~HdRprApiNormalAov() override = default;
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
@@ -162,7 +167,7 @@ class HdRprApiDepthAov : public HdRprApiAov {
 public:
     HdRprApiDepthAov(HdFormat format,
                      std::shared_ptr<HdRprApiAov> worldCoordinateAov,
-                     rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+                     rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     ~HdRprApiDepthAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;

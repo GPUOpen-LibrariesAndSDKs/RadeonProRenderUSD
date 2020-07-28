@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_passthrough" node="rpr_passthrough" uiname="RPR Passthrough" doc="Simple light emission, for flat color with no lighting.">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Surface color."/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

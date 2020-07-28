@@ -9,6 +9,14 @@
                         ],
                         "displayName": "RPR",
                         "priority": 99
+                    },
+                    "HdRprNdrDiscoveryPlugin": {
+                        "bases": ["NdrDiscoveryPlugin"],
+                        "displayName": "RPR Node Discovery"
+                    },
+                    "HdRprNdrParserPlugin": {
+                        "bases": ["NdrParserPlugin"],
+                        "displayName": "RPR Node Parser"
                     }
                 }
             },

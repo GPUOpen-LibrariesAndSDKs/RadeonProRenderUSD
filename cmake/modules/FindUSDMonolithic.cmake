@@ -91,4 +91,14 @@ if(USDMonolithic_FOUND)
       IMPORTED_IMPLIB_RELEASE "${USD_MONOLITHIC_LIBRARY}"
       IMPORTED_LOCATION_RELEASE "${USD_LIBRARY_DIR}/${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
     )
+
+    foreach(targetName
+        arch tf gf js trace work plug vt ar kind sdf ndr sdr pcp usd usdGeom
+        usdVol usdLux usdMedia usdShade usdRender usdHydra usdRi usdSkel usdUI
+        usdUtils garch hf hio cameraUtil pxOsd glf hgi hgiGL hd hdSt hdx
+        usdImaging usdImagingGL usdRiImaging usdSkelImaging usdVolImaging
+        usdAppUtils usdviewq)
+        add_library(${targetName} INTERFACE)
+        target_link_libraries(${targetName} INTERFACE usd_ms)
+    endforeach()
 endif()

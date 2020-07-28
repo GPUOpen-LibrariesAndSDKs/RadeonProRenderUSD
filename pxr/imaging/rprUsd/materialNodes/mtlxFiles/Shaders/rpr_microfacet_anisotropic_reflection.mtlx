@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_microfacet_anisotropic_reflection" node="rpr_microfacet_anisotropic_reflection" uiname="RPR Microfacet Anisotropic Reflection" doc="Microfacet reflectance with anisotropic rotation. This allows surfaces like brushed metal. The direction of anisotropy is dictated by the rotation, and effects the microfacet distribution.">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Reflection color."/>
+      <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" doc="Normal direction used for shading."/>
+      <input name="ior" type="float" value="1.5" uimin="1" uisoftmax="5" uiname="IOR" doc="Index of refraction, usually 1-5."/>
+      <input name="roughness" type="float" value="0" uimin="0" uimax="1" uiname="Roughness" doc="Reflection Rougness"/>
+      <input name="anisotropic" type="float" value="0" uimin="-1" uimax="1" uiname="Anisotropy" doc="Anisotropy amount, forwards or backwards."/>
+      <input name="rotation" type="angle" value="0" uiname="Rotation" doc="Rotation of anisotropy around UV direction."/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

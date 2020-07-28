@@ -18,7 +18,7 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-struct HdRprApiMaterial;
+class RprUsdMaterial;
 
 class HdRprMaterial final : public HdMaterial {
 public:
@@ -37,13 +37,10 @@ public:
 
     /// Get pointer to RPR material
     /// In case material сreation failure return nullptr
-    HdRprApiMaterial const* GetRprMaterialObject() const;
-
-    TfToken const& GetStName() const { return m_stName; }
+    RprUsdMaterial const* GetRprMaterialObject() const;
 
 private:
-    HdRprApiMaterial* m_rprMaterial = nullptr;
-    TfToken m_stName;
+    RprUsdMaterial* m_rprMaterial = nullptr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -61,14 +61,12 @@ if(HoudiniUSD_FOUND)
         FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/rpr_exportRpr1.hda
         DESTINATION "houdini/otls")
 
-    set(PLUG_INFO_ROOT "../../../plugin/usd/hdRpr")
-    set(PLUG_INFO_LIBRARY_PATH "../hdRpr${CMAKE_SHARED_LIBRARY_SUFFIX}")
-    set(PLUG_INFO_RESOURCE_PATH "resources")
-    configure_file(plugInfo.json ${CMAKE_CURRENT_BINARY_DIR}/houdiniPlugInfo.json)
     install(
-        FILES ${CMAKE_CURRENT_BINARY_DIR}/houdiniPlugInfo.json
-        DESTINATION houdini/dso/usd_plugins
-        RENAME plugInfo.json)
+        CODE
+        "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/houdini/dso/usd_plugins/plugInfo.json\"
+        \"{
+        \\\"Includes\\\": [ \\\"../../../plugin/\\\" ]
+    }\")")
 endif()
 
 if(RPR_NORTHSTAR_BINARY)
@@ -90,28 +88,15 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
 list(APPEND RIF_MODEL_RESOURCE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
 
-if(NOT DEFINED RPR_CPP_WRAPPER_LOCATION)
-    set(RPR_CPP_WRAPPER_LOCATION ${RPR_TOOLS_LOCATION})
-endif()
-
-if(USDMonolithic_FOUND)
-    set(USD_LIBRARIES usd_ms)
-else()
-    set(USD_LIBRARIES
+pxr_plugin(hdRpr
+   LIBRARIES
         ar
-        arch
-        sdf
         trace
         plug
         tf
-        vt
         gf
-        glf
-        work
         hf
-        hd
-        hdSt
-        hdx
+        ndr
         usdVol
         usdLux
         usdUtils
@@ -119,22 +104,14 @@ else()
         usdGeom
         usdImaging
         pxOsd
-        cameraUtil)
-endif()
-
-pxr_plugin(hdRpr
-   LIBRARIES
-        ${RPR_LIBRARY}
-        ${RPR_LOADSTORE_LIBRARY}
+        cameraUtil
+        rprUsd
         ${RIF_LIBRARY}
         ${OPENEXR_LIBRARIES}
-        ${USD_LIBRARIES}
 
         ${OptLibs}
 
     INCLUDE_DIRS
-        ${RPR_LOCATION_INCLUDE}
-        ${RPR_CPP_WRAPPER_LOCATION}
         ${RIF_LOCATION_INCLUDE}
         ${CMAKE_CURRENT_BINARY_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
@@ -155,14 +132,11 @@ pxr_plugin(hdRpr
         mesh
         instancer
         material
-        materialFactory
-        materialAdapter
         domeLight
         distantLight
         light
         renderBuffer
         basisCurves
-        imageCache
         camera
         debugCodes
         primvarUtil
@@ -181,6 +155,8 @@ pxr_plugin(hdRpr
 
     CPPFILES
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
+        ndrDiscoveryPlugin.cpp
+        ndrParserPlugin.cpp
 )
 
 target_sources(hdRpr PRIVATE
@@ -196,37 +172,13 @@ else()
         ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.cpp)
 endif()
 
-target_compile_definitions(hdRpr PRIVATE
-    RPR_CPPWRAPER_DISABLE_MUTEXLOCK
-    RPR_API_USE_HEADER_V2)
-
-target_sources(hdRpr PRIVATE
-    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRender.hpp
-    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRenderCpp.cpp)
-
-add_subdirectory(rpr)
 add_subdirectory(rifcpp)
 add_subdirectory(houdini)
 if(NOT HoudiniUSD_FOUND)
     add_subdirectory(usdviewMenu)
 endif()
 
-get_target_property(hdRpr_SOURCES hdRpr SOURCES)
-foreach(FILE ${hdRpr_SOURCES}) 
-    get_filename_component(ABS_FILE ${FILE} ABSOLUTE)
-    file(RELATIVE_PATH relPath ${CMAKE_CURRENT_SOURCE_DIR} ${ABS_FILE})
-
-    string(FIND "${relPath}" ".." out)
-    if("${out}" EQUAL 0)
-        source_group("external" FILES "${FILE}")
-    else()
-        get_filename_component(PARENT_DIR "${FILE}" DIRECTORY)
-        string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" GROUP "${PARENT_DIR}")
-        string(REPLACE "/" "\\" GROUP "${GROUP}")
-
-        source_group("${GROUP}" FILES "${FILE}")
-    endif()
-endforeach()
+GroupSources(hdRpr)
 
 install(
     CODE
@@ -238,7 +190,7 @@ install(
 if(WIN32)
     install(
         FILES ${RPR_BINARIES} ${RIF_BINARIES} ${OptBin}
-        DESTINATION bin)
+        DESTINATION lib)
 else(WIN32)
     # install() does not follow symlinks, so we do it manually
     set(RESOLVED_LIBRARIES "")

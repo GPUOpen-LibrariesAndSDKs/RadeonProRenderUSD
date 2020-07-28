@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_checker_texture" node="rpr_checker_texture" doc="Black and white checkerboard" uiname="RPR Checker Texture">
+      <input name="uv" type="vector2" value="0,0" uisoftmin="0,0" uisoftmax="1,1" uiname="UV" doc="UV value for lookup. By default, it is a simple 4 square checker. Multiply UV for more squares."/>
+      <output name="out" type="color3" />
+  </nodedef>
+</materialx>

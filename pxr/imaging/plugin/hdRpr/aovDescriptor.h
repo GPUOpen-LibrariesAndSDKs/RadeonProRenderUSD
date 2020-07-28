@@ -75,7 +75,7 @@ struct HdRprAovDescriptor {
     GfVec4f clearValue;
 
     HdRprAovDescriptor(uint32_t id = kAovNone, bool multiSampled = true, HdFormat format = HdFormatFloat32Vec4, GfVec4f clearValue = GfVec4f(0.0f), bool computed = false)
-        : id(id), multiSampled(multiSampled), format(format), clearValue(clearValue), computed(computed) {
+        : id(id), format(format), multiSampled(multiSampled), computed(computed), clearValue(clearValue) {
 
     }
 };

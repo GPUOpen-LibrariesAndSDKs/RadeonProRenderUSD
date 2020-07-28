@@ -1,17 +1,19 @@
 # This finds Pixar USD which is part of a Houdini installation.
 
+set(HOUDINI_ROOT $ENV{HFS} CACHE PATH "Houdini installation directory")
+
 set(HUSD_REQ_VARS "")
 
 find_path(Houdini_USD_INCLUDE_DIR
     "pxr/pxr.h"
-    PATHS ENV HFS
+    PATHS ${HOUDINI_ROOT}
     PATH_SUFFIXES "toolkit/include"
     NO_DEFAULT_PATH)
 list(APPEND HUSD_REQ_VARS "Houdini_USD_INCLUDE_DIR")
 
 find_path(Houdini_USD_LIB_DIR
     "libpxr_tf${CMAKE_SHARED_LIBRARY_SUFFIX}"
-    PATHS ENV HFS
+    PATHS ${HOUDINI_ROOT}
     PATH_SUFFIXES
         "dsolib" # Linux and Windows
         "../Libraries" # macOS
@@ -22,7 +24,7 @@ list(APPEND HUSD_REQ_VARS "Houdini_USD_LIB_DIR")
 if(WIN32)
     find_path(Houdini_USD_IMPLIB_DIR
         "libpxr_tf.lib"
-        PATHS ENV HFS
+        PATHS ${HOUDINI_ROOT}
         PATH_SUFFIXES "custom/houdini/dsolib" # Windows (import lib)
         NO_DEFAULT_PATH)
     list(APPEND HUSD_REQ_VARS "Houdini_USD_IMPLIB_DIR")
@@ -30,7 +32,7 @@ endif()
 
 find_path(Houdini_Python_INCLUDE_DIR
     "pyconfig.h"
-    PATHS ENV HFS
+    PATHS ${HOUDINI_ROOT}
     PATH_SUFFIXES
         "toolkit/include/python2.7"
         "toolkit/include/python3.7"
@@ -45,7 +47,7 @@ find_file(
         "libpython3.7m${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
         #"python27.dll" "python37.dll" # Windows
         "python27.lib" "python37.lib" # Windows (import lib)
-    PATHS ENV HFS
+    PATHS ${HOUDINI_ROOT}
     PATH_SUFFIXES
         "python/lib" # Linux
         "../../../../Python.framework/Versions/Current/lib" # macOS
@@ -58,7 +60,7 @@ find_file(
     Houdini_Boostpython_LIB
     "libhboost_python-mt${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
     "hboost_python-mt.lib" # Windows (import lib)
-    PATHS ENV HFS
+    PATHS ${HOUDINI_ROOT}
     PATH_SUFFIXES
         "dsolib" # Linux
         "../Libraries" # macOS
@@ -68,7 +70,7 @@ find_file(
 list(APPEND HUSD_REQ_VARS "Houdini_Boostpython_LIB")
 
 find_program(HYTHON_EXECUTABLE hython
-    PATHS ENV HFS
+    PATHS ${HOUDINI_ROOT}
     PATH_SUFFIXES bin)
 if(NOT HYTHON_EXECUTABLE)
     message(FATAL "Could not find hython executable")
@@ -76,11 +78,11 @@ endif()
 list(APPEND HUSD_REQ_VARS "HYTHON_EXECUTABLE")
 
 if(WIN32)
-    set(Houdini_LIB_DIR $ENV{HFS}/custom/houdini/dsolib)
+    set(Houdini_LIB_DIR ${HOUDINI_ROOT}/custom/houdini/dsolib)
 elseif(APPLE)
-    set(Houdini_LIB_DIR $ENV{HFS}/../Libraries)
+    set(Houdini_LIB_DIR ${HOUDINI_ROOT}/../Libraries)
 else()
-    set(Houdini_LIB_DIR $ENV{HFS}/dsolib)
+    set(Houdini_LIB_DIR ${HOUDINI_ROOT}/dsolib)
 endif()
 
 include(FindPackageHandleStandardArgs)
@@ -128,7 +130,7 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
                 "/wd4506" "/wd4244" "/wd4305" "/wd4267")
             # For automatically linked libraries (python, tbb)
             target_link_directories(${targetName}
-                INTERFACE "$ENV{HFS}/custom/houdini/dsolib")
+                INTERFACE "${HOUDINI_ROOT}/custom/houdini/dsolib")
         endif()
     endforeach()
     # Add python to tf, usdImagingGL targets.

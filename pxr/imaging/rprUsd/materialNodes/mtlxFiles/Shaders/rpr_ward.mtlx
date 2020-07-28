@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_ward" node="rpr_ward" uiname="RPR Ward" doc="Anisotropic reflectance. Anisotropy is specified with a roughness in the X and Y direction (of UV).">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Reflection color."/>
+      <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" doc="Normal direction used for shading."/>
+      <input name="roughness_x" type="float" value="0" uimin="0" uimax="1" uiname="Roughness" doc="Reflection roughness in X direction."/>
+      <input name="roughness_y" type="float" value="0" uimin="0" uimax="1" uiname="Roughness" doc="Reflection roughness in Y direction."/>
+      <input name="rotation" type="angle" value="0" uiname="Rotation" doc="Rotation of anisotropy around UV direction."/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

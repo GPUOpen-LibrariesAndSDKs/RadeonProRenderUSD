@@ -13,7 +13,8 @@ limitations under the License.
 
 #include "rprApiFramebuffer.h"
 #include "aovDescriptor.h"
-#include "rpr/helpers.h"
+
+#include "pxr/imaging/rprUsd/helpers.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -132,7 +133,7 @@ rpr_cl_mem HdRprApiFramebuffer::GetCLMem() {
         return nullptr;
     }
 
-    return rpr::GetInfo<rpr_cl_mem>(m_rprFb, rpr_framebuffer_info(RPR_CL_MEM_OBJECT));
+    return RprUsdGetInfo<rpr_cl_mem>(m_rprFb, rpr_framebuffer_info(RPR_CL_MEM_OBJECT));
 }
 
 void HdRprApiFramebuffer::Create(uint32_t width, uint32_t height) {

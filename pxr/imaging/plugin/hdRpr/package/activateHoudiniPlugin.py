@@ -62,7 +62,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpForm
 
 parser.add_argument('-d', '--deactivate', default=False, action='store_true')
 parser.add_argument('-p', '--plugin_path', type=str,
-                    help='Path to hdRpr plugin. If not set, the plugin will be automatically found in the current working directory')
+                    help='Path to RPR plugin for Houdini. If not set, the plugin will be automatically found in the current working directory')
 
 args = parser.parse_args()
 
@@ -71,46 +71,31 @@ houdini_user_pref_dir = get_houdini_user_pref_dir('18.0')
 houdini_packages_dir = os.path.join(houdini_user_pref_dir, 'packages')
 os.makedirs(houdini_packages_dir, exist_ok=True)
 
-package_desc_filepath = os.path.join(houdini_packages_dir, 'hdRpr.json')
+package_desc_filepath = os.path.join(houdini_packages_dir, 'RPR_for_Houdini.json')
 
 if args.deactivate:
     if os.path.exists(package_desc_filepath):
         os.remove(package_desc_filepath)
-        print('hdRpr has been deactivated')
+        print('RPR plugin for Houdini has been deactivated')
     else:
-        print('hdRpr plugin is not active')
+        print('RPR plugin for Houdini is not active')
 else:
+    def is_valid_plugin_dir(path):
+        plugin_info_path = os.path.join(path, 'plugin/usd/hdRpr/resources/plugInfo.json')
+        return os.path.isfile(plugin_info_path)
+
     if args.plugin_path:
-        if not os.path.exists(args.plugin_path):
+        if not is_valid_plugin_dir(args.plugin_path):
             print('Invalid plugin path')
             exit(1)
 
         plugin_dir = args.plugin_path
     else:
-        def is_valid_plugin_dir(path):
-            plugin_info_path = os.path.join(path, 'plugin/usd/hdRpr/resources/plugInfo.json')
-            return os.path.isfile(plugin_info_path)
-
         if is_valid_plugin_dir('.'):
             plugin_dir = '.'
         else:
-            valid_targets = ['Houdini']
-            plugin_pattern = re.compile(r'hdRpr-.*-(?P<target>.*?)-.*-(?P<platform_>.*?)', re.VERBOSE)
-            for path in glob.glob('hdRpr*'):
-                if os.path.isdir(path):
-                    match = plugin_pattern.match(path)
-
-                    target = match.group('target')
-                    if target not in valid_targets:
-                        print('"{}": unknown target. Skipping.'.format(path))
-                        continue
-                    if is_valid_plugin_dir(path):
-                        plugin_dir = path
-                        break
-            else:
-                print('Can not find hdRpr plugin. Specify --plugin_path explicitly')
-                exit(1)
-
+            print('Cannot find RPR plugin for Houdini. Specify --plugin_path explicitly')
+            exit(1)
 
     plugin_dir = os.path.abspath(plugin_dir)
     plugin_dir = plugin_dir.replace('\\', '/')
@@ -120,8 +105,8 @@ else:
         {"HOUDINI_PATH": "$RPR/houdini"}
     ]
     if platform.system() == 'Windows':
-        env += [{"PATH": "$RPR/bin"}]
+        env += [{"PATH": "$RPR/lib"}]
 
     with open(package_desc_filepath, 'w') as desc_file:
         desc_file.write(json.dumps({"env":env}))
-    print('hdRpr has been activated')
+    print('RPR plugin for Houdini has been activated')

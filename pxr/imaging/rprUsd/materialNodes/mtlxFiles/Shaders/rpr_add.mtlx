@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_add" node="rpr_add" uiname="RPR Add Shaders" doc="Adds two shaders.">
+      <input name="color0" type="surfaceshader" uiname="Shader 1"/>
+      <input name="color1" type="surfaceshader" uiname="Shader 2"/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

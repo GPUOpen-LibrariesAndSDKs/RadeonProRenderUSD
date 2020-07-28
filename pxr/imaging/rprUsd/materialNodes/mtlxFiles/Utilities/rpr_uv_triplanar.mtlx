@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_uv_triplanar" node="rpr_uv_triplanar" uiname="RPR UV Triplanar" doc="Triplanar procedural UV, projects a texture from X, Y, Z direction onto geometry.">
+      <input name="offset" type="vector3" value="0,0,0" uisoftmin="0,0,0" uisoftmax="1,1,1" uiname="Center" doc="Position (in object space) where the projection is centered."/>
+      <input name="zaxis" type="vector3" value="0,0,1" uisoftmin="0,0,0" uisoftmax="1,1,1" uiname="Z Axis" doc="Z direction (up) of the proection shape."/>
+      <input name="xaxis" type="vector3" value="1,0,0" uisoftmin="0,0,0" uisoftmax="1,1,1" uiname="X Axis" doc="X direction of the projection."/>
+      <input name="uv_scale" type="vector3" value="1,1,1" uisoftmin="0,0,0" uisoftmax="1,1,1" uiname="UV Scale" doc="Amount to scale projection in XYZ."/>
+      <input name="weight" type="float" value="0" uimin="0" uimax="1" uiname="Weight" doc="Weighting of edges."/>
+      <output name="out" type="vector2" />
+  </nodedef>
+</materialx>

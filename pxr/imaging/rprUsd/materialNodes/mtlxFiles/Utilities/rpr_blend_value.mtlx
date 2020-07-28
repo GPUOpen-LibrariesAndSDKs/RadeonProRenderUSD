@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_blend_value" node="rpr_blend_value" uiname="RPR Blend Value" doc="Blends texture/arithmetic values based on weight. The output is weight * color0 + (1 - weight) * color1.">
+      <input name="weight" type="float" value="0.5" uimin="0" uimax="1" uiname="Weight" doc="Mixing weight."/>
+      <input name="color0" type="color3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Color 0" doc="Color 0 to mix."/>
+      <input name="color1" type="color3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Color 1" doc="Color 1 to mix."/>
+      <output name="out" type="color3" />
+  </nodedef>
+</materialx>

@@ -15,9 +15,10 @@ limitations under the License.
 #include "instancer.h"
 #include "renderParam.h"
 #include "material.h"
-#include "materialAdapter.h"
 #include "primvarUtil.h"
 #include "rprApi.h"
+
+#include "pxr/imaging/rprUsd/material.h"
 
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/imaging/pxOsd/subdivTags.h"
@@ -29,8 +30,6 @@ limitations under the License.
 
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/vec4f.h"
-
-#include "pxr/usd/usdUtils/pipeline.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -107,7 +106,7 @@ bool HdRprMesh::GetPrimvarData(TfToken const& name,
 template bool HdRprMesh::GetPrimvarData<GfVec2f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec2f>&, VtIntArray&);
 template bool HdRprMesh::GetPrimvarData<GfVec3f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec3f>&, VtIntArray&);
 
-HdRprApiMaterial const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits) {
+RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits) {
     if (m_fallbackMaterial && (dirtyBits & HdChangeTracker::DirtyPrimvar)) {
         rprApi->Release(m_fallbackMaterial);
         m_fallbackMaterial = nullptr;
@@ -134,8 +133,7 @@ HdRprApiMaterial const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDel
             }
         }
 
-        auto matAdapter = MaterialAdapter(EMaterialType::COLOR, MaterialParams{ {HdRprMaterialTokens->color, VtValue(color)} });
-        m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
+        m_fallbackMaterial = rprApi->CreateDiffuseMaterial(color);
     }
 
     return m_fallbackMaterial;
@@ -219,9 +217,17 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_cachedMaterialId));
-    if (material) {
-        if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, material->GetStName())) {
-            GetPrimvarData(material->GetStName(), sceneDelegate, primvarDescsPerInterpolation, m_uvs, m_uvIndices);
+    if (material && material->GetRprMaterialObject()) {
+        auto rprMaterial = material->GetRprMaterialObject();
+
+        auto uvPrimvarName = &rprMaterial->GetUvPrimvarName();
+        if (uvPrimvarName->IsEmpty()) {
+            static TfToken st("st", TfToken::Immortal);
+            uvPrimvarName = &st;
+        }
+
+        if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, *uvPrimvarName)) {
+            GetPrimvarData(*uvPrimvarName, sceneDelegate, primvarDescsPerInterpolation, m_uvs, m_uvIndices);
 
             newMesh = true;
         }
@@ -229,10 +235,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
         _sharedData.visible = sceneDelegate->GetVisible(id);
-    }
-
-    if (*dirtyBits & HdChangeTracker::DirtyDoubleSided) {
-        m_doublesided = sceneDelegate->GetDoubleSided(id);
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -501,13 +503,13 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             if (m_geomSubsets.empty()) {
                 auto material = getMeshMaterial(m_cachedMaterialId);
                 for (auto& mesh : m_rprMeshes) {
-                    rprApi->SetMeshMaterial(mesh, material, m_doublesided, m_displayStyle.displacementEnabled);
+                    rprApi->SetMeshMaterial(mesh, material, m_displayStyle.displacementEnabled);
                 }
             } else {
                 if (m_geomSubsets.size() == m_rprMeshes.size()) {
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
                         auto material = getMeshMaterial(m_geomSubsets[i].materialId);
-                        rprApi->SetMeshMaterial(m_rprMeshes[i], material, m_doublesided, m_displayStyle.displacementEnabled);
+                        rprApi->SetMeshMaterial(m_rprMeshes[i], material, m_displayStyle.displacementEnabled);
                     }
                 } else {
                     TF_CODING_ERROR("Unexpected number of meshes");

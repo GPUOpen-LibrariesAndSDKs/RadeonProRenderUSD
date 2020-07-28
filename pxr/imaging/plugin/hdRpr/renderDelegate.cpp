@@ -14,8 +14,8 @@ limitations under the License.
 #include "renderDelegate.h"
 #include "aovDescriptor.h"
 
+#include "pxr/imaging/rprUsd/materialRegistry.h"
 #include "pxr/imaging/hd/extComputation.h"
-
 #include "pxr/base/tf/diagnosticMgr.h"
 #include "pxr/base/tf/getenv.h"
 
@@ -202,7 +202,7 @@ void HdRprDelegate::CommitResources(HdChangeTracker* tracker) {
 }
 
 TfToken HdRprDelegate::GetMaterialNetworkSelector() const {
-    return m_renderParam->GetMaterialNetworkSelector();
+    return RprUsdMaterialRegistry::GetInstance().GetMaterialNetworkSelector();
 }
 
 TfTokenVector const& HdRprDelegate::GetSupportedRprimTypes() const {
