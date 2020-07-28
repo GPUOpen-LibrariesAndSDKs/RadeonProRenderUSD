@@ -49,6 +49,11 @@ Provide USD in one of two ways:
 * An installation of USD. Define pxr_DIR to point to it when running cmake, if required. You can download USD to build yourself from [GitHub](https://www.github.com/PixarAnimationStudios/USD).
 * The USD which is provided with Houdini. The HFS environment variable should point to the Houdini installation (the correct way is to run cmake from Houdini's `Command Line Tools` or by sourcing `houdini_setup`). You can download Houdini installer from [Downloads | SideFX](https://www.sidefx.com/download).
 
+##### MaterialX Component
+
+By default, MaterialX library will be compiled from the sources located under a MaterialX submodule `deps/MaterialX`.
+You can override this behavior by providing a complete build of MaterialX to cmake. Please note, on Linux for Houdini plugin, MaterialX should be compiled with `-D_GLIBCXX_USE_CXX11_ABI=0` definition as it is required by Houdini.
+
 ##### Optional Components
 
 ##### OpenVDB

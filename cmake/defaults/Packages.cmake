@@ -84,6 +84,8 @@ if (NOT PXR_MALLOC_LIBRARY)
     endif()
 endif()
 
+find_package(MaterialX QUIET)
+
 # Third Party Plugin Package Requirements
 # ----------------------------------------------
 

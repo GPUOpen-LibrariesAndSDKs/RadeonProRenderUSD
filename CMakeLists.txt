@@ -2,9 +2,6 @@ project(hdRpr)
 
 cmake_minimum_required(VERSION 3.12)
 
-# Shut up 'Up-to-date' install messages.
-set(CMAKE_INSTALL_MESSAGE LAZY)
-
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
                       ${CMAKE_SOURCE_DIR}/cmake/modules
                       ${CMAKE_SOURCE_DIR}/cmake/macros)
@@ -32,18 +29,21 @@ include(Public)
 
 set(CMAKE_CXX_STANDARD 14)
 
-set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
-if(HoudiniUSD_FOUND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    # Houdini builds with the old ABI. We need to match.
-	set(EXTERNAL_COMPILE_FLAGS "-D_GLIBCXX_USE_CXX11_ABI=0")
+if(NOT MaterialX_FOUND)
+    # If MaterialX was not explicitly provided, use the one from a submodule
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    if(HoudiniUSD_FOUND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Houdini builds with the old ABI. We need to match.
+    	set(EXTERNAL_COMPILE_FLAGS "-D_GLIBCXX_USE_CXX11_ABI=0")
+    endif()
+    set(MATERIALX_PYTHON_LTO OFF)
+    set(MATERIALX_INSTALL_PYTHON OFF)
+    set(MATERIALX_BUILD_RENDER OFF)
+    set(MATERIALX_BUILD_GEN_GLSL OFF)
+    set(MATERIALX_BUILD_GEN_OSL OFF)
+    set(MATERIALX_BUILD_TESTS OFF)
+    add_subdirectory(deps/MaterialX)
 endif()
-set(MATERIALX_PYTHON_LTO OFF)
-set(MATERIALX_INSTALL_PYTHON OFF)
-set(MATERIALX_BUILD_RENDER OFF)
-set(MATERIALX_BUILD_GEN_GLSL OFF)
-set(MATERIALX_BUILD_GEN_OSL OFF)
-set(MATERIALX_BUILD_TESTS OFF)
-add_subdirectory(deps/MaterialX)
 
 add_subdirectory(pxr/imaging)
 
