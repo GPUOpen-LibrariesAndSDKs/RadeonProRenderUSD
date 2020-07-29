@@ -12,6 +12,7 @@ pxr_library(rprUsd
         glf
         sdf
         arch
+        work
         cpprpr
         MaterialXCore
         MaterialXFormat

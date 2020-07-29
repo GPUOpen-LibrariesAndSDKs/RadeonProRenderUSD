@@ -220,32 +220,25 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
         throw RprUsd_NodeError("UsdUVTexture requires file parameter");
     }
 
-    std::string filepath;
+    RprUsdMaterialRegistry::TextureCommit textureCommit = {};
 
     if (fileIt->second.IsHolding<SdfAssetPath>()) {
         auto& assetPath = fileIt->second.UncheckedGet<SdfAssetPath>();
         if (assetPath.GetResolvedPath().empty()) {
-            filepath = assetPath.GetAssetPath();
+            textureCommit.filepath = assetPath.GetAssetPath();
         } else {
-            filepath = assetPath.GetResolvedPath();
+            textureCommit.filepath = assetPath.GetResolvedPath();
         }
     }
 
-    if (filepath.empty()) {
+    if (textureCommit.filepath.empty()) {
         throw RprUsd_NodeError("UsdUVTexture: empty file path");
     }
-
-    bool forceLinearSpace = false;
 
     auto colorSpaceIt = hydraParameters.find(RprUsd_UsdUVTextureTokens->colorSpace);
     if (colorSpaceIt != hydraParameters.end() &&
         colorSpaceIt->second.Get<TfToken>() == RprUsd_UsdUVTextureTokens->linear) {
-        forceLinearSpace = true;
-    }
-
-    m_image = ctx->imageCache->GetImage(filepath, forceLinearSpace);
-    if (!m_image) {
-        throw RprUsd_NodeError("UsdUVTexture: failed to load texture");
+        textureCommit.forceLinearSpace = true;
     }
 
     rpr::ImageWrapType wrapS = {};
@@ -261,8 +254,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
             TF_RUNTIME_ERROR("RPR renderer does not support different wrapS and wrapT modes");
         }
 
-        auto wrapMode = wrapS ? wrapS : wrapT;
-        RPR_ERROR_CHECK((*m_image)->SetWrap(wrapMode), "Failed to set image wrap mode");
+        textureCommit.wrapType = wrapS ? wrapS : wrapT;
     }
 
     rpr::Status status;
@@ -270,10 +262,19 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
     if (!m_imageNode) {
         throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to create image texture material node"));
     }
-
-    RPR_ERROR_CHECK(m_imageNode->SetInput(RPR_MATERIAL_INPUT_DATA, (*m_image)->GetRootImage()), "Failed to set material node image data input");
-
     m_outputs[RprUsd_UsdUVTextureTokens->rgba] = VtValue(m_imageNode);
+
+    textureCommit.setTextureCallback = [this](std::shared_ptr<RprUsdCoreImage> const& image) {
+        if (!image) return;
+
+        if (!RPR_ERROR_CHECK(m_imageNode->SetInput(RPR_MATERIAL_INPUT_DATA, image->GetRootImage()), "Failed to set material node image data input")) {
+            m_image = image;
+        }
+    };
+
+    // Texture loading is postponed to allow multi-threading loading.
+    //
+    RprUsdMaterialRegistry::GetInstance().CommitTexture(std::move(textureCommit));
 
     auto scaleIt = hydraParameters.find(RprUsd_UsdUVTextureTokens->scale);
     if (scaleIt != hydraParameters.end() &&

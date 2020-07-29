@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
+#include "pxr/imaging/glf/glew.h"
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/coreImage.h"
 #include "pxr/imaging/rprUsd/helpers.h"
@@ -19,105 +20,194 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+template <typename T>
+size_t GetHash(T const& value) {
+    return std::hash<T>{}(value);
+}
+
+bool RprUsdImageCache::InitCacheKey(
+    std::string const& path,
+    std::vector<RprUsdCoreImage::UDIMTile> const& tiles,
+    CacheKey* key) {
+
+    key->path = path;
+    key->hash = GetHash(path);
+
+    auto processTile = [key](std::string const& path) -> bool {
+        double modificationTime;
+        if (!ArchGetModificationTime(path.c_str(), &modificationTime)) return false;
+
+        int64_t sizeInt = ArchGetFileLength(path.c_str());
+        if (sizeInt == -1) return false;
+
+        key->tiles.emplace_back(size_t(sizeInt), modificationTime);
+        key->hash ^= size_t(sizeInt) ^ GetHash(modificationTime);
+
+        return true;
+    };
+
+    if (tiles.size() != 1 || tiles[0].id != 0) {
+        // UDIM tiles
+        auto udimStr = std::strstr(path.c_str(), "<UDIM>");
+        if (!udimStr) return false;
+
+        std::string formatString = path;
+        formatString.replace(udimStr - path.c_str(), 6, "%i");
+
+        for (auto& tile : tiles) {
+            if (!processTile(TfStringPrintf(formatString.c_str(), tile.id))) {
+                return false;
+            }
+        }
+    } else {
+        if (!processTile(path)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool RprUsdImageCache::InitCacheEntryDesc(
+    GlfUVTextureData* data,
+    rpr::ImageWrapType wrapType,
+    bool forceLinearSpace,
+    CacheEntry::Desc* desc) {
+    if (!data) return false;
+
+    auto internalFormat = data->GLInternalFormat();
+    if (!forceLinearSpace &&
+        (internalFormat == GL_SRGB ||
+        internalFormat == GL_SRGB8 ||
+        internalFormat == GL_SRGB_ALPHA ||
+        internalFormat == GL_SRGB8_ALPHA8)) {
+        // XXX(RPR): sRGB formula is different from straight pow decoding, but it's the best we can do right now
+        desc->gamma = 2.2f;
+    } else {
+        desc->gamma = 1.0f;
+    }
+
+    if (!wrapType) {
+        wrapType = RPR_IMAGE_WRAP_TYPE_REPEAT;
+    }
+    desc->wrapType = wrapType;
+
+    return true;
+}
+
 RprUsdImageCache::RprUsdImageCache(rpr::Context* context)
     : m_context(context) {
 
 }
 
-std::shared_ptr<RprUsdImageCache::CachedImage>
+std::shared_ptr<RprUsdCoreImage>
 RprUsdImageCache::GetImage(
-    std::string const& path, bool forceLinearSpace) {
-    ImageMetadata md(path);
-
-    auto cacheKey = path;
-
-    static const char* kForceLinearSpaceCacheKeySuffix = "?l";
-    if (forceLinearSpace) {
-        cacheKey += kForceLinearSpaceCacheKeySuffix;
+    std::string const& path,
+    bool forceLinearSpace,
+    rpr::ImageWrapType wrapType,
+    std::vector<RprUsdCoreImage::UDIMTile> const& tiles) {
+    if (tiles.empty()) {
+        return nullptr;
     }
 
-    auto it = m_cache.find(cacheKey);
-    if (it != m_cache.end() && it->second.IsMetadataEqual(md)) {
-        if (auto image = it->second.handle.lock()) {
-            return image;
+    CacheKey key;
+    CacheEntry::Desc desc;
+    if (!InitCacheKey(path, tiles, &key) ||
+        !InitCacheEntryDesc(tiles[0].textureData, wrapType, forceLinearSpace, &desc)) {
+        return nullptr;
+    }
+
+    auto it = m_cache.find(key);
+    if (it != m_cache.end()) {
+        auto& entries = it->second;
+        for (size_t i = 0; i < entries.size(); ++i) {
+            auto& entry = entries[i];
+            if (entry.desc == desc) {
+                if (auto image = entry.handle.lock()) {
+                    return image;
+                } else {
+                    TF_CODING_ERROR("Expired cache entry was not removed");
+
+                    if (i + 1 != entries.size()) {
+                        std::swap(entry, entries.back());
+                    }
+                    entries.pop_back();
+
+                    break;
+                }
+            }
         }
     }
 
-    auto coreImage = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_context, path.c_str(), forceLinearSpace));
+    auto coreImage = RprUsdCoreImage::Create(m_context, tiles);
     if (!coreImage) {
         return nullptr;
     }
 
-    auto cachedImage = std::make_shared<CachedImage>(this, std::move(coreImage));
+    RPR_ERROR_CHECK(coreImage->SetGamma(desc.gamma), "Failed to set image gamma");
+    RPR_ERROR_CHECK(coreImage->SetWrap(desc.wrapType), "Failed to set image wrap type");
 
-    md.handle = cachedImage;
-    auto status = m_cache.emplace(cacheKey, md);
-    cachedImage->SetCachePath(&status.first->first);
-
-    {
-        auto gammaFromFile = RprUsdGetInfo<float>(cachedImage->Get(), RPR_IMAGE_GAMMA_FROM_FILE);
-        if (std::abs(gammaFromFile - 1.0f) < 0.01f) {
-            // Image is in linear space, we can cache the same image for both variants of forceLinearSpace
-            if (forceLinearSpace) {
-                status = m_cache.emplace(path, md);
-            } else {
-                status = m_cache.emplace(path + kForceLinearSpaceCacheKeySuffix, md);
-            }
-            cachedImage->SetCachePath(&status.first->first);
-        }
+    if (it == m_cache.end()) {
+        it = m_cache.emplace(key, CacheValue()).first;
     }
+
+    std::shared_ptr<RprUsdCoreImage> cachedImage(coreImage,
+        [this, key, desc](RprUsdCoreImage* coreImage) {
+            delete coreImage;
+            PopCacheEntry(key, desc);
+        }
+    );
+
+    CacheEntry cacheEntry;
+    cacheEntry.desc = desc;
+    cacheEntry.handle = cachedImage;
+    it->second.push_back(std::move(cacheEntry));
 
     return cachedImage;
 }
 
-void RprUsdImageCache::RemoveCacheEntry(std::string const& cachePath) {
-    m_cache.erase(cachePath);
-}
+void RprUsdImageCache::PopCacheEntry(
+    CacheKey const& key,
+    CacheEntry::Desc const& desc) {
 
-RprUsdImageCache::ImageMetadata::ImageMetadata(std::string const& path) {
-    double time;
-    if (!ArchGetModificationTime(path.c_str(), &time)) {
+    auto it = m_cache.find(key);
+    if (it == m_cache.end()) {
+        TF_CODING_ERROR("Failed to release cache entry: no entry with such key - path=%s", key.path.c_str());
         return;
     }
 
-    int64_t size = ArchGetFileLength(path.c_str());
-    if (size == -1) {
-        return;
-    }
+    auto& entries = it->second;
 
-    m_modificationTime = time;
-    m_size = static_cast<size_t>(size);
-}
-
-bool RprUsdImageCache::ImageMetadata::IsMetadataEqual(ImageMetadata const& md) {
-    return m_modificationTime == md.m_modificationTime &&
-        m_size == md.m_size;
-}
-
-RprUsdImageCache::CachedImage::CachedImage(
-    RprUsdImageCache* imageCache,
-    std::unique_ptr<RprUsdCoreImage> coreImage)
-    : m_imageCache(imageCache)
-    , m_coreImage(std::move(coreImage)) {
-
-}
-
-RprUsdImageCache::CachedImage::~CachedImage() {
-    for (auto path : m_cachePaths) {
-        if (path) {
-            m_imageCache->RemoveCacheEntry(*path);
+    for (size_t i = 0; i < entries.size(); ++i) {
+        auto& entry = entries[i];
+        if (entry.desc == desc) {
+            if (entries.size() == 1) {
+                // if this is the latest entry, remove whole key-value pair
+                m_cache.erase(it);
+            } else {
+                // avoid removing from the middle by swapping with the end element
+                if (i + 1 != entries.size()) {
+                    std::swap(entry, entries.back());
+                }
+                entries.pop_back();
+            }
+            return;
         }
     }
+
+    TF_CODING_ERROR("Failed to release cache entry: no entry with such desc - path=%s, gamma=%g, wrapType=%u",
+        key.path.c_str(), desc.gamma, desc.wrapType);
 }
 
-void RprUsdImageCache::CachedImage::SetCachePath(std::string const* path) {
-    if (!m_cachePaths[0]) {
-        m_cachePaths[0] = path;
-    } else if (!m_cachePaths[1]) {
-        m_cachePaths[1] = path;
-    } else {
-        TF_CODING_ERROR("Unexpected amount of cache paths");
-    }
+bool RprUsdImageCache::CacheKey::Equal::operator()(CacheKey const& lhs, CacheKey const& rhs) const {
+    return lhs.tiles == rhs.tiles &&
+           lhs.path == rhs.path;
+}
+
+bool RprUsdImageCache::CacheEntry::Desc::operator==(Desc const& rhs) const {
+    constexpr static float kGammaEpsilon = 0.1f;
+    return wrapType == rhs.wrapType &&
+           std::abs(gamma - rhs.gamma) < kGammaEpsilon;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

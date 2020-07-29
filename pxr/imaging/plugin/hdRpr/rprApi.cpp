@@ -25,6 +25,9 @@ limitations under the License.
 #include "renderBuffer.h"
 #include "renderParam.h"
 
+#include "pxr/imaging/glf/glew.h"
+#include "pxr/imaging/glf/uvTextureData.h"
+
 #include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/helpers.h"
 #include "pxr/imaging/rprUsd/coreImage.h"
@@ -41,8 +44,6 @@ limitations under the License.
 #include "pxr/base/plug/plugin.h"
 #include "pxr/base/plug/thisPlugin.h"
 #include "pxr/imaging/pxOsd/tokens.h"
-#include "pxr/imaging/glf/glew.h"
-#include "pxr/imaging/glf/uvTextureData.h"
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
@@ -717,7 +718,7 @@ public:
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
-        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), path.c_str()));
+        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), path));
         if (!image) {
             return nullptr;
         }
@@ -1796,6 +1797,14 @@ Don't show this message again?
         }
     }
 
+    void CommitResources() {
+        if (!m_rprContext) {
+            return;
+        }
+
+        RprUsdMaterialRegistry::GetInstance().CommitResources(m_imageCache.get());
+    }
+
     void Render(HdRprRenderThread* renderThread) {
         RenderFrame(renderThread);
 
@@ -2697,6 +2706,10 @@ void HdRprApi::SetAovBindings(HdRenderPassAovBindingVector const& aovBindings) {
 
 HdRenderPassAovBindingVector HdRprApi::GetAovBindings() const {
     return m_impl->GetAovBindings();
+}
+
+void HdRprApi::CommitResources() {
+    m_impl->CommitResources();
 }
 
 void HdRprApi::Render(HdRprRenderThread* renderThread) {

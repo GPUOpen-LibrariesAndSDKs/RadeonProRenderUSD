@@ -198,7 +198,7 @@ HdRenderParam* HdRprDelegate::GetRenderParam() const {
 void HdRprDelegate::CommitResources(HdChangeTracker* tracker) {
     // CommitResources() is called after prim sync has finished, but before any
     // tasks (such as draw tasks) have run.
-
+    m_rprApi->CommitResources();
 }
 
 TfToken HdRprDelegate::GetMaterialNetworkSelector() const {

@@ -15,6 +15,7 @@ limitations under the License.
 #define PXR_IMAGING_RPR_USD_CORE_IMAGE_H
 
 #include "pxr/imaging/rprUsd/api.h"
+#include "pxr/imaging/glf/uvTextureData.h"
 
 #include <RadeonProRender.hpp>
 
@@ -25,7 +26,16 @@ PXR_NAMESPACE_OPEN_SCOPE
 class RprUsdCoreImage {
 public:
     RPRUSD_API
-    static RprUsdCoreImage* Create(rpr::Context* context, char const* path, bool forceLinearSpace = false);
+    static RprUsdCoreImage* Create(rpr::Context* context, std::string const& path);
+
+    struct UDIMTile {
+        uint32_t id;
+        GlfUVTextureData* textureData;
+
+        UDIMTile(uint32_t id, GlfUVTextureData* textureData) : id(id), textureData(textureData) {}
+    };
+    RPRUSD_API
+    static RprUsdCoreImage* Create(rpr::Context* context, std::vector<UDIMTile> const& textureData);
 
     RPRUSD_API
     static RprUsdCoreImage* Create(rpr::Context* context, uint32_t width, uint32_t height, rpr::ImageFormat format, void const* data, rpr::Status* status = nullptr);

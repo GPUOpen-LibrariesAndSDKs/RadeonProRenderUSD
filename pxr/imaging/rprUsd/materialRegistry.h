@@ -24,6 +24,7 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 class RprUsdImageCache;
+class RprUsdCoreImage;
 class RprUsdMaterial;
 class RprUsdMaterialNodeInfo;
 
@@ -74,6 +75,20 @@ public:
         RprUsdMaterialNodeFactoryFnc factory,
         RprUsdMaterialNodeInfo const* info = nullptr);
 
+    struct TextureCommit {
+        std::string filepath;
+        bool forceLinearSpace;
+        rpr::ImageWrapType wrapType;
+
+        std::function<void(std::shared_ptr<RprUsdCoreImage> const&)> setTextureCallback;
+    };
+
+    RPRUSD_API
+    void CommitTexture(TextureCommit commit);
+
+    RPRUSD_API
+    void CommitResources(RprUsdImageCache* imageCache);
+
 private:
     friend class TfSingleton<RprUsdMaterialRegistry>;
     RprUsdMaterialRegistry();
@@ -87,6 +102,8 @@ private:
 
     std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
     bool m_mtlxDefsDirty = true;
+
+    std::vector<TextureCommit> m_textureCommits;
 };
 
 class RprUsdMaterialNodeInput;
@@ -178,6 +195,10 @@ inline void RprUsdMaterialRegistry::Register(
     } else {
         m_registeredNodes.push_back(std::move(desc));
     }
+}
+
+inline void RprUsdMaterialRegistry::CommitTexture(TextureCommit commit) {
+    m_textureCommits.push_back(std::move(commit));
 }
 
 inline const char* GetCStr(std::string const& str) {

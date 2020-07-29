@@ -143,6 +143,7 @@ public:
     // returns -1 if adaptive sampling is not used
     int GetNumActivePixels() const;
 
+    void CommitResources();
     void Render(HdRprRenderThread* renderThread);
     void AbortRender();
 
