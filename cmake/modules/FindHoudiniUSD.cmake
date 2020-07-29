@@ -35,8 +35,6 @@ find_path(Houdini_Python_INCLUDE_DIR
     PATHS ${HOUDINI_ROOT}
     PATH_SUFFIXES
         "toolkit/include/python2.7"
-        "toolkit/include/python3.7"
-        "toolkit/include/python3.7m"
     NO_DEFAULT_PATH)
 list(APPEND HUSD_REQ_VARS "Houdini_Python_INCLUDE_DIR")
 
@@ -44,22 +42,21 @@ find_file(
     Houdini_Python_LIB
     NAMES
         "libpython2.7${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
-        "libpython3.7m${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
-        #"python27.dll" "python37.dll" # Windows
-        "python27.lib" "python37.lib" # Windows (import lib)
+        "python27.lib" # Windows (import lib)
     PATHS ${HOUDINI_ROOT}
     PATH_SUFFIXES
         "python/lib" # Linux
         "../../../../Python.framework/Versions/Current/lib" # macOS
-        #"bin" # Windows
-        "python27/libs" "python37/libs" # Windows (import lib)
+        "python27/libs" # Windows (import lib)
     NO_DEFAULT_PATH)
 list(APPEND HUSD_REQ_VARS "Houdini_Python_LIB")
 
 find_file(
     Houdini_Boostpython_LIB
     "libhboost_python-mt${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
+    "libhboost_python27-mt-x64${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
     "hboost_python-mt.lib" # Windows (import lib)
+    "hboost_python27-mt-x64.lib" # Windows Houdini 18.5
     PATHS ${HOUDINI_ROOT}
     PATH_SUFFIXES
         "dsolib" # Linux
@@ -143,4 +140,6 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
     # more than enough to get it linked in for us.
     target_link_libraries(tf INTERFACE ${Houdini_Boostpython_LIB})
     target_link_libraries(vt INTERFACE ${Houdini_Boostpython_LIB})
+    # By default Boost links libraries implicitly for the user via pragma's, we do not want this
+    target_compile_definitions(tf INTERFACE -DHBOOST_ALL_NO_LIB)
 endif()

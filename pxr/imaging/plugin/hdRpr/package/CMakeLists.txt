@@ -1,5 +1,7 @@
 if(HoudiniUSD_FOUND)
-    install(FILES activateHoudiniPlugin.py DESTINATION .)
+    set(HOUDINI_MAJOR_MINOR_VERSION "${Houdini_VERSION_MAJOR}.${Houdini_VERSION_MINOR}")
+    configure_file(activateHoudiniPlugin.py.in ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.py)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.py DESTINATION .)
 endif()
 
 set(USD_MINOR_VERSION "0")
