@@ -1314,10 +1314,10 @@ public:
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode)) {
-            bool is_interactive = preferences.GetInteractiveMode();
-            auto maxRayDepth = is_interactive ? preferences.GetInteractiveMaxRayDepth() : preferences.GetMaxRayDepth();
+            m_isInteractive = preferences.GetInteractiveMode();
+            auto maxRayDepth = m_isInteractive ? preferences.GetInteractiveMaxRayDepth() : preferences.GetMaxRayDepth();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, int(is_interactive)), "Failed to set preview mode");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(m_isInteractive)), "Failed to set preview mode");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
@@ -1344,7 +1344,7 @@ public:
     void UpdateSettings(HdRprConfig const& preferences, bool force = false) {
         if (preferences.IsDirty(HdRprConfig::DirtySampling) || force) {
             m_maxSamples = preferences.GetMaxSamples();
-            if (m_maxSamples < m_iter) {
+            if (m_maxSamples < m_numSamples) {
                 // Force framebuffers clear to render required number of samples
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
@@ -1602,7 +1602,7 @@ public:
         }
 
         if (clearAovs) {
-            m_iter = 0;
+            m_numSamples = 0;
             m_activePixels = -1;
         }
     }
@@ -1653,11 +1653,11 @@ public:
             } else {
                 numSamplesPerIter = m_maxSamples;
             }
-            m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
         }
+        m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
 
+        int frameCount = 0;
         bool firstResolve = true;
-
         bool stopRequested = false;
         while (!IsConverged() || stopRequested) {
             renderThread->WaitUntilPaused();
@@ -1667,7 +1667,7 @@ public:
             }
 
             if (m_rprContextMetadata.pluginType != kPluginHybrid) {
-                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, m_iter), "Failed to set framecount");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, frameCount++), "Failed to set framecount");
             }
 
             auto status = m_rprContext->Render();
@@ -1678,9 +1678,9 @@ public:
                 break;
             }
 
-            m_iter += numSamplesPerIter;
+            m_numSamples += numSamplesPerIter;
             if (m_varianceThreshold > 0.0f) {
-                if (isBatch && !isProgressive && m_iter == m_minSamples) {
+                if (isBatch && !isProgressive && m_numSamples == m_minSamples) {
                     numSamplesPerIter = 1;
                     m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
                 }
@@ -1688,6 +1688,16 @@ public:
                 if (RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                     m_activePixels = -1;
                 }
+            } else if (!isBatch && !m_isInteractive &&
+                       m_rprContextMetadata.pluginType == kPluginNorthStar && m_numSamples > 1) {
+                // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
+                numSamplesPerIter *= 2;
+
+                // But do not oversample the image
+                int numSamplesLeft = m_maxSamples - m_numSamples;
+                numSamplesPerIter = std::min(numSamplesPerIter, numSamplesLeft);
+
+                m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
             }
 
             if (!isBatch && !IsConverged()) {
@@ -1803,7 +1813,7 @@ Don't show this message again?
     }
 
     int GetNumCompletedSamples() const {
-        return m_iter;
+        return m_numSamples;
     }
 
     int GetNumActivePixels() const {
@@ -1831,10 +1841,10 @@ Don't show this message again?
 
     bool IsConverged() const {
         if (m_currentRenderQuality < kRenderQualityHigh) {
-            return m_iter == 1;
+            return m_numSamples == 1;
         }
 
-        return m_iter >= m_maxSamples || m_activePixels == 0;
+        return m_numSamples >= m_maxSamples || m_activePixels == 0;
     }
 
     bool IsGlInteropEnabled() const {
@@ -2459,7 +2469,8 @@ private:
     std::atomic<int> m_numLights{0};
     HdRprApiEnvironmentLight* m_defaultLightObject = nullptr;
 
-    int m_iter = 0;
+    bool m_isInteractive = false;
+    int m_numSamples = 0;
     int m_activePixels = -1;
     int m_maxSamples = 0;
     int m_minSamples = 0;
