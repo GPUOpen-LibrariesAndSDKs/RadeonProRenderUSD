@@ -15,6 +15,7 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/coreImage.h"
 #include "pxr/imaging/rprUsd/helpers.h"
+#include "pxr/imaging/rprUsd/util.h"
 #include "pxr/base/arch/fileSystem.h"
 #include "pxr/base/tf/diagnostic.h"
 
@@ -48,11 +49,10 @@ bool RprUsdImageCache::InitCacheKey(
 
     if (tiles.size() != 1 || tiles[0].id != 0) {
         // UDIM tiles
-        auto udimStr = std::strstr(path.c_str(), "<UDIM>");
-        if (!udimStr) return false;
-
-        std::string formatString = path;
-        formatString.replace(udimStr - path.c_str(), 6, "%i");
+        std::string formatString;
+        if (!RprUsdGetUDIMFormatString(path, &formatString)) {
+            return false;
+        }
 
         for (auto& tile : tiles) {
             if (!processTile(TfStringPrintf(formatString.c_str(), tile.id))) {

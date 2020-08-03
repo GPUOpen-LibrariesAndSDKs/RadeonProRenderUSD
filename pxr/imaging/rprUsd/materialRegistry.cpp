@@ -18,6 +18,7 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/rprUsd/material.h"
+#include "pxr/imaging/rprUsd/util.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/staticTokens.h"
 #include "pxr/base/tf/envSetting.h"
@@ -125,17 +126,12 @@ void RprUsdMaterialRegistry::CommitResources(
 
     // Iterate over all texture commits and collect unique textures including UDIM tiles
     //
+    std::string formatString;
     for (size_t i = 0; i < m_textureCommits.size(); ++i) {
         auto& commit = m_textureCommits[i];
         auto& commitTexIndices = uniqueTextureIndicesPerCommit[i];
 
-        const char* path = commit.filepath.c_str();
-
-        auto udimStr = std::strstr(path, "<UDIM>");
-        if (udimStr) {
-            std::string formatString = path;
-            formatString.replace(udimStr - path, 6, "%i");
-
+        if (RprUsdGetUDIMFormatString(commit.filepath, &formatString)) {
             constexpr uint32_t kStartTile = 1001;
             constexpr uint32_t kEndTile = 1100;
 
@@ -257,7 +253,16 @@ void DumpMaterialNetwork(HdMaterialNetworkMap const& networkMap) {
             fprintf(file, "        identifier=%s\n", node.identifier.GetText());
             fprintf(file, "        parameters: {\n");
             for (auto& param : node.parameters) {
-                fprintf(file, "          {%s: %s},\n", param.first.GetText(), param.second.GetTypeName().c_str());
+                fprintf(file, "          {%s: %s", param.first.GetText(), param.second.GetTypeName().c_str());
+                if (param.second.IsHolding<TfToken>()) {
+                    fprintf(file, "(\"%s\")", param.second.UncheckedGet<TfToken>().GetText());
+                } else if (param.second.IsHolding<SdfAssetPath>()) {
+                    fprintf(file, "(\"%s\")", param.second.UncheckedGet<SdfAssetPath>().GetResolvedPath().c_str());
+                } else if (param.second.IsHolding<GfVec4f>()) {
+                    auto& v = param.second.UncheckedGet<GfVec4f>();
+                    fprintf(file, "(%g, %g, %g, %g)", v[0], v[1], v[2], v[3]);
+                }
+                fprintf(file, "},\n");
             }
             fprintf(file, "        }\n");
             fprintf(file, "      },\n");
