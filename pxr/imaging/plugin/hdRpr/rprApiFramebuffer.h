@@ -40,6 +40,7 @@ public:
     bool GetData(void* dstBuffer, size_t dstBufferSize);
     size_t GetSize() const;
     rpr::FramebufferDesc GetDesc() const;
+    rpr::Aov GetAovId() const { return m_aov; }
 
     rpr_cl_mem GetCLMem();
     rpr::FrameBuffer* GetRprObject() { return m_rprFb; }

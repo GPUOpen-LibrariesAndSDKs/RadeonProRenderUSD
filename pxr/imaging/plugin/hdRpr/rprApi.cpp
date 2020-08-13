@@ -101,6 +101,31 @@ RprUsdRenderDeviceType ToRprUsd(RenderDeviceType configDeviceType) {
 
 } // namespace anonymous
 
+TfToken GetRprLpeAovName(rpr::Aov aov) {
+    switch (aov) {
+        case RPR_AOV_LPE_0:
+            return HdRprAovTokens->lpe0;
+        case RPR_AOV_LPE_1:
+            return HdRprAovTokens->lpe1;
+        case RPR_AOV_LPE_2:
+            return HdRprAovTokens->lpe2;
+        case RPR_AOV_LPE_3:
+            return HdRprAovTokens->lpe3;
+        case RPR_AOV_LPE_4:
+            return HdRprAovTokens->lpe4;
+        case RPR_AOV_LPE_5:
+            return HdRprAovTokens->lpe5;
+        case RPR_AOV_LPE_6:
+            return HdRprAovTokens->lpe6;
+        case RPR_AOV_LPE_7:
+            return HdRprAovTokens->lpe7;
+        case RPR_AOV_LPE_8:
+            return HdRprAovTokens->lpe8;
+        default:
+            return TfToken();
+    }
+}
+
 HdFormat ConvertUsdRenderVarDataType(TfToken const& format) {
     static std::map<TfToken, HdFormat> s_mapping = []() {
         std::map<TfToken, HdFormat> ret;
@@ -120,6 +145,7 @@ HdFormat ConvertUsdRenderVarDataType(TfToken const& format) {
         addMappingEntry("vector3f", HdFormatFloat32Vec3);
         addMappingEntry("normal3f", HdFormatFloat32Vec3);
         addMappingEntry("color3f", HdFormatFloat32Vec3);
+        addMappingEntry("color4f", HdFormatFloat32Vec4);
 
         return ret;
     }();
@@ -1493,7 +1519,7 @@ public:
         return settingsIt->second;
     }
 
-    bool GetAovBindingInfo(HdRenderPassAovBinding const& aovBinding, TfToken* aovName, HdFormat* format) {
+    bool GetAovBindingInfo(HdRenderPassAovBinding const& aovBinding, TfToken* aovName, std::string* lpe, HdFormat* format) {
         // Check for UsdRenderVar: take aovName from `sourceName`, format from `dataType`
         auto sourceType = GetAovSetting(UsdRenderTokens->sourceType, aovBinding);
         if (sourceType == UsdRenderTokens->raw) {
@@ -1505,6 +1531,25 @@ public:
                 return *format != HdFormatInvalid;
             } else {
                 TF_RUNTIME_ERROR("Unsupported UsdRenderVar sourceName: %s", name.GetText());
+            }
+        } else if (sourceType == UsdRenderTokens->lpe) {
+            auto sourceName = GetAovSetting(UsdRenderTokens->sourceName, aovBinding).Get<std::string>();
+            if (sourceName.empty()) {
+                return false;
+            }
+
+            if (sourceName == "C.*" && aovBinding.aovName == HdAovTokens->color) {
+                // We can use RPR_AOV_COLOR here instead of reserving one of the available LPE AOV slots
+                // TODO: check if we can map some other LPEs to non-lpe RPR AOVs
+            } else {
+                if (m_rprContextMetadata.pluginType != kPluginNorthStar) {
+                    TF_RUNTIME_ERROR("LPE AOV is supported in Northstar only");
+                    return false;
+                }
+
+                *lpe = sourceName;
+                *format = ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
+                return *format != HdFormatInvalid;
             }
         }
 
@@ -1523,23 +1568,39 @@ public:
         if (m_dirtyFlags & ChangeTracker::DirtyAOVBindings) {
             auto retainedOutputRenderBuffers = std::move(m_outputRenderBuffers);
             auto registerAovBinding = [&retainedOutputRenderBuffers, this](HdRenderPassAovBinding const& aovBinding) {
-                TfToken aovName;
+                OutputRenderBuffer outRb;
+                outRb.aovBinding = &aovBinding;
+
                 HdFormat aovFormat;
-                if (!GetAovBindingInfo(aovBinding, &aovName, &aovFormat)) {
+                if (!GetAovBindingInfo(aovBinding, &outRb.aovName, &outRb.lpe, &aovFormat)) {
                     return false;
                 }
 
-                OutputRenderBuffer outRb;
-                outRb.aovName = aovName;
-                outRb.aovBinding = &aovBinding;
+                decltype(retainedOutputRenderBuffers.begin()) outputRenderBufferIt;
+                if (outRb.lpe.empty()) {
+                    outputRenderBufferIt = std::find_if(retainedOutputRenderBuffers.begin(), retainedOutputRenderBuffers.end(),
+                        [&outRb](OutputRenderBuffer const& buffer) { return buffer.aovName == outRb.aovName; });
+                } else {
+                    outputRenderBufferIt = std::find_if(retainedOutputRenderBuffers.begin(), retainedOutputRenderBuffers.end(),
+                        [&outRb](OutputRenderBuffer const& buffer) { return buffer.lpe == outRb.lpe; });
+                }
 
-                auto outputRenderBufferIt = std::find_if(retainedOutputRenderBuffers.begin(), retainedOutputRenderBuffers.end(),
-                    [&aovName](OutputRenderBuffer const& buffer) {
-                    return buffer.aovName == aovName;
-                });
                 if (outputRenderBufferIt == retainedOutputRenderBuffers.end()) {
+                    if (!outRb.lpe.empty()) {
+                        // We can bind limited amount of LPE AOVs with RPR.
+                        // lpeAovPool controls available AOV binding slots.
+                        if (m_lpeAovPool.empty()) {
+                            TF_RUNTIME_ERROR("Cannot create \"%s\" LPE AOV: exceeded the number of LPE AOVs at the same time - %d",
+                                outRb.lpe.c_str(), +RPR_AOV_LPE_8 - +RPR_AOV_LPE_0 + 1);
+                            return false;
+                        }
+
+                        outRb.aovName = m_lpeAovPool.back();
+                        m_lpeAovPool.pop_back();
+                    }
+
                     // Create new RPR AOV
-                    outRb.rprAov = CreateAov(aovName, aovBinding.renderBuffer->GetWidth(), aovBinding.renderBuffer->GetHeight(), aovFormat);
+                    outRb.rprAov = CreateAov(outRb.aovName, aovBinding.renderBuffer->GetWidth(), aovBinding.renderBuffer->GetHeight(), aovFormat);
                 } else {
                     // Reuse previously created RPR AOV
                     std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
@@ -1548,6 +1609,11 @@ public:
                 }
 
                 if (!outRb.rprAov) return false;
+
+                if (!outRb.lpe.empty() &&
+                    RPR_ERROR_CHECK(outRb.rprAov->GetAovFb()->GetRprObject()->SetLPE(outRb.lpe.c_str()), "Failed to set LPE")) {
+                    return false;
+                }
 
                 m_outputRenderBuffers.push_back(std::move(outRb));
                 return true;
@@ -1964,6 +2030,12 @@ private:
             initInternalAov(HdAovTokens->primId);
             initInternalAov(HdRprAovTokens->worldCoordinate);
         }
+
+        m_lpeAovPool.clear();
+        m_lpeAovPool.insert(m_lpeAovPool.begin(), {
+            HdRprAovTokens->lpe0, HdRprAovTokens->lpe1, HdRprAovTokens->lpe2,
+            HdRprAovTokens->lpe3, HdRprAovTokens->lpe4, HdRprAovTokens->lpe5,
+            HdRprAovTokens->lpe6, HdRprAovTokens->lpe7, HdRprAovTokens->lpe8});
     }
 
     void InitScene() {
@@ -2258,6 +2330,14 @@ private:
                     }
 
                     aov = std::make_shared<HdRprApiDepthAov>(format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
+                    auto aovPtr = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    aov = std::shared_ptr<HdRprApiAov>(aovPtr, [this](HdRprApiAov* aov) {
+                        // Each LPE AOV reserves RPR's LPE AOV id (RPR_AOV_LPE_0, ...)
+                        // As soon as LPE AOV is released we want to return reserved id to the pool
+                        m_lpeAovPool.push_back(GetRprLpeAovName(aov->GetAovFb()->GetAovId()));
+                        delete aov;
+                    });
                 } else {
                     if (!aovDesc.computed) {
                         aov = std::make_shared<HdRprApiAov>(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
@@ -2458,10 +2538,12 @@ private:
     std::map<TfToken, std::weak_ptr<HdRprApiAov>> m_aovRegistry;
     std::map<TfToken, std::shared_ptr<HdRprApiAov>> m_internalAovs;
     HdRenderPassAovBindingVector m_aovBindings;
+    std::vector<TfToken> m_lpeAovPool;
 
     struct OutputRenderBuffer {
         HdRenderPassAovBinding const* aovBinding;
         TfToken aovName;
+        std::string lpe;
 
         std::shared_ptr<HdRprApiAov> rprAov;
 
