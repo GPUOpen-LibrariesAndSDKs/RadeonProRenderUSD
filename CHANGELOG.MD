@@ -1,4 +1,31 @@
 # Change Log
+
+## 1.3 Release
+
+hdRpr installation scheme was changed - there is no more need to copy hdRpr package directly into Houdini. More info [here](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/285).
+
+### New features
+* Parallelize texture loading ([PR #307](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/307))
+* Expose RPR-native materials ([PR #301](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/301))
+* Add RPR 2.0 (Northstar) support ([PR #297](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/297))
+* Add UsdRenderVar support (raw AOVs only) ([PR #300](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/300))
+* Add UDIM support (Northstar only) ([PR #298](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/298))
+* Improve AOV system ([PR #295](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/295))
+* Expose shadow and reflection catcher controls ([PR #294](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/294))
+* Expose caustics control ([PR #291](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/291))
+* Add render mode render setting ([PR #289](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/289))
+* Optimize batch rendering ([PR #288](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/288))
+* BasisCurves bezier support ([PR #282](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/282))
+* Speed up basis curves creation ([PR #302](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/302))
+* Add RIF-based tone mapping filter ([PR #283](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/283))
+
+### Fixes
+* Fixed normal input of AI denoise filter ([PR #305](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/305))
+* Fixed dome light visibility ([PR #292](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/292))
+* Now UV primvar name is queried from the bound material ([PR #296](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/296))
+* Use specular workflow on refractive materials for UsdPreviewSurface ([PR #299](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/299))
+
+
 ## 1.2 Release
 ### New features
 - Volume rework ([PR #268](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/268))
