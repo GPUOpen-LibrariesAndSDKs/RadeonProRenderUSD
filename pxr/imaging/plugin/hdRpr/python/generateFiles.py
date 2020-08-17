@@ -19,7 +19,7 @@ if __name__ == "__main__":
     p.add_argument('scripts_dir', help="Directory with scripts")
     p.add_argument("install", help="The install root for generated files.")
     p.add_argument("--houdini_root", help="The install root for generated files.")
-    p.add_argument('--northstar', default=False, action='store_true', help='Whether enable northstar render setting or not')
+    p.add_argument('--hidden-render-qualities', default='', type=str)
     args = p.parse_args()
 
     generate_ds_files = []
@@ -30,5 +30,8 @@ if __name__ == "__main__":
         os.environ['PYTHONPATH'] = os.environ.get('PYTHONPATH', '') + os.pathsep + os.path.join(os.path.join(args.houdini_root, 'houdini'), 'python2.7libs')
 
     subprocess.check_call([sys.executable, os.path.join(args.scripts_dir, 'generateLightSettingFiles.py'), args.install] + generate_ds_files)
-    subprocess.check_call([sys.executable, os.path.join(args.scripts_dir, 'generateRenderSettingFiles.py'), args.install] + generate_ds_files + (['--northstar'] if args.northstar else []))
     subprocess.check_call([sys.executable, os.path.join(args.scripts_dir, 'generateGeometrySettingFiles.py'), args.install] + generate_ds_files)
+    subprocess.check_call([
+        sys.executable, os.path.join(args.scripts_dir, 'generateRenderSettingFiles.py'),
+        '--hidden-render-qualities', args.hidden_render_qualities,
+        args.install] + generate_ds_files)
