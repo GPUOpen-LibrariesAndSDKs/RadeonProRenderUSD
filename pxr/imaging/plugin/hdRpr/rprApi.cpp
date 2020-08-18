@@ -1473,8 +1473,23 @@ public:
 
             float fstop = 0.0f;
             m_hdCamera->GetFStop(&fstop);
-            if (fstop == 0.0f) { fstop = std::numeric_limits<float>::max(); }
+            bool dofEnabled = fstop != 0.0f && fstop != std::numeric_limits<float>::max();
+
+            if (dofEnabled) {
+                int apertureBlades = m_hdCamera->GetApertureBlades();
+                if (apertureBlades < 4 || apertureBlades > 32) {
+                    apertureBlades = 16;
+                }
+                RPR_ERROR_CHECK(m_camera->SetApertureBlades(apertureBlades), "Failed to set camera aperture blades");
+            } else {
+                fstop = std::numeric_limits<float>::max();
+            }
             RPR_ERROR_CHECK(m_camera->SetFStop(fstop), "Failed to set camera FStop");
+
+            // Convert to millimeters
+            focalLength *= 1e3f;
+            sensorWidth *= 1e3f;
+            sensorHeight *= 1e3f;
 
             RPR_ERROR_CHECK(m_camera->SetFocalLength(focalLength), "Fail to set camera focal length");
             RPR_ERROR_CHECK(m_camera->SetSensorSize(sensorWidth, sensorHeight), "Failed to set camera sensor size");
