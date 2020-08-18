@@ -43,7 +43,7 @@ render_setting_categories = [
                     'Medium',
                     'High',
                     'Full',
-                    'Northstar'
+                    'Full 2.0 (Beta)'
                 ]
             }
         ]
