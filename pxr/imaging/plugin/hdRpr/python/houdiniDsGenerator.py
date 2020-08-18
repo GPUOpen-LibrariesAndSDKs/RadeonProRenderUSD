@@ -145,7 +145,7 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 c_type_str = type(default_value).__name__
                 render_param_type = 'ordinal'
                 for value in values:
-                    render_param_values.append((len(render_param_values), value))
+                    render_param_values.append((len(render_param_values), value.get_ui_name()))
 
             render_param_range = None
             if 'minValue' in setting and 'maxValue' in setting and not 'values' in setting:
