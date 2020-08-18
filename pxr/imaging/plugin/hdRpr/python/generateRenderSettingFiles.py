@@ -15,6 +15,7 @@ import argparse
 import platform
 
 from houdiniDsGenerator import generate_houdini_ds
+from commonSettings import SettingValue
 
 def get_render_setting(render_setting_categories, category_name, name):
     for category in render_setting_categories:
@@ -39,11 +40,11 @@ render_setting_categories = [
                 'help': 'Render restart might be required',
                 'defaultValue': 'Full',
                 'values': [
-                    'Low',
-                    'Medium',
-                    'High',
-                    'Full',
-                    'Full 2.0 (Beta)'
+                    SettingValue('Low'),
+                    SettingValue('Medium'),
+                    SettingValue('High'),
+                    SettingValue('Full'),
+                    SettingValue('Northstar', 'Full 2.0 (Beta)')
                 ]
             }
         ]
@@ -56,15 +57,15 @@ render_setting_categories = [
                 'ui_name': 'Render Mode',
                 'defaultValue': 'Global Illumination',
                 'values': [
-                    'Global Illumination',
-                    'Direct Illumination',
-                    'Wireframe',
-                    'Material Index',
-                    'Position',
-                    'Normal',
-                    'Texcoord',
-                    'Ambient Occlusion',
-                    'Diffuse'
+                    SettingValue('Global Illumination'),
+                    SettingValue('Direct Illumination'),
+                    SettingValue('Wireframe'),
+                    SettingValue('Material Index'),
+                    SettingValue('Position'),
+                    SettingValue('Normal'),
+                    SettingValue('Texcoord'),
+                    SettingValue('Ambient Occlusion'),
+                    SettingValue('Diffuse')
                 ]
             },
             {
@@ -94,9 +95,9 @@ render_setting_categories = [
                 'help': 'Restart required.',
                 'defaultValue': 'GPU',
                 'values': [
-                    "CPU",
-                    "GPU",
-                    # "CPU+GPU"
+                    SettingValue('CPU'),
+                    SettingValue('GPU'),
+                    # SettingValue('CPU+GPU')
                 ]
             }
         ]
@@ -578,7 +579,7 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 setting['maxValue'] = len(setting['values']) - 1
                 rs_mapped_values_enum += 'enum {name_title}Type {{\n'.format(name_title=name_title)
                 for value in setting['values']:
-                    rs_mapped_values_enum += '    k{name_title}{value},\n'.format(name_title=name_title, value=value.replace(' ', ''))
+                    rs_mapped_values_enum += '    k{name_title}{value},\n'.format(name_title=name_title, value=value.key.replace(' ', ''))
                 rs_mapped_values_enum += '};\n'
                 default_value = setting['values'].index(default_value)
                 type_str = '{name_title}Type'.format(name_title=name_title)
