@@ -132,11 +132,19 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 render_param_type = 'toggle'
                 render_param_default = 1 if default_value else 0
             elif 'values' in setting:
-                default_value = setting['values'].index(default_value)
+                if 'hidden_values' in setting:
+                    values = list()
+                    for value in setting['values']:
+                        if not value in setting['hidden_values']:
+                            values.append(value)
+                else:
+                    values = setting['values']
+
+                default_value = values.index(default_value)
                 render_param_default = default_value
                 c_type_str = type(default_value).__name__
                 render_param_type = 'ordinal'
-                for value in setting['values']:
+                for value in values:
                     render_param_values.append((len(render_param_values), value))
 
             render_param_range = None

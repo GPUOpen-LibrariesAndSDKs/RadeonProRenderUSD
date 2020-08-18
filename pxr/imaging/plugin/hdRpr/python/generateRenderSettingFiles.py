@@ -32,7 +32,6 @@ def hidewhen_not_ambient_occlusion_mode(render_setting_categories):
 render_setting_categories = [
     {
         'name': 'RenderQuality',
-        'disabled_platform': ['Darwin'],
         'settings': [
             {
                 'name': 'renderQuality',
@@ -40,10 +39,11 @@ render_setting_categories = [
                 'help': 'Render restart might be required',
                 'defaultValue': 'Full',
                 'values': [
-                    "Low",
-                    "Medium",
-                    "High",
-                    "Full"
+                    'Low',
+                    'Medium',
+                    'High',
+                    'Full',
+                    'Full 2.0 (Beta)'
                 ]
             }
         ]
@@ -612,6 +612,13 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 rs_validate_values += '\n'
             rs_range_definitions += '\n'
 
+            if 'hidden_values' in setting:
+                set_validation += '    switch ({name}) {{\n'.format(name=name)
+                for value in setting['hidden_values']:
+                    set_validation += '        case k{name_title}{value}:\n'.format(name_title=name_title, value=value.replace(' ', ''))
+                set_validation += '            return;\n'.format(name_title=name_title, value=value.replace(' ', ''))
+                set_validation += '        default: break;}\n'
+
             if 'ui_name' in setting:
                 rs_list_initialization += '    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title)
 
@@ -661,15 +668,21 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("install", help="The install root for generated files.")
     p.add_argument("--generate_ds_files", default=False, action='store_true')
-    p.add_argument('--northstar', default=False, action='store_true', help='Whether enable northstar render setting or not')
+    p.add_argument('--hidden-render-qualities', default='', type=str)
     args = p.parse_args()
 
-    if args.northstar:
+    if args.hidden_render_qualities:
         for category in render_setting_categories:
             if category['name']  == 'RenderQuality':
                 for setting in category['settings']:
                     if setting['name'] == 'renderQuality':
-                        setting['values'].append('Northstar')
+                        hidden_render_qualities = args.hidden_render_qualities.split()
+                        for render_quality in hidden_render_qualities:
+                            if not render_quality in setting['values']:
+                                print('Unknown render quality: {}'.format(render_quality))
+                                sys.exit(1)
+
+                        setting['hidden_values'] = hidden_render_qualities
                         break
                 break
 

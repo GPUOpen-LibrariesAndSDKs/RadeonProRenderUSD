@@ -1235,8 +1235,8 @@ public:
                 RenderQualityType currentRenderQuality;
                 if (m_rprContextMetadata.pluginType == kPluginTahoe) {
                     currentRenderQuality = kRenderQualityFull;
-                } else if (m_rprContextMetadata.pluginType == kPluginNorthStar) {
-                    currentRenderQuality = static_cast<RenderQualityType>(int(kRenderQualityFull) + 1);
+                } else if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                    currentRenderQuality = kRenderQualityNorthstar;
                 } else {
                     rpr_uint currentHybridQuality = RPR_RENDER_QUALITY_HIGH;
                     size_t dummy;
@@ -1360,7 +1360,7 @@ public:
         m_currentRenderQuality = preferences.GetRenderQuality();
 
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
-            m_rprContextMetadata.pluginType == kPluginNorthStar) {
+            m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
         } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             UpdateHybridSettings(preferences, force);
@@ -1686,7 +1686,7 @@ public:
                     m_activePixels = -1;
                 }
             } else if (!isBatch && !m_isInteractive &&
-                       m_rprContextMetadata.pluginType == kPluginNorthStar && m_numSamples > 1) {
+                       m_rprContextMetadata.pluginType == kPluginNorthstar && m_numSamples > 1) {
                 // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
                 numSamplesPerIter *= 2;
 
@@ -1873,8 +1873,8 @@ private:
     static RprUsdPluginType GetPluginType(RenderQualityType renderQuality) {
         if (renderQuality == kRenderQualityFull) {
             return kPluginTahoe;
-        } else if (+renderQuality == int(kRenderQualityFull) + 1) {
-            return kPluginNorthStar;
+        } else if (renderQuality == kRenderQualityNorthstar) {
+            return kPluginNorthstar;
         } else {
             return kPluginHybrid;
         }
