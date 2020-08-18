@@ -1353,10 +1353,6 @@ public:
 
         if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force) {
             m_isAlphaEnabled = preferences.GetEnableAlpha();
-            if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
-                // Disable opacity AOV in Northstar because it's always zeroed
-                m_isAlphaEnabled = false;
-            }
 
             UpdateColorAlpha();
         }

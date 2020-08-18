@@ -307,7 +307,7 @@ render_setting_categories = [
                 'ui_name': 'Enable Color Alpha',
                 'defaultValue': True,
                 'houdini': {
-                    'hidewhen': 'renderQuality != 3'
+                    'hidewhen': 'renderQuality < 3'
                 }
             }
         ]
