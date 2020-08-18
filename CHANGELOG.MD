@@ -20,6 +20,7 @@ hdRpr installation scheme was changed - there is no more need to copy hdRpr pack
 * Add RIF-based tone mapping filter ([PR #283](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/283))
 
 ### Fixes
+* Fixed depth of field ([PR #319](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/319))
 * Fixed normal input of AI denoise filter ([PR #305](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/305))
 * Fixed dome light visibility ([PR #292](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/292))
 * Now UV primvar name is queried from the bound material ([PR #296](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/296))
