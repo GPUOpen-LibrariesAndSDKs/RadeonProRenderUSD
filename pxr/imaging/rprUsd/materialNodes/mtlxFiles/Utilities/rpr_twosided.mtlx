@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_twosided" node="rpr_twosided" uiname="RPR Two Sided" doc="Applies different shaders to sides of geometry.">
+      <input name="frontface" type="surfaceshader" uiname="Front Face"/>
+      <input name="backface" type="surfaceshader" uiname="Back Face"/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

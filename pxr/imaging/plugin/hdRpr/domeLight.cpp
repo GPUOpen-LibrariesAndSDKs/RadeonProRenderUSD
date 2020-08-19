@@ -63,7 +63,20 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
 
     bool newLight = false;
     if (bits & HdLight::DirtyParams) {
-        m_rprLight = nullptr;
+        if (m_rprLight) {
+            rprApi->Release(m_rprLight);
+            m_rprLight = nullptr;
+        }
+
+        bool isVisible = sceneDelegate->GetVisible(id);
+        if (!isVisible) {
+            // Invisible light does not produces any emission on a scene.
+            // So we simply keep light primitive empty in that case.
+            // We can do it in such a way because Hydra releases light object
+            // whenever it changed and creates it from scratch
+            *dirtyBits = HdLight::Clean;
+            return;
+        }
 
         float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
         float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
@@ -108,11 +121,6 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
         rprApi->SetTransform(m_rprLight, m_transform);
     }
 
-    if (newLight && !m_created) {
-        m_created = true;
-        rprRenderParam->AddLight();
-    }
-
     *dirtyBits = HdLight::Clean;
 }
 
@@ -126,11 +134,6 @@ void HdRprDomeLight::Finalize(HdRenderParam* renderParam) {
     if (m_rprLight) {
         rprRenderParam->AcquireRprApiForEdit()->Release(m_rprLight);
         m_rprLight = nullptr;
-    }
-
-    if (m_created) {
-        rprRenderParam->RemoveLight();
-        m_created = false;
     }
 
     HdSprim::Finalize(renderParam);

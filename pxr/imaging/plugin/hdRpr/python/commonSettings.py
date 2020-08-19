@@ -73,3 +73,18 @@ visibility_flag_settings = [
         'defaultValue': True
     }
 ]
+
+class SettingValue(object):
+    def __init__(self, key, ui_name=None):
+        self.key = key
+        self._ui_name = ui_name
+
+    def __eq__(self, obj):
+        return self.key == obj
+
+    def __ne__(self, obj):
+        return not self == obj
+
+    def get_ui_name(self):
+        return self._ui_name if self._ui_name else self.key
+

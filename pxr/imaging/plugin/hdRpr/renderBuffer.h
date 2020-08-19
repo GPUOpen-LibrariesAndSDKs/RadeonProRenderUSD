@@ -55,6 +55,8 @@ public:
 
     void SetConverged(bool converged);
 
+    void SetStatus(bool isValid);
+
 protected:
     void _Deallocate() override;
 
@@ -66,6 +68,8 @@ private:
     std::vector<uint8_t> m_mappedBuffer;
     std::atomic<int> m_numMappers;
     std::atomic<bool> m_isConverged;
+
+    bool m_isValid = true;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

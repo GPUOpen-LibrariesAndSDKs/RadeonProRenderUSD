@@ -12,9 +12,10 @@ limitations under the License.
 ************************************************************************/
 
 #include "renderDelegate.h"
+#include "aovDescriptor.h"
 
-#include"pxr/imaging/hd/extComputation.h"
-
+#include "pxr/imaging/rprUsd/materialRegistry.h"
+#include "pxr/imaging/hd/extComputation.h"
 #include "pxr/base/tf/diagnosticMgr.h"
 #include "pxr/base/tf/getenv.h"
 
@@ -116,7 +117,10 @@ private:
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
-    (percentDone)
+    (percentDone) \
+    (renderMode) \
+    (batch) \
+    (progressive)
 );
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES = {
@@ -147,7 +151,14 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
     HdPrimTypeTokens->renderBuffer
 };
 
-HdRprDelegate::HdRprDelegate() {
+HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
+    for (auto& entry : renderSettings) {
+        SetRenderSetting(entry.first, entry.second);
+    }
+
+    m_isBatch = GetRenderSetting(_tokens->renderMode) == _tokens->batch;
+    m_isProgressive = GetRenderSetting(_tokens->progressive).GetWithDefault(true);
+
     m_rprApi.reset(new HdRprApi(this));
     g_rprApi = m_rprApi.get();
 
@@ -187,11 +198,11 @@ HdRenderParam* HdRprDelegate::GetRenderParam() const {
 void HdRprDelegate::CommitResources(HdChangeTracker* tracker) {
     // CommitResources() is called after prim sync has finished, but before any
     // tasks (such as draw tasks) have run.
-
+    m_rprApi->CommitResources();
 }
 
 TfToken HdRprDelegate::GetMaterialNetworkSelector() const {
-    return m_renderParam->GetMaterialNetworkSelector();
+    return RprUsdMaterialRegistry::GetInstance().GetMaterialNetworkSelector();
 }
 
 TfTokenVector const& HdRprDelegate::GetSupportedRprimTypes() const {
@@ -324,42 +335,14 @@ void HdRprDelegate::DestroyBprim(HdBprim* bPrim) {
 }
 
 HdAovDescriptor HdRprDelegate::GetDefaultAovDescriptor(TfToken const& name) const {
-    HdParsedAovToken aovId(name);
-    if (name != HdAovTokens->color &&
-        name != HdAovTokens->normal &&
-        name != HdAovTokens->primId &&
-        name != HdAovTokens->depth &&
-        name != HdRprUtilsGetCameraDepthName() &&
-        !(aovId.isPrimvar && aovId.name == "st")) {
-        // TODO: implement support for instanceId and elementId aov
-        return HdAovDescriptor();
-    }
+    auto& rprAovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(name);
 
-    if (!m_rprApi->IsAovFormatConversionAvailable()) {
-        if (name == HdAovTokens->primId) {
-            // Integer images required, no way to support it
-            return HdAovDescriptor();
-        }
-        // Only native RPR format can be used for AOVs when there is no support for AOV format conversion
-        return HdAovDescriptor(HdFormatFloat32Vec4, false, VtValue(GfVec4f(0.0f)));
-    }
+    HdAovDescriptor hdAovDesc;
+    hdAovDesc.format = rprAovDesc.format;
+    hdAovDesc.multiSampled = rprAovDesc.multiSampled;
+    hdAovDesc.clearValue = VtValue(rprAovDesc.clearValue);
 
-    HdFormat format = HdFormatInvalid;
-
-    float clearColorValue = 0.0f;
-    if (name == HdAovTokens->depth ||
-        name == HdRprUtilsGetCameraDepthName()) {
-        clearColorValue = name == HdRprUtilsGetCameraDepthName() ? 0.0f : 1.0f;
-        format = HdFormatFloat32;
-    } else if (name == HdAovTokens->color) {
-        format = HdFormatFloat32Vec4;
-    } else if (name == HdAovTokens->primId) {
-        format = HdFormatInt32;
-    } else {
-        format = HdFormatFloat32Vec3;
-    }
-
-    return HdAovDescriptor(format, false, VtValue(GfVec4f(clearColorValue)));
+    return hdAovDesc;
 }
 
 HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const {
@@ -419,14 +402,6 @@ bool HdRprDelegate::Restart() {
 }
 
 #endif // PXR_VERSION >= 2005
-
-TfToken const& HdRprUtilsGetCameraDepthName() {
-#if PXR_VERSION < 2002
-    return HdAovTokens->linearDepth;
-#else
-    return HdAovTokens->cameraDepth;
-#endif
-}
 
 PXR_NAMESPACE_CLOSE_SCOPE
 

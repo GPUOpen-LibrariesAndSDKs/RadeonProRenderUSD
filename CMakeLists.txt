@@ -7,11 +7,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
                       ${CMAKE_SOURCE_DIR}/cmake/macros)
 
 include(Options)
-
-if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    include(Houdini)
-endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
-
 include(ProjectDefaults)
 include(Packages)
 
@@ -34,12 +29,24 @@ include(Public)
 
 set(CMAKE_CXX_STANDARD 14)
 
-include_directories(${USD_INCLUDE_DIR})
-link_directories(${USD_LIBRARY_DIR})
-include_directories(${RPR_INCLUDE_DIR})
-link_directories(${RPR_LIBRARY_DIR})
+if(NOT MaterialX_FOUND)
+    # If MaterialX was not explicitly provided, use the one from a submodule
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    if(HoudiniUSD_FOUND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Houdini builds with the old ABI. We need to match.
+    	set(EXTERNAL_COMPILE_FLAGS "-D_GLIBCXX_USE_CXX11_ABI=0")
+    endif()
+    set(MATERIALX_PYTHON_LTO OFF)
+    set(MATERIALX_INSTALL_PYTHON OFF)
+    set(MATERIALX_BUILD_RENDER OFF)
+    set(MATERIALX_BUILD_GEN_GLSL OFF)
+    set(MATERIALX_BUILD_GEN_OSL OFF)
+    set(MATERIALX_BUILD_TESTS OFF)
+    add_subdirectory(deps/MaterialX)
+endif()
 
-add_subdirectory(pxr/imaging/plugin/hdRpr)
+add_subdirectory(pxr/imaging)
 
-# install(FILES README.md DESTINATION .)
-# install(FILES LICENSE.md DESTINATION .)
+install(FILES README.md DESTINATION .)
+install(FILES INSTALL.md DESTINATION .)
+install(FILES LICENSE.md DESTINATION .)

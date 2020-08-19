@@ -23,7 +23,7 @@ namespace rpr { class Curve; }
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
-struct HdRprApiMaterial;
+class RprUsdMaterial;
 
 class HdRprMaterial;
 
@@ -56,7 +56,7 @@ private:
 
 private:
     rpr::Curve* m_rprCurve = nullptr;
-    HdRprApiMaterial* m_fallbackMaterial = nullptr;
+    RprUsdMaterial* m_fallbackMaterial = nullptr;
 
     HdRprMaterial const* m_cachedMaterial;
 

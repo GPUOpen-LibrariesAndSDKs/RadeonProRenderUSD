@@ -15,7 +15,6 @@ limitations under the License.
 #include "rprApi.h"
 #include "primvarUtil.h"
 #include "renderParam.h"
-#include "materialAdapter.h"
 
 #include "pxr/imaging/hd/extComputationUtils.h"
 #include "pxr/usdImaging/usdImaging/implicitSurfaceMeshUtils.h"
@@ -128,8 +127,7 @@ void HdRprPoints::Sync(
         if (m_colorsInterpolation == HdInterpolationVertex) {
             m_material = rprApi->CreatePointsMaterial(m_colors);
         } else if (!m_colors.empty()) {
-            auto matAdapter = MaterialAdapter(EMaterialType::COLOR, MaterialParams{{HdRprMaterialTokens->color, VtValue(m_colors[0])}});
-            m_material = rprApi->CreateMaterial(matAdapter);
+            m_material = rprApi->CreateDiffuseMaterial(m_colors[0]);
         }
     }
 
@@ -199,7 +197,7 @@ void HdRprPoints::Sync(
 
         if (dirtyDisplayColors || dirtyInstances) {
             for (size_t i = 0; i < m_instances.size(); ++i) {
-                rprApi->SetMeshMaterial(m_instances[i], m_material, false, false);
+                rprApi->SetMeshMaterial(m_instances[i], m_material, false);
             }
         }
 

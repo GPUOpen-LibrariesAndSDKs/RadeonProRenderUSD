@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_refraction" node="rpr_refraction" uiname="RPR Refraction" doc="Represents perfectly smooth refractive materials which allow light to transmit through and bend due to Snell’s law, like glass.">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Refraction color. White is perfectly transparent."/>
+      <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" doc="Normal direction used for shading."/>
+      <input name="ior" type="float" value="1.5" uimin="1" uisoftmax="5" uiname="IOR" doc="Index of refraction, usually 1-5."/>
+      <input name="caustics" type="boolean" value="true" uiname="Caustics" doc="Whether or not caustics are calculated through this surface."/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

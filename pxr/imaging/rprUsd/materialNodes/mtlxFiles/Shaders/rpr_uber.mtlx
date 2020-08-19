@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <!--
+    RPR Uber node definition.
+  -->
+  <nodedef name="ND_rpr_uber_surfaceshader" node="rpr_uberv2" uiname="RPR Uber" doc="RPR Uber shader">
+      <input name="uber_diffuse_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" uifolder="Diffuse" doc=""/>
+      <input name="uber_diffuse_weight" type="float" value="1.0" uimin="0.0" uisoftmax="1.0" uiname="Weight" uifolder="Diffuse" doc=""/>
+      <input name="uber_diffuse_roughness" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Roughness" uifolder="Diffuse" doc=""/>
+      <input name="uber_diffuse_normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" uifolder="Diffuse" doc=""/>
+
+      <input name="uber_reflection_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" uifolder="Reflection" doc=""/>
+      <input name="uber_reflection_weight" type="float" value="0.0" uimin="0.0" uisoftmax="1.0" uiname="Weight" uifolder="Reflection" doc=""/>
+      <input name="uber_reflection_roughness" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Roughness" uifolder="Reflection" doc=""/>
+      <input name="uber_reflection_anisotropy" type="float" value="0.0" uimin="-1.0" uimax="1.0" uiname="Anisotropy" uifolder="Reflection" doc=""/>
+      <input name="uber_reflection_anisotropy_rotation" type="float" value="0.0" uisoftmin="0.0" uisoftmax="1.0" uiname="Anisotropy Rotation" uifolder="Reflection" doc=""/>
+      <input name="uber_reflection_mode" type="string" value="PBR" enum="PBR,Metalness" uiname="Mode" uifolder="Reflection"/>
+      <input name="uber_reflection_ior" type="float" value="1.5" uimin="0.0" uisoftmax="3.0" uiname="Ior" uifolder="Reflection" doc=""/>
+      <input name="uber_reflection_metalness" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Metalness" uifolder="Reflection" doc=""/>
+      <input name="uber_reflection_normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" uifolder="Reflection" doc=""/>
+      <input name="uber_fresnel_schlick_approximation" type="float" value="1" uiname="Fresnel Schlick Approximation" uifolder="Reflection" doc=""/>
+
+      <input name="uber_refraction_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" uifolder="Refraction" doc=""/>
+      <input name="uber_refraction_weight" type="float" value="0.0" uimin="0.0" uisoftmax="1.0" uiname="Weight" uifolder="Refraction" doc=""/>
+      <input name="uber_refraction_roughness" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Roughness" uifolder="Refraction" doc=""/>
+      <input name="uber_refraction_ior" type="float" value="1.5" uimin="0.0" uisoftmax="3.0" uiname="Ior" uifolder="Refraction" doc=""/>
+      <input name="uber_refraction_normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" uifolder="Refraction" doc=""/>
+      <input name="uber_refraction_thin_surface" type="boolean" value="false" uiname="Thin Surface" uifolder="Refraction" doc=""/>
+      <input name="uber_refraction_absorption_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Absorption Color" uifolder="Refraction" doc=""/>
+      <input name="uber_refraction_absorption_distance" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Absorption Distance" uifolder="Refraction" doc=""/>
+      <input name="uber_refraction_caustics" type="boolean" value="true" uiname="Caustics" uifolder="Refraction" doc=""/>
+
+      <input name="uber_coating_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" uifolder="Coating" doc=""/>
+      <input name="uber_coating_weight" type="float" value="0.0" uimin="0.0" uisoftmax="1.0" uiname="Weight" uifolder="Coating" doc=""/>
+      <input name="uber_coating_roughness" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Roughness" uifolder="Coating" doc=""/>
+      <input name="uber_coating_mode" type="string" value="PBR" enum="PBR,Metalness" uiname="Mode" uifolder="Coating"/>
+      <input name="uber_coating_ior" type="float" value="1.5" uimin="0.0" uisoftmax="3.0" uiname="Ior" uifolder="Coating" doc=""/>
+      <input name="uber_coating_metalness" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Metalness" uifolder="Coating" doc=""/>
+      <input name="uber_coating_normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" uifolder="Coating" doc=""/>
+      <input name="uber_coating_thickness" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Thickness" uifolder="Coating" doc=""/>
+      <input name="uber_coating_transmission_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Transmission Color" uifolder="Coating" doc=""/>
+
+      <input name="uber_sheen" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Sheen" uifolder="Sheen" doc=""/>
+      <input name="uber_sheen_tint" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Tint" uifolder="Sheen" doc=""/>
+      <input name="uber_sheen_weight" type="float" value="0.0" uimin="0.0" uisoftmax="1.0" uiname="Weight" uifolder="Sheen" doc=""/>
+
+      <input name="uber_emission_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" uifolder="Emission" doc=""/>
+      <input name="uber_emission_weight" type="float" value="0.0" uimin="0.0" uisoftmax="1.0" uiname="Weight" uifolder="Emission" doc=""/>
+      <input name="uber_emission_mode" type="string" value="Singlesided" enum="Singlesided,Doublesided" uiname="Mode" uifolder="Emission"/>
+
+      <input name="uber_transparency" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Transparency" uifolder="Transparency" doc=""/>
+
+      <input name="uber_sss_scatter_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Scatter Color" uifolder="Subsurface" doc=""/>
+      <input name="uber_sss_scatter_distance" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Scatter Distance" uifolder="Subsurface" doc=""/>
+      <input name="uber_sss_scatter_direction" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Scatter Direction" uifolder="Subsurface" doc=""/>
+      <input name="uber_sss_weight" type="float" value="0.0" uimin="0.0" uisoftmax="1.0" uiname="Weight" uifolder="Subsurface" doc=""/>
+      <input name="uber_sss_multiscatter" type="boolean" value="false" uiname="Multiscatter" uifolder="Subsurface" doc=""/>
+      <input name="uber_backscatter_weight" type="float" value="0.0" uimin="0.0" uisoftmax="1.0" uiname="Backscatter Weight" uifolder="Subsurface" doc=""/>
+      <input name="uber_backscatter_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Backscatter Color" uifolder="Subsurface" doc=""/>
+
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

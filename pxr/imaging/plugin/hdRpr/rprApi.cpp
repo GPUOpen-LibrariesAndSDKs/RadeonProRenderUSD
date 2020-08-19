@@ -13,7 +13,7 @@ limitations under the License.
 
 #include "rprApi.h"
 #include "rprApiAov.h"
-#include "materialFactory.h"
+#include "aovDescriptor.h"
 
 #include "rifcpp/rifFilter.h"
 #include "rifcpp/rifImage.h"
@@ -21,11 +21,21 @@ limitations under the License.
 
 #include "config.h"
 #include "camera.h"
-#include "imageCache.h"
-#include "materialAdapter.h"
 #include "renderDelegate.h"
 #include "renderBuffer.h"
 #include "renderParam.h"
+
+#include "pxr/imaging/glf/glew.h"
+#include "pxr/imaging/glf/uvTextureData.h"
+
+#include "pxr/imaging/rprUsd/error.h"
+#include "pxr/imaging/rprUsd/helpers.h"
+#include "pxr/imaging/rprUsd/coreImage.h"
+#include "pxr/imaging/rprUsd/imageCache.h"
+#include "pxr/imaging/rprUsd/material.h"
+#include "pxr/imaging/rprUsd/materialRegistry.h"
+#include "pxr/imaging/rprUsd/contextMetadata.h"
+#include "pxr/imaging/rprUsd/contextHelpers.h"
 
 #include "pxr/base/gf/math.h"
 #include "pxr/base/gf/vec2f.h"
@@ -34,15 +44,9 @@ limitations under the License.
 #include "pxr/base/plug/plugin.h"
 #include "pxr/base/plug/thisPlugin.h"
 #include "pxr/imaging/pxOsd/tokens.h"
-#include "pxr/imaging/glf/glew.h"
-#include "pxr/imaging/glf/uvTextureData.h"
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
-
-#include "rpr/contextHelpers.h"
-#include "rpr/imageHelpers.h"
-#include "rpr/error.h"
 
 #include "notify/message.h"
 
@@ -63,21 +67,9 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_ENV_SETTING(HDRPR_DISABLE_ALPHA, false,
-    "Disable alpha in color AOV. All alpha values would be 1.0");
-
-TF_DEFINE_PRIVATE_TOKENS(HdRprAovTokens,
-    (albedo) \
-    (variance) \
-    (worldCoordinate) \
-    (opacity) \
-    ((primvarsSt, "primvars:st"))
-);
-
 namespace {
 
-using RecursiveLockGuard = std::lock_guard<std::recursive_mutex>;
-std::recursive_mutex g_rprAccessMutex;
+using LockGuard = std::lock_guard<std::mutex>;
 
 bool ArchCreateDirectory(const char* path) {
 #ifdef WIN32
@@ -93,7 +85,100 @@ struct RenderSetting {
     bool isDirty;
 };
 
+GfVec4f ToVec4(GfVec3f const& vec, float w) {
+    return GfVec4f(vec[0], vec[1], vec[2], w);
+}
+
+RprUsdRenderDeviceType ToRprUsd(RenderDeviceType configDeviceType) {
+    if (configDeviceType == kRenderDeviceCPU) {
+        return RprUsdRenderDeviceType::CPU;
+    } else if (configDeviceType == kRenderDeviceGPU) {
+        return RprUsdRenderDeviceType::GPU;
+    } else {
+        return RprUsdRenderDeviceType::Invalid;
+    }
+}
+
 } // namespace anonymous
+
+HdFormat ConvertUsdRenderVarDataType(TfToken const& format) {
+    static std::map<TfToken, HdFormat> s_mapping = []() {
+        std::map<TfToken, HdFormat> ret;
+
+        auto addMappingEntry = [&ret](std::string name, HdFormat format) {
+            ret[TfToken(name, TfToken::Immortal)] = format;
+        };
+
+        addMappingEntry("int", HdFormatInt32);
+        addMappingEntry("half", HdFormatFloat16);
+        addMappingEntry("half3", HdFormatFloat16Vec3);
+        addMappingEntry("half4", HdFormatFloat16Vec4);
+        addMappingEntry("float", HdFormatFloat32);
+        addMappingEntry("float3", HdFormatFloat32Vec3);
+        addMappingEntry("float4", HdFormatFloat32Vec4);
+        addMappingEntry("point3f", HdFormatFloat32Vec3);
+        addMappingEntry("vector3f", HdFormatFloat32Vec3);
+        addMappingEntry("normal3f", HdFormatFloat32Vec3);
+        addMappingEntry("color3f", HdFormatFloat32Vec3);
+
+        return ret;
+    }();
+    static std::string s_supportedFormats = []() {
+        std::string ret;
+        auto it = s_mapping.begin();
+        for (size_t i = 0; i < s_mapping.size(); ++i, ++it) {
+            ret += it->first.GetString();
+            if (i + 1 != s_mapping.size()) {
+                ret += ", ";
+            }
+        }
+        return ret;
+    }();
+
+    auto it = s_mapping.find(format);
+    if (it == s_mapping.end()) {
+        TF_RUNTIME_ERROR("Unsupported UsdRenderVar format. Supported formats: %s", s_supportedFormats.c_str());
+        return HdFormatInvalid;
+    }
+    return it->second;
+}
+
+class HdRprApiRawMaterial : public RprUsdMaterial {
+public:
+    static HdRprApiRawMaterial* Create(
+        rpr::Context* rprContext,
+        rpr::MaterialNodeType nodeType,
+        std::vector<std::pair<rpr::MaterialNodeInput, GfVec4f>> const& inputs) {
+
+        rpr::Status status;
+        auto rprNode = rprContext->CreateMaterialNode(nodeType, &status);
+        if (!rprNode) {
+            RPR_ERROR_CHECK(status, "Failed to create material node", rprContext);
+            return nullptr;
+        }
+
+        for (auto& input : inputs) {
+            auto& c = input.second;
+            if (RPR_ERROR_CHECK(rprNode->SetInput(input.first, c[0], c[1], c[2], c[3]), "Failed to set material input")) {
+                delete rprNode;
+                return nullptr;
+            }
+        };
+
+        return new HdRprApiRawMaterial(rprNode);
+    }
+
+    ~HdRprApiRawMaterial() final = default;
+
+private:
+    HdRprApiRawMaterial(rpr::MaterialNode* surfaceNode)
+        : m_retainedSurfaceNode(surfaceNode) {
+        m_surfaceNode = surfaceNode;
+    }
+
+private:
+    std::unique_ptr<rpr::MaterialNode> m_retainedSurfaceNode;
+};
 
 struct HdRprApiVolume {
     std::unique_ptr<rpr::HeteroVolume> heteroVolume;
@@ -102,13 +187,13 @@ struct HdRprApiVolume {
     std::unique_ptr<rpr::Grid> densityGrid;
     std::unique_ptr<rpr::Grid> emissionGrid;
     std::unique_ptr<rpr::Shape> cubeMesh;
-    std::unique_ptr<HdRprApiMaterial> cubeMeshMaterial;
+    std::unique_ptr<HdRprApiRawMaterial> cubeMeshMaterial;
     GfMatrix4f voxelsTransform;
 };
 
 struct HdRprApiEnvironmentLight {
     std::unique_ptr<rpr::EnvironmentLight> light;
-    std::unique_ptr<rpr::Image> image;
+    std::unique_ptr<RprUsdCoreImage> image;
 
     enum {
         kDetached,
@@ -117,22 +202,9 @@ struct HdRprApiEnvironmentLight {
     } state = kDetached;
 };
 
-static const std::map<TfToken, rpr_aov> kAovTokenToRprAov = {
-    {HdAovTokens->color, RPR_AOV_COLOR},
-    {HdAovTokens->depth, RPR_AOV_DEPTH},
-    {HdAovTokens->primId, RPR_AOV_OBJECT_ID},
-    {HdAovTokens->normal, RPR_AOV_SHADING_NORMAL},
-    {HdRprUtilsGetCameraDepthName(), RPR_AOV_DEPTH},
-    {HdRprAovTokens->albedo, RPR_AOV_DIFFUSE_ALBEDO},
-    {HdRprAovTokens->variance, RPR_AOV_VARIANCE},
-    {HdRprAovTokens->worldCoordinate, RPR_AOV_WORLD_COORDINATE},
-    {HdRprAovTokens->primvarsSt, RPR_AOV_UV},
-    {HdRprAovTokens->opacity, RPR_AOV_OPACITY},
-};
-
 class HdRprApiImpl {
 public:
-    HdRprApiImpl(HdRenderDelegate* delegate)
+    HdRprApiImpl(HdRprDelegate* delegate)
         : m_delegate(delegate) {
         // Postpone initialization as further as possible to allow Hydra user to set custom render settings before creating a context
         //InitIfNeeded();
@@ -143,7 +215,8 @@ public:
             return;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        static std::mutex s_rprInitMutex;
+        LockGuard lock(s_rprInitMutex);
 
         if (m_state != kStateUninitialized) {
             return;
@@ -154,15 +227,13 @@ public:
             InitRif();
             InitScene();
             InitCamera();
+            InitAovs();
 
             m_state = kStateRender;
-        } catch (rpr::Error& e) {
+        } catch (RprUsdError& e) {
             TF_RUNTIME_ERROR("%s", e.what());
             m_state = kStateInvalid;
-        } catch (rif::Error& e) {
-            TF_RUNTIME_ERROR("%s", e.what());
-            m_state = kStateInvalid;
-        }
+        } 
 
         UpdateRestartRequiredMessageStatus();
     }
@@ -181,7 +252,7 @@ public:
 
         VtIntArray newNormalIndexes;
         if (normals.empty()) {
-            if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+            if (m_rprContextMetadata.pluginType == kPluginHybrid) {
                 // XXX (Hybrid): we need to generate geometry normals by ourself
                 normals.reserve(newVpf.size());
                 newNormalIndexes.clear();
@@ -219,7 +290,7 @@ public:
 
         VtIntArray newUvIndexes;
         if (uvs.empty()) {
-            if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+            if (m_rprContextMetadata.pluginType == kPluginHybrid) {
                 newUvIndexes = newIndexes;
                 uvs = VtVec2fArray(points.size(), GfVec2f(0.0f));
             }
@@ -242,7 +313,7 @@ public:
             uvIndicesData = nullptr;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         rpr::Status status;
         auto mesh = m_rprContext->CreateShape(
@@ -271,7 +342,7 @@ public:
             return nullptr;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         rpr::Status status;
         auto mesh = m_rprContext->CreateShapeInstance(prototype, &status);
@@ -293,12 +364,12 @@ public:
             return;
         }
 
-        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             // Not supported
             return;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         bool dirty = true;
 
@@ -319,7 +390,7 @@ public:
             return;
         }
 
-        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             // Not supported
             return;
         }
@@ -328,7 +399,7 @@ public:
             RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_AND_CORNER :
             RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         bool dirty = true;
 
@@ -344,21 +415,21 @@ public:
         }
     }
 
-    void SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        m_materialFactory->AttachMaterial(mesh, material, doublesided, displacementEnabled);
+    void SetMeshMaterial(rpr::Shape* mesh, RprUsdMaterial const* material, bool displacementEnabled) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+        material->AttachTo(mesh, displacementEnabled);
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    void SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        m_materialFactory->AttachMaterial(curve, material);
+    void SetCurveMaterial(rpr::Curve* curve, RprUsdMaterial const* material) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+        material->AttachTo(curve);
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
     void SetCurveVisibility(rpr::Curve* curve, uint32_t visibilityMask) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             // XXX (Hybrid): rprCurveSetVisibility not supported, emulate visibility using attach/detach
             if (visibilityMask) {
                 m_scene->Attach(curve);
@@ -382,7 +453,7 @@ public:
 
     void Release(rpr::Curve* curve) {
         if (curve) {
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
+            LockGuard rprLock(m_rprContext->GetMutex());
 
             if (!RPR_ERROR_CHECK(m_scene->Detach(curve), "Failed to detach curve from scene")) {
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -393,7 +464,7 @@ public:
 
     void Release(rpr::Shape* shape) {
         if (shape) {
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
+            LockGuard rprLock(m_rprContext->GetMutex());
 
             if (!RPR_ERROR_CHECK(m_scene->Detach(shape), "Failed to detach mesh from scene")) {
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -403,8 +474,8 @@ public:
     }
 
     void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             // XXX (Hybrid): rprShapeSetVisibility not supported, emulate visibility using attach/detach
             if (visibilityMask) {
                 m_scene->Attach(mesh);
@@ -428,7 +499,7 @@ public:
     }
 
     void SetMeshId(rpr::Shape* mesh, uint32_t id) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
         RPR_ERROR_CHECK(mesh->SetObjectID(id), "Failed to set mesh id");
     }
 
@@ -454,7 +525,7 @@ public:
             creationFlags |= rpr::kCurveCreationFlagTapered;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         rpr::Status status;
         auto curve = m_rprContext->CreateCurve(
@@ -480,7 +551,7 @@ public:
             return nullptr;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         rpr::Status status;
         auto light = creator(&status);
@@ -495,6 +566,7 @@ public:
         }
 
         m_dirtyFlags |= ChangeTracker::DirtyScene;
+        m_numLights++;
         return light;
     }
 
@@ -540,7 +612,7 @@ public:
     }
 
     void SetDirectionalLightAttributes(rpr::DirectionalLight* light, GfVec3f const& color, float shadowSoftnessAngle) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         RPR_ERROR_CHECK(light->SetRadiantPower(color[0], color[1], color[2]), "Failed to set directional light color");
         RPR_ERROR_CHECK(light->SetShadowSoftnessAngle(GfClamp(shadowSoftnessAngle, 0.0f, float(M_PI_4))), "Failed to set directional light color");
@@ -548,23 +620,44 @@ public:
 
     template <typename Light>
     void SetLightColor(Light* light, GfVec3f const& color) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         RPR_ERROR_CHECK(light->SetRadiantPower(color[0], color[1], color[2]), "Failed to set light color");
     }
 
     void Release(rpr::Light* light) {
         if (light) {
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
+            LockGuard rprLock(m_rprContext->GetMutex());
 
             if (!RPR_ERROR_CHECK(m_scene->Detach(light), "Failed to detach light from scene")) {
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
             delete light;
+            m_numLights--;
         }
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<rpr::Image>&& image, float intensity) {
+    RprUsdMaterial* CreateGeometryLightMaterial(GfVec3f const& emissionColor) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+
+        auto material = HdRprApiRawMaterial::Create(m_rprContext.get(), RPR_MATERIAL_NODE_EMISSIVE, {
+            {RPR_MATERIAL_INPUT_COLOR, ToVec4(emissionColor, 1.0f)}
+        });
+        if (material) m_numLights++;
+        return material;
+    }
+
+    void ReleaseGeometryLightMaterial(RprUsdMaterial* material) {
+        if (material) {
+            m_numLights--;
+            Release(material);
+        }
+    }
+
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<RprUsdCoreImage>&& image, float intensity) {
+        // XXX (RPR): default environment light should be removed before creating a new one - RPR limitation
+        RemoveDefaultLight();
+
         auto envLight = new HdRprApiEnvironmentLight;
 
         rpr::Status status;
@@ -572,14 +665,14 @@ public:
         envLight->image = std::move(image);
 
         if (!envLight ||
-            RPR_ERROR_CHECK(envLight->light->SetImage(envLight->image.get()), "Failed to set env light image", m_rprContext.get()) ||
+            RPR_ERROR_CHECK(envLight->light->SetImage(envLight->image->GetRootImage()), "Failed to set env light image", m_rprContext.get()) ||
             RPR_ERROR_CHECK(envLight->light->SetIntensityScale(intensity), "Failed to set env light intensity", m_rprContext.get())) {
             RPR_ERROR_CHECK(status, "Failed to create environment light");
             delete envLight;
             return nullptr;
         }
 
-        if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             if ((status = m_scene->SetEnvironmentLight(envLight->light.get())) == RPR_SUCCESS) {
                 envLight->state = HdRprApiEnvironmentLight::kAttachedAsEnvLight;
             }
@@ -595,12 +688,13 @@ public:
         }
 
         m_dirtyFlags |= ChangeTracker::DirtyScene;
+        m_numLights++;
         return envLight;
     }
 
     void Release(HdRprApiEnvironmentLight* envLight) {
         if (envLight) {
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
+            LockGuard rprLock(m_rprContext->GetMutex());
 
             rpr::Status status;
             if (envLight->state == HdRprApiEnvironmentLight::kAttachedAsEnvLight) {
@@ -613,6 +707,7 @@ public:
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
             delete envLight;
+            m_numLights--;
         }
     }
 
@@ -621,9 +716,9 @@ public:
             return nullptr;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
-        auto image = std::unique_ptr<rpr::Image>(rpr::CreateImage(m_rprContext.get(), path.c_str()));
+        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), path));
         if (!image) {
             return nullptr;
         }
@@ -638,11 +733,13 @@ public:
 
         std::array<float, 3> backgroundColor = {color[0], color[1], color[2]};
         rpr_image_format format = {3, RPR_COMPONENT_TYPE_FLOAT32};
-        rpr_uint imageSize = m_rprContextMetadata.pluginType == rpr::kPluginHybrid ? 64 : 1;
+        rpr_uint imageSize = m_rprContextMetadata.pluginType == kPluginHybrid ? 64 : 1;
         std::vector<std::array<float, 3>> imageData(imageSize * imageSize, backgroundColor);
 
+        LockGuard rprLock(m_rprContext->GetMutex());
+
         rpr::Status status;
-        auto image = std::unique_ptr<rpr::Image>(rpr::CreateImage(m_rprContext.get(), imageSize, imageSize, format, imageData.data(), &status));
+        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), imageSize, imageSize, format, imageData.data(), &status));
         if (!image) {
             RPR_ERROR_CHECK(status, "Failed to create image", m_rprContext.get());
             return nullptr;
@@ -652,7 +749,7 @@ public:
     }
 
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
         if (!RPR_ERROR_CHECK(object->SetTransform(transform.GetArray(), false), "Fail set object transform")) {
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
@@ -771,7 +868,7 @@ public:
 
         auto rprStartTransform = GfMatrix4f(startTransform);
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         RPR_ERROR_CHECK(shape->SetTransform(rprStartTransform.GetArray(), false), "Fail set shape transform");
         RPR_ERROR_CHECK(shape->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Fail to set shape linear motion");
@@ -780,28 +877,95 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    HdRprApiMaterial* CreateMaterial(const MaterialAdapter& MaterialAdapter) {
+    RprUsdMaterial* CreateMaterial(HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
         if (!m_rprContext) {
             return nullptr;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        return m_materialFactory->CreateMaterial(MaterialAdapter.GetType(), MaterialAdapter);
+        LockGuard rprLock(m_rprContext->GetMutex());
+        return RprUsdMaterialRegistry::GetInstance().CreateMaterial(sceneDelegate, materialNetwork, m_rprContext.get(), m_imageCache.get());
     }
 
-    HdRprApiMaterial* CreatePointsMaterial(VtVec3fArray const& colors) {
+    RprUsdMaterial* CreatePointsMaterial(VtVec3fArray const& colors) {
         if (!m_rprContext) {
             return nullptr;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-        return m_materialFactory->CreatePointsMaterial(colors);
+        LockGuard rprLock(m_rprContext->GetMutex());
+
+        class HdRprApiPointsMaterial : public RprUsdMaterial {
+        public:
+            HdRprApiPointsMaterial(VtVec3fArray const& colors, rpr::Context* context) {
+                rpr::Status status;
+
+                rpr::BufferDesc bufferDesc;
+                bufferDesc.nb_element = colors.size();
+                bufferDesc.element_type = RPR_BUFFER_ELEMENT_TYPE_FLOAT32;
+                bufferDesc.element_channel_size = 3;
+
+                m_colorsBuffer.reset(context->CreateBuffer(bufferDesc, colors.data(), &status));
+                if (!m_colorsBuffer) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to create colors buffer");
+                }
+
+                m_objectIdLookupNode.reset(context->CreateMaterialNode(RPR_MATERIAL_NODE_INPUT_LOOKUP, &status));
+                if (!m_objectIdLookupNode) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to create objectId lookup node");
+                }
+
+                status = m_objectIdLookupNode->SetInput(RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_OBJECT_ID);
+                if (status != RPR_SUCCESS) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to set lookup node input value");
+                }
+
+                m_bufferSamplerNode.reset(context->CreateMaterialNode(RPR_MATERIAL_NODE_BUFFER_SAMPLER, &status));
+                if (!m_bufferSamplerNode) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to create buffer sampler node");
+                }
+                RPR_ERROR_CHECK_THROW(m_bufferSamplerNode->SetInput(RPR_MATERIAL_INPUT_DATA, m_colorsBuffer.get()), "Failed to set buffer sampler node input data");
+                RPR_ERROR_CHECK_THROW(m_bufferSamplerNode->SetInput(RPR_MATERIAL_INPUT_UV, m_objectIdLookupNode.get()), "Failed to set buffer sampler node input uv");
+
+                m_uberNode.reset(context->CreateMaterialNode(RPR_MATERIAL_NODE_UBERV2, &status));
+                if (!m_uberNode) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to create uber node");
+                }
+                RPR_ERROR_CHECK_THROW(m_uberNode->SetInput(RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR, m_bufferSamplerNode.get()), "Failed to set root material diffuse color");
+
+                m_surfaceNode = m_uberNode.get();
+            }
+
+            ~HdRprApiPointsMaterial() final = default;
+
+        private:
+            std::unique_ptr<rpr::Buffer> m_colorsBuffer;
+            std::unique_ptr<rpr::MaterialNode> m_objectIdLookupNode;
+            std::unique_ptr<rpr::MaterialNode> m_bufferSamplerNode;
+            std::unique_ptr<rpr::MaterialNode> m_uberNode;
+        };
+
+        try {
+            return new HdRprApiPointsMaterial(colors, m_rprContext.get());
+        } catch (RprUsdError& e) {
+            TF_RUNTIME_ERROR("Failed to create points material: %s", e.what());
+            return nullptr;
+        }
     }
 
-    void Release(HdRprApiMaterial* material) {
+    RprUsdMaterial* CreateRawMaterial(
+        rpr::MaterialNodeType nodeType,
+        std::vector<std::pair<rpr::MaterialNodeInput, GfVec4f>> const& inputs) {
+        if (!m_rprContext) {
+            return nullptr;
+        }
+
+        LockGuard rprLock(m_rprContext->GetMutex());
+        return HdRprApiRawMaterial::Create(m_rprContext.get(), nodeType, inputs);
+    }
+
+    void Release(RprUsdMaterial* material) {
         if (material) {
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
-            m_materialFactory->Release(material);
+            LockGuard rprLock(m_rprContext->GetMutex());
+            delete material;
         }
     }
 
@@ -813,14 +977,19 @@ public:
             return nullptr;
         }
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        auto cubeMesh = CreateCubeMesh(1.0f, 1.0f, 1.0f);
+        if (!cubeMesh) {
+            return nullptr;
+        }
+
+        LockGuard rprLock(m_rprContext->GetMutex());
 
         auto rprApiVolume = new HdRprApiVolume;
 
-        MaterialAdapter matAdapter(EMaterialType::TRANSPERENT,
-            MaterialParams{{HdPrimvarRoleTokens->color, VtValue(GfVec4f(1.0f))}});
-        rprApiVolume->cubeMeshMaterial.reset(CreateMaterial(matAdapter));
-        rprApiVolume->cubeMesh.reset(CreateCubeMesh(1.0f, 1.0f, 1.0f));
+        rprApiVolume->cubeMeshMaterial.reset(HdRprApiRawMaterial::Create(m_rprContext.get(), RPR_MATERIAL_NODE_TRANSPARENT, {
+            {RPR_MATERIAL_INPUT_COLOR, GfVec4f(1.0f)}
+        }));
+        rprApiVolume->cubeMesh.reset(cubeMesh);
 
         rpr::Status densityGridStatus;
         rprApiVolume->densityGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
@@ -863,7 +1032,10 @@ public:
             RPR_ERROR_CHECK(albedoGridStatus, "Failed to create albedo grid");
             RPR_ERROR_CHECK(emissionGridStatus, "Failed to create emission grid");
             RPR_ERROR_CHECK(status, "Failed to create hetero volume");
+
+            m_scene->Detach(rprApiVolume->heteroVolume.get());
             delete rprApiVolume;
+
             return nullptr;
         }
 
@@ -892,7 +1064,7 @@ public:
         if (rprApiVolume->volumeMaterial) {
             RPR_ERROR_CHECK(rprApiVolume->cubeMesh->SetVolumeMaterial(rprApiVolume->volumeMaterial.get()), "Failed to set volume material");
         }
-        SetMeshMaterial(rprApiVolume->cubeMesh.get(), rprApiVolume->cubeMeshMaterial.get(), true, false);
+        rprApiVolume->cubeMeshMaterial->AttachTo(rprApiVolume->cubeMesh.get(), false);
 
         rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
         rprApiVolume->voxelsTransform.SetScale(GfCompMult(voxelSize, gridSize));
@@ -904,7 +1076,7 @@ public:
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform) {
         auto t = transform * volume->voxelsTransform;
 
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
+        LockGuard rprLock(m_rprContext->GetMutex());
         RPR_ERROR_CHECK(volume->cubeMesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
         RPR_ERROR_CHECK(volume->heteroVolume->SetTransform(t.data(), false), "Failed to set heteroVolume transform");
         m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -912,7 +1084,7 @@ public:
 
     void Release(HdRprApiVolume* volume) {
         if (volume) {
-            RecursiveLockGuard rprLock(g_rprAccessMutex);
+            LockGuard rprLock(m_rprContext->GetMutex());
 
             m_scene->Detach(volume->heteroVolume.get());
             delete volume;
@@ -927,8 +1099,6 @@ public:
             TF_CODING_ERROR("HdRprApi can work only with HdRprCamera");
             return;
         }
-
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
 
         if (m_hdCamera != hdRprCamera) {
             m_hdCamera = hdRprCamera;
@@ -953,15 +1123,11 @@ public:
     }
 
     void SetViewportSize(GfVec2i const& size) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
         m_viewportSize = size;
         m_dirtyFlags |= ChangeTracker::DirtyViewport;
     }
 
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings) {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
         m_aovBindings = aovBindings;
         m_dirtyFlags |= ChangeTracker::DirtyAOVBindings;
     }
@@ -970,43 +1136,50 @@ public:
         return m_aovBindings;
     }
 
-    void ResolveFramebuffers(std::vector<std::pair<void*, size_t>> const& outputRenderBuffers) {
+    void ResolveFramebuffers(bool* firstResolve) {
+        std::vector<std::shared_ptr<HdRprApiAov>> computedAovsToResolve;
         for (auto& aovEntry : m_aovRegistry) {
             auto aov = aovEntry.second.lock();
             if (TF_VERIFY(aov)) {
-                aov->Resolve();
+                if (*firstResolve || aov->GetDesc().multiSampled) {
+                    if (aov->GetDesc().computed) {
+                        // Computed AOVs depend on raw AOVs
+                        computedAovsToResolve.push_back(aov);
+                    } else {
+                        aov->Resolve();
+                    }
+                }
             }
+        }
+        for (auto& aov : computedAovsToResolve) {
+            aov->Resolve();
         }
 
         if (m_rifContext) {
             m_rifContext->ExecuteCommandQueue();
         }
 
-        for (int i = 0; i < m_aovBindings.size(); ++i) {
-            if (outputRenderBuffers[i].first) {
-                auto aovIter = m_boundAovs.find(m_aovBindings[i].aovName);
-                if (aovIter != m_boundAovs.end()) {
-                    aovIter->second->GetData(outputRenderBuffers[i].first, outputRenderBuffers[i].second);
-                }
+        for (auto& outRb : m_outputRenderBuffers) {
+            if (!outRb.mappedData) {
+                continue;
+            }
+
+            if (*firstResolve || outRb.rprAov->GetDesc().multiSampled) {
+                outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
             }
         }
+
+        *firstResolve = false;
     }
 
     void Update() {
-        RecursiveLockGuard rprLock(g_rprAccessMutex);
-
-        m_imageCache->GarbageCollectIfNeeded();
-
         auto rprRenderParam = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam());
 
         // In case there is no Lights in scene - create default
-        if (!rprRenderParam->HasLights()) {
-            if (!m_defaultLightObject) {
-                const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
-                m_defaultLightObject.reset(CreateEnvironmentLight(k_defaultLightColor, 1.f));
-            }
+        if (m_numLights == 0) {
+            AddDefaultLight();
         } else {
-            m_defaultLightObject = nullptr;
+            RemoveDefaultLight();
         }
 
         bool clearAovs = false;
@@ -1041,17 +1214,16 @@ public:
                 config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 bool restartRequired = false;
                 if (config->IsDirty(HdRprConfig::DirtyDevice)) {
-                    if (int(m_rprContextMetadata.renderDeviceType) != config->GetRenderDevice()) {
+                    if (m_rprContextMetadata.renderDeviceType != ToRprUsd(config->GetRenderDevice())) {
                         restartRequired = true;
                     }
                 }
 
                 if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                     auto quality = config->GetRenderQuality();
-
+                    auto newPlugin = GetPluginType(quality);
                     auto activePlugin = m_rprContextMetadata.pluginType;
-                    if ((activePlugin == rpr::kPluginTahoe && quality < kRenderQualityFull) ||
-                        (activePlugin == rpr::kPluginHybrid && quality == kRenderQualityFull)) {
+                    if (newPlugin != activePlugin) {
                         restartRequired = true;
                     }
                 }
@@ -1061,8 +1233,10 @@ public:
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 RenderQualityType currentRenderQuality;
-                if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe) {
+                if (m_rprContextMetadata.pluginType == kPluginTahoe) {
                     currentRenderQuality = kRenderQualityFull;
+                } else if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                    currentRenderQuality = kRenderQualityNorthstar;
                 } else {
                     rpr_uint currentHybridQuality = RPR_RENDER_QUALITY_HIGH;
                     size_t dummy;
@@ -1085,11 +1259,30 @@ public:
         }
     }
 
+    rpr_uint GetRprRenderMode(RenderModeType mode) {
+        static std::map<RenderModeType, rpr_render_mode> s_mapping = {
+            {kRenderModeGlobalIllumination, RPR_RENDER_MODE_GLOBAL_ILLUMINATION},
+            {kRenderModeDirectIllumination, RPR_RENDER_MODE_DIRECT_ILLUMINATION},
+            {kRenderModeWireframe, RPR_RENDER_MODE_WIREFRAME},
+            {kRenderModeMaterialIndex, RPR_RENDER_MODE_MATERIAL_INDEX},
+            {kRenderModePosition, RPR_RENDER_MODE_POSITION},
+            {kRenderModeNormal, RPR_RENDER_MODE_NORMAL},
+            {kRenderModeTexcoord, RPR_RENDER_MODE_TEXCOORD},
+            {kRenderModeAmbientOcclusion, RPR_RENDER_MODE_AMBIENT_OCCLUSION},
+            {kRenderModeDiffuse, RPR_RENDER_MODE_DIFFUSE},
+        };
+
+        auto it = s_mapping.find(mode);
+        if (it == s_mapping.end()) return RPR_RENDER_MODE_GLOBAL_ILLUMINATION;
+        return it->second;
+    }
+
     void UpdateTahoeSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
             m_varianceThreshold = preferences.GetVarianceThreshold();
+            m_minSamples = preferences.GetMinAdaptiveSamples();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, m_varianceThreshold), "Failed to set as.threshold");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, preferences.GetMinAdaptiveSamples()), "Failed to set as.minspp");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, m_minSamples), "Failed to set as.minspp");
 
             if (m_varianceThreshold > 0.0f) {
                 if (!m_internalAovs.count(HdRprAovTokens->variance)) {
@@ -1122,11 +1315,20 @@ public:
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode)) {
-            bool is_interactive = preferences.GetInteractiveMode();
-            auto maxRayDepth = is_interactive ? preferences.GetInteractiveMaxRayDepth() : preferences.GetMaxRayDepth();
+            m_isInteractive = preferences.GetInteractiveMode();
+            auto maxRayDepth = m_isInteractive ? preferences.GetInteractiveMaxRayDepth() : preferences.GetMaxRayDepth();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, int(is_interactive)), "Failed to set preview mode");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(m_isInteractive)), "Failed to set preview mode");
 
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyRenderMode)) {
+            auto renderMode = preferences.GetRenderMode();
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, GetRprRenderMode(renderMode)), "Failed to set render mode");
+            if (renderMode == kRenderModeAmbientOcclusion) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_AO_RAY_LENGTH, preferences.GetAoRadius()), "Failed to set ambient occlusion radius");
+            }
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
@@ -1143,17 +1345,24 @@ public:
     void UpdateSettings(HdRprConfig const& preferences, bool force = false) {
         if (preferences.IsDirty(HdRprConfig::DirtySampling) || force) {
             m_maxSamples = preferences.GetMaxSamples();
-            if (m_maxSamples < m_iter) {
+            if (m_maxSamples < m_numSamples) {
                 // Force framebuffers clear to render required number of samples
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         }
 
+        if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force) {
+            m_isAlphaEnabled = preferences.GetEnableAlpha();
+
+            UpdateColorAlpha();
+        }
+
         m_currentRenderQuality = preferences.GetRenderQuality();
 
-        if (m_rprContextMetadata.pluginType == rpr::kPluginTahoe) {
+        if (m_rprContextMetadata.pluginType == kPluginTahoe ||
+            m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
-        } else if (m_rprContextMetadata.pluginType == rpr::kPluginHybrid) {
+        } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             UpdateHybridSettings(preferences, force);
         }
     }
@@ -1264,47 +1473,115 @@ public:
 
             float fstop = 0.0f;
             m_hdCamera->GetFStop(&fstop);
-            if (fstop == 0.0f) { fstop = std::numeric_limits<float>::max(); }
+            bool dofEnabled = fstop != 0.0f && fstop != std::numeric_limits<float>::max();
+
+            if (dofEnabled) {
+                int apertureBlades = m_hdCamera->GetApertureBlades();
+                if (apertureBlades < 4 || apertureBlades > 32) {
+                    apertureBlades = 16;
+                }
+                RPR_ERROR_CHECK(m_camera->SetApertureBlades(apertureBlades), "Failed to set camera aperture blades");
+            } else {
+                fstop = std::numeric_limits<float>::max();
+            }
             RPR_ERROR_CHECK(m_camera->SetFStop(fstop), "Failed to set camera FStop");
+
+            // Convert to millimeters
+            focalLength *= 1e3f;
+            sensorWidth *= 1e3f;
+            sensorHeight *= 1e3f;
 
             RPR_ERROR_CHECK(m_camera->SetFocalLength(focalLength), "Fail to set camera focal length");
             RPR_ERROR_CHECK(m_camera->SetSensorSize(sensorWidth, sensorHeight), "Failed to set camera sensor size");
         }
     }
 
+    VtValue GetAovSetting(TfToken const& settingName, HdRenderPassAovBinding const& aovBinding) {
+        auto settingsIt = aovBinding.aovSettings.find(settingName);
+        if (settingsIt == aovBinding.aovSettings.end()) {
+            return VtValue();
+        }
+        return settingsIt->second;
+    }
+
+    bool GetAovBindingInfo(HdRenderPassAovBinding const& aovBinding, TfToken* aovName, HdFormat* format) {
+        // Check for UsdRenderVar: take aovName from `sourceName`, format from `dataType`
+        auto sourceType = GetAovSetting(UsdRenderTokens->sourceType, aovBinding);
+        if (sourceType == UsdRenderTokens->raw) {
+            auto name = TfToken(GetAovSetting(UsdRenderTokens->sourceName, aovBinding).Get<std::string>());
+            auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(name);
+            if (aovDesc.id != kAovNone && aovDesc.format != HdFormatInvalid) {
+                *aovName = name;
+                *format = ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
+                return *format != HdFormatInvalid;
+            } else {
+                TF_RUNTIME_ERROR("Unsupported UsdRenderVar sourceName: %s", name.GetText());
+            }
+        }
+
+        // Default AOV: aovName from `aovBinding.aovName`, format is controlled by HdRenderBuffer
+        auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(aovBinding.aovName);
+        if (aovDesc.id != kAovNone && aovDesc.format != HdFormatInvalid) {
+            *aovName = aovBinding.aovName;
+            *format = aovBinding.renderBuffer->GetFormat();
+            return true;
+        }
+
+        return false;
+    }
+
     void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, bool clearAovs) {
         if (m_dirtyFlags & ChangeTracker::DirtyAOVBindings) {
-            auto retainedBoundAovs = std::move(m_boundAovs);
-            for (auto& aovBinding : m_aovBindings) {
-                if (auto rb = aovBinding.renderBuffer) {
-                    auto boundAovIter = retainedBoundAovs.find(aovBinding.aovName);
-                    if (boundAovIter == retainedBoundAovs.end()) {
-                        if (auto aov = CreateAov(aovBinding.aovName, rb->GetWidth(), rb->GetHeight(), rb->GetFormat())) {
-                            m_boundAovs[aovBinding.aovName] = aov;
-                        }
-                    } else {
-                        m_boundAovs[aovBinding.aovName] = boundAovIter->second;
-
-                        // Update underlying format if needed
-                        boundAovIter->second->Resize(rb->GetWidth(), rb->GetHeight(), rb->GetFormat());
-                    }
+            auto retainedOutputRenderBuffers = std::move(m_outputRenderBuffers);
+            auto registerAovBinding = [&retainedOutputRenderBuffers, this](HdRenderPassAovBinding const& aovBinding) {
+                TfToken aovName;
+                HdFormat aovFormat;
+                if (!GetAovBindingInfo(aovBinding, &aovName, &aovFormat)) {
+                    return false;
                 }
+
+                OutputRenderBuffer outRb;
+                outRb.aovName = aovName;
+                outRb.aovBinding = &aovBinding;
+
+                auto outputRenderBufferIt = std::find_if(retainedOutputRenderBuffers.begin(), retainedOutputRenderBuffers.end(),
+                    [&aovName](OutputRenderBuffer const& buffer) {
+                    return buffer.aovName == aovName;
+                });
+                if (outputRenderBufferIt == retainedOutputRenderBuffers.end()) {
+                    // Create new RPR AOV
+                    outRb.rprAov = CreateAov(aovName, aovBinding.renderBuffer->GetWidth(), aovBinding.renderBuffer->GetHeight(), aovFormat);
+                } else {
+                    // Reuse previously created RPR AOV
+                    std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
+                    // Update underlying format if needed
+                    outRb.rprAov->Resize(aovBinding.renderBuffer->GetWidth(), aovBinding.renderBuffer->GetHeight(), aovFormat);
+                }
+
+                if (!outRb.rprAov) return false;
+
+                m_outputRenderBuffers.push_back(std::move(outRb));
+                return true;
+            };
+
+            for (auto& aovBinding : m_aovBindings) {
+                if (!aovBinding.renderBuffer) {
+                    continue;
+                }
+                auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
+                rprRenderBuffer->SetStatus(registerAovBinding(aovBinding));
             }
         }
 
         if (m_dirtyFlags & ChangeTracker::DirtyViewport) {
-            for (auto& aovEntry : m_internalAovs) {
-                aovEntry.second->Resize(m_viewportSize[0], m_viewportSize[1], aovEntry.second->GetFormat());
-            }
-            for (auto& aovBinding : m_aovBindings) {
-                if (auto rb = aovBinding.renderBuffer) {
-                    auto boundAovIter = m_boundAovs.find(aovBinding.aovName);
-                    if (boundAovIter != m_boundAovs.end()) {
-                        boundAovIter->second->Resize(rb->GetWidth(), rb->GetHeight(), rb->GetFormat());
-                    }
+            for (auto it = m_aovRegistry.begin(); it != m_aovRegistry.end();) {
+                if (auto aov = it->second.lock()) {
+                    aov->Resize(m_viewportSize[0], m_viewportSize[1], aov->GetFormat());
+                    ++it;
+                } else {
+                    it = m_aovRegistry.erase(it);
                 }
             }
-            // Size of bound AOVs controled by aovBinding's renderBuffer
         }
 
         if (m_dirtyFlags & ChangeTracker::DirtyScene ||
@@ -1337,7 +1614,7 @@ public:
         }
 
         if (clearAovs) {
-            m_iter = 0;
+            m_numSamples = 0;
             m_activePixels = -1;
         }
     }
@@ -1358,24 +1635,41 @@ public:
         }
 
         rif::FilterType filterType = rif::FilterType::EawDenoise;
-        if (m_rprContextMetadata.renderDeviceType == rpr::kRenderDeviceGPU) {
+        if (m_rprContextMetadata.renderDeviceType == RprUsdRenderDeviceType::GPU) {
             filterType = rif::FilterType::AIDenoise;
         }
 
         if (filterType == rif::FilterType::EawDenoise) {
             colorAov->EnableEAWDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
                                        m_internalAovs.at(HdAovTokens->normal),
-                                       m_internalAovs.at(HdRprUtilsGetCameraDepthName()),
+                                       m_internalAovs.at(HdRprGetCameraDepthAovName()),
                                        m_internalAovs.at(HdAovTokens->primId),
                                        m_internalAovs.at(HdRprAovTokens->worldCoordinate));
         } else {
             colorAov->EnableAIDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
                                       m_internalAovs.at(HdAovTokens->normal),
-                                      m_internalAovs.at(HdRprUtilsGetCameraDepthName()));
+                                      m_internalAovs.at(HdRprGetCameraDepthAovName()));
         }
     }
 
-    void RenderImpl(HdRprRenderThread* renderThread, std::vector<std::pair<void*, size_t>> const& outputRenderBuffers) {
+    void RenderImpl(HdRprRenderThread* renderThread) {
+        int numSamplesPerIter = 1;
+
+        const bool isBatch = m_delegate->IsBatch();
+        // XXX(RPR): until FIR-1681 is not resolved we should stick to progressive renders otherwise singlesampled AOV output will be broken
+        const bool isProgressive = true /*m_delegate->IsProgressive()*/;
+        if (isBatch && !isProgressive) {
+            // Render as many samples as possible per Render call
+            if (m_varianceThreshold > 0.0f) {
+                numSamplesPerIter = m_minSamples;
+            } else {
+                numSamplesPerIter = m_maxSamples;
+            }
+        }
+        m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
+
+        int frameCount = 0;
+        bool firstResolve = true;
         bool stopRequested = false;
         while (!IsConverged() || stopRequested) {
             renderThread->WaitUntilPaused();
@@ -1384,36 +1678,51 @@ public:
                 break;
             }
 
-            if (m_rprContextMetadata.pluginType != rpr::kPluginHybrid) {
-                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, m_iter), "Failed to set framecount");
+            if (m_rprContextMetadata.pluginType != kPluginHybrid) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, frameCount++), "Failed to set framecount");
             }
 
             auto status = m_rprContext->Render();
 
             if (status == RPR_ERROR_ABORTED ||
-                RPR_ERROR_CHECK(status, "Fail contex render framebuffer")) {
+                RPR_ERROR_CHECK(status, "Fail context render framebuffer", m_rprContext.get())) {
                 stopRequested = true;
                 break;
             }
 
-            m_iter++;
+            m_numSamples += numSamplesPerIter;
             if (m_varianceThreshold > 0.0f) {
+                if (isBatch && !isProgressive && m_numSamples == m_minSamples) {
+                    numSamplesPerIter = 1;
+                    m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
+                }
+
                 if (RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                     m_activePixels = -1;
                 }
+            } else if (!isBatch && !m_isInteractive &&
+                       m_rprContextMetadata.pluginType == kPluginNorthstar && m_numSamples > 1) {
+                // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
+                numSamplesPerIter *= 2;
+
+                // But do not oversample the image
+                int numSamplesLeft = m_maxSamples - m_numSamples;
+                numSamplesPerIter = std::min(numSamplesPerIter, numSamplesLeft);
+
+                m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
             }
 
-            if (!IsConverged()) {
+            if (!isBatch && !IsConverged()) {
                 // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
                 // We do not resolve framebuffers in case user requested render stop
-                ResolveFramebuffers(outputRenderBuffers);
+                ResolveFramebuffers(&firstResolve);
             }
 
             stopRequested = renderThread->IsStopRequested();
         }
 
         if (!stopRequested) {
-            ResolveFramebuffers(outputRenderBuffers);
+            ResolveFramebuffers(&firstResolve);
         }
     }
 
@@ -1449,23 +1758,22 @@ public:
             }
         }
 
-        std::vector<std::pair<void*, size_t>> outputRenderBuffers;
-        for (auto& aovBinding : m_aovBindings) {
-            if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
+        for (auto& outRb : m_outputRenderBuffers) {
+            if (auto rb = static_cast<HdRprRenderBuffer*>(outRb.aovBinding->renderBuffer)) {
                 if (rb->GetWidth() != m_viewportSize[0] || rb->GetHeight() != m_viewportSize[1]) {
                     TF_RUNTIME_ERROR("%s renderBuffer has inconsistent render buffer size: %ux%u. Expected: %dx%d",
-                                     aovBinding.aovName.GetText(), rb->GetWidth(), rb->GetHeight(), m_viewportSize[0], m_viewportSize[1]);
-                    outputRenderBuffers.emplace_back(nullptr, 0u);
+                        outRb.aovName.GetText(), rb->GetWidth(), rb->GetHeight(), m_viewportSize[0], m_viewportSize[1]);
+                    outRb.mappedData = nullptr;
                 } else {
-                    size_t size = rb->GetWidth() * rb->GetHeight() * HdDataSizeOfFormat(rb->GetFormat());
-                    outputRenderBuffers.emplace_back(rb->Map(), size);
+                    outRb.mappedData = rb->Map();
+                    outRb.mappedDataSize = HdDataSizeOfFormat(outRb.rprAov->GetFormat()) * rb->GetWidth() * rb->GetHeight();
                 }
             }
         }
 
         if (m_state == kStateRender) {
             try {
-                RenderImpl(renderThread, outputRenderBuffers);
+                RenderImpl(renderThread);
             } catch (std::runtime_error const& e) {
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
             }
@@ -1500,6 +1808,14 @@ Don't show this message again?
         }
     }
 
+    void CommitResources() {
+        if (!m_rprContext) {
+            return;
+        }
+
+        RprUsdMaterialRegistry::GetInstance().CommitResources(m_imageCache.get());
+    }
+
     void Render(HdRprRenderThread* renderThread) {
         RenderFrame(renderThread);
 
@@ -1517,7 +1833,7 @@ Don't show this message again?
     }
 
     int GetNumCompletedSamples() const {
-        return m_iter;
+        return m_numSamples;
     }
 
     int GetNumActivePixels() const {
@@ -1545,22 +1861,18 @@ Don't show this message again?
 
     bool IsConverged() const {
         if (m_currentRenderQuality < kRenderQualityHigh) {
-            return m_iter == 1;
+            return m_numSamples == 1;
         }
 
-        return m_iter >= m_maxSamples || m_activePixels == 0;
+        return m_numSamples >= m_maxSamples || m_activePixels == 0;
     }
 
     bool IsGlInteropEnabled() const {
         return m_rprContext && m_rprContextMetadata.isGlInteropEnabled;
     }
 
-    bool IsAovFormatConversionAvailable() const {
-        return m_rifContext != nullptr;
-    }
-
     bool IsArbitraryShapedLightSupported() const {
-        return m_rprContextMetadata.pluginType != rpr::kPluginHybrid;
+        return m_rprContextMetadata.pluginType != kPluginHybrid;
     }
 
     int GetCurrentRenderQuality() const {
@@ -1573,6 +1885,16 @@ Don't show this message again?
     }
 
 private:
+    static RprUsdPluginType GetPluginType(RenderQualityType renderQuality) {
+        if (renderQuality == kRenderQualityFull) {
+            return kPluginTahoe;
+        } else if (renderQuality == kRenderQualityNorthstar) {
+            return kPluginNorthstar;
+        } else {
+            return kPluginHybrid;
+        }
+    }
+
     void InitRpr() {
         RenderQualityType renderQuality;
         {
@@ -1582,12 +1904,12 @@ private:
             config->Sync(m_delegate);
 
             renderQuality = config->GetRenderQuality();
-            m_rprContextMetadata.renderDeviceType = static_cast<rpr::RenderDeviceType>(config->GetRenderDevice());
+            m_rprContextMetadata.renderDeviceType = ToRprUsd(config->GetRenderDevice());
         }
 
-        m_rprContextMetadata.pluginType = renderQuality == kRenderQualityFull ? rpr::kPluginTahoe : rpr::kPluginHybrid;
+        m_rprContextMetadata.pluginType = GetPluginType(renderQuality);
         auto cachePath = HdRprApi::GetCachePath();
-        m_rprContext.reset(rpr::CreateContext(cachePath.c_str(), &m_rprContextMetadata));
+        m_rprContext.reset(RprUsdCreateContext(cachePath.c_str(), &m_rprContextMetadata));
         if (!m_rprContext) {
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
@@ -1600,8 +1922,7 @@ private:
             UpdateSettings(*config, true);
         }
 
-        m_imageCache.reset(new ImageCache(m_rprContext.get()));
-        m_materialFactory.reset(new RprMaterialFactory(m_imageCache.get()));
+        m_imageCache.reset(new RprUsdImageCache(m_rprContext.get()));
     }
 
     bool ValidateRifModels(std::string const& modelsPath) {
@@ -1628,32 +1949,25 @@ private:
         }
 
         m_rifContext = rif::Context::Create(m_rprContext.get(), m_rprContextMetadata, modelsPath);
-        if (!m_rifContext) {
-            return;
-        }
+    }
 
+    void InitAovs() {
         auto initInternalAov = [this](TfToken const& name) {
-            if (auto aov = CreateAov(name)) {
+            auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(name);
+            if (auto aov = CreateAov(name, 0, 0, aovDesc.format)) {
                 m_internalAovs.emplace(name, std::move(aov));
             }
         };
-
-        // In case we have RIF we can use it to combine opacity and color AOVs
-        // into image that can be used for alpha compositing,
-        // without it color AOV always have 1.0 in alpha channel
-        if (!TfGetEnvSetting(HDRPR_DISABLE_ALPHA)) {
-            initInternalAov(HdRprAovTokens->opacity);
-        }
 
         // We create separate AOVs needed for denoising ASAP
         // In such a way, when user enables denoising it will not require to rerender
         // but it requires more memory, obviously, it should be taken into an account
         rif::FilterType filterType = rif::FilterType::EawDenoise;
-        if (m_rprContextMetadata.renderDeviceType == rpr::kRenderDeviceGPU) {
+        if (m_rprContextMetadata.renderDeviceType == RprUsdRenderDeviceType::GPU) {
             filterType = rif::FilterType::AIDenoise;
         }
 
-        initInternalAov(HdRprUtilsGetCameraDepthName());
+        initInternalAov(HdRprGetCameraDepthAovName());
         initInternalAov(HdRprAovTokens->albedo);
         initInternalAov(HdAovTokens->color);
         initInternalAov(HdAovTokens->normal);
@@ -1698,6 +2012,26 @@ private:
         }
 
         m_showRestartRequiredWarning = !fileExists;
+    }
+
+    void AddDefaultLight() {
+        if (!m_defaultLightObject) {
+            const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
+            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
+
+            // Do not count default light object
+            m_numLights--;
+        }
+    }
+
+    void RemoveDefaultLight() {
+        if (m_defaultLightObject) {
+            Release(m_defaultLightObject);
+            m_defaultLightObject = nullptr;
+
+            // Do not count default light object
+            m_numLights++;
+        }
     }
 
     void SplitPolygons(const VtIntArray& indexes, const VtIntArray& vpf, VtIntArray& out_newIndexes, VtIntArray& out_newVpf) {
@@ -1862,6 +2196,35 @@ private:
         return CreateMesh(position, indexes, normals, VtIntArray(), VtVec2fArray(), VtIntArray(), vpf);
     }
 
+    void UpdateColorAlpha(HdRprApiColorAov* colorAov = nullptr) {
+        if (!colorAov) {
+            colorAov = GetColorAov();
+            if (!colorAov) return;
+        }
+
+        if (m_isAlphaEnabled) {
+            auto opacityAov = GetAov(HdRprAovTokens->opacity, m_viewportSize[0], m_viewportSize[1], HdFormatFloat32Vec4);
+            if (opacityAov) {
+                colorAov->SetOpacityAov(opacityAov);
+            } else {
+                TF_WARN("Cannot enable alpha");
+            }
+        } else {
+            colorAov->SetOpacityAov(nullptr);
+        }
+    }
+
+    std::shared_ptr<HdRprApiAov> GetAov(TfToken const& aovName, int width, int height, HdFormat format) {
+        std::shared_ptr<HdRprApiAov> aov;
+        auto aovIter = m_aovRegistry.find(aovName);
+        if (aovIter == m_aovRegistry.end() ||
+            !(aov = aovIter->second.lock())) {
+
+            aov = CreateAov(aovName, width, height, format);
+        }
+        return aov;
+    }
+
     std::shared_ptr<HdRprApiAov> CreateAov(TfToken const& aovName, int width = 0, int height = 0, HdFormat format = HdFormatFloat32Vec4) {
         if (!m_rprContext ||
             width < 0 || height < 0 ||
@@ -1869,8 +2232,9 @@ private:
             return nullptr;
         }
 
-        auto rprAovIt = kAovTokenToRprAov.find(aovName);
-        if (rprAovIt == kAovTokenToRprAov.end()) {
+        auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(aovName);
+        if (aovDesc.id == kAovNone ||
+            aovDesc.format == HdFormatInvalid) {
             TF_WARN("Unsupported aov type: %s", aovName.GetText());
             return nullptr;
         }
@@ -1885,31 +2249,33 @@ private:
         try {
             if (!aov) {
                 if (aovName == HdAovTokens->color) {
-                    auto colorAov = std::make_shared<HdRprApiColorAov>(width, height, format, m_rprContext.get(), m_rprContextMetadata);
-                    
-                    auto opacityAovIter = m_aovRegistry.find(HdRprAovTokens->opacity);
-                    if (opacityAovIter != m_aovRegistry.end()) {
-                        if (auto opacityAov = opacityAovIter->second.lock()) {
-                            colorAov->SetOpacityAov(opacityAov);
-                        }
+                    auto rawColorAov = GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4);
+                    if (!rawColorAov) {
+                        TF_RUNTIME_ERROR("Failed to create color AOV: can't create rawColor AOV");
+                        return nullptr;
                     }
+
+                    auto colorAov = std::make_shared<HdRprApiColorAov>(format, std::move(rawColorAov), m_rprContext.get(), m_rprContextMetadata);
+                    UpdateColorAlpha(colorAov.get());
 
                     aov = colorAov;
                 } else if (aovName == HdAovTokens->normal) {
                     aov = std::make_shared<HdRprApiNormalAov>(width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else if (aovName == HdAovTokens->depth) {
-                    auto worldCoordinateAovIter = m_internalAovs.find(HdRprAovTokens->worldCoordinate);
-                    if (worldCoordinateAovIter == m_internalAovs.end()) {
-                        if (auto worldCoordinateAov = CreateAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4)) {
-                            worldCoordinateAovIter = m_internalAovs.emplace(HdRprAovTokens->worldCoordinate, worldCoordinateAov).first;
-                        } else {
-                            TF_CODING_ERROR("Failed to create depth AOV: can't create worldCoordinate AOV");
-                            return nullptr;
-                        }
+                    auto worldCoordinateAov = GetAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4);
+                    if (!worldCoordinateAov) {
+                        TF_RUNTIME_ERROR("Failed to create depth AOV: can't create worldCoordinate AOV");
+                        return nullptr;
                     }
-                    aov = std::make_shared<HdRprApiDepthAov>(format, worldCoordinateAovIter->second, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+
+                    aov = std::make_shared<HdRprApiDepthAov>(format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else {
-                    aov = std::make_shared<HdRprApiAov>(rprAovIt->second, width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    if (!aovDesc.computed) {
+                        aov = std::make_shared<HdRprApiAov>(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    } else {
+                        TF_CODING_ERROR("Failed to create %s AOV: unprocessed computed AOV", aovName.GetText());
+                        return nullptr;
+                    }
                 }
 
                 m_aovRegistry[aovName] = aov;
@@ -1942,11 +2308,11 @@ private:
             return false;
         }
 
-        auto colorAovBinding = std::find_if(m_aovBindings.begin(), m_aovBindings.end(), [](HdRenderPassAovBinding const& binding) {
-            return binding.aovName == HdAovTokens->color;
+        auto colorOutputRb = std::find_if(m_outputRenderBuffers.begin(), m_outputRenderBuffers.end(), [](OutputRenderBuffer const& outRb) {
+            return outRb.aovName == HdAovTokens->color;
         });
-        if (colorAovBinding == m_aovBindings.end() ||
-            !colorAovBinding->renderBuffer) {
+
+        if (colorOutputRb == m_outputRenderBuffers.end()) {
             return false;
         }
 
@@ -1995,7 +2361,7 @@ private:
             std::memcpy(mappedData, textureData->GetRawBuffer(), imageSize);
             RIF_ERROR_CHECK(rifImageUnmap(rifImage->GetHandle(), mappedData), "Failed to unmap rif image");
 
-            auto colorRb = colorAovBinding->renderBuffer;
+            auto colorRb = colorOutputRb->aovBinding->renderBuffer;
 
             try {
                 auto blitFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, m_rifContext.get());
@@ -2025,7 +2391,7 @@ private:
                 )");
                 blitFilter->SetInput("srcImage", rifImage->GetHandle());
                 blitFilter->SetParam("code", blitKernelCode);
-                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorRb->GetFormat()));
+                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorOutputRb->rprAov->GetFormat()));
                 blitFilter->SetInput(rif::Color, blitFilter->GetOutput());
                 blitFilter->Update();
 
@@ -2034,7 +2400,7 @@ private:
                 if (RIF_ERROR_CHECK(rifImageMap(blitFilter->GetOutput(), RIF_IMAGE_MAP_READ, &mappedData), "Failed to map rif image") || !mappedData) {
                     return false;
                 }
-                size_t size = HdDataSizeOfFormat(colorRb->GetFormat()) * colorRb->GetWidth() * colorRb->GetHeight();
+                size_t size = HdDataSizeOfFormat(colorOutputRb->rprAov->GetFormat()) * colorRb->GetWidth() * colorRb->GetHeight();
                 std::memcpy(colorRb->Map(), mappedData, size);
                 colorRb->Unmap();
 
@@ -2078,7 +2444,7 @@ private:
     }
 
 private:
-    HdRenderDelegate* m_delegate;
+    HdRprDelegate* m_delegate;
 
     enum ChangeTracker : uint32_t {
         Clean = 0,
@@ -2092,29 +2458,42 @@ private:
     uint32_t m_dirtyFlags = ChangeTracker::AllDirty;
 
     std::unique_ptr<rpr::Context> m_rprContext;
-    rpr::ContextMetadata m_rprContextMetadata;
+    RprUsdContextMetadata m_rprContextMetadata;
 
     std::unique_ptr<rif::Context> m_rifContext;
 
     std::unique_ptr<rpr::Scene> m_scene;
     std::unique_ptr<rpr::Camera> m_camera;
-    std::unique_ptr<ImageCache> m_imageCache;
-    std::unique_ptr<RprMaterialFactory> m_materialFactory;
+    std::unique_ptr<RprUsdImageCache> m_imageCache;
 
     std::map<TfToken, std::weak_ptr<HdRprApiAov>> m_aovRegistry;
-    std::map<TfToken, std::shared_ptr<HdRprApiAov>> m_boundAovs;
     std::map<TfToken, std::shared_ptr<HdRprApiAov>> m_internalAovs;
     HdRenderPassAovBindingVector m_aovBindings;
 
+    struct OutputRenderBuffer {
+        HdRenderPassAovBinding const* aovBinding;
+        TfToken aovName;
+
+        std::shared_ptr<HdRprApiAov> rprAov;
+
+        void* mappedData;
+        size_t mappedDataSize;
+    };
+    std::vector<OutputRenderBuffer> m_outputRenderBuffers;
+
     GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
-    HdRprCamera const* m_hdCamera;
+    HdRprCamera const* m_hdCamera = nullptr;
+    bool m_isAlphaEnabled;
 
-    std::unique_ptr<HdRprApiEnvironmentLight> m_defaultLightObject;
+    std::atomic<int> m_numLights{0};
+    HdRprApiEnvironmentLight* m_defaultLightObject = nullptr;
 
-    int m_iter = 0;
+    bool m_isInteractive = false;
+    int m_numSamples = 0;
     int m_activePixels = -1;
     int m_maxSamples = 0;
+    int m_minSamples = 0;
     float m_varianceThreshold = 0.0f;
     RenderQualityType m_currentRenderQuality = kRenderQualityFull;
 
@@ -2132,7 +2511,7 @@ private:
     std::string m_rprSceneExportPath;
 };
 
-HdRprApi::HdRprApi(HdRenderDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
+HdRprApi::HdRprApi(HdRprDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
 
 }
 
@@ -2216,6 +2595,14 @@ void HdRprApi::SetLightColor(rpr::IESLight* light, GfVec3f const& color) {
     m_impl->SetLightColor(light, color);
 }
 
+RprUsdMaterial* HdRprApi::CreateGeometryLightMaterial(GfVec3f const& emissionColor) {
+    return m_impl->CreateGeometryLightMaterial(emissionColor);
+}
+
+void HdRprApi::ReleaseGeometryLightMaterial(RprUsdMaterial* material) {
+    return m_impl->ReleaseGeometryLightMaterial(material);
+}
+
 HdRprApiVolume* HdRprApi::CreateVolume(
     VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
     VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
@@ -2229,14 +2616,22 @@ HdRprApiVolume* HdRprApi::CreateVolume(
         gridSize, voxelSize, gridBBLow, materialParams);
 }
 
-HdRprApiMaterial* HdRprApi::CreateMaterial(MaterialAdapter& MaterialAdapter) {
+RprUsdMaterial* HdRprApi::CreateMaterial(HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateMaterial(MaterialAdapter);
+    return m_impl->CreateMaterial(sceneDelegate, materialNetwork);
 }
 
-HdRprApiMaterial* HdRprApi::CreatePointsMaterial(VtVec3fArray const& colors) {
+RprUsdMaterial* HdRprApi::CreatePointsMaterial(VtVec3fArray const& colors) {
     m_impl->InitIfNeeded();
     return m_impl->CreatePointsMaterial(colors);
+}
+
+RprUsdMaterial* HdRprApi::CreateDiffuseMaterial(GfVec3f const& color) {
+    m_impl->InitIfNeeded();
+
+    return m_impl->CreateRawMaterial(RPR_MATERIAL_NODE_UBERV2, {
+        {RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR, ToVec4(color, 1.0f)}
+    });
 }
 
 void HdRprApi::SetMeshRefineLevel(rpr::Shape* mesh, int level) {
@@ -2247,8 +2642,8 @@ void HdRprApi::SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundary
     m_impl->SetMeshVertexInterpolationRule(mesh, boundaryInterpolation);
 }
 
-void HdRprApi::SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled) {
-    m_impl->SetMeshMaterial(mesh, material, doublesided, displacementEnabled);
+void HdRprApi::SetMeshMaterial(rpr::Shape* mesh, RprUsdMaterial const* material, bool displacementEnabled) {
+    m_impl->SetMeshMaterial(mesh, material, displacementEnabled);
 }
 
 void HdRprApi::SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask) {
@@ -2259,7 +2654,7 @@ void HdRprApi::SetMeshId(rpr::Shape* mesh, uint32_t id) {
     m_impl->SetMeshId(mesh, id);
 }
 
-void HdRprApi::SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material) {
+void HdRprApi::SetCurveMaterial(rpr::Curve* curve, RprUsdMaterial const* material) {
     m_impl->SetCurveMaterial(curve, material);
 }
 
@@ -2271,7 +2666,7 @@ void HdRprApi::Release(HdRprApiEnvironmentLight* envLight) {
     m_impl->Release(envLight);
 }
 
-void HdRprApi::Release(HdRprApiMaterial* material) {
+void HdRprApi::Release(RprUsdMaterial* material) {
     m_impl->Release(material);
 }
 
@@ -2324,6 +2719,10 @@ HdRenderPassAovBindingVector HdRprApi::GetAovBindings() const {
     return m_impl->GetAovBindings();
 }
 
+void HdRprApi::CommitResources() {
+    m_impl->CommitResources();
+}
+
 void HdRprApi::Render(HdRprRenderThread* renderThread) {
     m_impl->Render(renderThread);
 }
@@ -2346,10 +2745,6 @@ int HdRprApi::GetNumActivePixels() const {
 
 bool HdRprApi::IsGlInteropEnabled() const {
     return m_impl->IsGlInteropEnabled();
-}
-
-bool HdRprApi::IsAovFormatConversionAvailable() const {
-    return m_impl->IsAovFormatConversionAvailable();
 }
 
 bool HdRprApi::IsArbitraryShapedLightSupported() const {

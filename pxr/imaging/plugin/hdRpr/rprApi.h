@@ -24,6 +24,7 @@ limitations under the License.
 #include "pxr/base/tf/staticTokens.h"
 #include "pxr/imaging/hd/types.h"
 #include "pxr/imaging/hd/camera.h"
+#include "pxr/imaging/hd/material.h"
 #include "pxr/imaging/hd/renderPassState.h"
 #include "pxr/imaging/hd/renderDelegate.h"
 
@@ -35,13 +36,14 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprDelegate;
 class HdRprRenderThread;
 class MaterialAdapter;
 
 class HdRprApiImpl;
+class RprUsdMaterial;
 
 struct HdRprApiVolume;
-struct HdRprApiMaterial;
 struct HdRprApiEnvironmentLight;
 
 template <typename T, typename... Args>
@@ -65,7 +67,7 @@ const uint32_t kInvisible = 0u;
 
 class HdRprApi final {
 public:
-    HdRprApi(HdRenderDelegate* delegate);
+    HdRprApi(HdRprDelegate* delegate);
     ~HdRprApi();
 
     HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
@@ -85,6 +87,9 @@ public:
 
     void Release(rpr::Light* light);
 
+    RprUsdMaterial* CreateGeometryLightMaterial(GfVec3f const& emissionColor);
+    void ReleaseGeometryLightMaterial(RprUsdMaterial* material);
+
     struct VolumeMaterialParameters {
         GfVec3f scatteringColor = GfVec3f(1.0f);
         GfVec3f transmissionColor = GfVec3f(1.0f);
@@ -100,21 +105,22 @@ public:
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform);
     void Release(HdRprApiVolume* volume);
 
-    HdRprApiMaterial* CreateMaterial(MaterialAdapter& materialAdapter);
-    HdRprApiMaterial* CreatePointsMaterial(VtVec3fArray const& colors);
-    void Release(HdRprApiMaterial* material);
+    RprUsdMaterial* CreateMaterial(HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork);
+    RprUsdMaterial* CreatePointsMaterial(VtVec3fArray const& colors);
+    RprUsdMaterial* CreateDiffuseMaterial(GfVec3f const& color);
+    void Release(RprUsdMaterial* material);
 
     rpr::Shape* CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding);
     rpr::Shape* CreateMeshInstance(rpr::Shape* prototypeMesh);
     void SetMeshRefineLevel(rpr::Shape* mesh, int level);
     void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation);
-    void SetMeshMaterial(rpr::Shape* mesh, HdRprApiMaterial const* material, bool doublesided, bool displacementEnabled);
+    void SetMeshMaterial(rpr::Shape* mesh, RprUsdMaterial const* material, bool displacementEnabled);
     void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask);
     void SetMeshId(rpr::Shape* mesh, uint32_t id);
     void Release(rpr::Shape* shape);
 
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);
-    void SetCurveMaterial(rpr::Curve* curve, HdRprApiMaterial const* material);
+    void SetCurveMaterial(rpr::Curve* curve, RprUsdMaterial const* material);
     void SetCurveVisibility(rpr::Curve* curve, uint32_t visibilityMask);
     void Release(rpr::Curve* curve);
 
@@ -137,12 +143,12 @@ public:
     // returns -1 if adaptive sampling is not used
     int GetNumActivePixels() const;
 
+    void CommitResources();
     void Render(HdRprRenderThread* renderThread);
     void AbortRender();
 
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
-    bool IsAovFormatConversionAvailable() const;
     bool IsArbitraryShapedLightSupported() const;
     int GetCurrentRenderQuality() const;
     void ExportRprSceneOnNextRender(const char* exportPath);

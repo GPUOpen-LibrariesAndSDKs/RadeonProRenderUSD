@@ -25,7 +25,7 @@ namespace rpr { class Shape; }
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
-struct HdRprApiMaterial;
+class RprUsdMaterial;
 
 class HdRprMesh final : public HdMesh {
 public:
@@ -56,12 +56,12 @@ private:
                         VtArray<T>& out_data,
                         VtIntArray& out_indices);
 
-    HdRprApiMaterial const* GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits);
+    RprUsdMaterial const* GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits);
 
 private:
     std::vector<rpr::Shape*> m_rprMeshes;
     std::vector<std::vector<rpr::Shape*>> m_rprMeshInstances;
-    HdRprApiMaterial* m_fallbackMaterial = nullptr;
+    RprUsdMaterial* m_fallbackMaterial = nullptr;
 
     SdfPath m_cachedMaterialId;
     static constexpr int kDefaultNumTimeSamples = 2;
@@ -88,7 +88,6 @@ private:
 
     HdDisplayStyle m_displayStyle;
     int m_refineLevel = 0;
-    bool m_doublesided = false;
 
     uint32_t m_visibilityMask;
 };

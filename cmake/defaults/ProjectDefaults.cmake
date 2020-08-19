@@ -67,3 +67,8 @@ execute_process(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 add_definitions(-DRPR_GIT_SHORT_HASH="${RPR_GIT_SHORT_HASH}")
+
+if(MSVC)
+    # Allow running INSTALL target
+    set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
+endif()

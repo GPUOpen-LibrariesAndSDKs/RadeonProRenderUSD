@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_microfacet_anisotropic_refraction" node="rpr_microfacet_anisotropic_refraction" uiname="RPR Microfacet Anisotropic Refraction" doc="Refractive surfaces with roughness and anisotropy. Adds direction to distribution of roughness for refactive surfaces. For example frosted glass with brushed patterns.">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Refraction color. White is perfectly transparent."/>
+      <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" doc="Normal direction used for shading."/>
+      <input name="ior" type="float" value="1.5" uimin="1" uisoftmax="5" uiname="IOR" doc="Index of refraction, usually 1-5."/>
+      <input name="roughness" type="float" value="0" uimin="0" uimax="1" uiname="Roughness" doc="Refraction Rougness"/>
+      <input name="anisotropic" type="float" value="0" uimin="-1" uimax="1" uiname="Anisotropy" doc="Anisotropy amount, forwards or backwards."/>
+      <input name="rotation" type="angle" value="0" uiname="Rotation" doc="Rotation of anisotropy around UV direction."/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_hsv_to_rgb" node="rpr_hsv_to_rgb" uiname="RPR HSV to RGB">
+      <input name="color" type="color3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="HSV"/>
+      <output name="out" type="color3" />
+  </nodedef>
+</materialx>

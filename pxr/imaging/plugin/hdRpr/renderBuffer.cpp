@@ -49,7 +49,6 @@ void HdRprRenderBuffer::Finalize(HdRenderParam* renderParam) {
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
                                  HdFormat format,
                                  bool multiSampled) {
-    TF_VERIFY(!IsMapped());
     TF_UNUSED(multiSampled);
 
     if (dimensions[2] != 1) {
@@ -69,8 +68,6 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
 }
 
 void HdRprRenderBuffer::_Deallocate() {
-    TF_VERIFY(!IsMapped());
-
     m_width = 0u;
     m_height = 0u;
     m_format = HdFormatInvalid;
@@ -80,11 +77,15 @@ void HdRprRenderBuffer::_Deallocate() {
 }
 
 void* HdRprRenderBuffer::Map() {
+    if (!m_isValid) return nullptr;
+
     ++m_numMappers;
     return m_mappedBuffer.data();
 }
 
 void HdRprRenderBuffer::Unmap() {
+    if (!m_isValid) return;
+
     // XXX We could consider clearing _mappedBuffer here to free RAM.
     //     For now we assume that Map() will be called frequently so we prefer
     //     to avoid the cost of clearing the buffer over memory savings.
@@ -107,6 +108,10 @@ bool HdRprRenderBuffer::IsConverged() const {
 
 void HdRprRenderBuffer::SetConverged(bool converged) {
     return m_isConverged.store(converged);
+}
+
+void HdRprRenderBuffer::SetStatus(bool isValid) {
+    m_isValid = isValid;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -1,31 +1,50 @@
-set(HOMEPAGE "https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD")
-
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Radeon ProRender USD Hydra rendering delegate")
-set(CPACK_PACKAGE_VENDOR "AMD")
-set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE.md")
-if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    set(CPACK_INSTALL_TARGET "Houdini-${Houdini_VERSION}")
-else()
-    set(CPACK_INSTALL_TARGET "USD-${USD_MINOR_VERSION}.${USD_PATCH_VERSION}")
-endif()
-set(CPACK_PACKAGE_NAME hdRpr)
-if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CPACK_PACKAGE_NAME ${CPACK_PACKAGE_NAME}-${CMAKE_BUILD_TYPE})
-endif()
-set(CPACK_PACKAGE_VERSION "${HD_RPR_MAJOR_VERSION}.${HD_RPR_MINOR_VERSION}.${HD_RPR_PATCH_VERSION}")
-
-set(CPACK_GENERATOR "TGZ")
-
-set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
-
-if(APPLE)
-    set(CPACK_SYSTEM_NAME "macOS")
-elseif(WIN32)
-    set(CPACK_SYSTEM_NAME "Windows")
-else()
-    set(CPACK_SYSTEM_NAME "${RPR_SDK_PLATFORM}")
+if(HoudiniUSD_FOUND)
+    set(HOUDINI_MAJOR_MINOR_VERSION "${Houdini_VERSION_MAJOR}.${Houdini_VERSION_MINOR}")
+    configure_file(activateHoudiniPlugin.py.in ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.py)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.py DESTINATION .)
 endif()
 
-set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_INSTALL_TARGET}-${CPACK_SYSTEM_NAME}")
+set(USD_MINOR_VERSION "0")
+set(USD_MAJOR_VERSION "0")
+get_target_property(USD_INCLUDE_DIRS ar INTERFACE_INCLUDE_DIRECTORIES)
+if(USD_INCLUDE_DIRS)
+    foreach(dir ${USD_INCLUDE_DIRS})
+        if(EXISTS "${dir}/pxr/pxr.h")
+            foreach(_usd_comp MAJOR MINOR PATCH)
+                file(STRINGS
+                    "${dir}/pxr/pxr.h"
+                    _usd_tmp
+                    REGEX "#define PXR_${_usd_comp}_VERSION .*$")
+                string(REGEX MATCHALL "[0-9]+" USD_${_usd_comp}_VERSION ${_usd_tmp})
+            endforeach()
+            break()
+        endif()
+    endforeach()
+endif()
 
-include(CPack)
+if(DUMP_PACKAGE_FILE_NAME)
+    if(APPLE)
+        set(PACKAGE_PLATFORM "macOS")
+    elseif(WIN32)
+        set(PACKAGE_PLATFORM "Windows")
+    else()
+        set(PACKAGE_PLATFORM "${RPR_SDK_PLATFORM}")
+    endif()
+
+    set(PACKAGE_NAME hdRpr)
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+        set(PACKAGE_NAME ${PACKAGE_NAME}-${CMAKE_BUILD_TYPE})
+    endif()
+
+    set(PACKAGE_VERSION "${HD_RPR_MAJOR_VERSION}.${HD_RPR_MINOR_VERSION}.${HD_RPR_PATCH_VERSION}")
+
+    if(HoudiniUSD_FOUND)
+        set(TARGET "Houdini-${Houdini_VERSION}")
+    else()
+        set(TARGET "USD-${USD_MINOR_VERSION}.${USD_PATCH_VERSION}")
+    endif()
+
+    set(PACKAGE_FILE_NAME "${PACKAGE_NAME}-${PACKAGE_VERSION}-${TARGET}-${PACKAGE_PLATFORM}")
+
+    message(STATUS "PACKAGE_FILE_NAME: ${PACKAGE_FILE_NAME}")
+endif()

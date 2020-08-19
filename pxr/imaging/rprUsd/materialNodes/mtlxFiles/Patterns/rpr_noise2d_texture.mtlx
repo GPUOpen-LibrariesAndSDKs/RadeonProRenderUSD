@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_noise2d_texture" node="rpr_noise2d_texture" doc="Simple random noise" uiname="RPR Noise 2D Texture">
+      <input name="uv" type="vector2" value="0,0" uimin="0,0" uimax="1,1" uiname="UV" doc="UV value for random noise lookup."/>
+      <output name="out" type="color3" />
+  </nodedef>
+</materialx>
