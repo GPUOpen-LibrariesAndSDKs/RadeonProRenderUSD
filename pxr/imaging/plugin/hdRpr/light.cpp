@@ -183,14 +183,14 @@ rpr::Shape* HdRprLight::CreateCylinderLightMesh(HdRprApi* rprApi) {
     return rprApi->CreateMesh(points, topology.GetFaceVertexIndices(), VtVec3fArray(), VtIntArray(), VtVec2fArray(), VtIntArray(), topology.GetFaceVertexCounts(), topology.GetOrientation());
 }
 
-void HdRprLight::SyncAreaLightGeomParams(AreaLight* light, HdSceneDelegate* sceneDelegate, float* intensity) {
+void HdRprLight::SyncAreaLightGeomParams(HdSceneDelegate* sceneDelegate, float* intensity) {
     bool normalizeIntensity = sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->normalize).Get<bool>();
 
     if (m_lightType == HdPrimTypeTokens->diskLight ||
         m_lightType == HdPrimTypeTokens->sphereLight) {
         float radius = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->radius).Get<float>());
 
-        light->localTransform = GfMatrix4f(1.0f).SetScale(GfVec3f(radius * 2.0f));
+        m_localTransform = GfMatrix4f(1.0f).SetScale(GfVec3f(radius * 2.0f));
 
         if (normalizeIntensity) {
             if (m_lightType == HdPrimTypeTokens->diskLight) {
@@ -203,7 +203,7 @@ void HdRprLight::SyncAreaLightGeomParams(AreaLight* light, HdSceneDelegate* scen
         float width = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->width).Get<float>());
         float height = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->height).Get<float>());
 
-        light->localTransform = GfMatrix4f(1.0f).SetScale(GfVec3f(width, height, 1.0f));
+        m_localTransform = GfMatrix4f(1.0f).SetScale(GfVec3f(width, height, 1.0f));
 
         if (normalizeIntensity) {
             (*intensity) /= GetRectLightNormalization(m_transform, width, height);
@@ -212,7 +212,7 @@ void HdRprLight::SyncAreaLightGeomParams(AreaLight* light, HdSceneDelegate* scen
         float radius = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->radius).Get<float>());
         float length = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->length).Get<float>());
 
-        light->localTransform = GfMatrix4f(1.0f).SetRotate(GfRotation(GfVec3d(0.0, 1.0, 0.0), 90.0)) * GfMatrix4f(1.0f).SetScale(GfVec3f(length, radius * 2.0f, radius * 2.0f));
+        m_localTransform = GfMatrix4f(1.0f).SetRotate(GfRotation(GfVec3d(0.0, 1.0, 0.0), 90.0)) * GfMatrix4f(1.0f).SetScale(GfVec3f(length, radius * 2.0f, radius * 2.0f));
 
         if (normalizeIntensity) {
             (*intensity) /= GetCylinderLightNormalization(m_transform, length, radius);
@@ -299,6 +299,71 @@ void HdRprLight::CreateAreaLightMesh(HdRprApi* rprApi, HdSceneDelegate* sceneDel
     m_light = light;
 }
 
+struct HdRprLight::LightParameterSetter : public BOOST_NS::static_visitor<void> {
+    HdRprApi* rprApi;
+    GfVec3f const& emissionColor;
+    bool emissionColorIsDirty;
+
+    LightParameterSetter(HdRprApi* rprApi, GfVec3f const& emissionColor, bool emissionColorIsDirty)
+        : rprApi(rprApi), emissionColor(emissionColor), emissionColorIsDirty(emissionColorIsDirty) {
+
+    }
+
+    void operator()(LightVariantEmpty) const { /*no-op*/ }
+    void operator()(AreaLight* light) const {
+        if (emissionColorIsDirty || !light->material) {
+            if (light->material) {
+                rprApi->ReleaseGeometryLightMaterial(light->material);
+            }
+            light->material = rprApi->CreateGeometryLightMaterial(emissionColor);
+        }
+
+        if (light->material) {
+            for (auto& mesh : light->meshes) {
+                rprApi->SetMeshMaterial(mesh, light->material, false);
+            }
+        }
+    }
+
+    template <typename T>
+    void operator()(T* light) const {
+        if (emissionColorIsDirty) { rprApi->SetLightColor(light, emissionColor); }
+    }
+};
+
+float GetRadiusFromMatrix(GfMatrix4f const& transform) {
+    return std::abs(transform[0][0] * 0.5f);
+}
+
+struct HdRprLight::LightTransformSetter : public BOOST_NS::static_visitor<> {
+    HdRprApi* rprApi;
+    GfMatrix4f const& transform;
+
+    LightTransformSetter(HdRprApi* rprApi, GfMatrix4f const& transform)
+        : rprApi(rprApi), transform(transform) {
+
+    }
+
+    void operator()(LightVariantEmpty) const {}
+    void operator()(AreaLight* light) const {
+        for (auto& mesh : light->meshes) {
+            rprApi->SetTransform(mesh, transform);
+        }
+    }
+    void operator()(rpr::SphereLight* light) const {
+        rprApi->SetLightRadius(light, GetRadiusFromMatrix(transform));
+        rprApi->SetTransform(light, transform);
+    }
+    void operator()(rpr::DiskLight* light) const {
+        rprApi->SetLightRadius(light, GetRadiusFromMatrix(transform));
+        rprApi->SetLightAngle(light, float(M_PI_2));
+        rprApi->SetTransform(light, transform);
+    }
+
+    template <typename T>
+    void operator()(T* light) const { rprApi->SetTransform(light, transform); }
+};
+
 void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
                           HdRenderParam* renderParam,
                           HdDirtyBits* dirtyBits) {
@@ -313,6 +378,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (bits & DirtyParams) {
+        m_localTransform = GfMatrix4f(1.0f);
         ReleaseLight(rprApi);
 
         bool isVisible = sceneDelegate->GetVisible(id);
@@ -349,12 +415,30 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
                     newLight = true;
                 }
             } else {
-                CreateAreaLightMesh(rprApi, sceneDelegate);
-                newLight = true;
+                if (rprApi->IsSphereAndDiskLightSupported() &&
+                    (m_lightType == HdPrimTypeTokens->sphereLight ||
+                    m_lightType == HdPrimTypeTokens->diskLight)) {
+
+                    if (m_lightType == HdPrimTypeTokens->sphereLight) {
+                        if (auto light = rprApi->CreateSphereLight()) {
+                            m_light = light;
+                            newLight = true;
+                        }
+                    } else {
+                        if (auto light = rprApi->CreateDiskLight()) {
+                            m_light = light;
+                            newLight = true;
+                        }
+                    }
+
+                } else {
+                    CreateAreaLightMesh(rprApi, sceneDelegate);
+                    newLight = true;
+                }
             }
         }
 
-        if (m_light.which() == kLightTypeNone) {
+        if (m_light.type() == typeid(LightVariantEmpty)) {
             *dirtyBits = DirtyBits::Clean;
             return;
         }
@@ -371,78 +455,21 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
             color[2] *= temperatureColor[2];
         }
 
-        if (m_light.which() == kLightTypeArea) {
-            SyncAreaLightGeomParams(BOOST_NS::get<AreaLight*>(m_light), sceneDelegate, &intensity);
+        if (m_light.type() == typeid(AreaLight*) ||
+            m_light.type() == typeid(rpr::SphereLight*) ||
+            m_light.type() == typeid(rpr::DiskLight*)) {
+            SyncAreaLightGeomParams(sceneDelegate, &intensity);
         }
 
         auto emissionColor = color * intensity;
         bool isEmissionColorDirty = newLight || m_emisionColor != emissionColor;
         if (isEmissionColorDirty) { m_emisionColor = emissionColor; }
 
-        struct LightParameterSetter : public BOOST_NS::static_visitor<void> {
-            HdRprApi* rprApi;
-            GfVec3f const& emissionColor;
-            bool emissionColorIsDirty;
-
-            LightParameterSetter(HdRprApi* rprApi, GfVec3f const& emissionColor, bool emissionColorIsDirty)
-                : rprApi(rprApi), emissionColor(emissionColor), emissionColorIsDirty(emissionColorIsDirty) {
-
-            }
-
-            void operator()(LightVariantEmpty) const { /*no-op*/ }
-            void operator()(AreaLight* light) const {
-                if (emissionColorIsDirty || !light->material) {
-                    if (light->material) {
-                        rprApi->ReleaseGeometryLightMaterial(light->material);
-                    }
-                    light->material = rprApi->CreateGeometryLightMaterial(emissionColor);
-                }
-
-                if (light->material) {
-                    for (auto& mesh : light->meshes) {
-                        rprApi->SetMeshMaterial(mesh, light->material, false);
-                    }
-                }
-            }
-
-            void operator()(rpr::SpotLight* light) const {
-                if (emissionColorIsDirty) { rprApi->SetLightColor(light, emissionColor); }
-            }
-
-            void operator()(rpr::PointLight* light) const {
-                if (emissionColorIsDirty) { rprApi->SetLightColor(light, emissionColor); }
-            }
-
-            void operator()(rpr::IESLight* light) const {
-                if (emissionColorIsDirty) { rprApi->SetLightColor(light, emissionColor); }
-            }
-        };
-
         BOOST_NS::apply_visitor(LightParameterSetter{rprApi, emissionColor, isEmissionColorDirty}, m_light);
     }
 
     if (bits & (DirtyTransform | DirtyParams)) {
-        struct LightTransformSetter : public BOOST_NS::static_visitor<> {
-            HdRprApi* rprApi;
-            GfMatrix4f const& transform;
-
-            LightTransformSetter(HdRprApi* rprApi, GfMatrix4f const& transform)
-                : rprApi(rprApi), transform(transform) {
-
-            }
-
-            void operator()(LightVariantEmpty) const {}
-            void operator()(AreaLight* light) const {
-                auto modelTransform = light->localTransform * transform;
-                for (auto& mesh : light->meshes) {
-                    rprApi->SetTransform(mesh, modelTransform);
-                }
-            }
-            void operator()(rpr::PointLight* light) const { rprApi->SetTransform(light, transform); }
-            void operator()(rpr::SpotLight* light) const { rprApi->SetTransform(light, transform); }
-            void operator()(rpr::IESLight* light) const { rprApi->SetTransform(light, transform); }
-        };
-        BOOST_NS::apply_visitor(LightTransformSetter{rprApi, m_transform}, m_light);
+        BOOST_NS::apply_visitor(LightTransformSetter{rprApi, m_localTransform * m_transform}, m_light);
     }
 
     *dirtyBits = DirtyBits::Clean;
@@ -454,26 +481,25 @@ HdDirtyBits HdRprLight::GetInitialDirtyBitsMask() const {
          | DirtyBits::DirtyParams;
 }
 
-void HdRprLight::ReleaseLight(HdRprApi* rprApi) {
-    struct LightReleaser : public BOOST_NS::static_visitor<> {
-        HdRprApi* rprApi;
+struct HdRprLight::LightReleaser : public BOOST_NS::static_visitor<> {
+    HdRprApi* rprApi;
 
-        LightReleaser(HdRprApi* rprApi) : rprApi(rprApi) {}
+    LightReleaser(HdRprApi* rprApi) : rprApi(rprApi) {}
 
-        void operator()(LightVariantEmpty) const { /*no-op*/ }
-        void operator()(rpr::PointLight* light) const { rprApi->Release(light); }
-        void operator()(rpr::SpotLight* light) const { rprApi->Release(light); }
-        void operator()(rpr::IESLight* light) const { rprApi->Release(light); }
-
-        void operator()(AreaLight* light) const {
-            for (auto& mesh : light->meshes) {
-                rprApi->Release(mesh);
-            }
-            rprApi->ReleaseGeometryLightMaterial(light->material);
-            delete light;
+    void operator()(LightVariantEmpty) const { /*no-op*/ }
+    void operator()(AreaLight* light) const {
+        for (auto& mesh : light->meshes) {
+            rprApi->Release(mesh);
         }
-    };
+        rprApi->ReleaseGeometryLightMaterial(light->material);
+        delete light;
+    }
 
+    template <typename T>
+    void operator()(T* light) const { rprApi->Release(light); }
+};
+
+void HdRprLight::ReleaseLight(HdRprApi* rprApi) {
     BOOST_NS::apply_visitor(LightReleaser{rprApi}, m_light);
     m_light = LightVariantEmpty{};
 }
