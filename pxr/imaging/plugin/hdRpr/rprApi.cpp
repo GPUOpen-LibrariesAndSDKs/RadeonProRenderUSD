@@ -1199,7 +1199,7 @@ public:
             tonemap.isDirty = config->IsDirty(HdRprConfig::DirtyTonemapping);
             if (tonemap.isDirty) {
                 tonemap.value.enable = config->GetEnableTonemap();
-                tonemap.value.exposure = config->GetTonemapExposure();
+                tonemap.value.exposureTime = config->GetTonemapExposureTime();
                 tonemap.value.sensitivity = config->GetTonemapSensitivity();
                 tonemap.value.fstop = config->GetTonemapFstop();
                 tonemap.value.gamma = config->GetTonemapGamma();
