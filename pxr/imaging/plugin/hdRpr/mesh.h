@@ -58,6 +58,8 @@ private:
 
     RprUsdMaterial const* GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits);
 
+    uint32_t GetVisibilityMask() const;
+
 private:
     std::vector<rpr::Shape*> m_rprMeshes;
     std::vector<std::vector<rpr::Shape*>> m_rprMeshInstances;
