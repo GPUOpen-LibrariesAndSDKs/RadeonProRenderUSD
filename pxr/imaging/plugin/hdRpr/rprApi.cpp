@@ -1827,9 +1827,23 @@ Don't show this message again?
     }
 
     void AbortRender() {
-        if (m_rprContext) {
-            RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
+        if (!m_rprContext) {
+            return;
         }
+
+        // Do not abort the very first sample
+        //
+        // Ideally, aborting the first sample should not be the problem.
+        // We would like to be able to abort it: to reduce response time,
+        // to avoid doing calculations that may be discarded by the following changes.
+        // But in reality, aborting the very first sample may cause crashes or
+        // unwanted behavior when we will call rprContextRender next time.
+        // So until RPR core fixes these issues, we are not aborting the first sample.
+        if (m_numSamples == 0) {
+            return;
+        }
+
+        RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
     }
 
     int GetNumCompletedSamples() const {
