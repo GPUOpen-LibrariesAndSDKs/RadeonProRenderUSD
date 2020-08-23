@@ -23,7 +23,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id,
                                    SdfPath const& instancerId)
-    : HdBasisCurves(id, instancerId)
+    : HdRprBaseRprim(id, instancerId)
     , m_visibilityMask(kVisibleAll) {
 
 }
@@ -94,8 +94,12 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
-        m_cachedMaterial = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(id)));
+        UpdateMaterialId(sceneDelegate, rprRenderParam);
     }
+
+    auto material = static_cast<const HdRprMaterial*>(
+        sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_materialId)
+    );
 
     bool isVisibilityMaskDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
@@ -103,8 +107,8 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
 
         static TfToken st("st", TfToken::Immortal);
         TfToken const* uvPrimvarName = &st;
-        if (m_cachedMaterial) {
-            if (auto rprMaterial = m_cachedMaterial->GetRprMaterialObject()) {
+        if (material) {
+            if (auto rprMaterial = material->GetRprMaterialObject()) {
                 uvPrimvarName = &rprMaterial->GetUvPrimvarName();
             }
         }
@@ -183,8 +187,8 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
 
     if (m_rprCurve) {
         if (newCurve || (*dirtyBits & HdChangeTracker::DirtyMaterialId)) {
-            if (m_cachedMaterial && m_cachedMaterial->GetRprMaterialObject()) {
-                rprApi->SetCurveMaterial(m_rprCurve, m_cachedMaterial->GetRprMaterialObject());
+            if (material && material->GetRprMaterialObject()) {
+                rprApi->SetCurveMaterial(m_rprCurve, material->GetRprMaterialObject());
             } else {
                 GfVec3f color(0.18f);
 
@@ -538,7 +542,7 @@ void HdRprBasisCurves::Finalize(HdRenderParam* renderParam) {
     rprApi->Release(m_fallbackMaterial);
     m_fallbackMaterial = nullptr;
  
-    HdBasisCurves::Finalize(renderParam);
+    HdRprBaseRprim::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -14,6 +14,8 @@ limitations under the License.
 #ifndef HDRPR_MESH_H
 #define HDRPR_MESH_H
 
+#include "baseRprim.h"
+
 #include "pxr/imaging/hd/mesh.h"
 #include "pxr/imaging/hd/vertexAdjacency.h"
 #include "pxr/base/vt/array.h"
@@ -27,7 +29,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 class HdRprApi;
 class RprUsdMaterial;
 
-class HdRprMesh final : public HdMesh {
+class HdRprMesh final : public HdRprBaseRprim<HdMesh> {
 public:
     HF_MALLOC_TAG_NEW("new HdRprMesh");
 
@@ -63,7 +65,6 @@ private:
     std::vector<std::vector<rpr::Shape*>> m_rprMeshInstances;
     RprUsdMaterial* m_fallbackMaterial = nullptr;
 
-    SdfPath m_cachedMaterialId;
     static constexpr int kDefaultNumTimeSamples = 2;
     HdTimeSampleArray<GfMatrix4d, kDefaultNumTimeSamples> m_transformSamples;
 

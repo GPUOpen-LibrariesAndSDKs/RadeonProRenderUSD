@@ -47,6 +47,13 @@ public:
     HdRprVolumeFieldSubscription SubscribeVolumeForFieldUpdates(HdRprVolume* volume, SdfPath const& fieldId);
     void NotifyVolumesAboutFieldChange(HdSceneDelegate* sceneDelegate, SdfPath const& fieldId);
 
+    // Hydra does not always mark HdRprim as changed if HdMaterial used by it has been changed.
+    // HdStorm marks all existing rprims as dirty when a material is changed.
+    // We instead mark only those rprims that use the changed material.
+    void SubscribeForMaterialUpdates(SdfPath const& materialId, SdfPath const& rPrimId);
+    void UnsubscribeFromMaterialUpdates(SdfPath const& materialId, SdfPath const& rPrimId);
+    void MaterialDidChange(HdSceneDelegate* sceneDelegate, SdfPath const materialId);
+
     void RestartRender() { m_restartRender.store(true); }
     bool IsRenderShouldBeRestarted() { return m_restartRender.exchange(false); }
 
@@ -56,6 +63,9 @@ private:
 
     std::mutex m_subscribedVolumesMutex;
     std::map<SdfPath, std::vector<HdRprVolumeFieldSubscriptionHandle>> m_subscribedVolumes;
+
+    std::mutex m_materialSubscriptionsMutex;
+    std::map<SdfPath, std::set<SdfPath>> m_materialSubscriptions;
 
     std::atomic<bool> m_restartRender;
 };

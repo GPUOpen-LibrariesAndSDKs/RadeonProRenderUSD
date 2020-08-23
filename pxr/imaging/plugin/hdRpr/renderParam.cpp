@@ -55,4 +55,32 @@ void HdRprRenderParam::NotifyVolumesAboutFieldChange(HdSceneDelegate* sceneDeleg
     }
 }
 
+void HdRprRenderParam::SubscribeForMaterialUpdates(SdfPath const& materialId, SdfPath const& rPrimId) {
+    std::lock_guard<std::mutex> lock(m_materialSubscriptionsMutex);
+    m_materialSubscriptions[materialId].insert(rPrimId);
+}
+
+void HdRprRenderParam::UnsubscribeFromMaterialUpdates(SdfPath const& materialId, SdfPath const& rPrimId) {
+    std::lock_guard<std::mutex> lock(m_materialSubscriptionsMutex);
+    auto subscriptionsIt = m_materialSubscriptions.find(materialId);
+    if (TF_VERIFY(subscriptionsIt != m_materialSubscriptions.end())) {
+        subscriptionsIt->second.erase(rPrimId);
+        if (subscriptionsIt->second.empty()) {
+            m_materialSubscriptions.erase(subscriptionsIt);
+        }
+    }
+}
+
+void HdRprRenderParam::MaterialDidChange(HdSceneDelegate* sceneDelegate, SdfPath const materialId) {
+    std::lock_guard<std::mutex> lock(m_materialSubscriptionsMutex);
+    auto subscriptionsIt = m_materialSubscriptions.find(materialId);
+    if (subscriptionsIt != m_materialSubscriptions.end()) {
+        HdChangeTracker& changeTracker = sceneDelegate->GetRenderIndex().GetChangeTracker();
+        for (auto& rPrimId : subscriptionsIt->second) {
+            changeTracker.MarkRprimDirty(rPrimId, HdChangeTracker::DirtyMaterialId);
+        }
+    }
+}
+
+
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -151,6 +151,7 @@ pxr_plugin(hdRpr
 
     PRIVATE_HEADERS
         boostIncludePath.h
+        baseRprim.h
         api.h
 
     RESOURCE_FILES
