@@ -225,9 +225,26 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         UpdateMaterialId(sceneDelegate, rprRenderParam);
     }
 
+    // We are loading mesh UVs only when it has material
     auto material = static_cast<const HdRprMaterial*>(
         sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_materialId)
     );
+
+    // Check all materials, including those from geomSubsets
+    if (!material || !material->GetRprMaterialObject()) {
+        for (auto& subset : m_topology.GetGeomSubsets()) {
+            if (subset.type == HdGeomSubset::TypeFaceSet &&
+                !subset.materialId.IsEmpty()) {
+                material = static_cast<const HdRprMaterial*>(
+                    sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, subset.materialId)
+                );
+                if (material && material->GetRprMaterialObject()) {
+                    break;
+                }
+            }
+        }
+    }
+
     if (material && material->GetRprMaterialObject()) {
         auto rprMaterial = material->GetRprMaterialObject();
 
@@ -404,7 +421,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     for (int i = 0; i < numVerticesInFace; ++i) {
                         const int pointIndex = m_faceVertexIndices[faceIndexesOffset + i];
                         int subsetPointIndex = vertexIndexRemapping[pointIndex];
-                        if (subsetPointIndex == -1) {
+
+                        bool newPoint = subsetPointIndex == -1;
+                        if (newPoint) {
                             subsetPointIndex = static_cast<int>(subsetPoints.size());
                             vertexIndexRemapping[pointIndex] = subsetPointIndex;
 
@@ -414,7 +433,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                         if (!m_normals.empty()) {
                             if (m_normalIndices.empty()) {
-                                subsetNormals.push_back(m_normals[pointIndex]);
+                                if (newPoint) {
+                                    subsetNormals.push_back(m_normals[pointIndex]);
+                                }
                             } else {
                                 const int normalIndex = m_normalIndices[faceIndexesOffset + i];
                                 int subsetNormalIndex = normalIndexRemapping[normalIndex];
@@ -430,7 +451,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                         if (!m_uvs.empty()) {
                             if (m_uvIndices.empty()) {
-                                subsetUv.push_back(m_uvs[pointIndex]);
+                                if (newPoint) {
+                                    subsetUv.push_back(m_uvs[pointIndex]);
+                                }
                             } else {
                                 const int uvIndex = m_uvIndices[faceIndexesOffset + i];
                                 int subsetuvIndex = uvIndexRemapping[uvIndex];
