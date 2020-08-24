@@ -34,7 +34,7 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprMesh::HdRprMesh(SdfPath const& id, SdfPath const& instancerId)
-    : HdMesh(id, instancerId)
+    : HdRprBaseRprim(id, instancerId)
     , m_visibilityMask(kVisibleAll) {
 
 }
@@ -213,10 +213,12 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
-        m_cachedMaterialId = sceneDelegate->GetMaterialId(id);
+        UpdateMaterialId(sceneDelegate, rprRenderParam);
     }
 
-    auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_cachedMaterialId));
+    auto material = static_cast<const HdRprMaterial*>(
+        sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_materialId)
+    );
     if (material && material->GetRprMaterialObject()) {
         auto rprMaterial = material->GetRprMaterialObject();
 
@@ -331,7 +333,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 HdGeomSubset& unusedSubset = m_geomSubsets.back();
                 unusedSubset.type = HdGeomSubset::TypeFaceSet;
                 unusedSubset.id = id;
-                unusedSubset.materialId = m_cachedMaterialId;
+                unusedSubset.materialId = m_materialId;
                 unusedSubset.indices.resize(numUnusedFaces);
                 size_t count = 0;
                 for (size_t i = 0; i < faceIsUnused.size() && count < numUnusedFaces; ++i) {
@@ -501,7 +503,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             };
 
             if (m_geomSubsets.empty()) {
-                auto material = getMeshMaterial(m_cachedMaterialId);
+                auto material = getMeshMaterial(m_materialId);
                 for (auto& mesh : m_rprMeshes) {
                     rprApi->SetMeshMaterial(mesh, material, m_displayStyle.displacementEnabled);
                 }
@@ -619,7 +621,7 @@ void HdRprMesh::Finalize(HdRenderParam* renderParam) {
     rprApi->Release(m_fallbackMaterial);
     m_fallbackMaterial = nullptr;
 
-    HdMesh::Finalize(renderParam);
+    HdRprBaseRprim::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
