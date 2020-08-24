@@ -97,13 +97,13 @@ public:
 
     struct TonemapParams {
         bool enable;
-        float exposure;
+        float exposureTime;
         float sensitivity;
         float fstop;
         float gamma;
 
         bool operator==(TonemapParams const& lhs) {
-            return exposure == lhs.exposure &&
+            return exposureTime == lhs.exposureTime &&
                 sensitivity == lhs.sensitivity &&
                 fstop == lhs.fstop &&
                 gamma == lhs.gamma;
