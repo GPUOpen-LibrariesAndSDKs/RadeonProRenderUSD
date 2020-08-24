@@ -74,6 +74,10 @@ public:
                     RPR_ERROR_CHECK(status, "Failed to create materialX node", m_ctx->rprContext);
                 }
                 return m_materialNode != nullptr;
+            } else {
+                TF_RUNTIME_ERROR("[%s] file input should be of SdfAssetPath type: %s",
+                    RprUsdRprMaterialXNodeTokens->rpr_materialx_node.GetText(), value.GetTypeName().c_str());
+                return false;
             }
         }
 
