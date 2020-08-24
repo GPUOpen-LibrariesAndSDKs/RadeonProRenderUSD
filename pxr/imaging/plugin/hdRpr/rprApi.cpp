@@ -1990,7 +1990,7 @@ private:
         RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Fail to set context Y FLIP parameter");
 
         m_isRenderUpdateCallbackEnabled = false;
-        if (m_rprContextMetadata.pluginType == kPluginNorthStar) {
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
             m_rucData.rprApi = this;
             RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_FUNC, RenderUpdateCallback), "Failed to set northstar RUC func");
             RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_DATA, &m_rucData), "Failed to set northstar RUC data");
