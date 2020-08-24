@@ -594,6 +594,18 @@ public:
         });
     }
 
+    rpr::DiskLight* CreateDiskLight() {
+        return CreateLight<rpr::DiskLight>([this](rpr::Status* status) {
+            return m_rprContext->CreateDiskLight(status);
+        });
+    }
+
+    rpr::SphereLight* CreateSphereLight() {
+        return CreateLight<rpr::SphereLight>([this](rpr::Status* status) {
+            return m_rprContext->CreateSphereLight(status);
+        });
+    }
+
     rpr::IESLight* CreateIESLight(std::string const& iesFilepath) {
         return CreateLight<rpr::IESLight>([this, &iesFilepath](rpr::Status* status) {
             auto light = m_rprContext->CreateIESLight(status);
@@ -619,7 +631,19 @@ public:
     }
 
     template <typename Light>
-    void SetLightColor(Light* light, GfVec3f const& color) {
+    void SetLightRadius(Light* light, float radius) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+
+        RPR_ERROR_CHECK(light->SetRadius(radius), "Failed to set light radius");
+    }
+
+    void SetLightAngle(rpr::DiskLight* light, float angle) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+
+        RPR_ERROR_CHECK(light->SetAngle(angle), "Failed to set light angle");
+    }
+
+    void SetLightColor(rpr::RadiantLight* light, GfVec3f const& color) {
         LockGuard rprLock(m_rprContext->GetMutex());
 
         RPR_ERROR_CHECK(light->SetRadiantPower(color[0], color[1], color[2]), "Failed to set light color");
@@ -1199,7 +1223,7 @@ public:
             tonemap.isDirty = config->IsDirty(HdRprConfig::DirtyTonemapping);
             if (tonemap.isDirty) {
                 tonemap.value.enable = config->GetEnableTonemap();
-                tonemap.value.exposure = config->GetTonemapExposure();
+                tonemap.value.exposureTime = config->GetTonemapExposureTime();
                 tonemap.value.sensitivity = config->GetTonemapSensitivity();
                 tonemap.value.fstop = config->GetTonemapFstop();
                 tonemap.value.gamma = config->GetTonemapGamma();
@@ -1827,9 +1851,23 @@ Don't show this message again?
     }
 
     void AbortRender() {
-        if (m_rprContext) {
-            RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
+        if (!m_rprContext) {
+            return;
         }
+
+        // Do not abort the very first sample
+        //
+        // Ideally, aborting the first sample should not be the problem.
+        // We would like to be able to abort it: to reduce response time,
+        // to avoid doing calculations that may be discarded by the following changes.
+        // But in reality, aborting the very first sample may cause crashes or
+        // unwanted behavior when we will call rprContextRender next time.
+        // So until RPR core fixes these issues, we are not aborting the first sample.
+        if (m_numSamples == 0) {
+            return;
+        }
+
+        RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
     }
 
     int GetNumCompletedSamples() const {
@@ -1873,6 +1911,10 @@ Don't show this message again?
 
     bool IsArbitraryShapedLightSupported() const {
         return m_rprContextMetadata.pluginType != kPluginHybrid;
+    }
+
+    bool IsSphereAndDiskLightSupported() const {
+        return m_rprContextMetadata.pluginType == kPluginNorthstar;
     }
 
     int GetCurrentRenderQuality() const {
@@ -2574,6 +2616,16 @@ rpr::PointLight* HdRprApi::CreatePointLight() {
     return m_impl->CreatePointLight();
 }
 
+rpr::DiskLight* HdRprApi::CreateDiskLight() {
+    m_impl->InitIfNeeded();
+    return m_impl->CreateDiskLight();
+}
+
+rpr::SphereLight* HdRprApi::CreateSphereLight() {
+    m_impl->InitIfNeeded();
+    return m_impl->CreateSphereLight();
+}
+
 rpr::IESLight* HdRprApi::CreateIESLight(std::string const& iesFilepath) {
     m_impl->InitIfNeeded();
     return m_impl->CreateIESLight(iesFilepath);
@@ -2583,15 +2635,19 @@ void HdRprApi::SetDirectionalLightAttributes(rpr::DirectionalLight* directionalL
     m_impl->SetDirectionalLightAttributes(directionalLight, color, shadowSoftnessAngle);
 }
 
-void HdRprApi::SetLightColor(rpr::SpotLight* light, GfVec3f const& color) {
-    m_impl->SetLightColor(light, color);
+void HdRprApi::SetLightRadius(rpr::SphereLight* light, float radius) {
+    m_impl->SetLightRadius(light, radius);
 }
 
-void HdRprApi::SetLightColor(rpr::PointLight* light, GfVec3f const& color) {
-    m_impl->SetLightColor(light, color);
+void HdRprApi::SetLightRadius(rpr::DiskLight* light, float radius) {
+    m_impl->SetLightRadius(light, radius);
 }
 
-void HdRprApi::SetLightColor(rpr::IESLight* light, GfVec3f const& color) {
+void HdRprApi::SetLightAngle(rpr::DiskLight* light, float angle) {
+    m_impl->SetLightAngle(light, angle);
+}
+
+void HdRprApi::SetLightColor(rpr::RadiantLight* light, GfVec3f const& color) {
     m_impl->SetLightColor(light, color);
 }
 
@@ -2750,6 +2806,11 @@ bool HdRprApi::IsGlInteropEnabled() const {
 bool HdRprApi::IsArbitraryShapedLightSupported() const {
     m_impl->InitIfNeeded();
     return m_impl->IsArbitraryShapedLightSupported();
+}
+
+bool HdRprApi::IsSphereAndDiskLightSupported() const {
+    m_impl->InitIfNeeded();
+    return m_impl->IsSphereAndDiskLightSupported();
 }
 
 int HdRprApi::GetCurrentRenderQuality() const {

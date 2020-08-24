@@ -255,8 +255,8 @@ render_setting_categories = [
                 'defaultValue': False
             },
             {
-                'name': 'tonemapExposure',
-                'ui_name': 'Tone Mapping Exposure',
+                'name': 'tonemapExposureTime',
+                'ui_name': 'Tone Mapping Exposure Time',
                 'help': 'Film exposure time',
                 'defaultValue': 0.125,
                 'minValue': 0.0,
