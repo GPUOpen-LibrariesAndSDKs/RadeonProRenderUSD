@@ -139,6 +139,15 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDeleg
     return m_fallbackMaterial;
 }
 
+uint32_t HdRprMesh::GetVisibilityMask() const {
+    if (!_sharedData.visible) {
+        // If mesh is explicitly made invisible, ignore custom visibility mask
+        return kInvisible;
+    }
+
+    return m_visibilityMask;
+}
+
 void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                      HdRenderParam* renderParam,
                      HdDirtyBits* dirtyBits,
@@ -479,17 +488,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
-        if (newMesh || ((*dirtyBits & HdChangeTracker::DirtyVisibility) || isVisibilityMaskDirty)) {
-            auto visibilityMask = m_visibilityMask;
-            if (!_sharedData.visible) {
-                // Override m_visibilityMask
-                visibilityMask = 0;
-            }
-            for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshVisibility(rprMesh, visibilityMask);
-            }
-        }
-
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
             (*dirtyBits & HdChangeTracker::DirtyDoubleSided) || // update twosided material node
             (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) || isRefineLevelDirty) { // update displacement material
@@ -532,8 +530,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     }
                     m_rprMeshInstances.clear();
 
+                    auto visibilityMask = GetVisibilityMask();
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
-                        rprApi->SetMeshVisibility(m_rprMeshes[i], _sharedData.visible);
+                        rprApi->SetMeshVisibility(m_rprMeshes[i], visibilityMask);
                     }
                 } else {
                     updateTransform = false;
@@ -588,7 +587,23 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         }
 
                         // Hide prototype
-                        rprApi->SetMeshVisibility(m_rprMeshes[i], false);
+                        rprApi->SetMeshVisibility(m_rprMeshes[i], kInvisible);
+                    }
+                }
+            }
+        }
+
+        if (newMesh || ((*dirtyBits & HdChangeTracker::DirtyVisibility) || isVisibilityMaskDirty)) {
+            auto visibilityMask = GetVisibilityMask();
+            if (m_rprMeshInstances.empty()) {
+                for (auto& rprMesh : m_rprMeshes) {
+                    rprApi->SetMeshVisibility(rprMesh, visibilityMask);
+                }
+            } else {
+                // Do not touch prototype meshes (m_rprMeshes), set visibility for instances only
+                for (auto& instances : m_rprMeshInstances) {
+                    for (auto& rprMesh : instances) {
+                        rprApi->SetMeshVisibility(rprMesh, visibilityMask);
                     }
                 }
             }
