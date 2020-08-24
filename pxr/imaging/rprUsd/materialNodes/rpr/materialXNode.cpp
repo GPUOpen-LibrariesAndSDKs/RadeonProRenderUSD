@@ -24,7 +24,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(RprUsdRprMaterialXNodeTokens,
     (rpr_materialx_node)
-    (mtlx_file)
+    (file)
 );
 
 class RprUsd_RprMaterialXNode : public RprUsd_MaterialNode {
@@ -43,7 +43,7 @@ public:
     bool SetInput(
         TfToken const& inputId,
         VtValue const& value) override {
-        if (inputId == RprUsdRprMaterialXNodeTokens->mtlx_file) {
+        if (inputId == RprUsdRprMaterialXNodeTokens->file) {
             if (value.IsHolding<SdfAssetPath>()) {
                 auto& assetPath = value.UncheckedGet<SdfAssetPath>();
                 auto& path = assetPath.GetResolvedPath();
@@ -77,6 +77,8 @@ public:
             }
         }
 
+        TF_RUNTIME_ERROR("[%s] Unknown input %s",
+            RprUsdRprMaterialXNodeTokens->rpr_materialx_node.GetText(), inputId.GetText());
         return false;
     }
 
@@ -89,7 +91,7 @@ public:
         nodeInfo.uiFolder = "Shaders";
 
         RprUsd_RprNodeInput fileInput(RprUsdMaterialNodeElement::kFilepath);
-        fileInput.name = RprUsdRprMaterialXNodeTokens->mtlx_file.GetText();
+        fileInput.name = RprUsdRprMaterialXNodeTokens->file.GetText();
         fileInput.uiName = "MaterialX File";
         nodeInfo.inputs.push_back(fileInput);
 
