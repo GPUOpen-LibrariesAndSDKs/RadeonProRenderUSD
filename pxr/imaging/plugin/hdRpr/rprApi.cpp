@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "config.h"
 #include "camera.h"
+#include "debugCodes.h"
 #include "renderDelegate.h"
 #include "renderBuffer.h"
 #include "renderParam.h"
@@ -1937,6 +1938,67 @@ private:
         }
     }
 
+    static void RprContextDeleter(rpr::Context* ctx) {
+        static bool forceLeakCheck = false;
+        if (forceLeakCheck || TfDebug::IsEnabled(HD_RPR_DEBUG_LEAKS)) {
+            rpr_int status = RPR_SUCCESS;
+
+            struct ListDescriptor {
+                rpr_context_info infoType;
+                const char* name;
+            };
+            std::vector<ListDescriptor> lists = {
+                {RPR_CONTEXT_LIST_CREATED_CAMERAS, "cameras"},
+                {RPR_CONTEXT_LIST_CREATED_MATERIALNODES, "materialnodes"},
+                {RPR_CONTEXT_LIST_CREATED_LIGHTS, "lights"},
+                {RPR_CONTEXT_LIST_CREATED_SHAPES, "shapes"},
+                {RPR_CONTEXT_LIST_CREATED_POSTEFFECTS, "posteffects"},
+                {RPR_CONTEXT_LIST_CREATED_HETEROVOLUMES, "heterovolumes"},
+                {RPR_CONTEXT_LIST_CREATED_GRIDS, "grids"},
+                {RPR_CONTEXT_LIST_CREATED_BUFFERS, "buffers"},
+                {RPR_CONTEXT_LIST_CREATED_IMAGES, "images"},
+                {RPR_CONTEXT_LIST_CREATED_FRAMEBUFFERS, "framebuffers"},
+                {RPR_CONTEXT_LIST_CREATED_SCENES, "scenes"},
+                {RPR_CONTEXT_LIST_CREATED_CURVES, "curves"},
+                {RPR_CONTEXT_LIST_CREATED_COMPOSITE, "composite"},
+                {RPR_CONTEXT_LIST_CREATED_LUT, "lut"},
+            };
+
+            bool hasLeaks = false;
+
+            for (auto& list : lists) {
+                size_t sizeParam = 0;
+                if (!RPR_ERROR_CHECK(ctx->GetInfo(list.infoType, 0, nullptr, &sizeParam), "Failed to get context info", ctx)) {
+                    size_t numObjects = sizeParam / sizeof(void*);
+
+                    if (numObjects > 0) {
+                        if (!hasLeaks) {
+                            hasLeaks = true;
+                            fprintf(stderr, "hdRpr - rpr::Context leaks detected\n");
+                        }
+
+                        fprintf(stderr, "Leaked %zu %s: ", numObjects, list.name);
+
+                        std::vector<void*> objectPointers(numObjects, nullptr);
+                        if (!RPR_ERROR_CHECK(ctx->GetInfo(list.infoType, sizeParam, objectPointers.data(), nullptr), "Failed to get context info", ctx)) {
+                            fprintf(stderr, "{");
+                            for (size_t i = 0; i < numObjects; ++i) {
+                                fprintf(stderr, "0x%p", objectPointers[i]);
+                                if (i + 1 != numObjects) {
+                                    fprintf(stderr, ",");
+                                }
+                            }
+                            fprintf(stderr, "}\n");
+                        } else {
+                            fprintf(stderr, "failed to get object list\n");
+                        }
+                    }
+                }
+            }
+        }
+        delete ctx;
+    }
+
     void InitRpr() {
         RenderQualityType renderQuality;
         {
@@ -1951,7 +2013,7 @@ private:
 
         m_rprContextMetadata.pluginType = GetPluginType(renderQuality);
         auto cachePath = HdRprApi::GetCachePath();
-        m_rprContext.reset(RprUsdCreateContext(cachePath.c_str(), &m_rprContextMetadata));
+        m_rprContext = RprContextPtr(RprUsdCreateContext(cachePath.c_str(), &m_rprContextMetadata), RprContextDeleter);
         if (!m_rprContext) {
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
@@ -2499,7 +2561,8 @@ private:
     };
     uint32_t m_dirtyFlags = ChangeTracker::AllDirty;
 
-    std::unique_ptr<rpr::Context> m_rprContext;
+    using RprContextPtr = std::unique_ptr<rpr::Context, decltype(&RprContextDeleter)>;
+    RprContextPtr m_rprContext{nullptr, RprContextDeleter};
     RprUsdContextMetadata m_rprContextMetadata;
 
     std::unique_ptr<rif::Context> m_rifContext;
