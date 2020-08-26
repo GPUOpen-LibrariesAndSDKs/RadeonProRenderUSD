@@ -154,6 +154,8 @@ void RprUsdMaterialRegistry::CommitResources(
                 auto textureData = GlfUVTextureData::New(uniqueTextures[i].path, INT_MAX, 0, 0, 0, 0);
                 if (textureData && textureData->Read(0, false)) {
                     uniqueTextures[i].data = textureData;
+                } else {
+                    TF_RUNTIME_ERROR("Failed to load %s texture", uniqueTextures[i].path.c_str());
                 }
             }
         }
