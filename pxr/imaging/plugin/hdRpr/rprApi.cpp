@@ -716,10 +716,8 @@ public:
         return envLight;
     }
 
-    void Release(HdRprApiEnvironmentLight* envLight) {
+    void ReleaseImpl(HdRprApiEnvironmentLight* envLight) {
         if (envLight) {
-            LockGuard rprLock(m_rprContext->GetMutex());
-
             rpr::Status status;
             if (envLight->state == HdRprApiEnvironmentLight::kAttachedAsEnvLight) {
                 status = m_scene->SetEnvironmentLight(nullptr);
@@ -732,6 +730,13 @@ public:
             }
             delete envLight;
             m_numLights--;
+        }
+    }
+
+    void Release(HdRprApiEnvironmentLight* envLight) {
+        if (envLight) {
+            LockGuard rprLock(m_rprContext->GetMutex());
+            ReleaseImpl(envLight);
         }
     }
 
@@ -2068,7 +2073,7 @@ private:
 
     void RemoveDefaultLight() {
         if (m_defaultLightObject) {
-            Release(m_defaultLightObject);
+            ReleaseImpl(m_defaultLightObject);
             m_defaultLightObject = nullptr;
 
             // Do not count default light object
