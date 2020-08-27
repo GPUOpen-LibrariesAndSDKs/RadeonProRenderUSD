@@ -46,8 +46,8 @@ def setRenderQuality(usdviewApi, quality):
         lib.GetHdRprRenderQuality.restype = c_int
         currentQuality = lib.GetHdRprRenderQuality()
         lib.SetHdRprRenderQuality(quality)
-        if (currentQuality == 3 and quality < 3) or \
-           (currentQuality < 3 and quality == 3):
+        if (currentQuality >= 3 and quality < 3) or \
+           (currentQuality < 3 and quality >= 3):
             reemitStage(usdviewApi)
 
 def renderDeviceCPU(usdviewApi):
@@ -64,6 +64,8 @@ def SetRenderHighQuality(usdviewApi):
     setRenderQuality(usdviewApi, 2)
 def SetRenderFullQuality(usdviewApi):
     setRenderQuality(usdviewApi, 3)
+def SetRenderUltimateQuality(usdviewApi):
+    setRenderQuality(usdviewApi, 4)
 
 class RprPluginContainer(PluginContainer):
 
@@ -93,6 +95,10 @@ class RprPluginContainer(PluginContainer):
             "RprPluginContainer.setRenderFullQuality",
             "Full",
             SetRenderFullQuality)
+        self.setRenderUltimateQuality = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setRenderUltimateQuality",
+            "Ultimate",
+            SetRenderUltimateQuality)
 
         self.restartAction = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.restartAction",
@@ -113,6 +119,7 @@ class RprPluginContainer(PluginContainer):
         renderQualityMenu.addItem(self.setRenderMediumQuality)
         renderQualityMenu.addItem(self.setRenderHighQuality)
         renderQualityMenu.addItem(self.setRenderFullQuality)
+        renderQualityMenu.addItem(self.setRenderUltimateQuality)
 
         rprMenu.addItem(self.restartAction)
 
