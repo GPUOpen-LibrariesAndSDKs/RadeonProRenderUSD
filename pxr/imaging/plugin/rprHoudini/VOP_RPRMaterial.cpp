@@ -44,6 +44,7 @@ static VOP_Type GetVOPType(RprUsdMaterialNodeInput::Type rprType) {
         case RprUsdMaterialNodeElement::kInteger:
             return VOP_TYPE_INTEGER;
         case RprUsdMaterialNodeElement::kToken:
+        case RprUsdMaterialNodeElement::kFilepath:
             return VOP_TYPE_STRING;
         case RprUsdMaterialNodeElement::kVolumeShader:
             return VOP_ATMOSPHERE_SHADER;
@@ -74,6 +75,8 @@ static PRM_Type const& GetPRMType(RprUsdMaterialNodeInput::Type rprType) {
             return PRM_TOGGLE;
         case RprUsdMaterialNodeElement::kToken:
             return PRM_ORD_E;
+        case RprUsdMaterialNodeElement::kFilepath:
+            return PRM_FILE;
         default:
             return PRM_LIST_TERMINATOR;
     }
