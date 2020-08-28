@@ -83,6 +83,7 @@ public:
     bool IsStopSupported() const override;
     bool Stop() override;
     bool Restart() override;
+    void SetDrivers(HdDriverVector const& drivers) override;
 #endif // PXR_VERSION >= 2005
 
     bool IsBatch() const { return m_isBatch; }

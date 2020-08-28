@@ -209,6 +209,17 @@ public:
         : m_delegate(delegate) {
         // Postpone initialization as further as possible to allow Hydra user to set custom render settings before creating a context
         //InitIfNeeded();
+    
+    }
+
+    rpr::FrameBuffer* GetColorFramebuffer() {
+        if (auto colorAov = GetAov(HdRprAovTokens->rawColor, 0, 0, HdFormat::HdFormatInvalid)) {
+            if (auto fb = colorAov->GetAovFb()) {
+                return fb->GetRprObject();
+            }
+        }
+
+        return nullptr;
     }
 
     void InitIfNeeded() {
@@ -1756,6 +1767,32 @@ public:
         }
     }
 
+    void InteropRenderImpl(HdRprRenderThread* renderThread) {
+        if (m_rprContextMetadata.pluginType != RprUsdPluginType::kPluginHybrid) {
+            TF_CODING_ERROR("InteropRenderImpl should be called for Hybrid plugin only");
+            return;
+        }
+
+        // For now render 5 frames before each present
+        for (int i = 0; i < 5; i++) {
+            rpr::Status status = m_rprContext->Render();
+            if (status != rpr::Status::RPR_SUCCESS) {
+                TF_WARN("rprContextRender returns: %d", status);
+            }
+        }
+
+        // Next frame couldn't be flushed before previous was presented. We should wait for presenter
+        std::unique_lock<std::mutex> lock(m_rprContext->GetMutex());
+        m_presentedConditionVariable->wait(lock, [this] { return *m_presentedCondition == true; });
+
+        rpr_int status = m_rprContextFlushFrameBuffers(rpr::GetRprObject(m_rprContext.get()));
+        if (status != RPR_SUCCESS) {
+            TF_WARN("rprContextFlushFrameBuffers returns: %d", status);
+        }
+
+        *m_presentedCondition = false;
+    }
+
     void RenderFrame(HdRprRenderThread* renderThread) {
         if (!m_rprContext ||
             m_aovRegistry.empty()) {
@@ -1803,7 +1840,14 @@ public:
 
         if (m_state == kStateRender) {
             try {
-                RenderImpl(renderThread);
+                if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid)
+                {
+                    InteropRenderImpl(renderThread);
+                }
+                else
+                {
+                    RenderImpl(renderThread);
+                }
             } catch (std::runtime_error const& e) {
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
             }
@@ -1932,6 +1976,16 @@ Don't show this message again?
         m_rprSceneExportPath = exportPath;
     }
 
+    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
+        m_interopInfo = interopInfo;
+        m_presentedConditionVariable = presentedConditionVariable;
+        m_presentedCondition = presentedCondition;
+    }
+
+    RprUsdContextMetadata GetContextMetadata() {
+        return m_rprContextMetadata;
+    }
+
 private:
     static RprUsdPluginType GetPluginType(RenderQualityType renderQuality) {
         if (renderQuality == kRenderQualityFull) {
@@ -2023,7 +2077,15 @@ private:
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
-        RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Fail to set context Y FLIP parameter");
+        if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid) {
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 1), "Fail to set context Y FLIP parameter");
+            RPR_ERROR_CHECK_THROW(m_rprContext->GetFunctionPtr(
+                RPR_CONTEXT_FLUSH_FRAMEBUFFERS_FUNC_NAME, 
+                (void**)(&m_rprContextFlushFrameBuffers)
+            ), "Fail to get rprContextFlushFramebuffers function");
+        } else if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginTahoe) {
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Fail to set context Y FLIP parameter");
+        }
 
         {
             HdRprConfig* config;
@@ -2619,6 +2681,11 @@ private:
 
     std::mutex m_rprSceneExportPathMutex;
     std::string m_rprSceneExportPath;
+
+    void* m_interopInfo = nullptr;
+    std::condition_variable* m_presentedConditionVariable = nullptr;
+    bool* m_presentedCondition = nullptr;
+    rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
 };
 
 HdRprApi::HdRprApi(HdRprDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
@@ -2933,6 +3000,21 @@ std::string HdRprApi::GetCachePath() {
         ArchCreateDirectory(path.c_str());
     }
     return path;
+}
+
+rpr::FrameBuffer* HdRprApi::GetColorFramebuffer() {
+    return m_impl->GetColorFramebuffer();
+}
+
+void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
+    m_impl->SetInteropInfo(interopInfo, presentedConditionVariable, presentedCondition);
+
+    // Temporary should be force inited here, because otherwise has issues with GPU synchronization
+    m_impl->InitIfNeeded();
+}
+
+RprUsdContextMetadata HdRprApi::GetContextMetadata() {
+    return m_impl->GetContextMetadata();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

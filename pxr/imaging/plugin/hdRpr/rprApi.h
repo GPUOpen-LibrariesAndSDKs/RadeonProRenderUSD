@@ -27,6 +27,7 @@ limitations under the License.
 #include "pxr/imaging/hd/material.h"
 #include "pxr/imaging/hd/renderPassState.h"
 #include "pxr/imaging/hd/renderDelegate.h"
+#include "pxr/imaging/rprUsd/contextMetadata.h"
 
 #include <RadeonProRender.hpp>
 
@@ -156,6 +157,9 @@ public:
     bool IsSphereAndDiskLightSupported() const;
     int GetCurrentRenderQuality() const;
     void ExportRprSceneOnNextRender(const char* exportPath);
+    rpr::FrameBuffer* GetColorFramebuffer();
+    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);
+    RprUsdContextMetadata GetContextMetadata();
 
     static std::string GetAppDataPath();
     static std::string GetCachePath();

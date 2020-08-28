@@ -22,6 +22,9 @@ limitations under the License.
 #include "pxr/base/tf/envSetting.h"
 
 #include <RadeonProRender.hpp>
+#include <RadeonProRender_VK.h>
+#include <RadeonProRender_Baikal.h>
+#include <vulkan/vulkan.h>
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
@@ -267,7 +270,31 @@ rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* 
     }
 
     rpr::Status status;
-    auto context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, nullptr, cachePath, &status);
+    rpr::Context* context = nullptr;
+
+    if (metadata->pluginType == RprUsdPluginType::kPluginHybrid) {
+        // Create interop context for hybrid
+        constexpr std::uint32_t MB = 1024u * 1024u;
+        std::uint32_t acc_size = 1024 * MB;
+        std::uint32_t vbuf_size = 1024 * MB;
+        std::uint32_t ibuf_size = 512 * MB;
+        std::uint32_t sbuf_size = 512 * MB;
+
+        rpr_context_properties properties[] {
+            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO, (rpr_context_properties)metadata->interopInfo,
+            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE, (rpr_context_properties)&acc_size,
+            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, (rpr_context_properties)&vbuf_size,
+            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, (rpr_context_properties)&ibuf_size,
+            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, (rpr_context_properties)&sbuf_size,
+            0
+        };
+
+        context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, properties, cachePath, &status);
+    } else {
+        // Create non-interop context for tahoe
+        context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, nullptr, cachePath, &status);
+    }
+
     if (context) {
         if (RPR_ERROR_CHECK(context->SetActivePlugin(pluginID), "Failed to set active plugin")) {
             delete context;

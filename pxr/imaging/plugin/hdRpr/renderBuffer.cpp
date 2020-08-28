@@ -16,13 +16,15 @@ limitations under the License.
 #include "rprApi.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
+#include "pxr/imaging/rprUsd/contextMetadata.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id)
+HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id, HdRprApi* api)
     : HdRenderBuffer(id)
     , m_numMappers(0)
-    , m_isConverged(false) {
+    , m_isConverged(false)
+    , m_api(api) {
 
 }
 
@@ -112,6 +114,25 @@ void HdRprRenderBuffer::SetConverged(bool converged) {
 
 void HdRprRenderBuffer::SetStatus(bool isValid) {
     m_isValid = isValid;
+}
+
+VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
+    if ("aov_color" == GetId().GetElementString()) {
+        rpr::FrameBuffer* color = m_api->GetColorFramebuffer();
+
+        RprUsdPluginType type = m_api->GetContextMetadata().pluginType;
+        bool isHybrid = false;
+        if (type == RprUsdPluginType::kPluginHybrid) {
+            isHybrid = true;
+        }
+
+        VtDictionary dictionary;
+        dictionary["is_hybrid"] = isHybrid;
+        dictionary["framebuffer"] = color;
+
+        return VtValue(dictionary);
+    }
+    return VtValue();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
