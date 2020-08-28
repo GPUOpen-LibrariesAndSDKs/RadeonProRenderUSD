@@ -116,9 +116,16 @@ void HdRprRenderBuffer::SetStatus(bool isValid) {
     m_isValid = isValid;
 }
 
+#if PXR_VERSION >= 2005
+
 VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
     if ("aov_color" == GetId().GetElementString()) {
         rpr::FrameBuffer* color = m_api->GetColorFramebuffer();
+        // RPR framebuffer not created yet
+        if (color == nullptr)
+        {
+            return VtValue();
+        }
 
         RprUsdPluginType type = m_api->GetContextMetadata().pluginType;
         bool isHybrid = false;
@@ -134,5 +141,7 @@ VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
     }
     return VtValue();
 }
+
+#endif // PXR_VERSION >= 2005
 
 PXR_NAMESPACE_CLOSE_SCOPE

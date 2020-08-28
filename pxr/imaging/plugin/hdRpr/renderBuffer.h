@@ -59,9 +59,13 @@ public:
 
     void SetStatus(bool isValid);
 
+#if PXR_VERSION >= 2005
+
     // HdRprRenderBuffer should hold actual framebuffer
     // But for now just take it from HdRprApi in order to provide valid API
     VtValue GetResource(bool multiSampled) const override;
+
+#endif // PXR_VERSION >= 2005
 
 protected:
     void _Deallocate() override;
