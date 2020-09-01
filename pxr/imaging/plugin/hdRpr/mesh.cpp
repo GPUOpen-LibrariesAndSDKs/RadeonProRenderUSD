@@ -197,6 +197,12 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (HdChangeTracker::IsTopologyDirty(*dirtyBits, id)) {
+        for (auto& oldGeomSubset : m_topology.GetGeomSubsets()) {
+            if (!oldGeomSubset.materialId.IsEmpty()) {
+                rprRenderParam->UnsubscribeFromMaterialUpdates(oldGeomSubset.materialId, id);
+            }
+        }
+
         m_topology = GetMeshTopology(sceneDelegate);
         m_faceVertexCounts = m_topology.GetFaceVertexCounts();
         m_faceVertexIndices = m_topology.GetFaceVertexIndices();
@@ -205,6 +211,12 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_normalsValid = false;
 
         m_enableSubdiv = m_topology.GetScheme() == PxOsdOpenSubdivTokens->catmullClark;
+
+        for (auto& newGeomSubset : m_topology.GetGeomSubsets()) {
+            if (!newGeomSubset.materialId.IsEmpty()) {
+                rprRenderParam->SubscribeForMaterialUpdates(newGeomSubset.materialId, id);
+            }
+        }
 
         newMesh = true;
     }
@@ -643,7 +655,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 }
 
 void HdRprMesh::Finalize(HdRenderParam* renderParam) {
-    auto rprApi = static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     for (auto mesh : m_rprMeshes) {
         rprApi->Release(mesh);
@@ -658,6 +671,12 @@ void HdRprMesh::Finalize(HdRenderParam* renderParam) {
 
     rprApi->Release(m_fallbackMaterial);
     m_fallbackMaterial = nullptr;
+
+    for (auto& oldGeomSubset : m_topology.GetGeomSubsets()) {
+        if (!oldGeomSubset.materialId.IsEmpty()) {
+            rprRenderParam->UnsubscribeFromMaterialUpdates(oldGeomSubset.materialId, GetId());
+        }
+    }
 
     HdRprBaseRprim::Finalize(renderParam);
 }
