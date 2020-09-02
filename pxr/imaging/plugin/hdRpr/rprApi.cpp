@@ -1706,7 +1706,7 @@ public:
 
         // When we want to have a uniform seed across all frames,
         // we need to make sure that RPR_CONTEXT_FRAMECOUNT sequence is the same for all of them
-        if (m_isUniformSeed) {
+        if (m_isUniformSeed && m_numSamples == 0) {
             m_frameCount = 0;
         }
 
