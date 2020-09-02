@@ -11,7 +11,6 @@
 # 
 import subprocess
 import argparse
-import sys
 import os
 
 if __name__ == "__main__":
@@ -20,18 +19,16 @@ if __name__ == "__main__":
     p.add_argument("install", help="The install root for generated files.")
     p.add_argument("--houdini_root", help="The install root for generated files.")
     p.add_argument('--hidden-render-qualities', default='', type=str)
+    p.add_argument('--python_exe', help="Directory with scripts")
     args = p.parse_args()
 
     generate_ds_files = []
     if args.houdini_root:
-        # Generator of DialogScript files requires access to houdini's python modules
         generate_ds_files = ['--generate_ds_files']
-        os.environ['PATH'] = os.environ.get('PATH', '') + os.pathsep + os.path.join(args.houdini_root, 'bin')
-        os.environ['PYTHONPATH'] = os.environ.get('PYTHONPATH', '') + os.pathsep + os.path.join(os.path.join(args.houdini_root, 'houdini'), 'python2.7libs')
 
-    subprocess.check_call([sys.executable, os.path.join(args.scripts_dir, 'generateLightSettingFiles.py'), args.install] + generate_ds_files)
-    subprocess.check_call([sys.executable, os.path.join(args.scripts_dir, 'generateGeometrySettingFiles.py'), args.install] + generate_ds_files)
+    subprocess.check_call([args.python_exe, os.path.join(args.scripts_dir, 'generateLightSettingFiles.py'), args.install] + generate_ds_files)
+    subprocess.check_call([args.python_exe, os.path.join(args.scripts_dir, 'generateGeometrySettingFiles.py'), args.install] + generate_ds_files)
     subprocess.check_call([
-        sys.executable, os.path.join(args.scripts_dir, 'generateRenderSettingFiles.py'),
+        args.python_exe, os.path.join(args.scripts_dir, 'generateRenderSettingFiles.py'),
         '--hidden-render-qualities', args.hidden_render_qualities,
         args.install] + generate_ds_files)
