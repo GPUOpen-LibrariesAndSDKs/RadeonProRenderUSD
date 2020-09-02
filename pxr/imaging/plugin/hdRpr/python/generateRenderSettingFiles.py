@@ -15,6 +15,7 @@ import argparse
 import platform
 
 from houdiniDsGenerator import generate_houdini_ds
+from commonSettings import SettingValue
 
 def get_render_setting(render_setting_categories, category_name, name):
     for category in render_setting_categories:
@@ -32,7 +33,6 @@ def hidewhen_not_ambient_occlusion_mode(render_setting_categories):
 render_setting_categories = [
     {
         'name': 'RenderQuality',
-        'disabled_platform': ['Darwin'],
         'settings': [
             {
                 'name': 'renderQuality',
@@ -40,10 +40,11 @@ render_setting_categories = [
                 'help': 'Render restart might be required',
                 'defaultValue': 'Full',
                 'values': [
-                    "Low",
-                    "Medium",
-                    "High",
-                    "Full"
+                    SettingValue('Low'),
+                    SettingValue('Medium'),
+                    SettingValue('High'),
+                    SettingValue('Full'),
+                    SettingValue('Northstar', 'Full 2.0 (Beta)')
                 ]
             }
         ]
@@ -56,15 +57,15 @@ render_setting_categories = [
                 'ui_name': 'Render Mode',
                 'defaultValue': 'Global Illumination',
                 'values': [
-                    'Global Illumination',
-                    'Direct Illumination',
-                    'Wireframe',
-                    'Material Index',
-                    'Position',
-                    'Normal',
-                    'Texcoord',
-                    'Ambient Occlusion',
-                    'Diffuse'
+                    SettingValue('Global Illumination'),
+                    SettingValue('Direct Illumination'),
+                    SettingValue('Wireframe'),
+                    SettingValue('Material Index'),
+                    SettingValue('Position'),
+                    SettingValue('Normal'),
+                    SettingValue('Texcoord'),
+                    SettingValue('Ambient Occlusion'),
+                    SettingValue('Diffuse')
                 ]
             },
             {
@@ -94,9 +95,9 @@ render_setting_categories = [
                 'help': 'Restart required.',
                 'defaultValue': 'GPU',
                 'values': [
-                    "CPU",
-                    "GPU",
-                    # "CPU+GPU"
+                    SettingValue('CPU'),
+                    SettingValue('GPU'),
+                    # SettingValue('CPU+GPU')
                 ]
             }
         ]
@@ -254,8 +255,8 @@ render_setting_categories = [
                 'defaultValue': False
             },
             {
-                'name': 'tonemapExposure',
-                'ui_name': 'Tone Mapping Exposure',
+                'name': 'tonemapExposureTime',
+                'ui_name': 'Tone Mapping Exposure Time',
                 'help': 'Film exposure time',
                 'defaultValue': 0.125,
                 'minValue': 0.0,
@@ -307,7 +308,7 @@ render_setting_categories = [
                 'ui_name': 'Enable Color Alpha',
                 'defaultValue': True,
                 'houdini': {
-                    'hidewhen': 'renderQuality != 3'
+                    'hidewhen': 'renderQuality < 3'
                 }
             }
         ]
@@ -578,7 +579,7 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 setting['maxValue'] = len(setting['values']) - 1
                 rs_mapped_values_enum += 'enum {name_title}Type {{\n'.format(name_title=name_title)
                 for value in setting['values']:
-                    rs_mapped_values_enum += '    k{name_title}{value},\n'.format(name_title=name_title, value=value.replace(' ', ''))
+                    rs_mapped_values_enum += '    k{name_title}{value},\n'.format(name_title=name_title, value=value.key.replace(' ', ''))
                 rs_mapped_values_enum += '};\n'
                 default_value = setting['values'].index(default_value)
                 type_str = '{name_title}Type'.format(name_title=name_title)
@@ -611,6 +612,13 @@ PXR_NAMESPACE_CLOSE_SCOPE
             if 'minValue' in setting or 'maxValue' in setting:
                 rs_validate_values += '\n'
             rs_range_definitions += '\n'
+
+            if 'hidden_values' in setting:
+                set_validation += '    switch ({name}) {{\n'.format(name=name)
+                for value in setting['hidden_values']:
+                    set_validation += '        case k{name_title}{value}:\n'.format(name_title=name_title, value=value.replace(' ', ''))
+                set_validation += '            return;\n'.format(name_title=name_title, value=value.replace(' ', ''))
+                set_validation += '        default: break;}\n'
 
             if 'ui_name' in setting:
                 rs_list_initialization += '    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title)
@@ -661,15 +669,21 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("install", help="The install root for generated files.")
     p.add_argument("--generate_ds_files", default=False, action='store_true')
-    p.add_argument('--northstar', default=False, action='store_true', help='Whether enable northstar render setting or not')
+    p.add_argument('--hidden-render-qualities', default='', type=str)
     args = p.parse_args()
 
-    if args.northstar:
+    if args.hidden_render_qualities:
         for category in render_setting_categories:
             if category['name']  == 'RenderQuality':
                 for setting in category['settings']:
                     if setting['name'] == 'renderQuality':
-                        setting['values'].append('Northstar')
+                        hidden_render_qualities = args.hidden_render_qualities.split()
+                        for render_quality in hidden_render_qualities:
+                            if not render_quality in setting['values']:
+                                print('Unknown render quality: {}'.format(render_quality))
+                                sys.exit(1)
+
+                        setting['hidden_values'] = hidden_render_qualities
                         break
                 break
 

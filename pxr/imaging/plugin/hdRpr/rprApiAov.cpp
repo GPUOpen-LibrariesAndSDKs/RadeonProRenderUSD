@@ -305,7 +305,7 @@ void HdRprApiColorAov::SetTonemap(TonemapParams const& params) {
 }
 
 void HdRprApiColorAov::SetTonemapFilterParams(rif::Filter* filter) {
-    filter->SetParam("exposure", m_tonemap.exposure);
+    filter->SetParam("exposureTime", m_tonemap.exposureTime);
     filter->SetParam("sensitivity", m_tonemap.sensitivity);
     filter->SetParam("fstop", m_tonemap.fstop);
     filter->SetParam("gamma", m_tonemap.gamma);

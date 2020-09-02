@@ -34,17 +34,17 @@ bool RprUsdImageCache::InitCacheKey(
     key->path = path;
     key->hash = GetHash(path);
 
-    auto processTile = [key](std::string const& path) -> bool {
+    auto processTile = [key](std::string const& path) {
         double modificationTime;
-        if (!ArchGetModificationTime(path.c_str(), &modificationTime)) return false;
-
         int64_t sizeInt = ArchGetFileLength(path.c_str());
-        if (sizeInt == -1) return false;
+        if (sizeInt == -1 || !ArchGetModificationTime(path.c_str(), &modificationTime)) {
+            // If the path points to a non-filesystem image (e.g. usdz embedded image)
+            // we rely on the user of the Hydra to correctly reload all materials that use this image
+            return;
+        }
 
         key->tiles.emplace_back(size_t(sizeInt), modificationTime);
         key->hash ^= size_t(sizeInt) ^ GetHash(modificationTime);
-
-        return true;
     };
 
     if (tiles.size() != 1 || tiles[0].id != 0) {
@@ -55,14 +55,10 @@ bool RprUsdImageCache::InitCacheKey(
         }
 
         for (auto& tile : tiles) {
-            if (!processTile(TfStringPrintf(formatString.c_str(), tile.id))) {
-                return false;
-            }
+            processTile(TfStringPrintf(formatString.c_str(), tile.id));
         }
     } else {
-        if (!processTile(path)) {
-            return false;
-        }
+        processTile(path);
     }
 
     return true;

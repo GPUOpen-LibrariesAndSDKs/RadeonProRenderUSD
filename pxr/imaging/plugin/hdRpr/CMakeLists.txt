@@ -68,8 +68,14 @@ if(HoudiniUSD_FOUND)
     }\")")
 endif()
 
-if(RPR_NORTHSTAR_BINARY)
-    set(GEN_SCRIPT_ARGS --northstar ${GEN_SCRIPT_ARGS})
+if(NOT RPR_NORTHSTAR_BINARY)
+    set(HIDDEN_RENDER_QUALITIES ${HIDDEN_RENDER_QUALITIES} Northstar)
+endif()
+if(NOT RPR_HYBRID_BINARY)
+    set(HIDDEN_RENDER_QUALITIES ${HIDDEN_RENDER_QUALITIES} Low Medium High)
+endif()
+if(HIDDEN_RENDER_QUALITIES)
+    set(GEN_SCRIPT_ARGS --hidden-render-qualities "\"${HIDDEN_RENDER_QUALITIES}\"" ${GEN_SCRIPT_ARGS})
 endif()
 
 add_custom_command(
@@ -145,6 +151,7 @@ pxr_plugin(hdRpr
 
     PRIVATE_HEADERS
         boostIncludePath.h
+        baseRprim.h
         api.h
 
     RESOURCE_FILES
@@ -187,13 +194,16 @@ install(
 }\")")
 
 if(WIN32)
+    set(RPR_BINARIES
+        ${RPR_BIN_LOCATION}/RadeonProRender64.dll
+        ${RPR_BIN_LOCATION}/RprLoadStore64.dll)
     install(
-        FILES ${RPR_BINARIES} ${RIF_BINARIES} ${OptBin}
+        FILES ${RPR_BINARIES} ${RPR_PLUGINS} ${RIF_BINARIES} ${OptBin}
         DESTINATION lib)
 else(WIN32)
     # install() does not follow symlinks, so we do it manually
     set(RESOLVED_LIBRARIES "")
-    foreach (file ${RPR_LIBRARY} ${RPR_LOADSTORE_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY} ${RIF_DEPENDENCY_LIBRARIES})
+    foreach (file ${RPR_LIBRARY} ${RPR_LOADSTORE_LIBRARY} ${RPR_PLUGINS} ${RIF_LIBRARY} ${RIF_DEPENDENCY_LIBRARIES})
         while(IS_SYMLINK ${file})
             file(READ_SYMLINK ${file} symfile)
             if(NOT IS_ABSOLUTE "${symfile}")

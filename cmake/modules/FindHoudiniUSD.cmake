@@ -30,6 +30,14 @@ if(WIN32)
     list(APPEND HUSD_REQ_VARS "Houdini_USD_IMPLIB_DIR")
 endif()
 
+if(APPLE)
+    find_library(Houdini_TBB_LIB
+        NAMES tbb
+        PATHS ${HOUDINI_ROOT}
+        PATH_SUFFIXES "../Libraries"
+        NO_DEFAULT_PATH)
+endif(APPLE)
+
 find_path(Houdini_Python_INCLUDE_DIR
     "pyconfig.h"
     PATHS ${HOUDINI_ROOT}
@@ -140,6 +148,9 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
     # more than enough to get it linked in for us.
     target_link_libraries(tf INTERFACE ${Houdini_Boostpython_LIB})
     target_link_libraries(vt INTERFACE ${Houdini_Boostpython_LIB})
+    if(APPLE)
+        target_link_libraries(tf INTERFACE ${Houdini_TBB_LIB})
+    endif(APPLE)
     # By default Boost links libraries implicitly for the user via pragma's, we do not want this
     target_compile_definitions(tf INTERFACE -DHBOOST_ALL_NO_LIB)
 endif()

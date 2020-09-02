@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "config.h"
 #include "camera.h"
+#include "debugCodes.h"
 #include "renderDelegate.h"
 #include "renderBuffer.h"
 #include "renderParam.h"
@@ -594,6 +595,18 @@ public:
         });
     }
 
+    rpr::DiskLight* CreateDiskLight() {
+        return CreateLight<rpr::DiskLight>([this](rpr::Status* status) {
+            return m_rprContext->CreateDiskLight(status);
+        });
+    }
+
+    rpr::SphereLight* CreateSphereLight() {
+        return CreateLight<rpr::SphereLight>([this](rpr::Status* status) {
+            return m_rprContext->CreateSphereLight(status);
+        });
+    }
+
     rpr::IESLight* CreateIESLight(std::string const& iesFilepath) {
         return CreateLight<rpr::IESLight>([this, &iesFilepath](rpr::Status* status) {
             auto light = m_rprContext->CreateIESLight(status);
@@ -619,7 +632,19 @@ public:
     }
 
     template <typename Light>
-    void SetLightColor(Light* light, GfVec3f const& color) {
+    void SetLightRadius(Light* light, float radius) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+
+        RPR_ERROR_CHECK(light->SetRadius(radius), "Failed to set light radius");
+    }
+
+    void SetLightAngle(rpr::DiskLight* light, float angle) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+
+        RPR_ERROR_CHECK(light->SetAngle(angle), "Failed to set light angle");
+    }
+
+    void SetLightColor(rpr::RadiantLight* light, GfVec3f const& color) {
         LockGuard rprLock(m_rprContext->GetMutex());
 
         RPR_ERROR_CHECK(light->SetRadiantPower(color[0], color[1], color[2]), "Failed to set light color");
@@ -692,10 +717,8 @@ public:
         return envLight;
     }
 
-    void Release(HdRprApiEnvironmentLight* envLight) {
+    void ReleaseImpl(HdRprApiEnvironmentLight* envLight) {
         if (envLight) {
-            LockGuard rprLock(m_rprContext->GetMutex());
-
             rpr::Status status;
             if (envLight->state == HdRprApiEnvironmentLight::kAttachedAsEnvLight) {
                 status = m_scene->SetEnvironmentLight(nullptr);
@@ -708,6 +731,13 @@ public:
             }
             delete envLight;
             m_numLights--;
+        }
+    }
+
+    void Release(HdRprApiEnvironmentLight* envLight) {
+        if (envLight) {
+            LockGuard rprLock(m_rprContext->GetMutex());
+            ReleaseImpl(envLight);
         }
     }
 
@@ -1199,7 +1229,7 @@ public:
             tonemap.isDirty = config->IsDirty(HdRprConfig::DirtyTonemapping);
             if (tonemap.isDirty) {
                 tonemap.value.enable = config->GetEnableTonemap();
-                tonemap.value.exposure = config->GetTonemapExposure();
+                tonemap.value.exposureTime = config->GetTonemapExposureTime();
                 tonemap.value.sensitivity = config->GetTonemapSensitivity();
                 tonemap.value.fstop = config->GetTonemapFstop();
                 tonemap.value.gamma = config->GetTonemapGamma();
@@ -1235,8 +1265,8 @@ public:
                 RenderQualityType currentRenderQuality;
                 if (m_rprContextMetadata.pluginType == kPluginTahoe) {
                     currentRenderQuality = kRenderQualityFull;
-                } else if (m_rprContextMetadata.pluginType == kPluginNorthStar) {
-                    currentRenderQuality = static_cast<RenderQualityType>(int(kRenderQualityFull) + 1);
+                } else if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                    currentRenderQuality = kRenderQualityNorthstar;
                 } else {
                     rpr_uint currentHybridQuality = RPR_RENDER_QUALITY_HIGH;
                     size_t dummy;
@@ -1353,10 +1383,6 @@ public:
 
         if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force) {
             m_isAlphaEnabled = preferences.GetEnableAlpha();
-            if (m_rprContextMetadata.pluginType == kPluginNorthStar) {
-                // Disable opacity AOV in Northstar because it's always zeroed
-                m_isAlphaEnabled = false;
-            }
 
             UpdateColorAlpha();
         }
@@ -1364,7 +1390,7 @@ public:
         m_currentRenderQuality = preferences.GetRenderQuality();
 
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
-            m_rprContextMetadata.pluginType == kPluginNorthStar) {
+            m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
         } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             UpdateHybridSettings(preferences, force);
@@ -1477,8 +1503,23 @@ public:
 
             float fstop = 0.0f;
             m_hdCamera->GetFStop(&fstop);
-            if (fstop == 0.0f) { fstop = std::numeric_limits<float>::max(); }
+            bool dofEnabled = fstop != 0.0f && fstop != std::numeric_limits<float>::max();
+
+            if (dofEnabled) {
+                int apertureBlades = m_hdCamera->GetApertureBlades();
+                if (apertureBlades < 4 || apertureBlades > 32) {
+                    apertureBlades = 16;
+                }
+                RPR_ERROR_CHECK(m_camera->SetApertureBlades(apertureBlades), "Failed to set camera aperture blades");
+            } else {
+                fstop = std::numeric_limits<float>::max();
+            }
             RPR_ERROR_CHECK(m_camera->SetFStop(fstop), "Failed to set camera FStop");
+
+            // Convert to millimeters
+            focalLength *= 1e3f;
+            sensorWidth *= 1e3f;
+            sensorHeight *= 1e3f;
 
             RPR_ERROR_CHECK(m_camera->SetFocalLength(focalLength), "Fail to set camera focal length");
             RPR_ERROR_CHECK(m_camera->SetSensorSize(sensorWidth, sensorHeight), "Failed to set camera sensor size");
@@ -1690,7 +1731,7 @@ public:
                     m_activePixels = -1;
                 }
             } else if (!isBatch && !m_isInteractive &&
-                       m_rprContextMetadata.pluginType == kPluginNorthStar && m_numSamples > 1) {
+                       m_rprContextMetadata.pluginType == kPluginNorthstar && m_numSamples > 1) {
                 // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
                 numSamplesPerIter *= 2;
 
@@ -1816,9 +1857,23 @@ Don't show this message again?
     }
 
     void AbortRender() {
-        if (m_rprContext) {
-            RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
+        if (!m_rprContext) {
+            return;
         }
+
+        // Do not abort the very first sample
+        //
+        // Ideally, aborting the first sample should not be the problem.
+        // We would like to be able to abort it: to reduce response time,
+        // to avoid doing calculations that may be discarded by the following changes.
+        // But in reality, aborting the very first sample may cause crashes or
+        // unwanted behavior when we will call rprContextRender next time.
+        // So until RPR core fixes these issues, we are not aborting the first sample.
+        if (m_numSamples == 0) {
+            return;
+        }
+
+        RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
     }
 
     int GetNumCompletedSamples() const {
@@ -1864,6 +1919,10 @@ Don't show this message again?
         return m_rprContextMetadata.pluginType != kPluginHybrid;
     }
 
+    bool IsSphereAndDiskLightSupported() const {
+        return m_rprContextMetadata.pluginType == kPluginNorthstar;
+    }
+
     int GetCurrentRenderQuality() const {
         return m_currentRenderQuality;
     }
@@ -1877,11 +1936,72 @@ private:
     static RprUsdPluginType GetPluginType(RenderQualityType renderQuality) {
         if (renderQuality == kRenderQualityFull) {
             return kPluginTahoe;
-        } else if (+renderQuality == int(kRenderQualityFull) + 1) {
-            return kPluginNorthStar;
+        } else if (renderQuality == kRenderQualityNorthstar) {
+            return kPluginNorthstar;
         } else {
             return kPluginHybrid;
         }
+    }
+
+    static void RprContextDeleter(rpr::Context* ctx) {
+        static bool forceLeakCheck = false;
+        if (forceLeakCheck || TfDebug::IsEnabled(HD_RPR_DEBUG_LEAKS)) {
+            rpr_int status = RPR_SUCCESS;
+
+            struct ListDescriptor {
+                rpr_context_info infoType;
+                const char* name;
+            };
+            std::vector<ListDescriptor> lists = {
+                {RPR_CONTEXT_LIST_CREATED_CAMERAS, "cameras"},
+                {RPR_CONTEXT_LIST_CREATED_MATERIALNODES, "materialnodes"},
+                {RPR_CONTEXT_LIST_CREATED_LIGHTS, "lights"},
+                {RPR_CONTEXT_LIST_CREATED_SHAPES, "shapes"},
+                {RPR_CONTEXT_LIST_CREATED_POSTEFFECTS, "posteffects"},
+                {RPR_CONTEXT_LIST_CREATED_HETEROVOLUMES, "heterovolumes"},
+                {RPR_CONTEXT_LIST_CREATED_GRIDS, "grids"},
+                {RPR_CONTEXT_LIST_CREATED_BUFFERS, "buffers"},
+                {RPR_CONTEXT_LIST_CREATED_IMAGES, "images"},
+                {RPR_CONTEXT_LIST_CREATED_FRAMEBUFFERS, "framebuffers"},
+                {RPR_CONTEXT_LIST_CREATED_SCENES, "scenes"},
+                {RPR_CONTEXT_LIST_CREATED_CURVES, "curves"},
+                {RPR_CONTEXT_LIST_CREATED_COMPOSITE, "composite"},
+                {RPR_CONTEXT_LIST_CREATED_LUT, "lut"},
+            };
+
+            bool hasLeaks = false;
+
+            for (auto& list : lists) {
+                size_t sizeParam = 0;
+                if (!RPR_ERROR_CHECK(ctx->GetInfo(list.infoType, 0, nullptr, &sizeParam), "Failed to get context info", ctx)) {
+                    size_t numObjects = sizeParam / sizeof(void*);
+
+                    if (numObjects > 0) {
+                        if (!hasLeaks) {
+                            hasLeaks = true;
+                            fprintf(stderr, "hdRpr - rpr::Context leaks detected\n");
+                        }
+
+                        fprintf(stderr, "Leaked %zu %s: ", numObjects, list.name);
+
+                        std::vector<void*> objectPointers(numObjects, nullptr);
+                        if (!RPR_ERROR_CHECK(ctx->GetInfo(list.infoType, sizeParam, objectPointers.data(), nullptr), "Failed to get context info", ctx)) {
+                            fprintf(stderr, "{");
+                            for (size_t i = 0; i < numObjects; ++i) {
+                                fprintf(stderr, "0x%p", objectPointers[i]);
+                                if (i + 1 != numObjects) {
+                                    fprintf(stderr, ",");
+                                }
+                            }
+                            fprintf(stderr, "}\n");
+                        } else {
+                            fprintf(stderr, "failed to get object list\n");
+                        }
+                    }
+                }
+            }
+        }
+        delete ctx;
     }
 
     void InitRpr() {
@@ -1898,7 +2018,7 @@ private:
 
         m_rprContextMetadata.pluginType = GetPluginType(renderQuality);
         auto cachePath = HdRprApi::GetCachePath();
-        m_rprContext.reset(RprUsdCreateContext(cachePath.c_str(), &m_rprContextMetadata));
+        m_rprContext = RprContextPtr(RprUsdCreateContext(cachePath.c_str(), &m_rprContextMetadata), RprContextDeleter);
         if (!m_rprContext) {
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
@@ -2015,7 +2135,7 @@ private:
 
     void RemoveDefaultLight() {
         if (m_defaultLightObject) {
-            Release(m_defaultLightObject);
+            ReleaseImpl(m_defaultLightObject);
             m_defaultLightObject = nullptr;
 
             // Do not count default light object
@@ -2446,7 +2566,8 @@ private:
     };
     uint32_t m_dirtyFlags = ChangeTracker::AllDirty;
 
-    std::unique_ptr<rpr::Context> m_rprContext;
+    using RprContextPtr = std::unique_ptr<rpr::Context, decltype(&RprContextDeleter)>;
+    RprContextPtr m_rprContext{nullptr, RprContextDeleter};
     RprUsdContextMetadata m_rprContextMetadata;
 
     std::unique_ptr<rif::Context> m_rifContext;
@@ -2563,6 +2684,16 @@ rpr::PointLight* HdRprApi::CreatePointLight() {
     return m_impl->CreatePointLight();
 }
 
+rpr::DiskLight* HdRprApi::CreateDiskLight() {
+    m_impl->InitIfNeeded();
+    return m_impl->CreateDiskLight();
+}
+
+rpr::SphereLight* HdRprApi::CreateSphereLight() {
+    m_impl->InitIfNeeded();
+    return m_impl->CreateSphereLight();
+}
+
 rpr::IESLight* HdRprApi::CreateIESLight(std::string const& iesFilepath) {
     m_impl->InitIfNeeded();
     return m_impl->CreateIESLight(iesFilepath);
@@ -2572,15 +2703,19 @@ void HdRprApi::SetDirectionalLightAttributes(rpr::DirectionalLight* directionalL
     m_impl->SetDirectionalLightAttributes(directionalLight, color, shadowSoftnessAngle);
 }
 
-void HdRprApi::SetLightColor(rpr::SpotLight* light, GfVec3f const& color) {
-    m_impl->SetLightColor(light, color);
+void HdRprApi::SetLightRadius(rpr::SphereLight* light, float radius) {
+    m_impl->SetLightRadius(light, radius);
 }
 
-void HdRprApi::SetLightColor(rpr::PointLight* light, GfVec3f const& color) {
-    m_impl->SetLightColor(light, color);
+void HdRprApi::SetLightRadius(rpr::DiskLight* light, float radius) {
+    m_impl->SetLightRadius(light, radius);
 }
 
-void HdRprApi::SetLightColor(rpr::IESLight* light, GfVec3f const& color) {
+void HdRprApi::SetLightAngle(rpr::DiskLight* light, float angle) {
+    m_impl->SetLightAngle(light, angle);
+}
+
+void HdRprApi::SetLightColor(rpr::RadiantLight* light, GfVec3f const& color) {
     m_impl->SetLightColor(light, color);
 }
 
@@ -2739,6 +2874,11 @@ bool HdRprApi::IsGlInteropEnabled() const {
 bool HdRprApi::IsArbitraryShapedLightSupported() const {
     m_impl->InitIfNeeded();
     return m_impl->IsArbitraryShapedLightSupported();
+}
+
+bool HdRprApi::IsSphereAndDiskLightSupported() const {
+    m_impl->InitIfNeeded();
+    return m_impl->IsSphereAndDiskLightSupported();
 }
 
 int HdRprApi::GetCurrentRenderQuality() const {

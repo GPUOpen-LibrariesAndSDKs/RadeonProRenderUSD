@@ -34,7 +34,7 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprMesh::HdRprMesh(SdfPath const& id, SdfPath const& instancerId)
-    : HdMesh(id, instancerId)
+    : HdRprBaseRprim(id, instancerId)
     , m_visibilityMask(kVisibleAll) {
 
 }
@@ -139,6 +139,15 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDeleg
     return m_fallbackMaterial;
 }
 
+uint32_t HdRprMesh::GetVisibilityMask() const {
+    if (!_sharedData.visible) {
+        // If mesh is explicitly made invisible, ignore custom visibility mask
+        return kInvisible;
+    }
+
+    return m_visibilityMask;
+}
+
 void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                      HdRenderParam* renderParam,
                      HdDirtyBits* dirtyBits,
@@ -213,10 +222,29 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
-        m_cachedMaterialId = sceneDelegate->GetMaterialId(id);
+        UpdateMaterialId(sceneDelegate, rprRenderParam);
     }
 
-    auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_cachedMaterialId));
+    // We are loading mesh UVs only when it has material
+    auto material = static_cast<const HdRprMaterial*>(
+        sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_materialId)
+    );
+
+    // Check all materials, including those from geomSubsets
+    if (!material || !material->GetRprMaterialObject()) {
+        for (auto& subset : m_topology.GetGeomSubsets()) {
+            if (subset.type == HdGeomSubset::TypeFaceSet &&
+                !subset.materialId.IsEmpty()) {
+                material = static_cast<const HdRprMaterial*>(
+                    sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, subset.materialId)
+                );
+                if (material && material->GetRprMaterialObject()) {
+                    break;
+                }
+            }
+        }
+    }
+
     if (material && material->GetRprMaterialObject()) {
         auto rprMaterial = material->GetRprMaterialObject();
 
@@ -331,7 +359,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 HdGeomSubset& unusedSubset = m_geomSubsets.back();
                 unusedSubset.type = HdGeomSubset::TypeFaceSet;
                 unusedSubset.id = id;
-                unusedSubset.materialId = m_cachedMaterialId;
+                unusedSubset.materialId = m_materialId;
                 unusedSubset.indices.resize(numUnusedFaces);
                 size_t count = 0;
                 for (size_t i = 0; i < faceIsUnused.size() && count < numUnusedFaces; ++i) {
@@ -393,7 +421,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     for (int i = 0; i < numVerticesInFace; ++i) {
                         const int pointIndex = m_faceVertexIndices[faceIndexesOffset + i];
                         int subsetPointIndex = vertexIndexRemapping[pointIndex];
-                        if (subsetPointIndex == -1) {
+
+                        bool newPoint = subsetPointIndex == -1;
+                        if (newPoint) {
                             subsetPointIndex = static_cast<int>(subsetPoints.size());
                             vertexIndexRemapping[pointIndex] = subsetPointIndex;
 
@@ -403,7 +433,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                         if (!m_normals.empty()) {
                             if (m_normalIndices.empty()) {
-                                subsetNormals.push_back(m_normals[pointIndex]);
+                                if (newPoint) {
+                                    subsetNormals.push_back(m_normals[pointIndex]);
+                                }
                             } else {
                                 const int normalIndex = m_normalIndices[faceIndexesOffset + i];
                                 int subsetNormalIndex = normalIndexRemapping[normalIndex];
@@ -419,7 +451,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                         if (!m_uvs.empty()) {
                             if (m_uvIndices.empty()) {
-                                subsetUv.push_back(m_uvs[pointIndex]);
+                                if (newPoint) {
+                                    subsetUv.push_back(m_uvs[pointIndex]);
+                                }
                             } else {
                                 const int uvIndex = m_uvIndices[faceIndexesOffset + i];
                                 int subsetuvIndex = uvIndexRemapping[uvIndex];
@@ -477,17 +511,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
-        if (newMesh || ((*dirtyBits & HdChangeTracker::DirtyVisibility) || isVisibilityMaskDirty)) {
-            auto visibilityMask = m_visibilityMask;
-            if (!_sharedData.visible) {
-                // Override m_visibilityMask
-                visibilityMask = 0;
-            }
-            for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshVisibility(rprMesh, visibilityMask);
-            }
-        }
-
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
             (*dirtyBits & HdChangeTracker::DirtyDoubleSided) || // update twosided material node
             (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) || isRefineLevelDirty) { // update displacement material
@@ -501,7 +524,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             };
 
             if (m_geomSubsets.empty()) {
-                auto material = getMeshMaterial(m_cachedMaterialId);
+                auto material = getMeshMaterial(m_materialId);
                 for (auto& mesh : m_rprMeshes) {
                     rprApi->SetMeshMaterial(mesh, material, m_displayStyle.displacementEnabled);
                 }
@@ -530,8 +553,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     }
                     m_rprMeshInstances.clear();
 
+                    auto visibilityMask = GetVisibilityMask();
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
-                        rprApi->SetMeshVisibility(m_rprMeshes[i], _sharedData.visible);
+                        rprApi->SetMeshVisibility(m_rprMeshes[i], visibilityMask);
                     }
                 } else {
                     updateTransform = false;
@@ -586,7 +610,23 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         }
 
                         // Hide prototype
-                        rprApi->SetMeshVisibility(m_rprMeshes[i], false);
+                        rprApi->SetMeshVisibility(m_rprMeshes[i], kInvisible);
+                    }
+                }
+            }
+        }
+
+        if (newMesh || ((*dirtyBits & HdChangeTracker::DirtyVisibility) || isVisibilityMaskDirty)) {
+            auto visibilityMask = GetVisibilityMask();
+            if (m_rprMeshInstances.empty()) {
+                for (auto& rprMesh : m_rprMeshes) {
+                    rprApi->SetMeshVisibility(rprMesh, visibilityMask);
+                }
+            } else {
+                // Do not touch prototype meshes (m_rprMeshes), set visibility for instances only
+                for (auto& instances : m_rprMeshInstances) {
+                    for (auto& rprMesh : instances) {
+                        rprApi->SetMeshVisibility(rprMesh, visibilityMask);
                     }
                 }
             }
@@ -619,7 +659,7 @@ void HdRprMesh::Finalize(HdRenderParam* renderParam) {
     rprApi->Release(m_fallbackMaterial);
     m_fallbackMaterial = nullptr;
 
-    HdMesh::Finalize(renderParam);
+    HdRprBaseRprim::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

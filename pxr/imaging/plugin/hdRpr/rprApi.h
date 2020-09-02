@@ -79,11 +79,14 @@ public:
     rpr::SpotLight* CreateSpotLight(float angle, float softness);
     rpr::IESLight* CreateIESLight(std::string const& iesFilepath);
     rpr::PointLight* CreatePointLight();
+    rpr::DiskLight* CreateDiskLight();
+    rpr::SphereLight* CreateSphereLight();
 
     void SetDirectionalLightAttributes(rpr::DirectionalLight* light, GfVec3f const& color, float shadowSoftnessAngle);
-    void SetLightColor(rpr::SpotLight* light, GfVec3f const& color);
-    void SetLightColor(rpr::PointLight* light, GfVec3f const& color);
-    void SetLightColor(rpr::IESLight* light, GfVec3f const& color);
+    void SetLightRadius(rpr::SphereLight* light, float radius);
+    void SetLightRadius(rpr::DiskLight* light, float radius);
+    void SetLightAngle(rpr::DiskLight* light, float angle);
+    void SetLightColor(rpr::RadiantLight* light, GfVec3f const& color);
 
     void Release(rpr::Light* light);
 
@@ -150,6 +153,7 @@ public:
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
     bool IsArbitraryShapedLightSupported() const;
+    bool IsSphereAndDiskLightSupported() const;
     int GetCurrentRenderQuality() const;
     void ExportRprSceneOnNextRender(const char* exportPath);
 
