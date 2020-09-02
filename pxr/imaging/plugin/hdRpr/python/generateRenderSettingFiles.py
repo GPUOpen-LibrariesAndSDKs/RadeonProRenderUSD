@@ -27,8 +27,25 @@ def get_render_setting(render_setting_categories, category_name, name):
                 return setting
 
 def hidewhen_not_ambient_occlusion_mode(render_setting_categories):
-    renderMode = get_render_setting(render_setting_categories, 'RenderMode', 'renderMode')
-    return 'renderMode != {}'.format(renderMode['values'].index('Ambient Occlusion'))
+    render_mode = get_render_setting(render_setting_categories, 'RenderMode', 'renderMode')
+    return 'renderMode != {}'.format(render_mode['values'].index('Ambient Occlusion'))
+
+def hidewhen_render_quality(operator, quality, render_setting_categories):
+    render_quality = get_render_setting(render_setting_categories, 'RenderQuality', 'renderQuality')
+
+    values = render_quality.get('visible_values', None)
+    if not values:
+        values = render_quality['values']
+
+    if not quality in values:
+        return None
+    return 'renderQuality {} {}'.format(operator, values.index(quality))
+
+def hidewhen_hybrid(render_setting_categories):
+    hidewhen = hidewhen_render_quality('<', 'Full', render_setting_categories)
+    if not hidewhen:
+        hidewhen = hidewhen_render_quality('<', 'Northstar', render_setting_categories)
+    return hidewhen
 
 render_setting_categories = [
     {
@@ -80,13 +97,13 @@ render_setting_categories = [
             }
         ],
         'houdini': {
-            'hidewhen': 'renderQuality < 3'
+            'hidewhen': hidewhen_hybrid
         }
     },
     {
         'name': 'Device',
         'houdini': {
-            'hidewhen': 'renderQuality < 3'
+            'hidewhen': hidewhen_hybrid
         },
         'settings': [
             {
@@ -105,7 +122,7 @@ render_setting_categories = [
     {
         'name': 'Denoise',
         'houdini': {
-            'hidewhen': 'renderQuality < 2'
+            'hidewhen': lambda settings: hidewhen_render_quality('<', 'High', settings)
         },
         'settings': [
             {
@@ -123,7 +140,7 @@ render_setting_categories = [
     {
         'name': 'Sampling',
         'houdini': {
-            'hidewhen': 'renderQuality == 0'
+            'hidewhen': lambda settings: hidewhen_render_quality('==', 'Low', settings)
         },
         'settings': [
             {
@@ -139,7 +156,7 @@ render_setting_categories = [
     {
         'name': 'AdaptiveSampling',
         'houdini': {
-            'hidewhen': 'renderQuality < 3'
+            'hidewhen': hidewhen_hybrid
         },
         'settings': [
             {
@@ -163,7 +180,7 @@ render_setting_categories = [
     {
         'name': 'Quality',
         'houdini': {
-            'hidewhen': 'renderQuality < 3'
+            'hidewhen': hidewhen_hybrid
         },
         'settings': [
             {
@@ -308,7 +325,7 @@ render_setting_categories = [
                 'ui_name': 'Enable Color Alpha',
                 'defaultValue': True,
                 'houdini': {
-                    'hidewhen': 'renderQuality < 3'
+                    'hidewhen': hidewhen_hybrid
                 }
             }
         ]
@@ -613,12 +630,12 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 rs_validate_values += '\n'
             rs_range_definitions += '\n'
 
-            if 'hidden_values' in setting:
+            if 'visible_values' in setting:
                 set_validation += '    switch ({name}) {{\n'.format(name=name)
-                for value in setting['hidden_values']:
-                    set_validation += '        case k{name_title}{value}:\n'.format(name_title=name_title, value=value.replace(' ', ''))
-                set_validation += '            return;\n'.format(name_title=name_title, value=value.replace(' ', ''))
-                set_validation += '        default: break;}\n'
+                for index, visible_value in enumerate(setting['visible_values']):
+                    set_validation += '        case {index}: {name} = k{name_title}{value}; break;\n'.format(
+                        name=name, index=index, name_title=name_title, value=visible_value.key.replace(' ', ''))
+                set_validation += '        default: return;}\n'
 
             if 'ui_name' in setting:
                 rs_list_initialization += '    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title)
@@ -678,12 +695,15 @@ if __name__ == "__main__":
                 for setting in category['settings']:
                     if setting['name'] == 'renderQuality':
                         hidden_render_qualities = args.hidden_render_qualities.split()
-                        for render_quality in hidden_render_qualities:
-                            if not render_quality in setting['values']:
-                                print('Unknown render quality: {}'.format(render_quality))
-                                sys.exit(1)
+                        if hidden_render_qualities:
+                            for render_quality in hidden_render_qualities:
+                                if not render_quality in setting['values']:
+                                    print('Unknown render quality: {}'.format(render_quality))
+                                    sys.exit(1)
 
-                        setting['hidden_values'] = hidden_render_qualities
+                            visible_values = filter(lambda value: not value in hidden_render_qualities, setting['values'])
+                            if visible_values:
+                                setting['visible_values'] = visible_values
                         break
                 break
 

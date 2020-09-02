@@ -62,21 +62,24 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 continue
 
             houdini_hidewhen_conditions = []
+            def add_hidewhen_condition(condition):
+                if condition and callable(condition):
+                    condition = condition(settings)
+                if condition:
+                    houdini_hidewhen_conditions.append(condition)
+
             if 'houdini' in category:
-                houdini_hidewhen_conditions.append(category['houdini'].get('hidewhen'))
+                add_hidewhen_condition(category['houdini'].get('hidewhen'))
 
             houdini_settings = setting.get('houdini', {})
             houdini_param_label = setting['ui_name']
-            if 'hidewhen' in houdini_settings:
-                houdini_hidewhen_conditions.append(houdini_settings.get('hidewhen'))
+            add_hidewhen_condition(houdini_settings.get('hidewhen'))
+
             houdini_hidewhen = ''
             if houdini_hidewhen_conditions:
                 houdini_hidewhen += 'hidewhen "'
                 for condition in houdini_hidewhen_conditions:
-                    if condition:
-                        if callable(condition):
-                            condition = condition(settings)
-                        houdini_hidewhen += '{{ {} }} '.format(condition)
+                    houdini_hidewhen += '{{ {} }} '.format(condition)
                 houdini_hidewhen += '"'
 
             def CreateHoudiniParam(name, label, htype, default, values=[], hints=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None):
@@ -132,12 +135,8 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 render_param_type = 'toggle'
                 render_param_default = 1 if default_value else 0
             elif 'values' in setting:
-                if 'hidden_values' in setting:
-                    values = list()
-                    for value in setting['values']:
-                        if not value in setting['hidden_values']:
-                            values.append(value)
-                else:
+                values = setting.get('visible_values', None)
+                if not values:
                     values = setting['values']
 
                 default_value = values.index(default_value)
