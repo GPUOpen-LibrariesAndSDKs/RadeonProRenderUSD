@@ -314,6 +314,19 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'Seed',
+        'settings': [
+            {
+                'name': 'uniformSeed',
+                'ui_name': 'Use Uniform Seed',
+                'defaultValue': True,
+                'houdini': {
+                    'hidewhen': 'renderQuality < 3'
+                }
+            }
+        ]
+    },
+    {
         'name': 'UsdNativeCamera',
         'settings': [
             {
