@@ -1,0 +1,261 @@
+#include <map>
+#include <fstream>
+#include <cstdlib>
+#include <iostream>
+#include <functional>
+
+#if defined(__linux__)
+
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+
+#include <unistd.h>
+#include <sys/stat.h>
+
+#else
+
+#include <filesystem>
+namespace fs = std::filesystem;
+
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
+using CharType = fs::path::value_type;
+using StringType = fs::path::string_type;
+
+#ifndef ARCH_PATH_MAX
+    #ifdef PATH_MAX
+        #define ARCH_PATH_MAX PATH_MAX
+    #else
+        #ifdef MAXPATHLEN
+            #define ARCH_PATH_MAX MAXPATHLEN
+        #else
+            #ifdef _MAX_PATH
+                #define ARCH_PATH_MAX _MAX_PATH
+            #else
+                #define ARCH_PATH_MAX 1024
+            #endif
+        #endif
+    #endif
+#endif
+
+// Getting the executable path requires a dynamically allocated buffer
+// on all platforms.  This helper function handles the allocation.
+StringType _DynamicSizedRead(
+    size_t initialSize,
+    const std::function<bool(CharType*, size_t*)>& callback) {
+    // Make a buffer for the data.
+    // We use an explicit deleter to work around libc++ bug.
+    // See https://llvm.org/bugs/show_bug.cgi?id=18350.
+    std::unique_ptr<CharType, std::default_delete<CharType[]> > buffer;
+    buffer.reset(new CharType[initialSize]);
+
+    // Repeatedly invoke the callback with our buffer until it's big enough.
+    size_t size = initialSize;
+    while (!callback(buffer.get(), &size)) {
+        if (size == std::numeric_limits<size_t>::max()) {
+            // callback is never going to succeed.
+            return StringType();
+        }
+        buffer.reset(new CharType[size]);
+    }
+
+    // Make a string.
+    return StringType(buffer.get());
+}
+
+fs::path ArchGetExecutablePath() {
+#if defined(__linux__)
+
+    // On Linux the executable path is retrieved from the /proc/self/exe
+    // symlink.
+    return
+        _DynamicSizedRead(ARCH_PATH_MAX,
+            [](char* buffer, size_t* size) {
+                const ssize_t n = readlink("/proc/self/exe", buffer, *size);
+                if (n == -1) {
+                    fprintf(stderr, "Unable to read /proc/self/exe to obtain executable path");
+                    *size = std::numeric_limits<size_t>::max();
+                    return false;
+                }
+                else if (static_cast<size_t>(n) >= *size) {
+                    // Find out how much space we need.
+                    struct stat sb;
+                    if (lstat("/proc/self/exe", &sb) == 0) {
+                        *size = sb.st_size + 1;
+                    }
+                    else {
+                        // Try iterating on the size.
+                        *size *= 2;
+                    }
+                    return false;
+                }
+                else {
+                    buffer[n] = '\0';
+                    return true;
+                }
+            });
+
+#elif defined(__APPLE__)
+
+    // On Darwin _NSGetExecutablePath() returns the executable path.
+    return
+        _DynamicSizedRead(ARCH_PATH_MAX,
+            [](char* buffer, size_t* size) {
+                uint32_t bufsize = *size;
+                if (_NSGetExecutablePath(buffer, &bufsize) == -1) {
+                    // We're told the correct size.
+                    *size = bufsize;
+                    return false;
+                }
+                else {
+                    return true;
+                }
+            });
+
+#elif defined(_WIN32) || defined(_WIN64)
+
+    // On Windows GetModuleFileName() returns the executable path.
+    return
+        _DynamicSizedRead(ARCH_PATH_MAX,
+            [](wchar_t* buffer, size_t* size) {
+                DWORD nSize = *size;
+                const DWORD n = GetModuleFileNameW(NULL, buffer, nSize);
+                if (n == 0) {
+                    fprintf(stderr, "Unable to read GetModuleFileName() to obtain executable path");
+                    *size = std::numeric_limits<size_t>::max();
+                    return false;
+                }
+                else if (n >= nSize) {
+                    // We have to iterate to find a suitable size.
+                    *size *= 2;
+                    return false;
+                }
+                else {
+                    return true;
+                }
+            });
+#endif
+}
+
+fs::path GetHoudiniUserPrefDirFromParentDir(fs::path const& parentDir, const char* hver) {
+    auto prefDir = parentDir / (std::string("houdini") + hver);
+    if (fs::is_directory(prefDir)) {
+        return prefDir.string();
+    }
+
+    return {};
+}
+
+fs::path GetHoudiniUserPrefDir(const char* hver) {
+    if (auto prefDirCstr = std::getenv("HOUDINI_USER_PREF_DIR")) {
+        std::string prefDir(prefDirCstr);
+
+        std::string hverPattern("__HVER__");
+        auto hverIdx = prefDir.find(hverPattern);
+        if (hverIdx != std::string::npos) {
+            prefDir.replace(hverIdx, hverPattern.size(), hver);
+        }
+
+        return prefDir;
+    }
+
+    const char* home = std::getenv("HOME");
+    if (home) {
+        auto prefDir = GetHoudiniUserPrefDirFromParentDir(home, hver);
+        if (!prefDir.empty()) return prefDir;
+    }
+
+#if defined(_WIN32) || defined(_WIN64)
+    auto userprofile = _wgetenv(L"USERPROFILE");
+    if (!userprofile) {
+        printf("USERPROFILE environment variable is not set\n");
+        return {};
+    }
+
+    auto documentsDir = fs::path(userprofile) / "documents";
+    auto prefDir = GetHoudiniUserPrefDirFromParentDir(documentsDir, hver);
+    if (!prefDir.empty()) return prefDir;
+#elif defined(__APPLE__)
+    if (home) {
+        auto prefDir = fs::path(home) / "Library" / "Preferences" / "houdini" / hver;
+        if (fs::is_directory(prefDir)) {
+            return prefDir.string();
+        }
+    }
+#endif
+
+    return {};
+}
+
+int main() {
+    auto houdiniUserPrefDir = GetHoudiniUserPrefDir("@HOUDINI_MAJOR_MINOR_VERSION@");
+    if (houdiniUserPrefDir.empty()) {
+        printf("Can not determine HOUDINI_USER_PREF_DIR. Please check your environment and specify HOUDINI_USER_PREF_DIR\n");
+        return EXIT_FAILURE;
+    }
+    std::cout << "HOUDINI_USER_PREF_DIR: " << houdiniUserPrefDir << std::endl;
+
+    auto executablePath = ArchGetExecutablePath();
+    if (executablePath.empty()) {
+        printf("Can not determine executable path\n");
+        return EXIT_FAILURE;
+    }
+
+    auto rprPath = executablePath.parent_path().string();
+    std::replace(rprPath.begin(), rprPath.end(), '\\', '/');
+    std::cout << "RPR path: " << rprPath << std::endl;
+
+    auto packagesDir = houdiniUserPrefDir / "packages";
+    fs::create_directories(packagesDir);
+
+    auto packageJsonFilepath = packagesDir / "RPR_for_Houdini.json";
+    std::ofstream packageJson(packageJsonFilepath);
+    if (!packageJson.is_open()) {
+        std::cout << "Failed to open output file: " << packageJsonFilepath << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    std::map<std::string, fs::path> env = {
+        {"RPR", rprPath},
+        {"HOUDINI_PATH", "$RPR/houdini"},
+#if defined(_WIN32) || defined(_WIN64)
+        {"PATH", "$RPR/lib"}
+#endif
+    };
+
+    packageJson << '{';
+    packageJson << '\"' << "env" << '\"';
+    packageJson << ':';
+    packageJson << '[';
+    for (auto it = env.begin(); it != env.end(); ++it) {
+        packageJson << '{';
+        packageJson << '\"' << it->first << '\"';
+        packageJson << ':';
+        packageJson << it->second;
+        packageJson << '}';
+        if (std::next(it) != env.end()) {
+            packageJson << ',';
+        }
+    }
+    packageJson << ']';
+    packageJson << '}';
+
+    if (packageJson.fail()) {
+        std::cout << "Failed to write output file: " << packageJsonFilepath << '\n' << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    std::cout << "Successfully activated RPR plugin" << std::endl;
+
+#if defined(_WIN32) || defined(_WIN64)
+    system("pause");
+#endif
+
+    return EXIT_SUCCESS;
+}
