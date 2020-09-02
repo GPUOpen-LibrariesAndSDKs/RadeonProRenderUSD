@@ -140,7 +140,10 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (newCurve) {
-        m_rprCurve = nullptr;
+        if (m_rprCurve) {
+            rprApi->Release(m_rprCurve);
+            m_rprCurve = nullptr;
+        }
 
         if (m_points.empty()) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: missing points", id.GetText());
