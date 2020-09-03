@@ -93,7 +93,17 @@ void HdRprFillPrimvarDescsPerInterpolation(
         HdInterpolationInstance,
     };
     for (auto& interpolation : interpolations) {
-        primvarDescsPerInterpolation->emplace(interpolation, sceneDelegate->GetPrimvarDescriptors(id, interpolation));
+        auto primvarDescs = sceneDelegate->GetPrimvarDescriptors(id, interpolation);
+        if (!primvarDescs.empty()) {
+            primvarDescsPerInterpolation->emplace(interpolation, std::move(primvarDescs));
+        }
+    }
+
+    // If primitive has no primvars,
+    // insert dummy entry so that the next time user calls this function,
+    // it will not rerun sceneDelegate->GetPrimvarDescriptors which is quite costly
+    if (primvarDescsPerInterpolation->empty()) {
+        primvarDescsPerInterpolation->emplace(HdInterpolationCount, HdPrimvarDescriptorVector{});
     }
 }
 

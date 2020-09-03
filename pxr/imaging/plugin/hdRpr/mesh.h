@@ -54,11 +54,15 @@ private:
     template <typename T>
     bool GetPrimvarData(TfToken const& name,
                         HdSceneDelegate* sceneDelegate,
-                        std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation,
+                        std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
                         VtArray<T>& out_data,
                         VtIntArray& out_indices);
 
-    RprUsdMaterial const* GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits);
+    RprUsdMaterial const* GetFallbackMaterial(
+        HdSceneDelegate* sceneDelegate,
+        HdRprApi* rprApi,
+        HdDirtyBits dirtyBits,
+        std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation);
 
     uint32_t GetVisibilityMask() const;
 

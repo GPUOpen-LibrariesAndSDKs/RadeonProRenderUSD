@@ -45,6 +45,18 @@ void HdRprParseGeometrySettings(
     HdPrimvarDescriptorVector const& constantPrimvarDescs,
     HdRprGeometrySettings* geomSettings);
 
+inline void HdRprParseGeometrySettings(
+    HdSceneDelegate* sceneDelegate, SdfPath const& id,
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
+    HdRprGeometrySettings* geomSettings) {
+    auto constantPrimvarDescIt = primvarDescsPerInterpolation.find(HdInterpolationConstant);
+    if (constantPrimvarDescIt == primvarDescsPerInterpolation.end()) {
+        return;
+    }
+
+    HdRprParseGeometrySettings(sceneDelegate, id, constantPrimvarDescIt->second, geomSettings);
+}
+
 template <typename T>
 bool HdRprGetConstantPrimvar(TfToken const& name, HdSceneDelegate* sceneDelegate, SdfPath const& id, T* out_value) {
     auto value = sceneDelegate->Get(id, name);
