@@ -140,6 +140,10 @@ RprUsdImageCache::GetImage(
         return nullptr;
     }
 
+    if (RprUsdIsLeakCheckEnabled()) {
+        coreImage->SetName(path.c_str());
+    }
+
     RPR_ERROR_CHECK(coreImage->SetGamma(desc.gamma), "Failed to set image gamma");
     RPR_ERROR_CHECK(coreImage->SetWrap(desc.wrapType), "Failed to set image wrap type");
 

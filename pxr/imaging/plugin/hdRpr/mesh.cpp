@@ -19,6 +19,7 @@ limitations under the License.
 #include "rprApi.h"
 
 #include "pxr/imaging/rprUsd/material.h"
+#include "pxr/imaging/rprUsd/debugCodes.h"
 
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/imaging/pxOsd/subdivTags.h"
@@ -134,6 +135,10 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDeleg
         }
 
         m_fallbackMaterial = rprApi->CreateDiffuseMaterial(color);
+
+        if (RprUsdIsLeakCheckEnabled()) {
+            rprApi->SetName(m_fallbackMaterial, GetId().GetText());
+        }
     }
 
     return m_fallbackMaterial;
@@ -493,6 +498,13 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (!m_rprMeshes.empty()) {
+        if (newMesh && RprUsdIsLeakCheckEnabled()) {
+            auto name = id.GetText();
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetName(rprMesh, name);
+            }
+        }
+
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtySubdivTags)) {
             PxOsdSubdivTags subdivTags = sceneDelegate->GetSubdivTags(id);
 

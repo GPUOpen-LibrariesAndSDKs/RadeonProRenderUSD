@@ -67,6 +67,9 @@ public:
     RPRUSD_API
     rpr::Status SetFilter(rpr::ImageFilterType type);
 
+    RPRUSD_API
+    rpr::Status SetName(const char* name);
+
 private:
     RprUsdCoreImage(rpr::Image* rootImage = nullptr) : m_rootImage(rootImage) {};
     rpr::Image* GetBaseImage();

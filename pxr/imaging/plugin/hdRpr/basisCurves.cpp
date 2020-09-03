@@ -18,6 +18,7 @@ limitations under the License.
 #include "rprApi.h"
 
 #include "pxr/imaging/rprUsd/material.h"
+#include "pxr/imaging/rprUsd/debugCodes.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -185,6 +186,10 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                        m_topology.GetCurveBasis() == HdTokens->bezier) {
                 m_rprCurve = CreateBezierRprCurve(rprApi);
             }
+
+            if (m_rprCurve && RprUsdIsLeakCheckEnabled()) {
+                rprApi->SetName(m_rprCurve, id.GetText());
+            }
         }
     }
 
@@ -207,6 +212,10 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
 
                 m_fallbackMaterial = rprApi->CreateDiffuseMaterial(color);
                 rprApi->SetCurveMaterial(m_rprCurve, m_fallbackMaterial);
+
+                if (RprUsdIsLeakCheckEnabled()) {
+                    rprApi->SetName(m_fallbackMaterial, id.GetText());
+                }
             }
         }
 

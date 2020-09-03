@@ -15,6 +15,8 @@ limitations under the License.
 #include "renderParam.h"
 #include "rprApi.h"
 
+#include "pxr/imaging/rprUsd/debugCodes.h"
+
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
@@ -114,6 +116,10 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
 
         if (m_rprLight) {
             newLight = true;
+
+            if (RprUsdIsLeakCheckEnabled()) {
+                rprApi->SetName(m_rprLight, id.GetText());
+            }
         }
     }
 

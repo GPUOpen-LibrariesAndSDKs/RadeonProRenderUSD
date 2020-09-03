@@ -215,4 +215,8 @@ rpr::Status RprUsdCoreImage::SetFilter(rpr::ImageFilterType type) {
     return ForEachImage([type](rpr::Image* image) { return image->SetFilter(type); });
 }
 
+rpr::Status RprUsdCoreImage::SetName(const char* name) {
+    return ForEachImage([name](rpr::Image* image) { return image->SetName(name); });
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE
