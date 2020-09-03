@@ -1361,6 +1361,12 @@ public:
             }
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
+
+        if (preferences.IsDirty(HdRprConfig::DirtySeed)) {
+            m_isUniformSeed = preferences.GetUniformSeed();
+            m_frameCount = 0;
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
     }
 
     void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
@@ -1698,7 +1704,12 @@ public:
         }
         m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
 
-        int frameCount = 0;
+        // When we want to have a uniform seed across all frames,
+        // we need to make sure that RPR_CONTEXT_FRAMECOUNT sequence is the same for all of them
+        if (m_isUniformSeed && m_numSamples == 0) {
+            m_frameCount = 0;
+        }
+
         bool firstResolve = true;
         bool stopRequested = false;
         while (!IsConverged() || stopRequested) {
@@ -1709,7 +1720,17 @@ public:
             }
 
             if (m_rprContextMetadata.pluginType != kPluginHybrid) {
-                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, frameCount++), "Failed to set framecount");
+                uint32_t frameCount = m_frameCount++;
+
+                // XXX: When adaptive sampling is enabled,
+                // Tahoe requires RPR_CONTEXT_FRAMECOUNT to be set to 0 on the very first sample,
+                // otherwise internal adaptive sampling buffers is never reset
+                if (m_rprContextMetadata.pluginType == kPluginTahoe &&
+                    m_varianceThreshold > 0.0f && m_numSamples == 0) {
+                    frameCount = 0;
+                }
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, frameCount), "Failed to set framecount");
             }
 
             auto status = m_rprContext->Render();
@@ -2598,6 +2619,9 @@ private:
 
     std::atomic<int> m_numLights{0};
     HdRprApiEnvironmentLight* m_defaultLightObject = nullptr;
+
+    bool m_isUniformSeed = true;
+    uint32_t m_frameCount = 0;
 
     bool m_isInteractive = false;
     int m_numSamples = 0;
