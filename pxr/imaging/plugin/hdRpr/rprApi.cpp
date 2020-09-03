@@ -211,6 +211,10 @@ public:
         //InitIfNeeded();
     }
 
+    ~HdRprApiImpl() {
+        RemoveDefaultLight();
+    }
+
     void InitIfNeeded() {
         if (m_state != kStateUninitialized) {
             return;
@@ -1123,6 +1127,22 @@ public:
         }
     }
 
+    void SetName(rpr::ContextObject* object, const char* name) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+        object->SetName(name);
+    }
+
+    void SetName(RprUsdMaterial* object, const char* name) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+        object->SetName(name);
+    }
+
+    void SetName(HdRprApiEnvironmentLight* object, const char* name) {
+        LockGuard rprLock(m_rprContext->GetMutex());
+        object->light->SetName(name);
+        object->image->SetName(name);
+    }
+
     void SetCamera(HdCamera const* camera) {
         auto hdRprCamera = dynamic_cast<HdRprCamera const*>(camera);
         if (!hdRprCamera) {
@@ -1965,32 +1985,37 @@ private:
     }
 
     static void RprContextDeleter(rpr::Context* ctx) {
-        static bool forceLeakCheck = false;
-        if (forceLeakCheck || TfDebug::IsEnabled(HD_RPR_DEBUG_LEAKS)) {
+        if (RprUsdIsLeakCheckEnabled()) {
             rpr_int status = RPR_SUCCESS;
+
+            typedef rpr::Status (GetInfoFnc)(void*, uint32_t, size_t, void*, size_t*);
 
             struct ListDescriptor {
                 rpr_context_info infoType;
                 const char* name;
+                GetInfoFnc* getInfo;
+
+                ListDescriptor(rpr_context_info infoType, const char* name, void* getInfoFnc)
+                    : infoType(infoType), name(name)
+                    , getInfo(reinterpret_cast<GetInfoFnc*>(getInfoFnc)) {
+                }
             };
             std::vector<ListDescriptor> lists = {
-                {RPR_CONTEXT_LIST_CREATED_CAMERAS, "cameras"},
-                {RPR_CONTEXT_LIST_CREATED_MATERIALNODES, "materialnodes"},
-                {RPR_CONTEXT_LIST_CREATED_LIGHTS, "lights"},
-                {RPR_CONTEXT_LIST_CREATED_SHAPES, "shapes"},
-                {RPR_CONTEXT_LIST_CREATED_POSTEFFECTS, "posteffects"},
-                {RPR_CONTEXT_LIST_CREATED_HETEROVOLUMES, "heterovolumes"},
-                {RPR_CONTEXT_LIST_CREATED_GRIDS, "grids"},
-                {RPR_CONTEXT_LIST_CREATED_BUFFERS, "buffers"},
-                {RPR_CONTEXT_LIST_CREATED_IMAGES, "images"},
-                {RPR_CONTEXT_LIST_CREATED_FRAMEBUFFERS, "framebuffers"},
-                {RPR_CONTEXT_LIST_CREATED_SCENES, "scenes"},
-                {RPR_CONTEXT_LIST_CREATED_CURVES, "curves"},
-                {RPR_CONTEXT_LIST_CREATED_COMPOSITE, "composite"},
-                {RPR_CONTEXT_LIST_CREATED_LUT, "lut"},
+                {RPR_CONTEXT_LIST_CREATED_CAMERAS, "cameras", rprCameraGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_MATERIALNODES, "materialnodes", rprMaterialNodeGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_LIGHTS, "lights", rprLightGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_SHAPES, "shapes", rprShapeGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_HETEROVOLUMES, "heterovolumes", rprHeteroVolumeGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_GRIDS, "grids", rprGridGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_BUFFERS, "buffers", rprBufferGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_IMAGES, "images", rprImageGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_FRAMEBUFFERS, "framebuffers", rprFrameBufferGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_SCENES, "scenes", rprSceneGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_CURVES, "curves", rprCurveGetInfo},
             };
 
             bool hasLeaks = false;
+            std::vector<char> nameBuffer;
 
             for (auto& list : lists) {
                 size_t sizeParam = 0;
@@ -2009,10 +2034,21 @@ private:
                         if (!RPR_ERROR_CHECK(ctx->GetInfo(list.infoType, sizeParam, objectPointers.data(), nullptr), "Failed to get context info", ctx)) {
                             fprintf(stderr, "{");
                             for (size_t i = 0; i < numObjects; ++i) {
-                                fprintf(stderr, "0x%p", objectPointers[i]);
-                                if (i + 1 != numObjects) {
-                                    fprintf(stderr, ",");
+                                size_t size;
+                                if (!RPR_ERROR_CHECK(list.getInfo(objectPointers[i], RPR_OBJECT_NAME, 0, nullptr, &size), "Failed to get object name size") && size > 0) {
+                                    if (size > nameBuffer.size()) {
+                                        nameBuffer.reserve(size);
+                                    }
+
+                                    if (!RPR_ERROR_CHECK(list.getInfo(objectPointers[i], RPR_OBJECT_NAME, size, nameBuffer.data(), &size), "Failed to get object name")) {
+                                        fprintf(stderr, "\"%.*s\"", int(size), nameBuffer.data());
+                                        if (i + 1 != numObjects) fprintf(stderr, ",");
+                                        continue;
+                                    }
                                 }
+
+                                fprintf(stderr, "0x%p", objectPointers[i]);
+                                if (i + 1 != numObjects) fprintf(stderr, ",");
                             }
                             fprintf(stderr, "}\n");
                         } else {
@@ -2148,6 +2184,11 @@ private:
         if (!m_defaultLightObject) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
             m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
+
+            if (RprUsdIsLeakCheckEnabled()) {
+                m_defaultLightObject->light->SetName("defaultLight");
+                m_defaultLightObject->image->SetName("defaultLight");
+            }
 
             // Do not count default light object
             m_numLights--;
@@ -2832,6 +2873,18 @@ void HdRprApi::Release(rpr::Shape* shape) {
 
 void HdRprApi::Release(rpr::Curve* curve) {
     m_impl->Release(curve);
+}
+
+void HdRprApi::SetName(rpr::ContextObject* object, const char* name) {
+    m_impl->SetName(object, name);
+}
+
+void HdRprApi::SetName(RprUsdMaterial* object, const char* name) {
+    m_impl->SetName(object, name);
+}
+
+void HdRprApi::SetName(HdRprApiEnvironmentLight* object, const char* name) {
+    m_impl->SetName(object, name);
 }
 
 void HdRprApi::SetCamera(HdCamera const* camera) {

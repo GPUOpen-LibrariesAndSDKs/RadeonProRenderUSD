@@ -16,6 +16,8 @@ limitations under the License.
 #include "primvarUtil.h"
 #include "rprApi.h"
 
+#include "pxr/imaging/rprUsd/debugCodes.h"
+
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/gf/rotation.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
@@ -331,6 +333,29 @@ struct HdRprLight::LightParameterSetter : public BOOST_NS::static_visitor<void> 
     }
 };
 
+struct HdRprLight::LightNameSetter : public BOOST_NS::static_visitor<void> {
+    HdRprApi* rprApi;
+    const char* name;
+
+    LightNameSetter(HdRprApi* rprApi, const char* name)
+        : rprApi(rprApi), name(name) {
+
+    }
+
+    void operator()(LightVariantEmpty) const { /*no-op*/ }
+    void operator()(AreaLight* light) const {
+        rprApi->SetName(light->material, name);
+        for (auto& mesh : light->meshes) {
+            rprApi->SetName(mesh, name);
+        }
+    }
+
+    template <typename T>
+    void operator()(T* light) const {
+        rprApi->SetName(light, name);
+    }
+};
+
 float GetRadiusFromMatrix(GfMatrix4f const& transform) {
     return std::abs(transform[0][0] * 0.5f);
 }
@@ -466,6 +491,10 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
         if (isEmissionColorDirty) { m_emisionColor = emissionColor; }
 
         BOOST_NS::apply_visitor(LightParameterSetter{rprApi, emissionColor, isEmissionColorDirty}, m_light);
+
+        if (newLight && RprUsdIsLeakCheckEnabled()) {
+            BOOST_NS::apply_visitor(LightNameSetter{rprApi, id.GetText()}, m_light);
+        }
     }
 
     if (bits & (DirtyTransform | DirtyParams)) {
