@@ -24,10 +24,9 @@ houdini_configure_target(RPR_for_Houdini "INSTDIR" "${CMAKE_INSTALL_PREFIX}/houd
 set(HOUDINI_MAJOR_MINOR_VERSION "${Houdini_VERSION_MAJOR}.${Houdini_VERSION_MINOR}")
 configure_file(activateHoudiniPlugin.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.cpp)
 add_executable(activateHoudiniPlugin ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.cpp)
-set_property(TARGET activateHoudiniPlugin PROPERTY CXX_STANDARD 17)
-if(NOT WIN32 AND NOT APPLE)
-    target_link_libraries(activateHoudiniPlugin PRIVATE stdc++fs)
-endif()
+set_property(TARGET activateHoudiniPlugin PROPERTY CXX_STANDARD 11)
+target_link_libraries(activateHoudiniPlugin PRIVATE ghc_filesystem)
+target_compile_definitions(activateHoudiniPlugin PRIVATE GHC_WIN_WSTRING_STRING_TYPE)
 install(
     TARGETS activateHoudiniPlugin
     RUNTIME DESTINATION .)

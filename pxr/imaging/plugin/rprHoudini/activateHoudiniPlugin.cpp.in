@@ -4,19 +4,12 @@
 #include <iostream>
 #include <functional>
 
+#include <ghc/filesystem.hpp>
+namespace fs = ghc::filesystem;
+
 #if defined(__linux__)
-
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-
 #include <unistd.h>
 #include <sys/stat.h>
-
-#else
-
-#include <filesystem>
-namespace fs = std::filesystem;
-
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)

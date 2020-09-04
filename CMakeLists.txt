@@ -45,6 +45,11 @@ if(NOT MaterialX_FOUND)
     add_subdirectory(deps/MaterialX)
 endif()
 
+if(HoudiniUSD_FOUND)
+    # Currently we use it only in activateHoudiniPlugin utility
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/deps/ghc_filesystem)
+endif()
+
 add_subdirectory(pxr/imaging)
 
 install(FILES README.md DESTINATION .)
