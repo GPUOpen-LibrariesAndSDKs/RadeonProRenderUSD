@@ -356,10 +356,6 @@ struct HdRprLight::LightNameSetter : public BOOST_NS::static_visitor<void> {
     }
 };
 
-float GetRadiusFromMatrix(GfMatrix4f const& transform) {
-    return std::abs(transform[0][0] * 0.5f);
-}
-
 struct HdRprLight::LightTransformSetter : public BOOST_NS::static_visitor<> {
     HdRprApi* rprApi;
     GfMatrix4f const& transform;
@@ -374,15 +370,6 @@ struct HdRprLight::LightTransformSetter : public BOOST_NS::static_visitor<> {
         for (auto& mesh : light->meshes) {
             rprApi->SetTransform(mesh, transform);
         }
-    }
-    void operator()(rpr::SphereLight* light) const {
-        rprApi->SetLightRadius(light, GetRadiusFromMatrix(transform));
-        rprApi->SetTransform(light, transform);
-    }
-    void operator()(rpr::DiskLight* light) const {
-        rprApi->SetLightRadius(light, GetRadiusFromMatrix(transform));
-        rprApi->SetLightAngle(light, float(M_PI_2));
-        rprApi->SetTransform(light, transform);
     }
 
     template <typename T>
@@ -446,11 +433,16 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
 
                     if (m_lightType == HdPrimTypeTokens->sphereLight) {
                         if (auto light = rprApi->CreateSphereLight()) {
+                            rprApi->SetLightRadius(light, 0.5f);
+
                             m_light = light;
                             newLight = true;
                         }
                     } else {
                         if (auto light = rprApi->CreateDiskLight()) {
+                            rprApi->SetLightRadius(light, 0.5f);
+                            rprApi->SetLightAngle(light, float(M_PI_2));
+
                             m_light = light;
                             newLight = true;
                         }
