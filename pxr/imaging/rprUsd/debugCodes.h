@@ -16,13 +16,18 @@ limitations under the License.
 
 #include "pxr/pxr.h"
 #include "pxr/base/tf/debug.h"
+#include "pxr/imaging/rprUsd/api.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEBUG_CODES(
     RPR_USD_DEBUG_CORE_UNSUPPORTED_ERROR,
-    RPR_USD_DEBUG_DUMP_MATERIALS
+    RPR_USD_DEBUG_DUMP_MATERIALS,
+    RPR_USD_DEBUG_LEAKS
 );
+
+RPRUSD_API
+bool RprUsdIsLeakCheckEnabled();
 
 PXR_NAMESPACE_CLOSE_SCOPE
 

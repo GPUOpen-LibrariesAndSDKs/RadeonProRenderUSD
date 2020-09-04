@@ -130,6 +130,10 @@ public:
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform);
     void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples);
 
+    void SetName(rpr::ContextObject* object, const char* name);
+    void SetName(RprUsdMaterial* object, const char* name);
+    void SetName(HdRprApiEnvironmentLight* object, const char* name);
+
     GfMatrix4d GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;
 

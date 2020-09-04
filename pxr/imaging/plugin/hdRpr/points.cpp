@@ -16,6 +16,7 @@ limitations under the License.
 #include "primvarUtil.h"
 #include "renderParam.h"
 
+#include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/hd/extComputationUtils.h"
 #include "pxr/usdImaging/usdImaging/implicitSurfaceMeshUtils.h"
 
@@ -105,7 +106,7 @@ void HdRprPoints::Sync(
         HdRprGeometrySettings geomSettings;
         geomSettings.visibilityMask = kVisibleAll;
         HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation[HdInterpolationConstant], &geomSettings);
+        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation, &geomSettings);
 
         if (m_subdivisionLevel != geomSettings.subdivisionLevel) {
             m_subdivisionLevel = geomSettings.subdivisionLevel;
@@ -129,6 +130,10 @@ void HdRprPoints::Sync(
         } else if (!m_colors.empty()) {
             m_material = rprApi->CreateDiffuseMaterial(m_colors[0]);
         }
+
+        if (m_material && RprUsdIsLeakCheckEnabled()) {
+            rprApi->SetName(m_material, id.GetText());
+        }
     }
 
     bool dirtyPrototypeMesh = false;
@@ -146,6 +151,10 @@ void HdRprPoints::Sync(
             rprApi->SetMeshRefineLevel(m_prototypeMesh, m_subdivisionLevel);
 
             dirtyPrototypeMesh = true;
+
+            if (RprUsdIsLeakCheckEnabled()) {
+                rprApi->SetName(m_prototypeMesh, id.GetText());
+            }
         }
 
         if (m_instances.size() > m_points.size()) {
@@ -159,6 +168,10 @@ void HdRprPoints::Sync(
                 if (auto instance = rprApi->CreateMeshInstance(m_prototypeMesh)) {
                     rprApi->SetMeshId(instance, i);
                     m_instances.push_back(instance);
+
+                    if (RprUsdIsLeakCheckEnabled()) {
+                        rprApi->SetName(instance, id.GetText());
+                    }
                 }
             }
 

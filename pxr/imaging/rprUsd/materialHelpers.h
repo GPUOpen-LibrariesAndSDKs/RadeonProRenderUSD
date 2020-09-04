@@ -26,32 +26,40 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 using RprMaterialNodePtr = std::shared_ptr<rpr::MaterialNode>;
 
-inline bool SetRprInput(rpr::MaterialNode* node, rpr::MaterialNodeInput input, VtValue const& value) {
+inline rpr::Status SetRprInput(rpr::MaterialNode* node, rpr::MaterialNodeInput input, VtValue const& value) {
+    rpr::Status status;
     if (value.IsHolding<uint32_t>()) {
-        return !RPR_ERROR_CHECK(node->SetInput(input, value.UncheckedGet<uint32_t>()), "Failed to set material uint32_t input");
+        status = node->SetInput(input, value.UncheckedGet<uint32_t>());
     } else if (value.IsHolding<int>()) {
-        return !RPR_ERROR_CHECK(node->SetInput(input, rpr_uint(value.UncheckedGet<int>())), "Failed to set material int input");
+        status = node->SetInput(input, rpr_uint(value.UncheckedGet<int>()));
     } else if (value.IsHolding<bool>()) {
         rpr_uint v = value.UncheckedGet<bool>() ? 1 : 0;
-        return !RPR_ERROR_CHECK(node->SetInput(input, v), "Failed to set material bool input");
+        status = node->SetInput(input, v);
     } else if (value.IsHolding<float>()) {
         auto v = value.UncheckedGet<float>();
-        return !RPR_ERROR_CHECK(node->SetInput(input, v, v, v, v), "Failed to set material float input");
+        status = node->SetInput(input, v, v, v, v);
     } else if (value.IsHolding<GfVec3f>()) {
         auto& v = value.UncheckedGet<GfVec3f>();
-        return !RPR_ERROR_CHECK(node->SetInput(input, v[0], v[1], v[2], 1.0f), "Failed to set material GfVec3f input");
+        status = node->SetInput(input, v[0], v[1], v[2], 1.0f);
     } else if (value.IsHolding<GfVec2f>()) {
         auto& v = value.UncheckedGet<GfVec2f>();
-        return !RPR_ERROR_CHECK(node->SetInput(input, v[0], v[1], 1.0f, 1.0f), "Failed to set material GfVec2f input");
+        status = node->SetInput(input, v[0], v[1], 1.0f, 1.0f);
     } else if (value.IsHolding<GfVec4f>()) {
         auto& v = value.UncheckedGet<GfVec4f>();
-        return !RPR_ERROR_CHECK(node->SetInput(input, v[0], v[1], v[2], v[3]), "Failed to set material GfVec4f input");
+        status = node->SetInput(input, v[0], v[1], v[2], v[3]);
     } else if (value.IsHolding<RprMaterialNodePtr>()) {
-        return !RPR_ERROR_CHECK(node->SetInput(input, value.UncheckedGet<RprMaterialNodePtr>().get()), "Failed to set material RprMaterialNodePtr input");
+        status = node->SetInput(input, value.UncheckedGet<RprMaterialNodePtr>().get());
     } else {
-        TF_RUNTIME_ERROR("Failed to set node input: unknown VtValue type - %s", value.GetTypeName().c_str());
-        return false;
+        TF_RUNTIME_ERROR("Failed to set material input %d: unsupported VtValue type - %s", input, value.GetTypeName().c_str());
+        return RPR_ERROR_INVALID_PARAMETER_TYPE;
     }
+
+    if (status != RPR_SUCCESS) {
+        auto errMsg = TfStringPrintf("Failed to set material input %d(%s)", input, value.GetTypeName().c_str());
+        RPR_ERROR_CHECK(status, errMsg.c_str());
+    }
+
+    return status;
 }
 
 inline GfVec4f GetRprFloat(VtValue const& value) {

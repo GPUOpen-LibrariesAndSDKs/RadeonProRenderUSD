@@ -19,6 +19,7 @@ limitations under the License.
 #include "rprApi.h"
 
 #include "pxr/imaging/rprUsd/material.h"
+#include "pxr/imaging/rprUsd/debugCodes.h"
 
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/imaging/pxOsd/subdivTags.h"
@@ -76,7 +77,7 @@ void HdRprMesh::_InitRepr(TfToken const& reprName,
 template <typename T>
 bool HdRprMesh::GetPrimvarData(TfToken const& name,
                                HdSceneDelegate* sceneDelegate,
-                               std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation,
+                               std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
                                VtArray<T>& out_data,
                                VtIntArray& out_indices) {
     out_data.clear();
@@ -96,6 +97,8 @@ bool HdRprMesh::GetPrimvarData(TfToken const& name,
                     }
                     return true;
                 }
+
+                TF_RUNTIME_ERROR("Failed to load %s primvar data: unexpected underlying type - %s", name.GetText(), value.GetTypeName().c_str());
                 return false;
             }
         }
@@ -103,10 +106,14 @@ bool HdRprMesh::GetPrimvarData(TfToken const& name,
 
     return false;
 }
-template bool HdRprMesh::GetPrimvarData<GfVec2f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec2f>&, VtIntArray&);
-template bool HdRprMesh::GetPrimvarData<GfVec3f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector>, VtArray<GfVec3f>&, VtIntArray&);
+template bool HdRprMesh::GetPrimvarData<GfVec2f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector> const&, VtArray<GfVec2f>&, VtIntArray&);
+template bool HdRprMesh::GetPrimvarData<GfVec3f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector> const&, VtArray<GfVec3f>&, VtIntArray&);
 
-RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits) {
+RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
+    HdSceneDelegate* sceneDelegate,
+    HdRprApi* rprApi,
+    HdDirtyBits dirtyBits,
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation) {
     if (m_fallbackMaterial && (dirtyBits & HdChangeTracker::DirtyPrimvar)) {
         rprApi->Release(m_fallbackMaterial);
         m_fallbackMaterial = nullptr;
@@ -119,21 +126,27 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(HdSceneDelegate* sceneDeleg
 
         GfVec3f color(0.18f);
 
-        HdPrimvarDescriptorVector primvars = sceneDelegate->GetPrimvarDescriptors(GetId(), HdInterpolationConstant);
-        for (auto& pv : primvars) {
-            if (pv.name == HdTokens->displayColor) {
-                VtValue val = sceneDelegate->Get(GetId(), HdTokens->displayColor);
-                if (val.IsHolding<VtVec3fArray>()) {
-                    auto colors = val.UncheckedGet<VtVec3fArray>();
-                    if (!colors.empty()) {
-                        color = colors[0];
+        auto constantPrimvarsIt = primvarDescsPerInterpolation.find(HdInterpolationConstant);
+        if (constantPrimvarsIt != primvarDescsPerInterpolation.end()) {
+            for (auto& pv : constantPrimvarsIt->second) {
+                if (pv.name == HdTokens->displayColor) {
+                    VtValue val = sceneDelegate->Get(GetId(), HdTokens->displayColor);
+                    if (val.IsHolding<VtVec3fArray>()) {
+                        auto colors = val.UncheckedGet<VtVec3fArray>();
+                        if (!colors.empty()) {
+                            color = colors[0];
+                        }
+                        break;
                     }
-                    break;
                 }
             }
         }
 
         m_fallbackMaterial = rprApi->CreateDiffuseMaterial(color);
+
+        if (RprUsdIsLeakCheckEnabled()) {
+            rprApi->SetName(m_fallbackMaterial, GetId().GetText());
+        }
     }
 
     return m_fallbackMaterial;
@@ -197,6 +210,12 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (HdChangeTracker::IsTopologyDirty(*dirtyBits, id)) {
+        for (auto& oldGeomSubset : m_topology.GetGeomSubsets()) {
+            if (!oldGeomSubset.materialId.IsEmpty()) {
+                rprRenderParam->UnsubscribeFromMaterialUpdates(oldGeomSubset.materialId, id);
+            }
+        }
+
         m_topology = GetMeshTopology(sceneDelegate);
         m_faceVertexCounts = m_topology.GetFaceVertexCounts();
         m_faceVertexIndices = m_topology.GetFaceVertexIndices();
@@ -206,16 +225,19 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         m_enableSubdiv = m_topology.GetScheme() == PxOsdOpenSubdivTokens->catmullClark;
 
+        for (auto& newGeomSubset : m_topology.GetGeomSubsets()) {
+            if (!newGeomSubset.materialId.IsEmpty()) {
+                rprRenderParam->SubscribeForMaterialUpdates(newGeomSubset.materialId, id);
+            }
+        }
+
         newMesh = true;
     }
 
-    std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation = {
-        {HdInterpolationFaceVarying, sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationFaceVarying)},
-        {HdInterpolationVertex, sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationVertex)},
-        {HdInterpolationConstant, sceneDelegate->GetPrimvarDescriptors(id, HdInterpolationConstant)},
-    };
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation;
 
     if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->normals)) {
+        HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
         m_authoredNormals = GetPrimvarData(HdTokens->normals, sceneDelegate, primvarDescsPerInterpolation, m_normals, m_normalIndices);
 
         newMesh = true;
@@ -255,6 +277,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, *uvPrimvarName)) {
+            HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
             GetPrimvarData(*uvPrimvarName, sceneDelegate, primvarDescsPerInterpolation, m_uvs, m_uvIndices);
 
             newMesh = true;
@@ -281,7 +304,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
         HdRprGeometrySettings geomSettings = {};
         geomSettings.visibilityMask = kVisibleAll;
-        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
+        HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
+        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation, &geomSettings);
 
         if (m_refineLevel != geomSettings.subdivisionLevel) {
             m_refineLevel = geomSettings.subdivisionLevel;
@@ -481,6 +505,13 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (!m_rprMeshes.empty()) {
+        if (newMesh && RprUsdIsLeakCheckEnabled()) {
+            auto name = id.GetText();
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetName(rprMesh, name);
+            }
+        }
+
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtySubdivTags)) {
             PxOsdSubdivTags subdivTags = sceneDelegate->GetSubdivTags(id);
 
@@ -514,12 +545,13 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
             (*dirtyBits & HdChangeTracker::DirtyDoubleSided) || // update twosided material node
             (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) || isRefineLevelDirty) { // update displacement material
-            auto getMeshMaterial = [sceneDelegate, rprApi, dirtyBits, this](SdfPath const& materialId) {
+            auto getMeshMaterial = [sceneDelegate, rprApi, dirtyBits, &primvarDescsPerInterpolation, this](SdfPath const& materialId) {
                 auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
                 if (material && material->GetRprMaterialObject()) {
                     return material->GetRprMaterialObject();
                 } else {
-                    return GetFallbackMaterial(sceneDelegate, rprApi, *dirtyBits);
+                    HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, GetId(), &primvarDescsPerInterpolation);
+                    return GetFallbackMaterial(sceneDelegate, rprApi, *dirtyBits, primvarDescsPerInterpolation);
                 }
             };
 
@@ -643,7 +675,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 }
 
 void HdRprMesh::Finalize(HdRenderParam* renderParam) {
-    auto rprApi = static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
+    auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
+    auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     for (auto mesh : m_rprMeshes) {
         rprApi->Release(mesh);
@@ -658,6 +691,12 @@ void HdRprMesh::Finalize(HdRenderParam* renderParam) {
 
     rprApi->Release(m_fallbackMaterial);
     m_fallbackMaterial = nullptr;
+
+    for (auto& oldGeomSubset : m_topology.GetGeomSubsets()) {
+        if (!oldGeomSubset.materialId.IsEmpty()) {
+            rprRenderParam->UnsubscribeFromMaterialUpdates(oldGeomSubset.materialId, GetId());
+        }
+    }
 
     HdRprBaseRprim::Finalize(renderParam);
 }

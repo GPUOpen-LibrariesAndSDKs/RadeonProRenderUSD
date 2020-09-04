@@ -62,7 +62,9 @@ foreach(entry "Tahoe64;TAHOE" "Northstar64;NORTHSTAR" "Hybrid;HYBRID")
         endif()
     else()
         find_library(RPR_${libId}_BINARY
-            NAMES ${libName}
+            NAMES
+                ${libName}
+                ${libName}${CMAKE_SHARED_LIBRARY_SUFFIX}
             PATHS
                 "${RPR_LOCATION_LIB}"
             DOC

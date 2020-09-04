@@ -425,7 +425,7 @@ RprUsd_HoudiniPrincipledNode::RprUsd_HoudiniPrincipledNode(
             transparencyNode->SetInput(1, transparency);
             transparency = transparencyNode->GetOutput();
 
-            if (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_TRANSPARENCY, transparency)) {
+            if (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_TRANSPARENCY, transparency) == RPR_SUCCESS) {
                 hasTransparency = true;
             }
         }

@@ -84,8 +84,8 @@ bool RprUsd_UsdPreviewSurface::SetInput(
     VtValue const& value) {
     if (UsdPreviewSurfaceTokens->diffuseColor == inputId) {
         m_albedo = value;
-        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR, value) &&
-               SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFRACTION_COLOR, value);
+        return (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR, value) == RPR_SUCCESS) &&
+               (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFRACTION_COLOR, value) == RPR_SUCCESS);
     } else if (UsdPreviewSurfaceTokens->emissiveColor == inputId) {
         if (!m_emissiveWeightNode) {
             m_emissiveWeightNode = RprUsd_RprArithmeticNode::Create(RPR_MATERIAL_NODE_OP_GREATER, m_ctx);
@@ -94,22 +94,22 @@ bool RprUsd_UsdPreviewSurface::SetInput(
         m_emissiveWeightNode->SetInput(1, VtValue(GfVec4f(0.0f)));
         auto emissionWeight = m_emissiveWeightNode->GetOutput();
 
-        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_EMISSION_WEIGHT, emissionWeight) &&
-               SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_EMISSION_COLOR, value);
+        return (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_EMISSION_WEIGHT, emissionWeight) == RPR_SUCCESS) &&
+               (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_EMISSION_COLOR, value) == RPR_SUCCESS);
     } else if (UsdPreviewSurfaceTokens->useSpecularWorkflow == inputId) {
         m_useSpecular = value.Get<int>();
     } else if (UsdPreviewSurfaceTokens->specularColor == inputId) {
         m_reflection = value;
     } else if (UsdPreviewSurfaceTokens->metallic == inputId) {
-        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFLECTION_METALNESS, value);
+        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFLECTION_METALNESS, value) == RPR_SUCCESS;
     } else if (UsdPreviewSurfaceTokens->roughness == inputId) {
-        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_ROUGHNESS, value) &&
-               SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFLECTION_ROUGHNESS, value) &&
-               SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFRACTION_ROUGHNESS, value);
+        return (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_ROUGHNESS, value) == RPR_SUCCESS) &&
+               (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFLECTION_ROUGHNESS, value) == RPR_SUCCESS) &&
+               (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFRACTION_ROUGHNESS, value) == RPR_SUCCESS);
     } else if (UsdPreviewSurfaceTokens->clearcoat == inputId) {
-        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_COATING_WEIGHT, value);
+        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_COATING_WEIGHT, value) == RPR_SUCCESS;
     } else if (UsdPreviewSurfaceTokens->clearcoatRoughness == inputId) {
-        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_COATING_ROUGHNESS, value);
+        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_COATING_ROUGHNESS, value) == RPR_SUCCESS;
     } else if (UsdPreviewSurfaceTokens->opacity == inputId) {
         if (!m_refractionWeightNode) {
             m_refractionWeightNode = RprUsd_RprArithmeticNode::Create(RPR_MATERIAL_NODE_OP_SUB, m_ctx);
@@ -118,12 +118,12 @@ bool RprUsd_UsdPreviewSurface::SetInput(
         m_refractionWeightNode->SetInput(1, value);
         auto refractionWeight = m_refractionWeightNode->GetOutput();
 
-        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT, value) &&
-               SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT, refractionWeight);
+        return (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT, value) == RPR_SUCCESS) &&
+               (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT, refractionWeight) == RPR_SUCCESS);
     } else if (UsdPreviewSurfaceTokens->opacityThreshold == inputId) {
 
     } else if (UsdPreviewSurfaceTokens->ior == inputId) {
-        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFRACTION_IOR, value);
+        return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFRACTION_IOR, value) == RPR_SUCCESS;
     } else if (UsdPreviewSurfaceTokens->displacement == inputId) {
         if (value.IsHolding<RprMaterialNodePtr>()) {
             m_displacementOutput = value;
@@ -149,8 +149,8 @@ bool RprUsd_UsdPreviewSurface::SetInput(
             m_normalMapNode->SetInput(RPR_MATERIAL_INPUT_COLOR, value);
 
             auto normalMapOutput = m_normalMapNode->GetOutput(TfToken());
-            return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, normalMapOutput) &&
-                   SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL, normalMapOutput);
+            return (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, normalMapOutput) == RPR_SUCCESS) &&
+                   (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL, normalMapOutput) == RPR_SUCCESS);
         } else {
             TF_RUNTIME_ERROR("`normal` input should be of material node type - %s", value.GetTypeName().c_str());
             return false;
@@ -358,7 +358,7 @@ bool RprUsd_UsdUVTexture::SetInput(
     TfToken const& inputId,
     VtValue const& value) {
     if (inputId == RprUsd_UsdUVTextureTokens->st) {
-        return SetRprInput(m_imageNode.get(), RPR_MATERIAL_INPUT_UV, value);
+        return SetRprInput(m_imageNode.get(), RPR_MATERIAL_INPUT_UV, value) == RPR_SUCCESS;
     } else {
         TF_CODING_ERROR("UsdUVTexture accepts only `st` input");
         return false;
