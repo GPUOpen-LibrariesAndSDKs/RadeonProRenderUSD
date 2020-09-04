@@ -56,7 +56,7 @@ HdRprAovRegistry::HdRprAovRegistry() {
     m_aovDescriptors[RPR_AOV_SHADING_NORMAL] = HdRprAovDescriptor(RPR_AOV_SHADING_NORMAL, false, HdFormatFloat32Vec3);
     m_aovDescriptors[RPR_AOV_GEOMETRIC_NORMAL] = HdRprAovDescriptor(RPR_AOV_GEOMETRIC_NORMAL, false);
     m_aovDescriptors[RPR_AOV_OBJECT_ID] = HdRprAovDescriptor(RPR_AOV_OBJECT_ID, false, HdFormatInt32, idClearValue);
-    m_aovDescriptors[RPR_AOV_MATERIAL_IDX] = HdRprAovDescriptor(RPR_AOV_MATERIAL_IDX, false, HdFormatInt32, idClearValue);
+    m_aovDescriptors[RPR_AOV_MATERIAL_ID] = HdRprAovDescriptor(RPR_AOV_MATERIAL_ID, false, HdFormatInt32, idClearValue);
     m_aovDescriptors[RPR_AOV_OBJECT_GROUP_ID] = HdRprAovDescriptor(RPR_AOV_OBJECT_GROUP_ID, false, HdFormatInt32, idClearValue);
     m_aovDescriptors[RPR_AOV_WORLD_COORDINATE] = HdRprAovDescriptor(RPR_AOV_WORLD_COORDINATE, false);
     m_aovDescriptors[RPR_AOV_BACKGROUND] = HdRprAovDescriptor(RPR_AOV_BACKGROUND, false);
@@ -100,7 +100,7 @@ HdRprAovRegistry::HdRprAovRegistry() {
     addAovNameLookup(HdRprAovTokens->lightGroup2, m_aovDescriptors[RPR_AOV_LIGHT_GROUP2]);
     addAovNameLookup(HdRprAovTokens->lightGroup3, m_aovDescriptors[RPR_AOV_LIGHT_GROUP3]);
     addAovNameLookup(HdRprAovTokens->colorRight, m_aovDescriptors[RPR_AOV_COLOR_RIGHT]);
-    addAovNameLookup(HdRprAovTokens->materialIdx, m_aovDescriptors[RPR_AOV_MATERIAL_IDX]);
+    addAovNameLookup(HdRprAovTokens->materialId, m_aovDescriptors[RPR_AOV_MATERIAL_ID]);
     addAovNameLookup(HdRprAovTokens->objectGroupId, m_aovDescriptors[RPR_AOV_OBJECT_GROUP_ID]);
     addAovNameLookup(HdRprAovTokens->geometricNormal, m_aovDescriptors[RPR_AOV_GEOMETRIC_NORMAL]);
     addAovNameLookup(HdRprAovTokens->worldCoordinate, m_aovDescriptors[RPR_AOV_WORLD_COORDINATE]);
