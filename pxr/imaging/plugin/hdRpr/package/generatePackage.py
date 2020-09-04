@@ -65,6 +65,9 @@ if platform.system() == 'Windows':
 cmake_configure_cmd += ['..']
 
 build_dir = 'build_generatePackage_tmp_dir'
+if not args.disable_auto_cleanup and os.path.isdir(build_dir):
+    shutil.rmtree(build_dir)
+
 os.makedirs(build_dir, exist_ok=True)
 
 with current_working_directory(build_dir):
