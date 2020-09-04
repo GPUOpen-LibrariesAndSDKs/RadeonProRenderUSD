@@ -18,6 +18,7 @@ limitations under the License.
 #include "rprApi.h"
 
 #include "pxr/imaging/rprUsd/material.h"
+#include "pxr/imaging/rprUsd/debugCodes.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -122,7 +123,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
 
         HdRprGeometrySettings geomSettings = {};
         geomSettings.visibilityMask = kVisibleAll;
-        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
+        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation, &geomSettings);
 
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
@@ -140,7 +141,10 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (newCurve) {
-        m_rprCurve = nullptr;
+        if (m_rprCurve) {
+            rprApi->Release(m_rprCurve);
+            m_rprCurve = nullptr;
+        }
 
         if (m_points.empty()) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: missing points", id.GetText());
@@ -182,6 +186,10 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                        m_topology.GetCurveBasis() == HdTokens->bezier) {
                 m_rprCurve = CreateBezierRprCurve(rprApi);
             }
+
+            if (m_rprCurve && RprUsdIsLeakCheckEnabled()) {
+                rprApi->SetName(m_rprCurve, id.GetText());
+            }
         }
     }
 
@@ -204,6 +212,10 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
 
                 m_fallbackMaterial = rprApi->CreateDiffuseMaterial(color);
                 rprApi->SetCurveMaterial(m_rprCurve, m_fallbackMaterial);
+
+                if (RprUsdIsLeakCheckEnabled()) {
+                    rprApi->SetName(m_fallbackMaterial, id.GetText());
+                }
             }
         }
 

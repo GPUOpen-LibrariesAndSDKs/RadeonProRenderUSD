@@ -22,7 +22,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 RprUsd_BaseRuntimeNode::RprUsd_BaseRuntimeNode(
     rpr::MaterialNodeType type,
     RprUsd_MaterialBuilderContext* ctx)
-    : m_ctx(ctx) {
+    : m_type(type)
+    , m_ctx(ctx) {
 
     rpr::Status status;
     m_rprNode.reset(ctx->rprContext->CreateMaterialNode(type, &status));
@@ -45,7 +46,15 @@ bool RprUsd_BaseRuntimeNode::SetInput(
 bool RprUsd_BaseRuntimeNode::SetInput(
     rpr::MaterialNodeInput input,
     VtValue const& value) {
-    return SetRprInput(m_rprNode.get(), input, value);
+    rpr::Status status = SetRprInput(m_rprNode.get(), input, value);
+    if (status == RPR_SUCCESS) {
+        return true;
+    }
+
+    // XXX: Currently Hybrid does not support all UBER material parameters.
+    //      Do not invalidate whole node because of it.
+    return m_type == RPR_MATERIAL_NODE_UBERV2 &&
+        (status == RPR_ERROR_UNSUPPORTED || status == RPR_ERROR_UNIMPLEMENTED);
 }
 
 VtValue RprUsd_BaseRuntimeNode::GetOutput(TfToken const& outputId) {

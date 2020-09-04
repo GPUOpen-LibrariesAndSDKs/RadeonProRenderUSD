@@ -77,7 +77,9 @@ with current_working_directory(build_dir):
             package_name = line[len('-- PACKAGE_FILE_NAME: '):]
             break
 
-    subprocess.call(['cmake', '--build', '.', '--config', args.config, '--target', 'install', '--', format_multi_procs(get_cpu_count())])
+    return_code = subprocess.call(['cmake', '--build', '.', '--config', args.config, '--target', 'install', '--', format_multi_procs(get_cpu_count())])
+    if return_code != 0:
+        exit(return_code)
 
     with tarfile.open('tmpPackage.tar.gz', 'w:gz') as tar:
         tar.add(package_dir, package_name)

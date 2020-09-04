@@ -73,6 +73,7 @@ private:
 
     struct LightParameterSetter;
     struct LightTransformSetter;
+    struct LightNameSetter;
     struct LightReleaser;
 
     GfVec3f m_emisionColor = GfVec3f(0.0f);
