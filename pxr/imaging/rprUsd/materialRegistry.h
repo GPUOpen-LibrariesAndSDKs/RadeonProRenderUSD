@@ -148,6 +148,7 @@ public:
         kBoolean,
         kInteger,
         kToken,
+        kFilepath,
         kVolumeShader,
         kSurfaceShader,
         kDisplacementShader,
