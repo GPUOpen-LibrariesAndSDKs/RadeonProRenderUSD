@@ -2001,17 +2001,17 @@ private:
                 }
             };
             std::vector<ListDescriptor> lists = {
-                {RPR_CONTEXT_LIST_CREATED_CAMERAS, "cameras", rprCameraGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_MATERIALNODES, "materialnodes", rprMaterialNodeGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_LIGHTS, "lights", rprLightGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_SHAPES, "shapes", rprShapeGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_HETEROVOLUMES, "heterovolumes", rprHeteroVolumeGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_GRIDS, "grids", rprGridGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_BUFFERS, "buffers", rprBufferGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_IMAGES, "images", rprImageGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_FRAMEBUFFERS, "framebuffers", rprFrameBufferGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_SCENES, "scenes", rprSceneGetInfo},
-                {RPR_CONTEXT_LIST_CREATED_CURVES, "curves", rprCurveGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_CAMERAS, "cameras", (void*)rprCameraGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_MATERIALNODES, "materialnodes", (void*)rprMaterialNodeGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_LIGHTS, "lights", (void*)rprLightGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_SHAPES, "shapes", (void*)rprShapeGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_HETEROVOLUMES, "heterovolumes", (void*)rprHeteroVolumeGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_GRIDS, "grids", (void*)rprGridGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_BUFFERS, "buffers", (void*)rprBufferGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_IMAGES, "images", (void*)rprImageGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_FRAMEBUFFERS, "framebuffers", (void*)rprFrameBufferGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_SCENES, "scenes", (void*)rprSceneGetInfo},
+                {RPR_CONTEXT_LIST_CREATED_CURVES, "curves", (void*)rprCurveGetInfo},
             };
 
             bool hasLeaks = false;
