@@ -1186,12 +1186,16 @@ public:
         return m_aovBindings;
     }
 
-    void ResolveFramebuffers(bool* firstResolve) {
+    void ResolveFramebuffers() {
+        if (!m_isFbDirty) {
+            return;
+        }
+
         std::vector<std::shared_ptr<HdRprApiAov>> computedAovsToResolve;
         for (auto& aovEntry : m_aovRegistry) {
             auto aov = aovEntry.second.lock();
             if (TF_VERIFY(aov)) {
-                if (*firstResolve || aov->GetDesc().multiSampled) {
+                if (m_isFirstResolve || aov->GetDesc().multiSampled) {
                     if (aov->GetDesc().computed) {
                         // Computed AOVs depend on raw AOVs
                         computedAovsToResolve.push_back(aov);
@@ -1214,12 +1218,13 @@ public:
                 continue;
             }
 
-            if (*firstResolve || outRb.rprAov->GetDesc().multiSampled) {
+            if (m_isFirstResolve || outRb.rprAov->GetDesc().multiSampled) {
                 outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
             }
         }
 
-        *firstResolve = false;
+        m_isFirstResolve = false;
+        m_isFbDirty = false;
     }
 
     void Update() {
@@ -1671,6 +1676,8 @@ public:
 
         if (clearAovs) {
             m_numSamples = 0;
+            m_numSamplesPerIter = 1;
+            m_isFirstResolve = true;
             m_activePixels = -1;
         }
     }
@@ -1708,21 +1715,37 @@ public:
         }
     }
 
-    void RenderImpl(HdRprRenderThread* renderThread) {
-        int numSamplesPerIter = 1;
+    static void RenderUpdateCallback(float progress, void* dataPtr) {
+        auto data = static_cast<RenderUpdateCallbackData*>(dataPtr);
 
+        // Update framebuffer ASAP on the very first sample
+        if (data->rprApi->m_numSamples > 0) {
+            static const float kResolveFrequency = 0.1f;
+            int previousStep = static_cast<int>(data->previousProgress / kResolveFrequency);
+            int currentStep = static_cast<int>(progress / kResolveFrequency);
+            if (currentStep == previousStep) {
+                return;
+            }
+            data->previousProgress = progress;
+        }
+
+        data->rprApi->m_isFbDirty = true;
+        data->rprApi->ResolveFramebuffers();
+    }
+
+    void RenderImpl(HdRprRenderThread* renderThread) {
         const bool isBatch = m_delegate->IsBatch();
         // XXX(RPR): until FIR-1681 is not resolved we should stick to progressive renders otherwise singlesampled AOV output will be broken
         const bool isProgressive = true /*m_delegate->IsProgressive()*/;
         if (isBatch && !isProgressive) {
             // Render as many samples as possible per Render call
             if (m_varianceThreshold > 0.0f) {
-                numSamplesPerIter = m_minSamples;
+                m_numSamplesPerIter = m_minSamples;
             } else {
-                numSamplesPerIter = m_maxSamples;
+                m_numSamplesPerIter = m_maxSamples;
             }
         }
-        m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
 
         // When we want to have a uniform seed across all frames,
         // we need to make sure that RPR_CONTEXT_FRAMECOUNT sequence is the same for all of them
@@ -1730,8 +1753,9 @@ public:
             m_frameCount = 0;
         }
 
-        bool firstResolve = true;
         bool stopRequested = false;
+        m_isFbDirty = true;
+
         while (!IsConverged() || stopRequested) {
             renderThread->WaitUntilPaused();
             stopRequested = renderThread->IsStopRequested();
@@ -1753,7 +1777,10 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, frameCount), "Failed to set framecount");
             }
 
+            m_isFbDirty = true;
+            m_rucData.previousProgress = -1.0f;
             auto status = m_rprContext->Render();
+            m_rucData.previousProgress = -1.0f;
 
             if (status == RPR_ERROR_ABORTED ||
                 RPR_ERROR_CHECK(status, "Fail context render framebuffer", m_rprContext.get())) {
@@ -1761,11 +1788,11 @@ public:
                 break;
             }
 
-            m_numSamples += numSamplesPerIter;
+            m_numSamples += m_numSamplesPerIter;
             if (m_varianceThreshold > 0.0f) {
                 if (isBatch && !isProgressive && m_numSamples == m_minSamples) {
-                    numSamplesPerIter = 1;
-                    m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
+                    m_numSamplesPerIter = 1;
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
                 }
 
                 if (RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
@@ -1774,26 +1801,27 @@ public:
             } else if (!isBatch && !m_isInteractive &&
                        m_rprContextMetadata.pluginType == kPluginNorthstar && m_numSamples > 1) {
                 // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
-                numSamplesPerIter *= 2;
+                m_numSamplesPerIter *= 2;
 
                 // But do not oversample the image
                 int numSamplesLeft = m_maxSamples - m_numSamples;
-                numSamplesPerIter = std::min(numSamplesPerIter, numSamplesLeft);
-
-                m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, numSamplesPerIter);
+                int newContextIterations = std::min(m_numSamplesPerIter, numSamplesLeft);
+                if (newContextIterations > 0) {
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, newContextIterations), "Failed to set context iterations");
+                }
             }
 
             if (!isBatch && !IsConverged()) {
                 // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
                 // We do not resolve framebuffers in case user requested render stop
-                ResolveFramebuffers(&firstResolve);
+                ResolveFramebuffers();
             }
 
             stopRequested = renderThread->IsStopRequested();
         }
 
         if (!stopRequested) {
-            ResolveFramebuffers(&firstResolve);
+            ResolveFramebuffers();
         }
     }
 
@@ -1917,12 +1945,15 @@ Don't show this message again?
         RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
     }
 
-    int GetNumCompletedSamples() const {
-        return m_numSamples;
-    }
-
-    int GetNumActivePixels() const {
-        return m_activePixels;
+    double GetPercentDone() const {
+        double progress = double(m_numSamples) / m_maxSamples;
+        if (m_activePixels != -1) {
+            int numPixels = m_viewportSize[0] * m_viewportSize[1];
+            progress = std::max(progress, double(numPixels - m_activePixels) / numPixels);
+        } else if (m_isRenderUpdateCallbackEnabled && m_rucData.previousProgress > 0.0f) {
+            progress += m_rucData.previousProgress * (double(m_numSamplesPerIter) / m_maxSamples);
+        }
+        return 100.0 * progress;
     }
 
     bool IsCameraChanged() const {
@@ -2081,6 +2112,14 @@ private:
         }
 
         RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Fail to set context Y FLIP parameter");
+
+        m_isRenderUpdateCallbackEnabled = false;
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            m_rucData.rprApi = this;
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_FUNC, RenderUpdateCallback), "Failed to set northstar RUC func");
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_DATA, &m_rucData), "Failed to set northstar RUC data");
+            m_isRenderUpdateCallbackEnabled = true;
+        }
 
         {
             HdRprConfig* config;
@@ -2666,11 +2705,21 @@ private:
 
     bool m_isInteractive = false;
     int m_numSamples = 0;
+    int m_numSamplesPerIter = 0;
+    bool m_isFbDirty = true;
+    bool m_isFirstResolve = true;
     int m_activePixels = -1;
     int m_maxSamples = 0;
     int m_minSamples = 0;
     float m_varianceThreshold = 0.0f;
     RenderQualityType m_currentRenderQuality = kRenderQualityFull;
+
+    struct RenderUpdateCallbackData {
+        HdRprApiImpl* rprApi;
+        float previousProgress;
+    };
+    RenderUpdateCallbackData m_rucData;
+    bool m_isRenderUpdateCallbackEnabled;
 
     enum State {
         kStateUninitialized,
@@ -2936,12 +2985,8 @@ bool HdRprApi::IsChanged() const {
     return m_impl->IsChanged();
 }
 
-int HdRprApi::GetNumCompletedSamples() const {
-    return m_impl->GetNumCompletedSamples();
-}
-
-int HdRprApi::GetNumActivePixels() const {
-    return m_impl->GetNumActivePixels();
+double HdRprApi::GetPercentDone() const {
+    return m_impl->GetPercentDone();
 }
 
 bool HdRprApi::IsGlInteropEnabled() const {

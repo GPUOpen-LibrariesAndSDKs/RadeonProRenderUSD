@@ -351,22 +351,7 @@ HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const
 
 VtDictionary HdRprDelegate::GetRenderStats() const {
     VtDictionary stats;
-    int numCompletedSamples = m_rprApi->GetNumCompletedSamples();
-    stats[HdPerfTokens->numCompletedSamples.GetString()] = numCompletedSamples;
-
-    double percentDone = 0.0;
-    {
-        HdRprConfig* config;
-        auto configInstanceLock = HdRprConfig::GetInstance(&config);
-        percentDone = double(numCompletedSamples) / config->GetMaxSamples();
-    }
-    int numActivePixels = m_rprApi->GetNumActivePixels();
-    if (numActivePixels != -1) {
-        auto size = m_rprApi->GetViewportSize();
-        int numPixels = size[0] * size[1];
-        percentDone = std::max(percentDone, double(numPixels - numActivePixels) / numPixels);
-    }
-    stats[_tokens->percentDone.GetString()] = 100.0 * percentDone;
+    stats[_tokens->percentDone.GetString()] = m_rprApi->GetPercentDone();
     return stats;
 }
 

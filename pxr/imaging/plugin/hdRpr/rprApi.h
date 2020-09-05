@@ -146,9 +146,7 @@ public:
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings);
     HdRenderPassAovBindingVector GetAovBindings() const;
 
-    int GetNumCompletedSamples() const;
-    // returns -1 if adaptive sampling is not used
-    int GetNumActivePixels() const;
+    double GetPercentDone() const;
 
     void CommitResources();
     void Render(HdRprRenderThread* renderThread);
