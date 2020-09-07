@@ -57,7 +57,7 @@ public:
                 mtlxFile.seekg(0, std::ios::end);
                 auto fileSize = mtlxFile.tellg();
                 if (fileSize == 0) {
-                    TF_RUNTIME_ERROR("Empty file: \"%s\"");
+                    TF_RUNTIME_ERROR("Empty file: \"%s\"", path.c_str());
                     return false;
                 }
 
