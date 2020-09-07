@@ -2017,8 +2017,6 @@ private:
 
     static void RprContextDeleter(rpr::Context* ctx) {
         if (RprUsdIsLeakCheckEnabled()) {
-            rpr_int status = RPR_SUCCESS;
-
             typedef rpr::Status (GetInfoFnc)(void*, uint32_t, size_t, void*, size_t*);
 
             struct ListDescriptor {
@@ -2116,7 +2114,7 @@ private:
         m_isRenderUpdateCallbackEnabled = false;
         if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
             m_rucData.rprApi = this;
-            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_FUNC, RenderUpdateCallback), "Failed to set northstar RUC func");
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_FUNC, (void*)RenderUpdateCallback), "Failed to set northstar RUC func");
             RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_DATA, &m_rucData), "Failed to set northstar RUC data");
             m_isRenderUpdateCallbackEnabled = true;
         }
