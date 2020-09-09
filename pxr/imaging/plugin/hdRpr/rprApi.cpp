@@ -2121,6 +2121,17 @@ private:
             m_isRenderUpdateCallbackEnabled = true;
         }
 
+        // We need it for correct rendering of ID AOVs (e.g. RPR_AOV_OBJECT_ID)
+        // XXX: it takes approximately 32ms due to RPR API indirection,
+        //      replace with rprContextSetAOVindexLookupRange when ready
+        // XXX: only up to 2^16 indices, internal LUT limit
+        for (uint32_t i = 0; i < (1 << 16); ++i) {
+            m_rprContext->SetAOVindexLookup(rpr_int(i),
+                float((i << 0) % 256) / 255.0f,
+                float((i << 8) % 256) / 255.0f,
+                0.0f, 0.0f);
+        }
+
         {
             HdRprConfig* config;
             auto configInstanceLock = HdRprConfig::GetInstance(&config);
