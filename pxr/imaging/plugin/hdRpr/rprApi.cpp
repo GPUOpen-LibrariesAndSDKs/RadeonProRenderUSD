@@ -1195,7 +1195,7 @@ public:
         for (auto& aovEntry : m_aovRegistry) {
             auto aov = aovEntry.second.lock();
             if (TF_VERIFY(aov)) {
-                if (m_isFirstResolve || aov->GetDesc().multiSampled) {
+                if (m_numSamples == 0 || aov->GetDesc().multiSampled) {
                     if (aov->GetDesc().computed) {
                         // Computed AOVs depend on raw AOVs
                         computedAovsToResolve.push_back(aov);
@@ -1218,12 +1218,11 @@ public:
                 continue;
             }
 
-            if (m_isFirstResolve || outRb.rprAov->GetDesc().multiSampled) {
+            if (m_numSamples == 0 || outRb.rprAov->GetDesc().multiSampled) {
                 outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
             }
         }
 
-        m_isFirstResolve = false;
         m_isFbDirty = false;
     }
 
@@ -1677,7 +1676,6 @@ public:
         if (clearAovs) {
             m_numSamples = 0;
             m_numSamplesPerIter = 1;
-            m_isFirstResolve = true;
             m_activePixels = -1;
         }
     }
@@ -2707,7 +2705,6 @@ private:
     int m_numSamples = 0;
     int m_numSamplesPerIter = 0;
     bool m_isFbDirty = true;
-    bool m_isFirstResolve = true;
     int m_activePixels = -1;
     int m_maxSamples = 0;
     int m_minSamples = 0;
