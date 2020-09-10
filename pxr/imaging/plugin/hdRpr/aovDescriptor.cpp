@@ -123,7 +123,7 @@ HdRprAovDescriptor const& HdRprAovRegistry::GetAovDesc(TfToken const& name) {
 
 HdRprAovDescriptor const& HdRprAovRegistry::GetAovDesc(uint32_t id, bool computed) {
     size_t descsSize = computed ? m_computedAovDescriptors.size() : m_aovDescriptors.size();
-    if (id < 0 || id >= descsSize) {
+    if (id >= descsSize) {
         TF_RUNTIME_ERROR("Invalid arguments: %#x (computed=%d)", id, int(computed));
         return kInvalidDesc;
     }

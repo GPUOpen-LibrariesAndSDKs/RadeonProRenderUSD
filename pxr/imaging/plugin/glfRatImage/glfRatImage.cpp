@@ -308,8 +308,8 @@ bool Glf_RatImage::ReadCropped(
 
     if (raster->getXres() != storage.width ||
         raster->getYres() != storage.height) {
-        TF_RUNTIME_ERROR("Failed to load image %s: resolution do not match - expected=%dx%d, got=%ldx%ld",
-            m_filename.c_str(), m_width, m_height, raster->getXres(), raster->getYres());
+        TF_RUNTIME_ERROR("Failed to load image %s: resolution do not match - expected=%dx%d, got=%dx%d",
+            m_filename.c_str(), m_width, m_height, int(raster->getXres()), int(raster->getYres()));
         return false;
     }
 
