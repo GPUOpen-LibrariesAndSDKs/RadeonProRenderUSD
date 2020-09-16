@@ -1191,11 +1191,13 @@ public:
             return;
         }
 
+        const bool isFirstSample = m_numSamples == (m_isRenderUpdateCallbackEnabled ? 0 : 1);
+
         std::vector<std::shared_ptr<HdRprApiAov>> computedAovsToResolve;
         for (auto& aovEntry : m_aovRegistry) {
             auto aov = aovEntry.second.lock();
             if (TF_VERIFY(aov)) {
-                if (m_numSamples == 0 || aov->GetDesc().multiSampled) {
+                if (isFirstSample || aov->GetDesc().multiSampled) {
                     if (aov->GetDesc().computed) {
                         // Computed AOVs depend on raw AOVs
                         computedAovsToResolve.push_back(aov);
@@ -1218,7 +1220,7 @@ public:
                 continue;
             }
 
-            if (m_numSamples == 0 || outRb.rprAov->GetDesc().multiSampled) {
+            if (isFirstSample || outRb.rprAov->GetDesc().multiSampled) {
                 outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
             }
         }
@@ -1725,6 +1727,14 @@ public:
                 return;
             }
             data->previousProgress = progress;
+        } else if (data->rprApi->m_numSamples == 0) {
+            // Enable aborting as soon as possible
+            data->rprApi->m_isAbortingEnabled.store(true);
+
+            // If abort was called when it was disabled, abort now
+            if (data->rprApi->m_abortRender) {
+                data->rprApi->AbortRender();
+            }
         }
 
         data->rprApi->m_isFbDirty = true;
@@ -1732,6 +1742,19 @@ public:
     }
 
     void RenderImpl(HdRprRenderThread* renderThread) {
+        if (m_numSamples == 0) {
+            // Disable aborting on the very first sample
+            //
+            // Ideally, aborting the first sample should not be the problem.
+            // We would like to be able to abort it: to reduce response time,
+            // to avoid doing calculations that may be discarded by the following changes.
+            // But in reality, aborting the very first sample may cause crashes or
+            // unwanted behavior when we will call rprContextRender next time.
+            // So until RPR core fixes these issues, we are not aborting the first sample.
+            m_isAbortingEnabled.store(false);
+        }
+        m_abortRender.store(false);
+
         const bool isBatch = m_delegate->IsBatch();
         // XXX(RPR): until FIR-1681 is not resolved we should stick to progressive renders otherwise singlesampled AOV output will be broken
         const bool isProgressive = true /*m_delegate->IsProgressive()*/;
@@ -1784,6 +1807,12 @@ public:
                 RPR_ERROR_CHECK(status, "Fail context render framebuffer", m_rprContext.get())) {
                 stopRequested = true;
                 break;
+            }
+
+            if (m_numSamples == 0 && !m_isRenderUpdateCallbackEnabled) {
+                // As soon as the first sample has been rendered, we enable aborting,
+                // if it was not already enabled from the render update callback
+                m_isAbortingEnabled.store(true);
             }
 
             m_numSamples += m_numSamplesPerIter;
@@ -1928,19 +1957,13 @@ Don't show this message again?
             return;
         }
 
-        // Do not abort the very first sample
-        //
-        // Ideally, aborting the first sample should not be the problem.
-        // We would like to be able to abort it: to reduce response time,
-        // to avoid doing calculations that may be discarded by the following changes.
-        // But in reality, aborting the very first sample may cause crashes or
-        // unwanted behavior when we will call rprContextRender next time.
-        // So until RPR core fixes these issues, we are not aborting the first sample.
-        if (m_numSamples == 0) {
-            return;
+        if (m_isAbortingEnabled) {
+            RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
+            m_abortRender.store(false);
+        } else {
+            // In case aborting is disabled, we postpone abort until it's enabled
+            m_abortRender.store(true);
         }
-
-        RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
     }
 
     double GetPercentDone() const {
@@ -2140,6 +2163,8 @@ private:
         }
 
         m_imageCache.reset(new RprUsdImageCache(m_rprContext.get()));
+
+        m_isAbortingEnabled.store(false);
     }
 
     bool ValidateRifModels(std::string const& modelsPath) {
@@ -2726,8 +2751,8 @@ private:
     RenderQualityType m_currentRenderQuality = kRenderQualityFull;
 
     struct RenderUpdateCallbackData {
-        HdRprApiImpl* rprApi;
-        float previousProgress;
+        HdRprApiImpl* rprApi = nullptr;
+        float previousProgress = 0.0f;
     };
     RenderUpdateCallbackData m_rucData;
     bool m_isRenderUpdateCallbackEnabled;
@@ -2741,6 +2766,9 @@ private:
     State m_state = kStateUninitialized;
 
     bool m_showRestartRequiredWarning = true;
+
+    std::atomic<bool> m_isAbortingEnabled;
+    std::atomic<bool> m_abortRender;
 
     std::mutex m_rprSceneExportPathMutex;
     std::string m_rprSceneExportPath;
