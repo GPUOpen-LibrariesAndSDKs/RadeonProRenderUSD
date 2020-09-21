@@ -68,7 +68,21 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
+    "Set this to override render quality coming from the render settings");
+
 namespace {
+
+TfToken GetRenderQuality(HdRprConfig const& config) {
+    std::string renderQualityOverride = TfGetEnvSetting(HDRPR_RENDER_QUALITY_OVERRIDE);
+
+    auto& tokens = HdRprRenderQualityTokens->allTokens;
+    if (std::find(tokens.begin(), tokens.end(), renderQualityOverride) != tokens.end()) {
+        return TfToken(renderQualityOverride);
+    }
+
+    return config.GetRenderQuality();
+}
 
 using LockGuard = std::lock_guard<std::mutex>;
 
@@ -90,10 +104,10 @@ GfVec4f ToVec4(GfVec3f const& vec, float w) {
     return GfVec4f(vec[0], vec[1], vec[2], w);
 }
 
-RprUsdRenderDeviceType ToRprUsd(RenderDeviceType configDeviceType) {
-    if (configDeviceType == kRenderDeviceCPU) {
+RprUsdRenderDeviceType ToRprUsd(TfToken const& configDeviceType) {
+    if (configDeviceType == HdRprRenderDeviceTokens->CPU) {
         return RprUsdRenderDeviceType::CPU;
-    } else if (configDeviceType == kRenderDeviceGPU) {
+    } else if (configDeviceType == HdRprRenderDeviceTokens->GPU) {
         return RprUsdRenderDeviceType::GPU;
     } else {
         return RprUsdRenderDeviceType::Invalid;
@@ -1266,6 +1280,10 @@ public:
             instantaneousShutter.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
             instantaneousShutter.value = config->GetInstantaneousShutter();
 
+            if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
+                m_currentRenderQuality = GetRenderQuality(*config);
+            }
+
             if (config->IsDirty(HdRprConfig::DirtyDevice) ||
                 config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 bool restartRequired = false;
@@ -1276,8 +1294,7 @@ public:
                 }
 
                 if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
-                    auto quality = config->GetRenderQuality();
-                    auto newPlugin = GetPluginType(quality);
+                    auto newPlugin = GetPluginType(m_currentRenderQuality);
                     auto activePlugin = m_rprContextMetadata.pluginType;
                     if (newPlugin != activePlugin) {
                         restartRequired = true;
@@ -1288,19 +1305,25 @@ public:
             }
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
-                RenderQualityType currentRenderQuality;
+                TfToken activeRenderQuality;
                 if (m_rprContextMetadata.pluginType == kPluginTahoe) {
-                    currentRenderQuality = kRenderQualityFull;
+                    activeRenderQuality = HdRprRenderQualityTokens->Full;
                 } else if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
-                    currentRenderQuality = kRenderQualityNorthstar;
+                    activeRenderQuality = HdRprRenderQualityTokens->Northstar;
                 } else {
                     rpr_uint currentHybridQuality = RPR_RENDER_QUALITY_HIGH;
                     size_t dummy;
                     RPR_ERROR_CHECK(m_rprContext->GetInfo(rpr::ContextInfo(RPR_CONTEXT_RENDER_QUALITY), sizeof(currentHybridQuality), &currentHybridQuality, &dummy), "Failed to query current render quality");
-                    currentRenderQuality = static_cast<RenderQualityType>(currentHybridQuality);
+                    if (currentHybridQuality == RPR_RENDER_QUALITY_LOW) {
+                        activeRenderQuality = HdRprRenderQualityTokens->Low;
+                    } else if (currentHybridQuality == RPR_RENDER_QUALITY_MEDIUM) {
+                        activeRenderQuality = HdRprRenderQualityTokens->Medium;
+                    } else {
+                        activeRenderQuality = HdRprRenderQualityTokens->High;
+                    }
                 }
 
-                clearAovs = currentRenderQuality != config->GetRenderQuality();
+                clearAovs = activeRenderQuality != m_currentRenderQuality;
             }
 
             UpdateSettings(*config);
@@ -1315,17 +1338,17 @@ public:
         }
     }
 
-    rpr_uint GetRprRenderMode(RenderModeType mode) {
-        static std::map<RenderModeType, rpr_render_mode> s_mapping = {
-            {kRenderModeGlobalIllumination, RPR_RENDER_MODE_GLOBAL_ILLUMINATION},
-            {kRenderModeDirectIllumination, RPR_RENDER_MODE_DIRECT_ILLUMINATION},
-            {kRenderModeWireframe, RPR_RENDER_MODE_WIREFRAME},
-            {kRenderModeMaterialIndex, RPR_RENDER_MODE_MATERIAL_INDEX},
-            {kRenderModePosition, RPR_RENDER_MODE_POSITION},
-            {kRenderModeNormal, RPR_RENDER_MODE_NORMAL},
-            {kRenderModeTexcoord, RPR_RENDER_MODE_TEXCOORD},
-            {kRenderModeAmbientOcclusion, RPR_RENDER_MODE_AMBIENT_OCCLUSION},
-            {kRenderModeDiffuse, RPR_RENDER_MODE_DIFFUSE},
+    rpr_uint GetRprRenderMode(TfToken const& mode) {
+        static std::map<TfToken, rpr_render_mode> s_mapping = {
+            {HdRprRenderModeTokens->GlobalIllumination, RPR_RENDER_MODE_GLOBAL_ILLUMINATION},
+            {HdRprRenderModeTokens->DirectIllumination, RPR_RENDER_MODE_DIRECT_ILLUMINATION},
+            {HdRprRenderModeTokens->Wireframe, RPR_RENDER_MODE_WIREFRAME},
+            {HdRprRenderModeTokens->MaterialIndex, RPR_RENDER_MODE_MATERIAL_INDEX},
+            {HdRprRenderModeTokens->Position, RPR_RENDER_MODE_POSITION},
+            {HdRprRenderModeTokens->Normal, RPR_RENDER_MODE_NORMAL},
+            {HdRprRenderModeTokens->Texcoord, RPR_RENDER_MODE_TEXCOORD},
+            {HdRprRenderModeTokens->AmbientOcclusion, RPR_RENDER_MODE_AMBIENT_OCCLUSION},
+            {HdRprRenderModeTokens->Diffuse, RPR_RENDER_MODE_DIFFUSE},
         };
 
         auto it = s_mapping.find(mode);
@@ -1380,9 +1403,9 @@ public:
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyRenderMode)) {
-            auto renderMode = preferences.GetRenderMode();
+            auto& renderMode = preferences.GetRenderMode();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, GetRprRenderMode(renderMode)), "Failed to set render mode");
-            if (renderMode == kRenderModeAmbientOcclusion) {
+            if (renderMode == HdRprRenderModeTokens->AmbientOcclusion) {
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_AO_RAY_LENGTH, preferences.GetAoRadius()), "Failed to set ambient occlusion radius");
             }
             m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -1397,9 +1420,17 @@ public:
 
     void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
-            auto quality = preferences.GetRenderQuality();
-            if (quality < kRenderQualityFull) {
-                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RENDER_QUALITY), int(quality)), "Fail to set context hybrid render quality");
+            rpr_uint hybridRenderQuality = -1;
+            if (m_currentRenderQuality == HdRprRenderQualityTokens->High) {
+                hybridRenderQuality = RPR_RENDER_QUALITY_HIGH;
+            } else if (m_currentRenderQuality == HdRprRenderQualityTokens->Medium) {
+                hybridRenderQuality = RPR_RENDER_QUALITY_MEDIUM;
+            } else if (m_currentRenderQuality == HdRprRenderQualityTokens->Low) {
+                hybridRenderQuality = RPR_RENDER_QUALITY_LOW;
+            }
+
+            if (hybridRenderQuality != -1) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RENDER_QUALITY), hybridRenderQuality), "Fail to set context hybrid render quality");
             }
         }
     }
@@ -1418,8 +1449,6 @@ public:
 
             UpdateColorAlpha();
         }
-
-        m_currentRenderQuality = preferences.GetRenderQuality();
 
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
             m_rprContextMetadata.pluginType == kPluginNorthstar) {
@@ -1997,7 +2026,8 @@ Don't show this message again?
     }
 
     bool IsConverged() const {
-        if (m_currentRenderQuality < kRenderQualityHigh) {
+        if (m_currentRenderQuality == HdRprRenderQualityTokens->Low ||
+            m_currentRenderQuality == HdRprRenderQualityTokens->Medium) {
             return m_numSamples == 1;
         }
 
@@ -2016,7 +2046,7 @@ Don't show this message again?
         return m_rprContextMetadata.pluginType == kPluginNorthstar;
     }
 
-    int GetCurrentRenderQuality() const {
+    TfToken const& GetCurrentRenderQuality() const {
         return m_currentRenderQuality;
     }
 
@@ -2026,10 +2056,10 @@ Don't show this message again?
     }
 
 private:
-    static RprUsdPluginType GetPluginType(RenderQualityType renderQuality) {
-        if (renderQuality == kRenderQualityFull) {
+    static RprUsdPluginType GetPluginType(TfToken const& renderQuality) {
+        if (renderQuality == HdRprRenderQualityTokens->Full) {
             return kPluginTahoe;
-        } else if (renderQuality == kRenderQualityNorthstar) {
+        } else if (renderQuality == HdRprRenderQualityTokens->Northstar) {
             return kPluginNorthstar;
         } else {
             return kPluginHybrid;
@@ -2112,18 +2142,17 @@ private:
     }
 
     void InitRpr() {
-        RenderQualityType renderQuality;
         {
             HdRprConfig* config;
             auto configInstanceLock = HdRprConfig::GetInstance(&config);
             // Force sync to catch up the latest render quality and render device
             config->Sync(m_delegate);
 
-            renderQuality = config->GetRenderQuality();
+            m_currentRenderQuality = GetRenderQuality(*config);
             m_rprContextMetadata.renderDeviceType = ToRprUsd(config->GetRenderDevice());
         }
 
-        m_rprContextMetadata.pluginType = GetPluginType(renderQuality);
+        m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
         auto cachePath = HdRprApi::GetCachePath();
         m_rprContext = RprContextPtr(RprUsdCreateContext(cachePath.c_str(), &m_rprContextMetadata), RprContextDeleter);
         if (!m_rprContext) {
@@ -2748,7 +2777,7 @@ private:
     int m_maxSamples = 0;
     int m_minSamples = 0;
     float m_varianceThreshold = 0.0f;
-    RenderQualityType m_currentRenderQuality = kRenderQualityFull;
+    TfToken m_currentRenderQuality;
 
     struct RenderUpdateCallbackData {
         HdRprApiImpl* rprApi = nullptr;
@@ -3042,7 +3071,7 @@ bool HdRprApi::IsSphereAndDiskLightSupported() const {
     return m_impl->IsSphereAndDiskLightSupported();
 }
 
-int HdRprApi::GetCurrentRenderQuality() const {
+TfToken const& HdRprApi::GetCurrentRenderQuality() const {
     return m_impl->GetCurrentRenderQuality();
 }
 

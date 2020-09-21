@@ -18,7 +18,6 @@ if __name__ == "__main__":
     p.add_argument('scripts_dir', help="Directory with scripts")
     p.add_argument("install", help="The install root for generated files.")
     p.add_argument("--houdini_root", help="The install root for generated files.")
-    p.add_argument('--hidden-render-qualities', default='', type=str)
     p.add_argument('--python_exe', help="Directory with scripts")
     args = p.parse_args()
 
@@ -28,7 +27,4 @@ if __name__ == "__main__":
 
     subprocess.check_call([args.python_exe, os.path.join(args.scripts_dir, 'generateLightSettingFiles.py'), args.install] + generate_ds_files)
     subprocess.check_call([args.python_exe, os.path.join(args.scripts_dir, 'generateGeometrySettingFiles.py'), args.install] + generate_ds_files)
-    subprocess.check_call([
-        args.python_exe, os.path.join(args.scripts_dir, 'generateRenderSettingFiles.py'),
-        '--hidden-render-qualities', args.hidden_render_qualities,
-        args.install] + generate_ds_files)
+    subprocess.check_call([args.python_exe, os.path.join(args.scripts_dir, 'generateRenderSettingFiles.py'), args.install] + generate_ds_files)

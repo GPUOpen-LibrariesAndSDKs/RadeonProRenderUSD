@@ -51,9 +51,6 @@ def generate_houdini_ds(install_path, ds_name, settings):
 
     for category in settings:
         disabled_category = False
-        if 'disabled_platform' in category:
-            if platform.system() in category['disabled_platform']:
-                disabled_category = True
 
         category_name = category['name']
 
@@ -66,7 +63,10 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 if condition and callable(condition):
                     condition = condition(settings)
                 if condition:
-                    houdini_hidewhen_conditions.append(condition)
+                    if isinstance(condition, str):
+                        houdini_hidewhen_conditions.append(condition)
+                    elif isinstance(condition, list):
+                        houdini_hidewhen_conditions.extend(condition);
 
             if 'houdini' in category:
                 add_hidewhen_condition(category['houdini'].get('hidewhen'))
@@ -82,7 +82,7 @@ def generate_houdini_ds(install_path, ds_name, settings):
                     houdini_hidewhen += '{{ {} }} '.format(condition)
                 houdini_hidewhen += '"'
 
-            def CreateHoudiniParam(name, label, htype, default, values=[], hints=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None):
+            def CreateHoudiniParam(name, label, htype, default, values=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None):
                 param = 'parm {\n'
                 param += '    name "{}"\n'.format(hou.encode(name))
                 param += '    label "{}"\n'.format(label)
@@ -93,13 +93,7 @@ def generate_houdini_ds(install_path, ds_name, settings):
                     param += '    parmtag {{ {} }}\n'.format(tag)
                 if values:
                     param += '    menu {\n'
-                    for value in values:
-                        param += '        "{}" "{}"\n'.format(value[0], value[1])
-                    param += '    }\n'
-                if hints:
-                    param += '    menureplace {\n'
-                    for hint in hints:
-                        param += '        R"({})" "{}"\n'.format(hint[0], hint[1])
+                    param += '        ' + values + '\n'
                     param += '    }\n'
                 if disabled_category:
                     param += '    invisible\n'
@@ -122,12 +116,12 @@ def generate_houdini_ds(install_path, ds_name, settings):
 
             control_param_name = hou.encode(name + '_control')
 
-            render_param_values = []
+            render_param_values = None
             default_value = setting['defaultValue']
             c_type_str = type(default_value).__name__
             controlled_type = c_type_str
             if c_type_str == 'str':
-                c_type_str = 'TfToken'
+                c_type_str = 'token'
                 controlled_type = 'string'
             render_param_type = c_type_str
             render_param_default = default_value
@@ -135,16 +129,30 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 render_param_type = 'toggle'
                 render_param_default = 1 if default_value else 0
             elif 'values' in setting:
-                values = setting.get('visible_values', None)
-                if not values:
-                    values = setting['values']
+                default_value = next(value for value in setting['values'] if value == default_value)
+                render_param_default = '"{}"'.format(default_value.get_key())
+                render_param_type = 'string'
 
-                default_value = values.index(default_value)
-                render_param_default = default_value
-                c_type_str = type(default_value).__name__
-                render_param_type = 'ordinal'
-                for value in values:
-                    render_param_values.append((len(render_param_values), value.get_ui_name()))
+                is_values_constant = True
+                for value in setting['values']:
+                    if value.disabled_platform:
+                        is_values_constant = False
+                        break
+
+                render_param_values = ''
+                if is_values_constant:
+                    for value in setting['values']:
+                        render_param_values += '"{}" "{}"\n'.format(value.get_key(), value.get_ui_name())
+                else:
+                    render_param_values += '[ "import platform" ]\n'
+                    render_param_values += '[ "menu_values = []" ]\n'
+                    for value in setting['values']:
+                        expression = 'menu_values.extend([\\"{}\\", \\"{}\\"])'.format(value.get_key(), value.get_ui_name())
+                        if value.disabled_platform:
+                            expression = 'if platform.system() != \\"{}\\": {}'.format(value.disabled_platform, expression)
+                        render_param_values += '[ "{}" ]\n'.format(expression)
+                    render_param_values += '[ "return menu_values" ]\n'.format(expression)
+                    render_param_values += 'language python\n'
 
             render_param_range = None
             if 'minValue' in setting and 'maxValue' in setting and not 'values' in setting:
@@ -157,7 +165,6 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 hidewhen=houdini_hidewhen)
             houdini_params += CreateHoudiniParam(name, houdini_param_label, render_param_type, render_param_default,
                 values=render_param_values,
-                hints=setting['hints'] if 'hints' in setting else [],
                 tags=[
                     '"spare_category" "{}"'.format(category_name),
                     '"uiscope" "viewport"',

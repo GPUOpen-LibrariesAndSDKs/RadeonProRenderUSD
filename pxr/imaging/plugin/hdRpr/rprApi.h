@@ -156,7 +156,7 @@ public:
     bool IsGlInteropEnabled() const;
     bool IsArbitraryShapedLightSupported() const;
     bool IsSphereAndDiskLightSupported() const;
-    int GetCurrentRenderQuality() const;
+    TfToken const& GetCurrentRenderQuality() const;
     void ExportRprSceneOnNextRender(const char* exportPath);
 
     static std::string GetAppDataPath();
