@@ -631,8 +631,10 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                                 }
                                 meshInstances.resize(newNumInstances);
                             } else {
+                                int32_t meshId = GetPrimId();
                                 for (int j = meshInstances.size(); j < newNumInstances; ++j) {
                                     meshInstances.push_back(rprApi->CreateMeshInstance(m_rprMeshes[i]));
+                                    rprApi->SetMeshId(meshInstances.back(), meshId);
                                 }
                             }
                         }
