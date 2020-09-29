@@ -390,23 +390,33 @@ bool HdRprDelegate::Restart() {
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-void SetHdRprRenderDevice(int renderDevice) {
+void HdRprSetRenderDevice(const char* renderDevice) {
     PXR_INTERNAL_NS::HdRprConfig* config;
     auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);
-    config->SetRenderDevice(renderDevice);
+    config->SetRenderDevice(PXR_INTERNAL_NS::TfToken(renderDevice));
 }
 
-void SetHdRprRenderQuality(int quality) {
+void HdRprSetRenderQuality(const char* quality) {
     PXR_INTERNAL_NS::HdRprConfig* config;
     auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);
-    config->SetRenderQuality(quality);
+    config->SetRenderQuality(PXR_INTERNAL_NS::TfToken(quality));
 }
 
-int GetHdRprRenderQuality() {
+char* HdRprGetRenderQuality() {
     if (!PXR_INTERNAL_NS::g_rprApi) {
-        return -1;
+        return nullptr;
     }
-    return PXR_INTERNAL_NS::g_rprApi->GetCurrentRenderQuality();
+    auto currentRenderQuality = PXR_INTERNAL_NS::g_rprApi->GetCurrentRenderQuality().GetText();
+
+    auto len = std::strlen(currentRenderQuality);
+    auto copy = (char*)malloc(len + 1);
+    copy[len] = '\0';
+    std::strncpy(copy, currentRenderQuality, len);
+    return copy;
+}
+
+void HdRprFree(void* ptr) {
+    free(ptr);
 }
 
 int HdRprExportRprSceneOnNextRender(const char* exportPath) {
