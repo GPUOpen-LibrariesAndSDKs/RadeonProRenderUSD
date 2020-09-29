@@ -31,18 +31,25 @@ limitations under the License.
 
 #include "materialNodes/mtlxNode.h"
 #include <MaterialXFormat/XmlIo.h>
+#include <rprMtlxLoader.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_INSTANTIATE_SINGLETON(RprUsdMaterialRegistry);
 
 TF_DEFINE_ENV_SETTING(RPRUSD_MATERIAL_NETWORK_SELECTOR, "rpr",
-        "Material network selector to be used in hdRpr");
+    "Material network selector to be used in hdRpr");
+TF_DEFINE_ENV_SETTING(RPRUSD_USE_HSMTLXLOADER, true,
+    "Whether to use RPRMtlxLoader or rprLoadMateriaX");
+TF_DEFINE_ENV_SETTING(RPRUSD_HSMTLXLOADER_ENABLE_LOGGING, true,
+    "Enable logging of RPRMtlxLoader");
 
 RprUsdMaterialRegistry::RprUsdMaterialRegistry()
     : m_materialNetworkSelector(TfGetEnvSetting(RPRUSD_MATERIAL_NETWORK_SELECTOR)) {
 
 }
+
+RprUsdMaterialRegistry::~RprUsdMaterialRegistry() = default;
 
 std::vector<RprUsdMaterialNodeDesc> const&
 RprUsdMaterialRegistry::GetRegisteredNodes() {
@@ -53,6 +60,14 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
         if (RPR.empty()) {
             TF_WARN("RPR environment variable is not set");
             return m_registeredNodes;
+        }
+
+        if (TfGetEnvSetting(RPRUSD_USE_HSMTLXLOADER)) {
+            MaterialX::FilePathVec libraryNames = {"libraries"};
+            MaterialX::FileSearchPath searchPath = RPR;
+            m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
+            m_mtlxLoader->SetupStdlib(libraryNames, searchPath);
+            m_mtlxLoader->SetLogging(TfGetEnvSetting(RPRUSD_HSMTLXLOADER_ENABLE_LOGGING));
         }
 
         auto rprMaterialsPath = TfAbsPath(TfNormPath(RPR + "/materials"));
@@ -365,6 +380,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     RprUsd_MaterialBuilderContext context = {};
     context.rprContext = rprContext;
     context.imageCache = imageCache;
+    context.mtlxLoader = m_mtlxLoader.get();
 
     // The simple wrapper to retain material nodes that are used to build terminal outputs
     struct RprUsdGraphBasedMaterial : public RprUsdMaterial {

@@ -42,7 +42,14 @@ if(NOT MaterialX_FOUND)
     set(MATERIALX_BUILD_GEN_GLSL OFF)
     set(MATERIALX_BUILD_GEN_OSL OFF)
     set(MATERIALX_BUILD_TESTS OFF)
-    add_subdirectory(deps/MaterialX)
+    add_subdirectory(deps/MaterialX EXCLUDE_FROM_ALL) # EXCLUDE_FROM_ALL allows us to skip installation of mtlx static libraries
+
+    install(
+        FILES
+            deps/MaterialX/libraries/bxdf/standard_surface.mtlx
+            deps/MaterialX/libraries/bxdf/usd_preview_surface.mtlx
+        DESTINATION
+            libraries/bxdf)
 endif()
 
 if(HoudiniUSD_FOUND)
