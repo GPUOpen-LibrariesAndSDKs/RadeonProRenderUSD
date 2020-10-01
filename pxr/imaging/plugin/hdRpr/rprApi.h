@@ -131,6 +131,10 @@ public:
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform);
     void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples);
 
+    void SetName(rpr::ContextObject* object, const char* name);
+    void SetName(RprUsdMaterial* object, const char* name);
+    void SetName(HdRprApiEnvironmentLight* object, const char* name);
+
     GfMatrix4d GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;
 
@@ -143,9 +147,7 @@ public:
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings);
     HdRenderPassAovBindingVector GetAovBindings() const;
 
-    int GetNumCompletedSamples() const;
-    // returns -1 if adaptive sampling is not used
-    int GetNumActivePixels() const;
+    double GetPercentDone() const;
 
     void CommitResources();
     void Render(HdRprRenderThread* renderThread);
@@ -155,7 +157,7 @@ public:
     bool IsGlInteropEnabled() const;
     bool IsArbitraryShapedLightSupported() const;
     bool IsSphereAndDiskLightSupported() const;
-    int GetCurrentRenderQuality() const;
+    TfToken const& GetCurrentRenderQuality() const;
     void ExportRprSceneOnNextRender(const char* exportPath);
     rpr::FrameBuffer* GetColorFramebuffer();
     void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);

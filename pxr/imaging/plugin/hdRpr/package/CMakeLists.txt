@@ -1,9 +1,3 @@
-if(HoudiniUSD_FOUND)
-    set(HOUDINI_MAJOR_MINOR_VERSION "${Houdini_VERSION_MAJOR}.${Houdini_VERSION_MINOR}")
-    configure_file(activateHoudiniPlugin.py.in ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.py)
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.py DESTINATION .)
-endif()
-
 set(USD_MINOR_VERSION "0")
 set(USD_MAJOR_VERSION "0")
 get_target_property(USD_INCLUDE_DIRS ar INTERFACE_INCLUDE_DIRECTORIES)

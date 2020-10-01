@@ -32,7 +32,7 @@ public:
 
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
-    void Reload() override;
+    void Reload();
     void Finalize(HdRenderParam* renderParam) override;
 
     /// Get pointer to RPR material

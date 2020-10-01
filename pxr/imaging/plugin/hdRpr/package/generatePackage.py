@@ -65,6 +65,9 @@ if platform.system() == 'Windows':
 cmake_configure_cmd += ['..']
 
 build_dir = 'build_generatePackage_tmp_dir'
+if not args.disable_auto_cleanup and os.path.isdir(build_dir):
+    shutil.rmtree(build_dir)
+
 os.makedirs(build_dir, exist_ok=True)
 
 with current_working_directory(build_dir):
@@ -77,7 +80,9 @@ with current_working_directory(build_dir):
             package_name = line[len('-- PACKAGE_FILE_NAME: '):]
             break
 
-    subprocess.call(['cmake', '--build', '.', '--config', args.config, '--target', 'install', '--', format_multi_procs(get_cpu_count())])
+    return_code = subprocess.call(['cmake', '--build', '.', '--config', args.config, '--target', 'install', '--', format_multi_procs(get_cpu_count())])
+    if return_code != 0:
+        exit(return_code)
 
     with tarfile.open('tmpPackage.tar.gz', 'w:gz') as tar:
         tar.add(package_dir, package_name)

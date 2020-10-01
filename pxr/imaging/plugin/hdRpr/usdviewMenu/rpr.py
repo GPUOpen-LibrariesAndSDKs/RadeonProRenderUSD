@@ -13,7 +13,7 @@ from pxr import Tf
 from pxr.Plug import Registry
 from pxr.Usdviewq.plugin import PluginContainer
 
-from ctypes import cdll, c_int
+from ctypes import cdll, c_void_p, c_char_p, cast
 from ctypes.util import find_library
 
 import os
@@ -36,36 +36,54 @@ def setRenderDevice(usdviewApi, renderDeviceId):
     rprPath = getRprPath()
     if rprPath is not None:
         lib = cdll.LoadLibrary(rprPath)
-        lib.SetHdRprRenderDevice(renderDeviceId)
+        lib.HdRprSetRenderDevice(renderDeviceId)
         reemitStage(usdviewApi)
 
 def setRenderQuality(usdviewApi, quality):
     rprPath = getRprPath()
     if rprPath is not None:
         lib = cdll.LoadLibrary(rprPath)
-        lib.GetHdRprRenderQuality.restype = c_int
-        currentQuality = lib.GetHdRprRenderQuality()
-        lib.SetHdRprRenderQuality(quality)
-        if (currentQuality >= 3 and quality < 3) or \
-           (currentQuality < 3 and quality >= 3):
+        lib.HdRprGetRenderQuality.restype = c_void_p
+        lib.HdRprFree.argtypes = [c_void_p]
+
+        currentQualityPtr = lib.HdRprGetRenderQuality()
+        if not currentQualityPtr:
+            # Enable RPR plugin if it was not done yet
             reemitStage(usdviewApi)
 
-def renderDeviceCPU(usdviewApi):
-    setRenderDevice(usdviewApi, 0)
+        currentQuality = cast(currentQualityPtr, c_char_p).value
+        lib.HdRprFree(currentQualityPtr)
 
-def renderDeviceGPU(usdviewApi):
-    setRenderDevice(usdviewApi, 1)
+        if quality == currentQuality:
+            return
+        lib.HdRprSetRenderQuality(quality)
+
+        def getPluginName(quality):
+            if quality == b'Full':
+                return 'Tahoe'
+            elif quality == b'Northstar':
+                return 'Northstar'
+            else:
+                return 'Hybrid'
+
+        if getPluginName(quality) != getPluginName(currentQuality):
+            reemitStage(usdviewApi)
+
+def SetRenderDeviceCPU(usdviewApi):
+    setRenderDevice(usdviewApi, b'CPU')
+def SetRenderDeviceGPU(usdviewApi):
+    setRenderDevice(usdviewApi, b'GPU')
 
 def SetRenderLowQuality(usdviewApi):
-    setRenderQuality(usdviewApi, 0)
+    setRenderQuality(usdviewApi, b'Low')
 def SetRenderMediumQuality(usdviewApi):
-    setRenderQuality(usdviewApi, 1)
+    setRenderQuality(usdviewApi, b'Medium')
 def SetRenderHighQuality(usdviewApi):
-    setRenderQuality(usdviewApi, 2)
+    setRenderQuality(usdviewApi, b'High')
 def SetRenderFullQuality(usdviewApi):
-    setRenderQuality(usdviewApi, 3)
-def SetRenderUltimateQuality(usdviewApi):
-    setRenderQuality(usdviewApi, 4)
+    setRenderQuality(usdviewApi, b'Full')
+def SetRenderNorthstarQuality(usdviewApi):
+    setRenderQuality(usdviewApi, b'Northstar')
 
 class RprPluginContainer(PluginContainer):
 
@@ -73,11 +91,11 @@ class RprPluginContainer(PluginContainer):
         self.rDeviceCpu = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.renderDeviceCPU",
             "CPU",
-            renderDeviceCPU)
+            SetRenderDeviceCPU)
         self.rDeviceGpu = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.renderDeviceGPU",
             "GPU",
-            renderDeviceGPU)
+            SetRenderDeviceGPU)
 
         self.setRenderLowQuality = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.setRenderLowQuality",
@@ -95,10 +113,10 @@ class RprPluginContainer(PluginContainer):
             "RprPluginContainer.setRenderFullQuality",
             "Full",
             SetRenderFullQuality)
-        self.setRenderUltimateQuality = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.setRenderUltimateQuality",
-            "Ultimate",
-            SetRenderUltimateQuality)
+        self.setRenderNorthstarQuality = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setRenderNorthstarQuality",
+            "Full 2.0 (Beta)",
+            SetRenderNorthstarQuality)
 
         self.restartAction = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.restartAction",
@@ -119,7 +137,7 @@ class RprPluginContainer(PluginContainer):
         renderQualityMenu.addItem(self.setRenderMediumQuality)
         renderQualityMenu.addItem(self.setRenderHighQuality)
         renderQualityMenu.addItem(self.setRenderFullQuality)
-        renderQualityMenu.addItem(self.setRenderUltimateQuality)
+        renderQualityMenu.addItem(self.setRenderNorthstarQuality)
 
         rprMenu.addItem(self.restartAction)
 

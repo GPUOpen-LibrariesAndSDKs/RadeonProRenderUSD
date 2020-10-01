@@ -15,6 +15,7 @@ limitations under the License.
 #include "renderParam.h"
 #include "rprApi.h"
 
+#include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/usdLux/blackbody.h"
@@ -60,6 +61,10 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
                 TF_CODING_ERROR("Directional light was not created");
                 *dirtyBits = HdLight::Clean;
                 return;
+            }
+
+            if (RprUsdIsLeakCheckEnabled()) {
+                rprApi->SetName(m_rprLight, id.GetText());
             }
         }
 

@@ -45,6 +45,7 @@ public:
     VtValue GetOutput(TfToken const& outputId) override;
 
 protected:
+    rpr::MaterialNodeType m_type;
     RprUsd_MaterialBuilderContext* m_ctx;
     std::shared_ptr<rpr::MaterialNode> m_rprNode;
 };

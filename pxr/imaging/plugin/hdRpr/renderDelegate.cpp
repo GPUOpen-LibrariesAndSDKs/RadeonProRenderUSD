@@ -352,22 +352,7 @@ HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const
 
 VtDictionary HdRprDelegate::GetRenderStats() const {
     VtDictionary stats;
-    int numCompletedSamples = m_rprApi->GetNumCompletedSamples();
-    stats[HdPerfTokens->numCompletedSamples.GetString()] = numCompletedSamples;
-
-    double percentDone = 0.0;
-    {
-        HdRprConfig* config;
-        auto configInstanceLock = HdRprConfig::GetInstance(&config);
-        percentDone = double(numCompletedSamples) / config->GetMaxSamples();
-    }
-    int numActivePixels = m_rprApi->GetNumActivePixels();
-    if (numActivePixels != -1) {
-        auto size = m_rprApi->GetViewportSize();
-        int numPixels = size[0] * size[1];
-        percentDone = std::max(percentDone, double(numPixels - numActivePixels) / numPixels);
-    }
-    stats[_tokens->percentDone.GetString()] = 100.0 * percentDone;
+    stats[_tokens->percentDone.GetString()] = m_rprApi->GetPercentDone();
     return stats;
 }
 
@@ -436,23 +421,33 @@ void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-void SetHdRprRenderDevice(int renderDevice) {
+void HdRprSetRenderDevice(const char* renderDevice) {
     PXR_INTERNAL_NS::HdRprConfig* config;
     auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);
-    config->SetRenderDevice(renderDevice);
+    config->SetRenderDevice(PXR_INTERNAL_NS::TfToken(renderDevice));
 }
 
-void SetHdRprRenderQuality(int quality) {
+void HdRprSetRenderQuality(const char* quality) {
     PXR_INTERNAL_NS::HdRprConfig* config;
     auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);
-    config->SetRenderQuality(quality);
+    config->SetRenderQuality(PXR_INTERNAL_NS::TfToken(quality));
 }
 
-int GetHdRprRenderQuality() {
+char* HdRprGetRenderQuality() {
     if (!PXR_INTERNAL_NS::g_rprApi) {
-        return -1;
+        return nullptr;
     }
-    return PXR_INTERNAL_NS::g_rprApi->GetCurrentRenderQuality();
+    auto currentRenderQuality = PXR_INTERNAL_NS::g_rprApi->GetCurrentRenderQuality().GetText();
+
+    auto len = std::strlen(currentRenderQuality);
+    auto copy = (char*)malloc(len + 1);
+    copy[len] = '\0';
+    std::strncpy(copy, currentRenderQuality, len);
+    return copy;
+}
+
+void HdRprFree(void* ptr) {
+    free(ptr);
 }
 
 int HdRprExportRprSceneOnNextRender(const char* exportPath) {

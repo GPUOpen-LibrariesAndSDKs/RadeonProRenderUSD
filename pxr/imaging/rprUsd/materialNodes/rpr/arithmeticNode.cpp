@@ -467,7 +467,7 @@ VtValue RprUsd_RprArithmeticNode::GetOutput() {
                             return m_output;
                         }
                     } else {
-                        if (!SetRprInput(rprNode.get(), s_arithmeticNodeInputs[i], m_args[i])) {
+                        if (SetRprInput(rprNode.get(), s_arithmeticNodeInputs[i], m_args[i]) != RPR_SUCCESS) {
                             return m_output;
                         }
                     }

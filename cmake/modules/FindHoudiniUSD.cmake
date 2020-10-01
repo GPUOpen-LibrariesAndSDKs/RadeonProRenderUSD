@@ -38,41 +38,63 @@ if(APPLE)
         NO_DEFAULT_PATH)
 endif(APPLE)
 
-find_path(Houdini_Python_INCLUDE_DIR
-    "pyconfig.h"
-    PATHS ${HOUDINI_ROOT}
-    PATH_SUFFIXES
-        "toolkit/include/python2.7"
-    NO_DEFAULT_PATH)
-list(APPEND HUSD_REQ_VARS "Houdini_Python_INCLUDE_DIR")
+set(Houdini_Python_VARS Houdini_Python_INCLUDE_DIR Houdini_Python_LIB Houdini_Boostpython_LIB)
+list(APPEND HUSD_REQ_VARS ${Houdini_Python_VARS})
 
-find_file(
-    Houdini_Python_LIB
-    NAMES
-        "libpython2.7${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
-        "python27.lib" # Windows (import lib)
-    PATHS ${HOUDINI_ROOT}
-    PATH_SUFFIXES
-        "python/lib" # Linux
-        "../../../../Python.framework/Versions/Current/lib" # macOS
-        "python27/libs" # Windows (import lib)
-    NO_DEFAULT_PATH)
-list(APPEND HUSD_REQ_VARS "Houdini_Python_LIB")
+foreach(python_major_minor "2;7" "3;7")
+    list(GET python_major_minor 0 py_major)
+    list(GET python_major_minor 1 py_minor)
 
-find_file(
-    Houdini_Boostpython_LIB
-    "libhboost_python-mt${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
-    "libhboost_python27-mt-x64${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
-    "hboost_python-mt.lib" # Windows (import lib)
-    "hboost_python27-mt-x64.lib" # Windows Houdini 18.5
-    PATHS ${HOUDINI_ROOT}
-    PATH_SUFFIXES
-        "dsolib" # Linux
-        "../Libraries" # macOS
-        #"bin" # Windows
-        "custom/houdini/dsolib" # Windows (import lib)
-    NO_DEFAULT_PATH)
-list(APPEND HUSD_REQ_VARS "Houdini_Boostpython_LIB")
+    foreach(var ${Houdini_Python_VARS})
+        set(${var} ${var}-NOTFOUND)
+    endforeach()
+
+    find_path(
+        Houdini_Python_INCLUDE_DIR
+            "pyconfig.h"
+        PATHS ${HOUDINI_ROOT}/toolkit/include
+        PATH_SUFFIXES
+            "python${py_major}.${py_minor}"
+            "python${py_major}.${py_minor}m" # macOS Houdini 18.5
+        NO_DEFAULT_PATH)
+
+    find_file(
+        Houdini_Python_LIB
+        NAMES
+            "libpython${py_major}.${py_minor}${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
+            "libpython${py_major}.${py_minor}m${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix Houdini 18.5
+            "python${py_major}${py_minor}.lib" # Windows (import lib)
+        PATHS ${HOUDINI_ROOT}
+        PATH_SUFFIXES
+            "python/lib" # Linux
+            "../../../../Python.framework/Versions/Current/lib" # macOS
+            "python${py_major}${py_minor}/libs" # Windows (import lib)
+        NO_DEFAULT_PATH)
+
+    find_file(
+        Houdini_Boostpython_LIB
+        "libhboost_python-mt${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
+        "libhboost_python${py_major}${py_minor}-mt-x64${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
+        "hboost_python-mt.lib" # Windows (import lib)
+        "hboost_python${py_major}${py_minor}-mt-x64.lib" # Windows Houdini 18.5
+        PATHS ${HOUDINI_ROOT}
+        PATH_SUFFIXES
+            "dsolib" # Linux
+            "../Libraries" # macOS
+            "custom/houdini/dsolib" # Windows (import lib)
+        NO_DEFAULT_PATH)
+
+    set(Houdini_Python_FOUND TRUE)
+    foreach(var ${Houdini_Python_VARS})
+        if(NOT ${var})
+            set(Houdini_Python_FOUND FALSE)
+        endif()
+    endforeach()
+
+    if(Houdini_Python_FOUND)
+        break()
+    endif()
+endforeach()
 
 find_program(HYTHON_EXECUTABLE hython
     PATHS ${HOUDINI_ROOT}
