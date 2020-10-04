@@ -154,6 +154,7 @@ public:
     RenderStats GetRenderStats() const;
 
     void CommitResources();
+    void Resolve();
     void Render(HdRprRenderThread* renderThread);
     void AbortRender();
 

@@ -20,9 +20,11 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprApi;
+
 class HdRprRenderBuffer final : public HdRenderBuffer {
 public:
-    HdRprRenderBuffer(SdfPath const& id);
+    HdRprRenderBuffer(SdfPath const& id, HdRprApi* rprApi);
     ~HdRprRenderBuffer() override = default;
 
     void Sync(HdSceneDelegate* sceneDelegate,
@@ -70,6 +72,8 @@ private:
     bool m_multiSampled = false;
 
     std::atomic<bool> m_isConverged;
+
+    HdRprApi* m_rprApi;
 
 #ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
     std::mutex m_mapMutex;
