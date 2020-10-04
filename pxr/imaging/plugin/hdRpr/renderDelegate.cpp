@@ -314,7 +314,7 @@ void HdRprDelegate::DestroySprim(HdSprim* sPrim) {
 HdBprim* HdRprDelegate::CreateBprim(TfToken const& typeId,
                                     SdfPath const& bprimId) {
     if (typeId == HdPrimTypeTokens->renderBuffer) {
-        return new HdRprRenderBuffer(bprimId);
+        return new HdRprRenderBuffer(bprimId, m_rprApi.get());
     }
 #ifdef USE_VOLUME
     else if (typeId == _tokens->openvdbAsset) {

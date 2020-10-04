@@ -1329,10 +1329,6 @@ public:
     }
 
     void ResolveFramebuffers() {
-        if (!m_isFbDirty) {
-            return;
-        }
-
         auto startTime = std::chrono::high_resolution_clock::now();
 
         m_resolveData.ForAllAovs([&](ResolveData::AovEntry& e) {
@@ -1351,7 +1347,6 @@ public:
             }
         }
 
-        m_isFbDirty = false;
         m_isFirstSample = false;
 
         auto resolveTime = std::chrono::high_resolution_clock::now() - startTime;
@@ -1463,6 +1458,10 @@ public:
         if (m_hdCamera) {
             m_hdCamera->CleanDirtyBits();
         }
+
+        if (m_delegate->IsBatch() && !m_batchREM) {
+            m_batchREM = std::make_unique<BatchRenderEventManager>();
+        }
     }
 
     rpr_uint GetRprRenderMode(TfToken const& mode) {
@@ -1490,7 +1489,7 @@ public:
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_THRESHOLD, m_varianceThreshold), "Failed to set as.threshold");
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ADAPTIVE_SAMPLING_MIN_SPP, m_minSamples), "Failed to set as.minspp");
 
-            if (m_varianceThreshold > 0.0f) {
+            if (IsAdaptiveSamplingEnabled()) {
                 if (!m_internalAovs.count(HdRprAovTokens->variance)) {
                     if (auto aov = CreateAov(HdRprAovTokens->variance, m_viewportSize[0], m_viewportSize[1])) {
                         m_internalAovs.emplace(HdRprAovTokens->variance, std::move(aov));
@@ -1873,11 +1872,14 @@ public:
 
         if (clearAovs) {
             m_numSamples = 0;
-            m_numSamplesPerIter = 1;
             m_activePixels = -1;
             m_isFirstSample = true;
             m_frameRenderTotalTime = {};
             m_frameResolveTotalTime = {};
+
+            // Always start from RPR_CONTEXT_ITERATIONS=1 to be able to resolve singlesampled AOVs correctly
+            m_numSamplesPerIter = 1;
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
         }
     }
 
@@ -1931,12 +1933,20 @@ public:
         }
 
         if (data->rprApi->m_resolveMode == kResolveInRenderUpdateCallback) {
-            static const float kResolveFrequency = 0.1f;
-            int previousStep = static_cast<int>(data->previousProgress / kResolveFrequency);
-            int currentStep = static_cast<int>(progress / kResolveFrequency);
-            if (currentStep != previousStep) {
-                data->rprApi->m_isFbDirty = true;
-                data->rprApi->ResolveFramebuffers();
+            const bool isBatch = data->rprApi->m_delegate->IsBatch();
+            if (isBatch) {
+                // In batch, we do resolve from RUC only by request
+                if (data->rprApi->m_batchREM->IsResolveRequested()) {
+                    data->rprApi->ResolveFramebuffers();
+                    data->rprApi->m_batchREM->OnResolve();
+                }
+            } else {
+                static const float kResolveFrequency = 0.1f;
+                int previousStep = static_cast<int>(data->previousProgress / kResolveFrequency);
+                int currentStep = static_cast<int>(progress / kResolveFrequency);
+                if (currentStep != previousStep) {
+                    data->rprApi->ResolveFramebuffers();
+                }
             }
         }
 
@@ -1957,18 +1967,39 @@ public:
         }
         m_abortRender.store(false);
 
+        // Default resolve mode
+        m_resolveMode = kResolveAfterRender;
+
+        // In a batch session, we disable resolving of all samples except the first and last.
         const bool isBatch = m_delegate->IsBatch();
-        // XXX(RPR): until FIR-1681 is not resolved we should stick to progressive renders otherwise singlesampled AOV output will be broken
-        const bool isProgressive = true /*m_delegate->IsProgressive()*/;
-        if (isBatch && !isProgressive) {
-            // Render as many samples as possible per Render call
-            if (m_varianceThreshold > 0.0f) {
-                m_numSamplesPerIter = m_minSamples;
+        // User might decide to completely disable progress updates to maximize performance.
+        // In this case, snapshoting is not available.
+        const bool isProgressive = m_delegate->IsProgressive();
+
+        // Also, we try to maximize the number of samples rendered with one rprContextRender call.
+        bool isMaximizingContextIterations = false;
+        if (isBatch) {
+            if (isProgressive) {
+                // We can keep the ability to log progress and do snapshots
+                // while maximizing RPR_CONTEXT_ITERATIONS, only if RUC is enabled.
+                if (m_isRenderUpdateCallbackEnabled) {
+                    isMaximizingContextIterations = true;
+                }
             } else {
-                m_numSamplesPerIter = m_maxSamples;
+                // If the user is willing to sacrifice progress logging and snapshots,
+                // we minimize the amount of chore work needed to get renders.
+                isMaximizingContextIterations = true;
+                if (m_isRenderUpdateCallbackEnabled) {
+                    m_isRenderUpdateCallbackEnabled = false;
+                    RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_FUNC, (void*)nullptr), "Failed to disable RUC func");
+                }
             }
         }
-        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
+
+        // Though if adaptive sampling is enabled in a batch session we first render m_minSamples samples
+        // and after that render 1 sample at a time because we want to query the current amount of
+        // active pixels as often as possible
+        const bool isAdaptiveSamplingEnabled = IsAdaptiveSamplingEnabled();
 
         // When we want to have a uniform seed across all frames,
         // we need to make sure that RPR_CONTEXT_FRAMECOUNT sequence is the same for all of them
@@ -1976,19 +2007,22 @@ public:
             m_frameCount = 0;
         }
 
-        bool stopRequested = false;
-        m_isFbDirty = true;
-        m_resolveMode = kResolveAfterRender;
+        // If the changes that were made by the user did not reset our AOVs,
+        // we can just resolve them to the current render buffers and we are done with the rendering
+        if (IsConverged()) {
+            ResolveFramebuffers();
+            return;
+        }
 
         while (!IsConverged()) {
+            // In interactive mode, always render at least one frame, otherwise
+            // disturbing full-screen-flickering will be visible or
+            // viewport will not update because of fast exit due to abort
+            const bool forceRender = m_isInteractive && m_numSamples == 0;
+
             renderThread->WaitUntilPaused();
-            stopRequested = renderThread->IsStopRequested();
-            if (stopRequested) {
-                // Render at least one frame when in interactive mode,
-                // otherwise disturbing full-screen flickering will be visible
-                if (!m_isInteractive) {
-                    break;
-                }
+            if (renderThread->IsStopRequested() && !forceRender) {
+                break;
             }
 
             if (m_rprContextMetadata.pluginType != kPluginHybrid) {
@@ -1998,7 +2032,7 @@ public:
                 // Tahoe requires RPR_CONTEXT_FRAMECOUNT to be set to 0 on the very first sample,
                 // otherwise internal adaptive sampling buffers is never reset
                 if (m_rprContextMetadata.pluginType == kPluginTahoe &&
-                    m_varianceThreshold > 0.0f && m_numSamples == 0) {
+                    isAdaptiveSamplingEnabled && m_numSamples == 0) {
                     frameCount = 0;
                 }
 
@@ -2007,36 +2041,63 @@ public:
 
             auto startTime = std::chrono::high_resolution_clock::now();
 
-            m_isFbDirty = true;
             m_rucData.previousProgress = -1.0f;
             auto status = m_rprContext->Render();
             m_rucData.previousProgress = -1.0f;
 
             m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
 
-            // XXX(Northstar): workaround abort status code until RPRNEXT-401 resolved
-            bool isAborted = status == RPR_ERROR_ABORTED || m_abortRender.load();
-            if (isAborted ||
-                RPR_ERROR_CHECK(status, "Fail context render framebuffer", m_rprContext.get())) {
-                stopRequested = true;
+            if (status != RPR_SUCCESS && status != RPR_ERROR_ABORTED) {
+                RPR_ERROR_CHECK(status, "Failed to render", m_rprContext.get());
                 break;
+            }
+
+            // XXX(RPR): Northstar never returns RPR_ERROR_ABORTED,
+            //           so we query whether render was aborted via m_abortRender (RPRNEXT-401)
+            bool isAborted = status == RPR_ERROR_ABORTED || m_abortRender.load();
+            if (isAborted && !forceRender) {
+                break;
+            }
+
+            if (m_resolveMode == kResolveAfterRender) {
+                // In batch mode resolve only the first and the last frames
+                if (!isBatch || (m_isFirstSample || m_numSamples == m_maxSamples)) {
+                    ResolveFramebuffers();
+                }
+
+                if (m_batchREM) {
+                    m_batchREM->OnResolve();
+                }
             }
 
             // As soon as the first sample has been rendered, we enable aborting
             m_isAbortingEnabled.store(true);
 
             m_numSamples += m_numSamplesPerIter;
-            if (m_varianceThreshold > 0.0f) {
-                if (isBatch && !isProgressive && m_numSamples == m_minSamples) {
-                    m_numSamplesPerIter = 1;
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
-                }
 
-                if (RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
-                    m_activePixels = -1;
+            int oldNumSamplesPerIter = m_numSamplesPerIter;
+            if (isMaximizingContextIterations) {
+                // When singlesampled AOVs already rendered, we can fire up rendering of as many samples as possible
+                if (m_numSamples == 1) {
+                    // Render as many samples as possible per Render call
+                    if (isAdaptiveSamplingEnabled) {
+                        m_numSamplesPerIter = m_minSamples - m_numSamples;
+                    } else {
+                        m_numSamplesPerIter = m_maxSamples - m_numSamples;
+                    }
+
+                    // And disable resolves after render if possible
+                    if (m_isRenderUpdateCallbackEnabled) {
+                        m_resolveMode = kResolveInRenderUpdateCallback;
+                    }
+                } else {
+                    // When adaptive sampling is enabled, after reaching m_minSamples we want query RPR_CONTEXT_ACTIVE_PIXEL_COUNT each sample
+                    if (isAdaptiveSamplingEnabled && m_numSamples == m_minSamples) {
+                        m_numSamplesPerIter = 1;
+                        isMaximizingContextIterations = false;
+                    }
                 }
-            } else if (!isBatch && !m_isInteractive &&
-                       m_rprContextMetadata.pluginType == kPluginNorthstar && m_numSamples > 1) {
+            } else if (!m_isInteractive && m_rprContextMetadata.pluginType == kPluginNorthstar && m_numSamples > 1) {
                 // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
                 m_numSamplesPerIter *= 2;
 
@@ -2044,29 +2105,27 @@ public:
                 if (m_numSamplesPerIter >= 32) {
                     m_resolveMode = kResolveInRenderUpdateCallback;
                 }
+            }
 
-                // But do not oversample the image
+            if (m_numSamplesPerIter != oldNumSamplesPerIter) {
+                // Make sure we will not oversample the image
                 int numSamplesLeft = m_maxSamples - m_numSamples;
-                int newContextIterations = std::min(m_numSamplesPerIter, numSamplesLeft);
-                if (newContextIterations > 0) {
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, newContextIterations), "Failed to set context iterations");
+                m_numSamplesPerIter = std::min(m_numSamplesPerIter, numSamplesLeft);
+                if (m_numSamplesPerIter > 0) {
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
                 }
             }
 
-            if (!isBatch && !IsConverged()) {
-                // Last framebuffer resolve will be called after "while" in case framebuffer is converged.
-                // We do not resolve framebuffers in case user requested render stop
-                ResolveFramebuffers();
-            }
-
-            stopRequested = renderThread->IsStopRequested();
-            if (stopRequested) {
-                break;
+            if (isAdaptiveSamplingEnabled &&
+                RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
+                m_activePixels = -1;
             }
         }
 
-        if (!stopRequested || m_isInteractive) {
-            // Resolve at least one frame when in interactive mode
+        // In batch mode, when we only resolve by request in RUC,
+        // the final resolve does not happen while we are in the rendering loop,
+        // so we do it here
+        if (isBatch && m_resolveMode == kResolveInRenderUpdateCallback) {
             ResolveFramebuffers();
         }
     }
@@ -2093,10 +2152,18 @@ public:
         }
 
         if (m_state == kStateRender) {
+            if (m_batchREM) {
+                m_batchREM->OnRenderStatusChange(true);
+            }
+
             try {
                 RenderImpl(renderThread);
             } catch (std::runtime_error const& e) {
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
+            }
+
+            if (m_batchREM) {
+                m_batchREM->OnRenderStatusChange(false);
             }
         } else if (m_state == kStateRestartRequired) {
             if (m_showRestartRequiredWarning) {
@@ -2300,6 +2367,21 @@ Don't show this message again?
         RprUsdMaterialRegistry::GetInstance().CommitResources(m_imageCache.get());
     }
 
+    void Resolve() {
+        // hdRpr's rendering is implemented asynchronously - rprContextRender spins in the background thread.
+        //
+        // Resolve works differently depending on the current rendering session type:
+        //   * In a non-interactive (i.e. batch) session, it blocks execution until
+        //      AOV framebuffer resolved to corresponding HdRenderBuffers.
+        //   * In an interactive session, it simply does nothing because we always resolve
+        //      data to HdRenderBuffer as fast as possible. It might change in the future though.
+        //
+        if (m_batchREM) {
+            m_batchREM->OnResolveRequest();
+            m_batchREM->WaitUntilNextRenderEvent();
+        }
+    }
+
     void Render(HdRprRenderThread* renderThread) {
         RenderFrame(renderThread);
 
@@ -2380,6 +2462,10 @@ Don't show this message again?
         }
 
         return m_numSamples >= m_maxSamples || m_activePixels == 0;
+    }
+
+    bool IsAdaptiveSamplingEnabled() const {
+        return m_rprContext && m_rprContextMetadata.pluginType == kPluginTahoe && m_varianceThreshold > 0.0f;
     }
 
     bool IsGlInteropEnabled() const {
@@ -3144,6 +3230,39 @@ private:
     };
     std::vector<OutputRenderBuffer> m_outputRenderBuffers;
 
+    class BatchRenderEventManager {
+    public:
+        void WaitUntilNextRenderEvent() {
+            std::unique_lock<std::mutex> lock(m_renderEventMutex);
+            m_renderEventCV.wait(lock, [this]() -> bool { return !m_isRenderInProgress || !m_isResolveRequested; });
+        }
+
+        void OnRenderStatusChange(bool inProgress) {
+            m_isRenderInProgress.store(inProgress);
+            m_renderEventCV.notify_one();
+        }
+
+        void OnResolveRequest() {
+            m_isResolveRequested.store(true);
+        }
+
+        bool IsResolveRequested() const {
+            return m_isResolveRequested;
+        }
+
+        void OnResolve() {
+            m_renderEventCV.notify_one();
+            m_isResolveRequested.store(false);
+        }
+
+    private:
+        std::mutex m_renderEventMutex;
+        std::condition_variable m_renderEventCV;
+        std::atomic<bool> m_isRenderInProgress{false};
+        std::atomic<bool> m_isResolveRequested{false};
+    };
+    std::unique_ptr<BatchRenderEventManager> m_batchREM;
+
     struct ResolveData {
         struct AovEntry {
             HdRprApiAov* aov;
@@ -3180,7 +3299,6 @@ private:
     bool m_isInteractive = false;
     int m_numSamples = 0;
     int m_numSamplesPerIter = 0;
-    bool m_isFbDirty = true;
     int m_activePixels = -1;
     int m_maxSamples = 0;
     int m_minSamples = 0;
@@ -3450,6 +3568,10 @@ HdRenderPassAovBindingVector HdRprApi::GetAovBindings() const {
 
 void HdRprApi::CommitResources() {
     m_impl->CommitResources();
+}
+
+void HdRprApi::Resolve() {
+    m_impl->Resolve();
 }
 
 void HdRprApi::Render(HdRprRenderThread* renderThread) {

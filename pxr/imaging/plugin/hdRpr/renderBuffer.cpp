@@ -12,6 +12,7 @@ limitations under the License.
 ************************************************************************/
 
 #include "renderBuffer.h"
+#include "renderDelegate.h"
 #include "renderParam.h"
 #include "rprApi.h"
 
@@ -19,8 +20,9 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id)
+HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id, HdRprApi* rprApi)
     : HdRenderBuffer(id)
+    , m_rprApi(rprApi)
     , m_numMappers(0)
     , m_isConverged(false) {
 
@@ -91,6 +93,7 @@ void HdRprRenderBuffer::_Deallocate() {
 }
 
 void* HdRprRenderBuffer::Map() {
+    m_rprApi->Resolve();
 
 #ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
     std::unique_lock<std::mutex> lock(m_mapMutex);
