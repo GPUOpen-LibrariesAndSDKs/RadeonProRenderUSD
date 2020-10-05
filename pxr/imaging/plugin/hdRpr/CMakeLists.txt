@@ -55,9 +55,6 @@ if(HoudiniUSD_FOUND)
             ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
             ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds
         DESTINATION "houdini/soho/parameters")
-    install(
-        FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/rpr_exportRpr1.hda
-        DESTINATION "houdini/otls")
 
     install(
         CODE
