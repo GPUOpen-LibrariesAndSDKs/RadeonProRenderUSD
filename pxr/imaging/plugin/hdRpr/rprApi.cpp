@@ -134,7 +134,20 @@ HdFormat ConvertUsdRenderVarDataType(TfToken const& format) {
         addMappingEntry("point3f", HdFormatFloat32Vec3);
         addMappingEntry("vector3f", HdFormatFloat32Vec3);
         addMappingEntry("normal3f", HdFormatFloat32Vec3);
+        addMappingEntry("color2f", HdFormatFloat32Vec2);
         addMappingEntry("color3f", HdFormatFloat32Vec3);
+        addMappingEntry("color4f", HdFormatFloat32Vec4);
+        addMappingEntry("float2", HdFormatFloat32Vec2);
+        addMappingEntry("float16", HdFormatFloat16);
+        addMappingEntry("color2h", HdFormatFloat16Vec2);
+        addMappingEntry("color3h", HdFormatFloat16Vec3);
+        addMappingEntry("color4h", HdFormatFloat16Vec4);
+        addMappingEntry("half2", HdFormatFloat16Vec2);
+        addMappingEntry("u8", HdFormatUNorm8);
+        addMappingEntry("uint8", HdFormatUNorm8);
+        addMappingEntry("color2u8", HdFormatUNorm8Vec2);
+        addMappingEntry("color3u8", HdFormatUNorm8Vec3);
+        addMappingEntry("color4u8", HdFormatUNorm8Vec4);
 
         return ret;
     }();
@@ -1194,6 +1207,54 @@ public:
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings) {
         m_aovBindings = aovBindings;
         m_dirtyFlags |= ChangeTracker::DirtyAOVBindings;
+
+        auto retainedOutputRenderBuffers = std::move(m_outputRenderBuffers);
+        auto registerAovBinding = [&retainedOutputRenderBuffers, this](HdRenderPassAovBinding const& aovBinding) -> OutputRenderBuffer* {
+            TfToken aovName;
+            HdFormat aovFormat;
+            if (!GetAovBindingInfo(aovBinding, &aovName, &aovFormat)) {
+                return nullptr;
+            }
+
+            OutputRenderBuffer outRb;
+            outRb.aovName = aovName;
+            outRb.aovBinding = &aovBinding;
+
+            auto outputRenderBufferIt = std::find_if(retainedOutputRenderBuffers.begin(), retainedOutputRenderBuffers.end(),
+                [&aovName](OutputRenderBuffer const& buffer) {
+                return buffer.aovName == aovName;
+            });
+            auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
+            if (outputRenderBufferIt == retainedOutputRenderBuffers.end()) {
+                // Create new RPR AOV
+                outRb.rprAov = CreateAov(aovName, rprRenderBuffer->GetCommitWidth(), rprRenderBuffer->GetCommitHeight(), aovFormat);
+            } else {
+                // Reuse previously created RPR AOV
+                std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
+                // Update underlying format if needed
+                outRb.rprAov->Resize(rprRenderBuffer->GetCommitWidth(), rprRenderBuffer->GetCommitHeight(), aovFormat);
+            }
+
+            if (!outRb.rprAov) return nullptr;
+
+            m_outputRenderBuffers.push_back(std::move(outRb));
+            return &m_outputRenderBuffers.back();
+        };
+
+        for (auto& aovBinding : m_aovBindings) {
+            if (!aovBinding.renderBuffer) {
+                continue;
+            }
+            auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
+            auto outputRb = registerAovBinding(aovBinding);
+            auto mappedData = rprRenderBuffer->Commit(outputRb != nullptr);
+
+            if (outputRb) {
+                outputRb->isMultiSampled = rprRenderBuffer->IsMultiSampled();
+                outputRb->mappedData = mappedData;
+                outputRb->mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetCommitFormat()) * rprRenderBuffer->GetCommitWidth() * rprRenderBuffer->GetCommitHeight();
+            }
+        }
     }
 
     HdRenderPassAovBindingVector const& GetAovBindings() const {
@@ -1207,35 +1268,22 @@ public:
 
         const bool isFirstSample = m_numSamples == (m_isRenderUpdateCallbackEnabled ? 0 : 1);
 
-        std::vector<std::shared_ptr<HdRprApiAov>> computedAovsToResolve;
-        for (auto& aovEntry : m_aovRegistry) {
-            auto aov = aovEntry.second.lock();
-            if (TF_VERIFY(aov)) {
-                if (isFirstSample || aov->GetDesc().multiSampled) {
-                    if (aov->GetDesc().computed) {
-                        // Computed AOVs depend on raw AOVs
-                        computedAovsToResolve.push_back(aov);
-                    } else {
-                        aov->Resolve();
-                    }
-                }
+        m_resolveData.ForAllAovs([&](ResolveData::AovEntry& e) {
+            if (isFirstSample || e.isMultiSampled) {
+                e.aov->Resolve();
             }
-        }
-        for (auto& aov : computedAovsToResolve) {
-            aov->Resolve();
-        }
+        });
 
         if (m_rifContext) {
             m_rifContext->ExecuteCommandQueue();
         }
 
         for (auto& outRb : m_outputRenderBuffers) {
-            if (!outRb.mappedData) {
-                continue;
-            }
-
-            if (isFirstSample || outRb.rprAov->GetDesc().multiSampled) {
+            if (outRb.mappedData && (isFirstSample || outRb.isMultiSampled)) {
                 outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
+                if (isFirstSample) {
+                    static_cast<HdRprRenderBuffer*>(outRb.aovBinding->renderBuffer)->MarkAsReadyForMapping();
+                }
             }
         }
 
@@ -1614,7 +1662,7 @@ public:
         auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(aovBinding.aovName);
         if (aovDesc.id != kAovNone && aovDesc.format != HdFormatInvalid) {
             *aovName = aovBinding.aovName;
-            *format = aovBinding.renderBuffer->GetFormat();
+            *format = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)->GetCommitFormat();
             return true;
         }
 
@@ -1622,52 +1670,23 @@ public:
     }
 
     void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, bool clearAovs) {
-        if (m_dirtyFlags & ChangeTracker::DirtyAOVBindings) {
-            auto retainedOutputRenderBuffers = std::move(m_outputRenderBuffers);
-            auto registerAovBinding = [&retainedOutputRenderBuffers, this](HdRenderPassAovBinding const& aovBinding) {
-                TfToken aovName;
-                HdFormat aovFormat;
-                if (!GetAovBindingInfo(aovBinding, &aovName, &aovFormat)) {
-                    return false;
-                }
-
-                OutputRenderBuffer outRb;
-                outRb.aovName = aovName;
-                outRb.aovBinding = &aovBinding;
-
-                auto outputRenderBufferIt = std::find_if(retainedOutputRenderBuffers.begin(), retainedOutputRenderBuffers.end(),
-                    [&aovName](OutputRenderBuffer const& buffer) {
-                    return buffer.aovName == aovName;
-                });
-                if (outputRenderBufferIt == retainedOutputRenderBuffers.end()) {
-                    // Create new RPR AOV
-                    outRb.rprAov = CreateAov(aovName, aovBinding.renderBuffer->GetWidth(), aovBinding.renderBuffer->GetHeight(), aovFormat);
-                } else {
-                    // Reuse previously created RPR AOV
-                    std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
-                    // Update underlying format if needed
-                    outRb.rprAov->Resize(aovBinding.renderBuffer->GetWidth(), aovBinding.renderBuffer->GetHeight(), aovFormat);
-                }
-
-                if (!outRb.rprAov) return false;
-
-                m_outputRenderBuffers.push_back(std::move(outRb));
-                return true;
-            };
-
-            for (auto& aovBinding : m_aovBindings) {
-                if (!aovBinding.renderBuffer) {
-                    continue;
-                }
-                auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
-                rprRenderBuffer->SetStatus(registerAovBinding(aovBinding));
-            }
-        }
-
-        if (m_dirtyFlags & ChangeTracker::DirtyViewport) {
+        if (m_dirtyFlags & (ChangeTracker::DirtyAOVBindings | ChangeTracker::DirtyAOVRegistry)) {
+            m_resolveData.rawAovs.clear();
+            m_resolveData.computedAovs.clear();
             for (auto it = m_aovRegistry.begin(); it != m_aovRegistry.end();) {
                 if (auto aov = it->second.lock()) {
-                    aov->Resize(m_viewportSize[0], m_viewportSize[1], aov->GetFormat());
+                    bool isMultiSampled = aov->GetDesc().multiSampled;
+
+                    // An opinion of a user overrides an AOV descriptor opinion
+                    if (auto outputRb = GetOutputRenderBuffer(it->first)) {
+                        isMultiSampled = outputRb->isMultiSampled;
+                    }
+
+                    if (aov->GetDesc().computed) {
+                        m_resolveData.computedAovs.push_back({aov.get(), isMultiSampled});
+                    } else {
+                        m_resolveData.rawAovs.push_back({aov.get(), isMultiSampled});
+                    }
                     ++it;
                 } else {
                     it = m_aovRegistry.erase(it);
@@ -1675,8 +1694,24 @@ public:
             }
         }
 
+        if (m_dirtyFlags & ChangeTracker::DirtyViewport) {
+            m_resolveData.ForAllAovs([this](ResolveData::AovEntry const& e) {
+                e.aov->Resize(m_viewportSize[0], m_viewportSize[1], e.aov->GetFormat());
+            });
+
+            // If AOV bindings are dirty then we already committed HdRprRenderBuffers, see SetAovBindings
+            if ((m_dirtyFlags & ChangeTracker::DirtyAOVBindings) == 0) {
+                for (auto& outputRb : m_outputRenderBuffers) {
+                    auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(outputRb.aovBinding->renderBuffer);
+                    outputRb.mappedData = rprRenderBuffer->Commit(true);
+                    outputRb.mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetCommitFormat()) * rprRenderBuffer->GetCommitWidth() * rprRenderBuffer->GetCommitHeight();
+                }
+            }
+        }
+
         if (m_dirtyFlags & ChangeTracker::DirtyScene ||
             m_dirtyFlags & ChangeTracker::DirtyAOVRegistry ||
+            m_dirtyFlags & ChangeTracker::DirtyAOVBindings ||
             m_dirtyFlags & ChangeTracker::DirtyViewport ||
             IsCameraChanged()) {
             clearAovs = true;
@@ -1692,17 +1727,12 @@ public:
         }
 
         auto rprApi = rprRenderParam->GetRprApi();
-        for (auto it = m_aovRegistry.begin(); it != m_aovRegistry.end();) {
-            if (auto aov = it->second.lock()) {
-                aov->Update(rprApi, m_rifContext.get());
-                if (clearAovs) {
-                    aov->Clear();
-                }
-                ++it;
-            } else {
-                it = m_aovRegistry.erase(it);
+        m_resolveData.ForAllAovs([=](ResolveData::AovEntry const& e) {
+            e.aov->Update(rprApi, m_rifContext.get());
+            if (clearAovs) {
+                e.aov->Clear();
             }
-        }
+        });
 
         if (clearAovs) {
             m_numSamples = 0;
@@ -1913,19 +1943,6 @@ public:
             }
         }
 
-        for (auto& outRb : m_outputRenderBuffers) {
-            if (auto rb = static_cast<HdRprRenderBuffer*>(outRb.aovBinding->renderBuffer)) {
-                if (rb->GetWidth() != m_viewportSize[0] || rb->GetHeight() != m_viewportSize[1]) {
-                    TF_RUNTIME_ERROR("%s renderBuffer has inconsistent render buffer size: %ux%u. Expected: %dx%d",
-                        outRb.aovName.GetText(), rb->GetWidth(), rb->GetHeight(), m_viewportSize[0], m_viewportSize[1]);
-                    outRb.mappedData = nullptr;
-                } else {
-                    outRb.mappedData = rb->Map();
-                    outRb.mappedDataSize = HdDataSizeOfFormat(outRb.rprAov->GetFormat()) * rb->GetWidth() * rb->GetHeight();
-                }
-            }
-        }
-
         if (m_state == kStateRender) {
             try {
                 RenderImpl(renderThread);
@@ -1953,12 +1970,6 @@ Don't show this message again?
             auto path = imagesPath + "/restartRequired.png";
             if (!RenderImage(path)) {
                 fprintf(stderr, "Please restart render\n");
-            }
-        }
-
-        for (auto& aovBinding : m_aovBindings) {
-            if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
-                rb->Unmap();
             }
         }
     }
@@ -2560,7 +2571,7 @@ private:
                 aov->Resize(width, height, format);
             }
         } catch (std::runtime_error const& e) {
-            TF_CODING_ERROR("Failed to create %s AOV: %s", aovName.GetText(), e.what());
+            TF_RUNTIME_ERROR("Failed to create %s AOV: %s", aovName.GetText(), e.what());
         }
 
         return aov;
@@ -2579,16 +2590,25 @@ private:
         return static_cast<HdRprApiColorAov*>(aov);
     }
 
+    struct OutputRenderBuffer;
+
+    OutputRenderBuffer* GetOutputRenderBuffer(TfToken const& aovName) {
+        auto it = std::find_if(m_outputRenderBuffers.begin(), m_outputRenderBuffers.end(), [&](OutputRenderBuffer const& outRb) {
+            return outRb.aovName == aovName;
+        });
+        if (it == m_outputRenderBuffers.end()) {
+            return nullptr;
+        }
+        return &(*it);
+    }
+
     bool RenderImage(std::string const& path) {
         if (!m_rifContext) {
             return false;
         }
 
-        auto colorOutputRb = std::find_if(m_outputRenderBuffers.begin(), m_outputRenderBuffers.end(), [](OutputRenderBuffer const& outRb) {
-            return outRb.aovName == HdAovTokens->color;
-        });
-
-        if (colorOutputRb == m_outputRenderBuffers.end()) {
+        auto colorOutputRb = GetOutputRenderBuffer(HdAovTokens->color);
+        if (!colorOutputRb) {
             return false;
         }
 
@@ -2637,7 +2657,7 @@ private:
             std::memcpy(mappedData, textureData->GetRawBuffer(), imageSize);
             RIF_ERROR_CHECK(rifImageUnmap(rifImage->GetHandle(), mappedData), "Failed to unmap rif image");
 
-            auto colorRb = colorOutputRb->aovBinding->renderBuffer;
+            auto colorRb = static_cast<HdRprRenderBuffer*>(colorOutputRb->aovBinding->renderBuffer);
 
             try {
                 auto blitFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, m_rifContext.get());
@@ -2667,7 +2687,7 @@ private:
                 )");
                 blitFilter->SetInput("srcImage", rifImage->GetHandle());
                 blitFilter->SetParam("code", blitKernelCode);
-                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorOutputRb->rprAov->GetFormat()));
+                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetCommitWidth(), colorRb->GetCommitHeight(), colorRb->GetCommitFormat()));
                 blitFilter->SetInput(rif::Color, blitFilter->GetOutput());
                 blitFilter->Update();
 
@@ -2676,9 +2696,10 @@ private:
                 if (RIF_ERROR_CHECK(rifImageMap(blitFilter->GetOutput(), RIF_IMAGE_MAP_READ, &mappedData), "Failed to map rif image") || !mappedData) {
                     return false;
                 }
-                size_t size = HdDataSizeOfFormat(colorOutputRb->rprAov->GetFormat()) * colorRb->GetWidth() * colorRb->GetHeight();
-                std::memcpy(colorRb->Map(), mappedData, size);
-                colorRb->Unmap();
+                size_t size = HdDataSizeOfFormat(colorRb->GetCommitFormat()) * colorRb->GetCommitWidth() * colorRb->GetCommitHeight();
+                auto colorRbData = colorRb->Commit(true);
+                std::memcpy(colorRbData, mappedData, size);
+                colorRb->MarkAsReadyForMapping();
 
                 RIF_ERROR_CHECK(rifImageUnmap(blitFilter->GetOutput(), mappedData), "Failed to unmap rif image");
                 return true;
@@ -2753,10 +2774,27 @@ private:
 
         std::shared_ptr<HdRprApiAov> rprAov;
 
+        bool isMultiSampled;
         void* mappedData;
         size_t mappedDataSize;
     };
     std::vector<OutputRenderBuffer> m_outputRenderBuffers;
+
+    struct ResolveData {
+        struct AovEntry {
+            HdRprApiAov* aov;
+            bool isMultiSampled;
+        };
+        std::vector<AovEntry> rawAovs;
+        std::vector<AovEntry> computedAovs;
+
+        template <typename F>
+        void ForAllAovs(F&& f) {
+            for (auto& aov : rawAovs) { f(aov); }
+            for (auto& aov : computedAovs) { f(aov); }
+        }
+    };
+    ResolveData m_resolveData;
 
     GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);

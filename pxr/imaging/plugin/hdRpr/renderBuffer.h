@@ -33,7 +33,7 @@ public:
                   HdFormat format,
                   bool multiSampled) override;
 
-    unsigned int GetWidth() const override { return m_width; }
+    unsigned int GetWidth() const override;
 
     unsigned int GetHeight() const override { return m_height; }
 
@@ -41,7 +41,7 @@ public:
 
     HdFormat GetFormat() const override { return m_format; }
 
-    bool IsMultiSampled() const override { return false; }
+    bool IsMultiSampled() const override { return m_multiSampled; }
 
     void* Map() override;
 
@@ -55,7 +55,14 @@ public:
 
     void SetConverged(bool converged);
 
-    void SetStatus(bool isValid);
+    bool IsMappable() const;
+
+    void MarkAsReadyForMapping();
+
+    unsigned int GetCommitWidth() const { return m_commitWidth; }
+    unsigned int GetCommitHeight() const { return m_commitHeight; }
+    HdFormat GetCommitFormat() const { return m_commitFormat; }
+    void* Commit(bool isValid);
 
 protected:
     void _Deallocate() override;
@@ -64,12 +71,17 @@ private:
     uint32_t m_width = 0u;
     uint32_t m_height = 0u;
     HdFormat m_format = HdFormat::HdFormatInvalid;
+    bool m_multiSampled = false;
 
     std::vector<uint8_t> m_mappedBuffer;
     std::atomic<int> m_numMappers;
     std::atomic<bool> m_isConverged;
 
     bool m_isValid = true;
+    uint32_t m_commitWidth = 0u;
+    uint32_t m_commitHeight = 0u;
+    HdFormat m_commitFormat = HdFormat::HdFormatInvalid;
+    std::atomic<bool> m_isDataAvailable;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

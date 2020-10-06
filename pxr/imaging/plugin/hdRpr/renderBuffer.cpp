@@ -49,42 +49,63 @@ void HdRprRenderBuffer::Finalize(HdRenderParam* renderParam) {
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
                                  HdFormat format,
                                  bool multiSampled) {
-    TF_UNUSED(multiSampled);
-
     if (dimensions[2] != 1) {
         TF_WARN("HdRprRenderBuffer supports 2D buffers only");
         return false;
     }
 
-    _Deallocate();
+    // The following _Deallocate should have been called here but it might lead to a crash in Houdini.
+    // _Deallocate();
+    //
+    // Houdini may reallocate (resync) HdRenderBuffer while it's mapped in another
+    // thread (most likely for blitting to the viewport on the main thread).
+    // When HdRenderBuffer is reallocated, we resize the underlying std::vector
+    // and returned previously pointer from HdRenderBuffer::Map is invalidated.
+    //
+    // github.com/sideeffects/HoudiniUsdBridge tells us that Karma's HdRenderBuffer
+    // returns a pointer to the memory that is reallocated only on the next
+    // HdRenderPass::_Execute in validateAOVs function.
+    // So when Houdini makes Hydra reallocate all HdRenderBuffers it has no
+    // actual effect. These changes in fact postponed until HdRenderPass::_Execute.
+    //
+    // So we do the same - render buffer is reallocated in HdRprRenderPass::_Execute
+    // via HdRprRenderBuffer::Commit.
 
-    m_width = dimensions[0];
-    m_height = dimensions[1];
-    m_format = format;
-    size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
-    m_mappedBuffer.resize(dataByteSize, 0);
+    m_commitWidth = dimensions[0];
+    m_commitHeight = dimensions[1];
+    m_commitFormat = format;
+    m_multiSampled = multiSampled;
 
-    return false;
+    return true;
+}
+
+unsigned int HdRprRenderBuffer::GetWidth() const {
+    if (!IsMappable()) { return 0u; }
+
+    return m_width;
 }
 
 void HdRprRenderBuffer::_Deallocate() {
+    m_commitWidth = 0u;
+    m_commitHeight = 0u;
+    m_commitFormat = HdFormatInvalid;
     m_width = 0u;
     m_height = 0u;
     m_format = HdFormatInvalid;
     m_isConverged.store(false);
     m_numMappers.store(0);
-    m_mappedBuffer.resize(0);
+    m_mappedBuffer = std::vector<uint8_t>();
 }
 
 void* HdRprRenderBuffer::Map() {
-    if (!m_isValid) return nullptr;
+    if (!IsMappable()) { return nullptr; }
 
     ++m_numMappers;
     return m_mappedBuffer.data();
 }
 
 void HdRprRenderBuffer::Unmap() {
-    if (!m_isValid) return;
+    if (!IsMappable()) { return; }
 
     // XXX We could consider clearing _mappedBuffer here to free RAM.
     //     For now we assume that Map() will be called frequently so we prefer
@@ -110,8 +131,47 @@ void HdRprRenderBuffer::SetConverged(bool converged) {
     return m_isConverged.store(converged);
 }
 
-void HdRprRenderBuffer::SetStatus(bool isValid) {
+bool HdRprRenderBuffer::IsMappable() const {
+    return m_isValid &&
+        m_commitWidth == m_width &&
+        m_commitHeight == m_height &&
+        m_commitFormat == m_format &&
+        m_isDataAvailable.load();
+}
+
+void HdRprRenderBuffer::MarkAsReadyForMapping() {
+    m_isDataAvailable.store(true);
+}
+
+void* HdRprRenderBuffer::Commit(bool isValid) {
     m_isValid = isValid;
+
+    if (m_isValid) {
+        if (m_width != m_commitWidth ||
+            m_height != m_commitHeight ||
+            m_format != m_commitFormat) {
+            size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
+            size_t commitDataByteSize = m_commitWidth * m_commitHeight * HdDataSizeOfFormat(m_commitFormat);
+
+            m_width = m_commitWidth;
+            m_height = m_commitHeight;
+            m_format = m_commitFormat;
+
+            if (commitDataByteSize != dataByteSize) {
+                if (commitDataByteSize) {
+                    m_mappedBuffer.reserve(commitDataByteSize);
+                } else {
+                    m_mappedBuffer = std::vector<uint8_t>();
+                }
+            }
+
+            m_isDataAvailable.store(false);
+        }
+    } else {
+        m_mappedBuffer = std::vector<uint8_t>();
+    }
+
+    return m_mappedBuffer.data();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
