@@ -210,7 +210,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (HdChangeTracker::IsTopologyDirty(*dirtyBits, id)) {
-        for (auto& oldGeomSubset : m_topology.GetGeomSubsets()) {
+        for (auto& oldGeomSubset : m_geomSubsets) {
             if (!oldGeomSubset.materialId.IsEmpty()) {
                 rprRenderParam->UnsubscribeFromMaterialUpdates(oldGeomSubset.materialId, id);
             }
@@ -224,8 +224,68 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_normalsValid = false;
 
         m_enableSubdiv = m_topology.GetScheme() == PxOsdOpenSubdivTokens->catmullClark;
+        m_geomSubsets = m_topology.GetGeomSubsets();
 
-        for (auto& newGeomSubset : m_topology.GetGeomSubsets()) {
+        // GeomSubset data is directly transfered from USD into Hydra topology.
+        // This data should be validated and preprocessed before using it:
+        //   1) merge subsets with the same material
+        //
+        std::map<SdfPath, size_t> materialToSubsetMapping;
+        for (size_t i = 0; i < m_geomSubsets.size();) {
+            auto& subset = m_geomSubsets[i];
+            auto it = materialToSubsetMapping.find(subset.materialId);
+            if (it == materialToSubsetMapping.end()) {
+                materialToSubsetMapping.emplace(subset.materialId, i);
+                ++i;
+            } else {
+                auto& baseSubset = m_geomSubsets[it->second];
+
+                // Append indices to the base subset
+                baseSubset.indices.reserve(baseSubset.indices.size() + subset.indices.size());
+                for (auto index : subset.indices) {
+                    baseSubset.indices.push_back(index);
+                }
+
+                // Erase the current subset
+                if (i + 1 != m_geomSubsets.size()) {
+                    std::swap(m_geomSubsets[i], m_geomSubsets.back());
+                }
+                m_geomSubsets.pop_back();
+            }
+        }
+        //
+        //   2) create a new geomSubset that consists of unused faces
+        //
+        if (!m_geomSubsets.empty()) {
+            auto numFaces = m_faceVertexCounts.size();
+            std::vector<bool> faceIsUnused(numFaces, true);
+            size_t numUnusedFaces = faceIsUnused.size();
+            for (auto const& subset : m_geomSubsets) {
+                for (int index : subset.indices) {
+                    if (TF_VERIFY(index < numFaces) && faceIsUnused[index]) {
+                        faceIsUnused[index] = false;
+                        numUnusedFaces--;
+                    }
+                }
+            }
+            if (numUnusedFaces) {
+                m_geomSubsets.push_back(HdGeomSubset());
+                HdGeomSubset& unusedSubset = m_geomSubsets.back();
+                unusedSubset.type = HdGeomSubset::TypeFaceSet;
+                unusedSubset.id = id;
+                unusedSubset.materialId = m_materialId;
+                unusedSubset.indices.resize(numUnusedFaces);
+                size_t count = 0;
+                for (size_t i = 0; i < faceIsUnused.size() && count < numUnusedFaces; ++i) {
+                    if (faceIsUnused[i]) {
+                        unusedSubset.indices[count] = i;
+                        count++;
+                    }
+                }
+            }
+        }
+
+        for (auto& newGeomSubset : m_geomSubsets) {
             if (!newGeomSubset.materialId.IsEmpty()) {
                 rprRenderParam->SubscribeForMaterialUpdates(newGeomSubset.materialId, id);
             }
@@ -254,7 +314,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     // Check all materials, including those from geomSubsets
     if (!material || !material->GetRprMaterialObject()) {
-        for (auto& subset : m_topology.GetGeomSubsets()) {
+        for (auto& subset : m_geomSubsets) {
             if (subset.type == HdGeomSubset::TypeFaceSet &&
                 !subset.materialId.IsEmpty()) {
                 material = static_cast<const HdRprMaterial*>(
@@ -358,42 +418,12 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_rprMeshInstances.clear();
         m_rprMeshes.clear();
 
-        m_geomSubsets = m_topology.GetGeomSubsets();
         if (m_geomSubsets.empty()) {
             if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
                 rprApi->SetMeshId(rprMesh, GetPrimId());
                 m_rprMeshes.push_back(rprMesh);
             }
         } else {
-            auto numFaces = m_faceVertexCounts.size();
-            std::vector<bool> faceIsUnused(numFaces, true);
-            size_t numUnusedFaces = faceIsUnused.size();
-            for (auto const& subset : m_geomSubsets) {
-                for (int index : subset.indices) {
-                    if (TF_VERIFY(index < numFaces) && faceIsUnused[index]) {
-                        faceIsUnused[index] = false;
-                        numUnusedFaces--;
-                    }
-                }
-            }
-            // If we found any unused faces, build a final subset with those faces.
-            // Use the material bound to the parent mesh.
-            if (numUnusedFaces) {
-                m_geomSubsets.push_back(HdGeomSubset());
-                HdGeomSubset& unusedSubset = m_geomSubsets.back();
-                unusedSubset.type = HdGeomSubset::TypeFaceSet;
-                unusedSubset.id = id;
-                unusedSubset.materialId = m_materialId;
-                unusedSubset.indices.resize(numUnusedFaces);
-                size_t count = 0;
-                for (size_t i = 0; i < faceIsUnused.size() && count < numUnusedFaces; ++i) {
-                    if (faceIsUnused[i]) {
-                        unusedSubset.indices[count] = i;
-                        count++;
-                    }
-                }
-            }
-
             // GeomSubset may reference face subset in any given order so we need to be able to
             //   randomly lookup face indexes but each face may be of an arbitrary number of vertices
             std::vector<int> indexesOffsetPrefixSum;
@@ -694,7 +724,7 @@ void HdRprMesh::Finalize(HdRenderParam* renderParam) {
     rprApi->Release(m_fallbackMaterial);
     m_fallbackMaterial = nullptr;
 
-    for (auto& oldGeomSubset : m_topology.GetGeomSubsets()) {
+    for (auto& oldGeomSubset : m_geomSubsets) {
         if (!oldGeomSubset.materialId.IsEmpty()) {
             rprRenderParam->UnsubscribeFromMaterialUpdates(oldGeomSubset.materialId, GetId());
         }
