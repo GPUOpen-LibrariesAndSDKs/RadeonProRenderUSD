@@ -30,3 +30,8 @@ target_compile_definitions(activateHoudiniPlugin PRIVATE GHC_WIN_WSTRING_STRING_
 install(
     TARGETS activateHoudiniPlugin
     RUNTIME DESTINATION .)
+install(
+    FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_exportRpr1.hda
+        ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_standard_rendervars.hda
+    DESTINATION "houdini/otls")
