@@ -2621,29 +2621,38 @@ private:
             imageDesc.image_row_pitch = 0;
             imageDesc.image_slice_pitch = 0;
 
+            #if PXR_VERSION >= 2011
+                auto hioFormat = textureData->GetHioFormat();
+                GLenum glType = GlfGetGLType(hioFormat);
+                GLenum glFormat = GlfGetGLFormat(hioFormat);
+            #else
+                GLenum glType = textureData->GLType();
+                GLenum glFormat = textureData->GLFormat();
+            #endif
+
             uint8_t bytesPerComponent;
-            if (textureData->GLType() == GL_UNSIGNED_BYTE) {
+            if (glType == GL_UNSIGNED_BYTE) {
                 imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
                 bytesPerComponent = 1;
-            } else if (textureData->GLType() == GL_HALF_FLOAT) {
+            } else if (glType == GL_HALF_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
                 bytesPerComponent = 2;
-            } else if (textureData->GLType() == GL_FLOAT) {
+            } else if (glType == GL_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
                 bytesPerComponent = 2;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureData->GLType());
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), glType);
                 return false;
             }
 
-            if (textureData->GLFormat() == GL_RGBA) {
+            if (glFormat == GL_RGBA) {
                 imageDesc.num_components = 4;
-            } else if (textureData->GLFormat() == GL_RGB) {
+            } else if (glFormat == GL_RGB) {
                 imageDesc.num_components = 3;
-            } else if (textureData->GLFormat() == GL_RED) {
+            } else if (glFormat == GL_RED) {
                 imageDesc.num_components = 1;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), textureData->GLFormat());
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), glFormat);
                 return false;
             }
 
