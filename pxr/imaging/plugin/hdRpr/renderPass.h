@@ -28,7 +28,7 @@ public:
                     HdRprimCollection const& collection,
                     HdRprRenderParam* renderParam);
 
-    ~HdRprRenderPass() override = default;
+    ~HdRprRenderPass() override;
 
     bool IsConverged() const override;
 
