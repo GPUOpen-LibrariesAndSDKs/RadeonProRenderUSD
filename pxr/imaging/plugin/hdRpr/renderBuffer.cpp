@@ -54,69 +54,88 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
         return false;
     }
 
-    // The following _Deallocate should have been called here but it might lead to a crash in Houdini.
-    // _Deallocate();
-    //
-    // Houdini may reallocate (resync) HdRenderBuffer while it's mapped in another
-    // thread (most likely for blitting to the viewport on the main thread).
-    // When HdRenderBuffer is reallocated, we resize the underlying std::vector
-    // and returned previously pointer from HdRenderBuffer::Map is invalidated.
-    //
-    // github.com/sideeffects/HoudiniUsdBridge tells us that Karma's HdRenderBuffer
-    // returns a pointer to the memory that is reallocated only on the next
-    // HdRenderPass::_Execute in validateAOVs function.
-    // So when Houdini makes Hydra reallocate all HdRenderBuffers it has no
-    // actual effect. These changes in fact postponed until HdRenderPass::_Execute.
-    //
-    // So we do the same - render buffer is reallocated in HdRprRenderPass::_Execute
-    // via HdRprRenderBuffer::Commit.
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    std::unique_lock<std::mutex> lock(m_mapMutex);
+    m_mapConditionVar.wait(lock, [this]() { return m_numMappers == 0; });
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
 
-    m_commitWidth = dimensions[0];
-    m_commitHeight = dimensions[1];
-    m_commitFormat = format;
+    m_width = dimensions[0];
+    m_height = dimensions[1];
+    m_format = format;
     m_multiSampled = multiSampled;
+    m_isConverged.store(false);
+
+    size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
+    if (dataByteSize) {
+        m_mappedBuffer.reserve(dataByteSize);
+        std::memset(m_mappedBuffer.data(), 0, dataByteSize);
+    } else {
+        m_mappedBuffer = std::vector<uint8_t>();
+    }
 
     return true;
 }
 
-unsigned int HdRprRenderBuffer::GetWidth() const {
-    if (!IsMappable()) { return 0u; }
-
-    return m_width;
-}
-
 void HdRprRenderBuffer::_Deallocate() {
-    m_commitWidth = 0u;
-    m_commitHeight = 0u;
-    m_commitFormat = HdFormatInvalid;
+
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    std::unique_lock<std::mutex> lock(m_mapMutex);
+    m_mapConditionVar.wait(lock, [this]() { return m_numMappers == 0; });
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
+
     m_width = 0u;
     m_height = 0u;
     m_format = HdFormatInvalid;
     m_isConverged.store(false);
-    m_numMappers.store(0);
     m_mappedBuffer = std::vector<uint8_t>();
 }
 
 void* HdRprRenderBuffer::Map() {
-    if (!IsMappable()) { return nullptr; }
+
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    std::unique_lock<std::mutex> lock(m_mapMutex);
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
 
     ++m_numMappers;
     return m_mappedBuffer.data();
 }
 
 void HdRprRenderBuffer::Unmap() {
-    if (!IsMappable()) { return; }
+
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    bool isLastMapper;
+    {
+        std::unique_lock<std::mutex> lock(m_mapMutex);
+        if (!TF_VERIFY(m_numMappers)) {
+            TF_CODING_ERROR("Invalid HdRenderBuffer usage detected. Over-use of Unmap.");
+            return;
+        }
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
+
+        --m_numMappers;
+        TF_VERIFY(m_numMappers >= 0);
+
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+        isLastMapper = m_numMappers == 0;
+    }
+
+    if (isLastMapper) {
+        m_mapConditionVar.notify_one();
+    }
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
 
     // XXX We could consider clearing _mappedBuffer here to free RAM.
     //     For now we assume that Map() will be called frequently so we prefer
     //     to avoid the cost of clearing the buffer over memory savings.
-    // m_mappedBuffer.clear();
-    // m_mappedBuffer.shrink_to_fit();
-    --m_numMappers;
+    //if (m_numMappers == 0) {
+    //    m_mappedBuffer = std::vector<uint8_t>();
+    //}
 }
 
 bool HdRprRenderBuffer::IsMapped() const {
-    return m_numMappers.load() != 0;
+    // There is no point to lock this read because HdRenderBuffer user has no idea about internal synchronization.
+    // Calling this function to check if they need to unmap a render buffer is just wrong and should not happen.
+    return m_numMappers != 0;
 }
 
 void HdRprRenderBuffer::Resolve() {
@@ -129,49 +148,6 @@ bool HdRprRenderBuffer::IsConverged() const {
 
 void HdRprRenderBuffer::SetConverged(bool converged) {
     return m_isConverged.store(converged);
-}
-
-bool HdRprRenderBuffer::IsMappable() const {
-    return m_isValid &&
-        m_commitWidth == m_width &&
-        m_commitHeight == m_height &&
-        m_commitFormat == m_format &&
-        m_isDataAvailable.load();
-}
-
-void HdRprRenderBuffer::MarkAsReadyForMapping() {
-    m_isDataAvailable.store(true);
-}
-
-void* HdRprRenderBuffer::Commit(bool isValid) {
-    m_isValid = isValid;
-
-    if (m_isValid) {
-        if (m_width != m_commitWidth ||
-            m_height != m_commitHeight ||
-            m_format != m_commitFormat) {
-            size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
-            size_t commitDataByteSize = m_commitWidth * m_commitHeight * HdDataSizeOfFormat(m_commitFormat);
-
-            m_width = m_commitWidth;
-            m_height = m_commitHeight;
-            m_format = m_commitFormat;
-
-            if (commitDataByteSize != dataByteSize) {
-                if (commitDataByteSize) {
-                    m_mappedBuffer.reserve(commitDataByteSize);
-                } else {
-                    m_mappedBuffer = std::vector<uint8_t>();
-                }
-            }
-
-            m_isDataAvailable.store(false);
-        }
-    } else {
-        m_mappedBuffer = std::vector<uint8_t>();
-    }
-
-    return m_mappedBuffer.data();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
