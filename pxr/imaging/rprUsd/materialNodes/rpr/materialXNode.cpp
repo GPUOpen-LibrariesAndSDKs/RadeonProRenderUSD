@@ -188,13 +188,34 @@ public:
                     if (mtlxPtr->imageNodes && (m_surfaceNode || m_displacementNode)) {
                         RprUsdMaterialRegistry::TextureCommit textureCommit = {};
                         for (size_t i = 0; i < mtlxPtr->numImageNodes; ++i) {
-                            textureCommit.filepath = basePath + "/" + mtlxPtr->imageNodes[i].filepath;
-                            rpr_material_node imageNode = mtlxPtr->imageNodes[i].rprNode;
-                            textureCommit.setTextureCallback = [retainedImagesPtr, imageNode](std::shared_ptr<RprUsdCoreImage> const& image) {
+                            auto& mtlxImageNode = mtlxPtr->imageNodes[i];
+
+                            // TODO: support Image Filename Substitutions
+                            textureCommit.filepath = basePath + "/" + mtlxImageNode.file;
+
+                            std::string& addressmode = !mtlxImageNode.uaddressmode.empty() ? mtlxImageNode.uaddressmode : mtlxImageNode.vaddressmode;
+                            if (!addressmode.empty()) {
+                                if (mtlxImageNode.uaddressmode != mtlxImageNode.vaddressmode) {
+                                    TF_WARN("RPR does not support different address modes on an image. Using %s for %s image",
+                                        addressmode.c_str(), textureCommit.filepath.c_str());
+                                }
+
+                                textureCommit.wrapType = RPR_IMAGE_WRAP_TYPE_REPEAT;
+                                if (addressmode == "constant") {
+                                    TF_WARN("The constant uv address mode is not supported. Falling back to periodic.");
+                                } else if (addressmode == "clamp") {
+                                    textureCommit.wrapType = RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE;
+                                } else if (addressmode == "mirror") {
+                                    textureCommit.wrapType = RPR_IMAGE_WRAP_TYPE_MIRRORED_REPEAT;
+                                }
+                            }
+
+                            rpr_material_node rprImageNode = mtlxImageNode.rprNode;
+                            textureCommit.setTextureCallback = [retainedImagesPtr, rprImageNode](std::shared_ptr<RprUsdCoreImage> const& image) {
                                 if (!image) return;
 
                                 auto imageData = rpr::GetRprObject(image->GetRootImage());
-                                if (!RPR_ERROR_CHECK(rprMaterialNodeSetInputImageDataByKey(imageNode, RPR_MATERIAL_INPUT_DATA, imageData), "Failed to set material node image data input")) {
+                                if (!RPR_ERROR_CHECK(rprMaterialNodeSetInputImageDataByKey(rprImageNode, RPR_MATERIAL_INPUT_DATA, imageData), "Failed to set material node image data input")) {
                                     retainedImagesPtr->push_back(image);
                                 }
                             };
