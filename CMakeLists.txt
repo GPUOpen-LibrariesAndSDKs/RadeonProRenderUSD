@@ -50,6 +50,14 @@ if(NOT MaterialX_FOUND)
             deps/MaterialX/libraries/bxdf/usd_preview_surface.mtlx
         DESTINATION
             libraries/bxdf)
+    foreach(mtlx_lib stdlib pbrlib)
+        install(
+            FILES
+                deps/MaterialX/libraries/${mtlx_lib}/${mtlx_lib}_ng.mtlx
+                deps/MaterialX/libraries/${mtlx_lib}/${mtlx_lib}_defs.mtlx
+            DESTINATION
+                libraries/${mtlx_lib})
+    endforeach()
 endif()
 
 if(HoudiniUSD_FOUND)
