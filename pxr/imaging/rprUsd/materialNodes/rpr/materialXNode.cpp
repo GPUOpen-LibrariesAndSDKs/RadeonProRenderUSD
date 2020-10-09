@@ -81,7 +81,8 @@ public:
                             return false;
                         }
 
-                        mtlx = m_ctx->mtlxLoader->Load(mtlxDoc.get(), matSys);
+                        MaterialX::FileSearchPath searchPath(basePath);
+                        mtlx = m_ctx->mtlxLoader->Load(mtlxDoc.get(), matSys, searchPath);
                     } catch (MaterialX::ExceptionParseError& e) {
                         fprintf(stderr, "Failed to parse %s: %s\n", path.c_str(), e.what());
                     } catch (MaterialX::ExceptionFileMissing& e) {
@@ -191,7 +192,7 @@ public:
                             auto& mtlxImageNode = mtlxPtr->imageNodes[i];
 
                             // TODO: support Image Filename Substitutions
-                            textureCommit.filepath = basePath + "/" + mtlxImageNode.file;
+                            textureCommit.filepath = std::move(mtlxImageNode.file);
 
                             std::string& addressmode = !mtlxImageNode.uaddressmode.empty() ? mtlxImageNode.uaddressmode : mtlxImageNode.vaddressmode;
                             if (!addressmode.empty()) {
