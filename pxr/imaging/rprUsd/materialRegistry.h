@@ -72,6 +72,9 @@ public:
     RPRUSD_API
     std::vector<RprUsdMaterialNodeDesc> const& GetRegisteredNodes();
 
+    RPRUSD_API
+    RPRMtlxLoader* GetMtlxLoader() const { return m_mtlxLoader.get(); }
+
     /// Register implementation of the Node with \p id
     RPRUSD_API
     void Register(
@@ -154,6 +157,7 @@ public:
         kBoolean,
         kInteger,
         kToken,
+        kString,
         kFilepath,
         kVolumeShader,
         kSurfaceShader,

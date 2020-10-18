@@ -14,8 +14,6 @@ pxr_library(rprUsd
         arch
         work
         cpprpr
-        MaterialXCore
-        MaterialXFormat
 
     PUBLIC_CLASSES
         util
@@ -37,10 +35,6 @@ pxr_library(rprUsd
     RESOURCE_FILES
 )
 
-if(NOT RPRMTLXLOADER_PATH)
-    set(RPRMTLXLOADER_PATH ${RPR_TOOLS_LOCATION})
-endif()
-
 target_sources(rprUsd PRIVATE
     materialNodes/materialNode.h
     materialNodes/usdNode.h
@@ -57,10 +51,7 @@ target_sources(rprUsd PRIVATE
     materialNodes/rpr/arithmeticNode.cpp
     materialNodes/rpr/combineShadersNode.cpp
     materialNodes/houdiniPrincipledShaderNode.h
-    materialNodes/houdiniPrincipledShaderNode.cpp
-    ${RPRMTLXLOADER_PATH}/rprMtlxLoader.h
-    ${RPRMTLXLOADER_PATH}/rprMtlxLoader.cpp)
-target_include_directories(rprUsd PRIVATE ${RPRMTLXLOADER_PATH})
+    materialNodes/houdiniPrincipledShaderNode.cpp)
 
 add_subdirectory(materialNodes/mtlxFiles)
 

@@ -60,6 +60,35 @@ if(NOT MaterialX_FOUND)
     endforeach()
 endif()
 
+# RPR C++ wrapper
+# ----------------------------------------------
+
+if(NOT RPR_TOOLS_LOCATION)
+    set(RPR_TOOLS_LOCATION ${RPR_LOCATION_INCLUDE}/../rprTools)
+endif()
+
+if(NOT RPRMTLXLOADER_LOCATION)
+    set(RPRMTLXLOADER_LOCATION ${RPR_TOOLS_LOCATION})
+endif()
+
+if(NOT RPR_CPP_WRAPPER_LOCATION)
+    set(RPR_CPP_WRAPPER_LOCATION ${RPR_TOOLS_LOCATION})
+endif()
+
+add_library(cpprpr STATIC
+    ${RPRMTLXLOADER_LOCATION}/rprMtlxLoader.h
+    ${RPRMTLXLOADER_LOCATION}/rprMtlxLoader.cpp
+    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRender.hpp
+    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRenderCpp.cpp)
+set_target_properties(cpprpr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(cpprpr PUBLIC ${RPR_CPP_WRAPPER_LOCATION} ${RPRMTLXLOADER_LOCATION})
+target_link_libraries(cpprpr PUBLIC rpr MaterialXCore MaterialXFormat)
+target_compile_definitions(cpprpr PUBLIC
+    RPR_CPPWRAPER_DISABLE_MUTEXLOCK
+    RPR_API_USE_HEADER_V2)
+
+# ----------------------------------------------
+
 if(HoudiniUSD_FOUND)
     # Currently we use it only in activateHoudiniPlugin utility
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/deps/ghc_filesystem)
