@@ -108,12 +108,15 @@ public:
     static PRM_Template* GetTemplates(RprUsdMaterialNodeInfo const* shaderInfo);
 
     void opChanged(OP_EventType reason, void* data) override;
+    bool runCreateScript() override;
 
 private:
     static void ElementChoiceGenFunc(void* op, PRM_Name* choices, int maxChoicesSize, const PRM_SpareData*, const PRM_Parm*);
 
 private:
     UT_String m_file;
+    int m_reloadDummy = 0;
+    double m_fileModificationTime;
     RPRMtlxLoader::RenderableElements m_renderableElements;
 };
 

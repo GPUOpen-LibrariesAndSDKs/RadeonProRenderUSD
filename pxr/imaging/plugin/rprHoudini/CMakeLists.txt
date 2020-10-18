@@ -8,6 +8,7 @@ add_library(RPR_for_Houdini SHARED
     VOP_RPRMaterial.cpp)
 
 target_link_libraries(RPR_for_Houdini
+    arch
     rprUsd
     Houdini)
 

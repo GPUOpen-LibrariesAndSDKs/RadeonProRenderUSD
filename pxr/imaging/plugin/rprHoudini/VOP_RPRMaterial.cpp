@@ -13,7 +13,8 @@ limitations under the License.
 
 #include "VOP_RPRMaterial.h"
 
-#include "pxr/base/tf/stringUtils.h"
+#include <pxr/base/tf/stringUtils.h>
+#include <pxr/base/arch/fileSystem.h>
 
 #include <PRM/PRM_Include.h>
 #include <PRM/PRM_SpareData.h>
@@ -405,10 +406,60 @@ PRM_Template* VOP_MaterialX::GetTemplates(RprUsdMaterialNodeInfo const* shaderIn
         }
     }
 
-    auto it = std::prev(templates->end());
+    templates->pop_back();
+
+    // Add error message parm.
+    // It will be displayed if selected mtlx has not renderable elements only
+    //
     auto msgName = LEAKED(new PRM_Name("msg"));
     auto msgDefault = LEAKED(new PRM_Default(0.0, "No renderable elements"));
-    it = templates->insert(it, PRM_Template(PRM_LABEL, PRM_TYPE_NO_LABEL, 1, msgName, msgDefault));
+    templates->emplace_back(PRM_LABEL, PRM_TYPE_NO_LABEL, 1, msgName, msgDefault);
+
+    // Reload button
+
+    // Currently, the only way to reload a material in Houdini is to modify the material node itself.
+    // So we add dummy parameter that will be changed on reload button press
+    //
+    static const char* dummyParmName = "reloadDummy";
+    templates->emplace_back(PRM_INT_E, 1, LEAKED(new PRM_Name(dummyParmName)));
+    templates->back().setInvisible(true);
+
+    // Add reload button parm
+    //
+    auto separatorName = LEAKED(new PRM_Name("reloadSeparator"));
+    templates->emplace_back(PRM_SEPARATOR, 1, separatorName);
+    auto buttonName = LEAKED(new PRM_Name("reload", "Reload"));
+    PRM_Callback buttonCallback([](void* data, int, float time, const PRM_Template*) -> int {
+        auto vop = static_cast<VOP_MaterialX*>(CAST_VOPNODE((OP_Node*)data));
+        if (vop->m_file.isstring()) {
+            if (auto reloadDummy = vop->getParmPtr(dummyParmName)) {
+                double modificationTime;
+                if (ArchGetModificationTime(vop->m_file, &modificationTime)) {
+                    if (vop->m_fileModificationTime != modificationTime) {
+
+                        // If the file did not exist before, update UI
+                        //
+                        if (vop->m_fileModificationTime == 0.0) {
+                            vop->opChanged(OP_PARM_CHANGED, (void*)vop->getParmIndex("file"));
+                        }
+
+                        vop->m_fileModificationTime = modificationTime;
+
+                        // Force Hydra material reload
+                        //
+                        reloadDummy->setValue(time, ++vop->m_reloadDummy);
+
+                        return 1;
+                    }
+                }
+            }
+        }
+
+        return 0;
+    });
+    templates->emplace_back(PRM_CALLBACK_NOREFRESH, 1, buttonName, nullptr, nullptr, nullptr, buttonCallback);
+
+    templates->emplace_back();
 
     return &templates->at(0);
 }
@@ -461,55 +512,73 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
         int parmIndex = int(reinterpret_cast<intptr_t>(data));
         auto& changedParm = getParm(parmIndex);
         if (std::strcmp(changedParm.getToken(), "file") == 0) {
-            UT_String newFile;
-            changedParm.getValue(0.0, newFile, 0, true, 0);
+            changedParm.getValue(0.0, m_file, 0, true, 0);
+            if (!ArchGetModificationTime(m_file, &m_fileModificationTime)) {
+                m_fileModificationTime = 0.0;
+            }
 
-            if (m_file != newFile) {
-                m_file = std::move(newFile);
-
-                // Rebuild renderable elements cache
-                //
-                m_renderableElements = {};
-                if (auto mtlxLoader = RprUsdMaterialRegistry::GetInstance().GetMtlxLoader()) {
-                    try {
-                        auto mtlxDoc = MaterialX::createDocument();
-                        MaterialX::readFromXmlFile(mtlxDoc, m_file.toStdString());
-                        mtlxDoc->importLibrary(mtlxLoader->GetStdlib());
-                        m_renderableElements = mtlxLoader->GetRenderableElements(mtlxDoc.get());
-                    } catch (MaterialX::Exception& e) {
-                        // no-op
-                    }
+            // Rebuild renderable elements cache
+            //
+            m_renderableElements = {};
+            if (auto mtlxLoader = RprUsdMaterialRegistry::GetInstance().GetMtlxLoader()) {
+                try {
+                    auto mtlxDoc = MaterialX::createDocument();
+                    MaterialX::readFromXmlFile(mtlxDoc, m_file.toStdString());
+                    mtlxDoc->importLibrary(mtlxLoader->GetStdlib());
+                    m_renderableElements = mtlxLoader->GetRenderableElements(mtlxDoc.get());
+                } catch (MaterialX::Exception& e) {
+                    // no-op
                 }
+            }
 
-                // Reset element parameters
-                //
-                bool hasAnyElements = false;
-                const char* parmNames[RPRMtlxLoader::kOutputsTotal] = {
-                    "surfaceElement", "displacementElement"
-                };
-                for (int i = 0; i < RPRMtlxLoader::kOutputsTotal; ++i) {
-                    if (auto parm = getParmPtr(parmNames[i])) {
-                        auto& namePaths = m_renderableElements.namePaths[i];
+            // Hide everything but file parm when a file is not specified
+            //
+            bool isUiVisible = bool(m_file);
 
-                        const char* parmValue = "";
-                        bool parmVisible = false;
-                        if (!namePaths.empty()) {
-                            parmValue = namePaths[0].c_str();
-                            parmVisible = true;
-                            hasAnyElements = true;
-                        }
+            // Reset element parameters
+            //
+            bool hasAnyElements = false;
+            const char* parmNames[RPRMtlxLoader::kOutputsTotal] = {
+                "surfaceElement", "displacementElement"
+            };
+            for (int i = 0; i < RPRMtlxLoader::kOutputsTotal; ++i) {
+                if (auto parm = getParmPtr(parmNames[i])) {
+                    auto& namePaths = m_renderableElements.namePaths[i];
 
-                        parm->setValue(0.0, parmValue, CH_STRING_LITERAL);
-                        parm->setVisibleState(parmVisible);
+                    const char* parmValue = "";
+                    bool parmVisible = false;
+                    if (!namePaths.empty()) {
+                        parmValue = namePaths[0].c_str();
+                        parmVisible = true;
+                        hasAnyElements = true;
                     }
-                }
 
-                if (auto msgParm = getParmPtr("msg")) {
-                    msgParm->setVisibleState(!hasAnyElements);
+                    parm->setValue(0.0, parmValue, CH_STRING_LITERAL);
+                    parm->setVisibleState(isUiVisible && parmVisible);
+                }
+            }
+
+            if (auto msgParm = getParmPtr("msg")) {
+                msgParm->setVisibleState(isUiVisible && !hasAnyElements);
+            }
+
+            if (auto buttonParm = getParmPtr("reload")) {
+                buttonParm->setVisibleState(isUiVisible);
+                if (auto separatorParm = getParmPtr("reloadSeparator")) {
+                    separatorParm->setVisibleState(isUiVisible);
                 }
             }
         }
     }
+}
+
+bool VOP_MaterialX::runCreateScript() {
+    int numParms = getNumParms();
+    for (int i = 1; i < numParms; ++i) {
+        getParm(i).setVisibleState(false);
+    }
+
+    return true;
 }
 
 static const char* GetUIName(RprUsdMaterialNodeInfo const* shaderInfo) {
