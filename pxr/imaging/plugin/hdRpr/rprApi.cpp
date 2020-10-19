@@ -1935,10 +1935,23 @@ public:
                 std::swap(m_rprSceneExportPath, exportPath);
             }
             if (!exportPath.empty()) {
+                uint32_t currentYFlip;
+                if (m_isOutputFlipped) {
+                    currentYFlip = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP);
+
+                    currentYFlip = !currentYFlip;
+                    RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, currentYFlip), "Failed to set context Y FLIP parameter");
+                }
+
                 auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
                 auto rprSceneHandle = rpr::GetRprObject(m_scene.get());
                 if (!RPR_ERROR_CHECK(rprsExport(exportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, 0), "Failed to export .rpr file")) {
                     printf("Successfully exported \"%s\"\n", exportPath.c_str());
+                }
+
+                if (m_isOutputFlipped) {
+                    currentYFlip = !currentYFlip;
+                    RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, currentYFlip), "Failed to set context Y FLIP parameter");
                 }
             }
         }
@@ -2170,7 +2183,10 @@ private:
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
-        RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Fail to set context Y FLIP parameter");
+        m_isOutputFlipped = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP) != 0;
+        if (m_isOutputFlipped) {
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Failed to set context Y FLIP parameter");
+        }
 
         m_isRenderUpdateCallbackEnabled = false;
         if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
@@ -2757,6 +2773,7 @@ private:
     using RprContextPtr = std::unique_ptr<rpr::Context, decltype(&RprContextDeleter)>;
     RprContextPtr m_rprContext{nullptr, RprContextDeleter};
     RprUsdContextMetadata m_rprContextMetadata;
+    bool m_isOutputFlipped;
 
     std::unique_ptr<rif::Context> m_rifContext;
 
