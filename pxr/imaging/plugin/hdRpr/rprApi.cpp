@@ -1712,7 +1712,7 @@ public:
                 // We can use RPR_AOV_COLOR here instead of reserving one of the available LPE AOV slots
                 // TODO: check if we can map some other LPEs to non-lpe RPR AOVs
             } else {
-                if (m_rprContextMetadata.pluginType != kPluginNorthStar) {
+                if (m_rprContextMetadata.pluginType != kPluginNorthstar) {
                     TF_RUNTIME_ERROR("LPE AOV is supported in Northstar only");
                     return false;
                 }
