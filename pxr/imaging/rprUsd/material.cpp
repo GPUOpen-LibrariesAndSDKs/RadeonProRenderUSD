@@ -74,4 +74,10 @@ void RprUsdMaterial::DetachFrom(rpr::Curve* curve) {
     RPR_ERROR_CHECK(curve->SetMaterial(nullptr), "Failed to unset curve material");
 }
 
+void RprUsdMaterial::SetName(const char *name) {
+    if (m_surfaceNode) m_surfaceNode->SetName(name);
+    if (m_displacementNode) m_displacementNode->SetName(name);
+    if (m_volumeNode) m_volumeNode->SetName(name);
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE

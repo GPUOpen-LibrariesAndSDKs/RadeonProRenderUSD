@@ -79,11 +79,14 @@ public:
     rpr::SpotLight* CreateSpotLight(float angle, float softness);
     rpr::IESLight* CreateIESLight(std::string const& iesFilepath);
     rpr::PointLight* CreatePointLight();
+    rpr::DiskLight* CreateDiskLight();
+    rpr::SphereLight* CreateSphereLight();
 
     void SetDirectionalLightAttributes(rpr::DirectionalLight* light, GfVec3f const& color, float shadowSoftnessAngle);
-    void SetLightColor(rpr::SpotLight* light, GfVec3f const& color);
-    void SetLightColor(rpr::PointLight* light, GfVec3f const& color);
-    void SetLightColor(rpr::IESLight* light, GfVec3f const& color);
+    void SetLightRadius(rpr::SphereLight* light, float radius);
+    void SetLightRadius(rpr::DiskLight* light, float radius);
+    void SetLightAngle(rpr::DiskLight* light, float angle);
+    void SetLightColor(rpr::RadiantLight* light, GfVec3f const& color);
 
     void Release(rpr::Light* light);
 
@@ -127,6 +130,10 @@ public:
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform);
     void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples);
 
+    void SetName(rpr::ContextObject* object, const char* name);
+    void SetName(RprUsdMaterial* object, const char* name);
+    void SetName(HdRprApiEnvironmentLight* object, const char* name);
+
     GfMatrix4d GetCameraViewMatrix() const;
     const GfMatrix4d& GetCameraProjectionMatrix() const;
 
@@ -139,9 +146,7 @@ public:
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings);
     HdRenderPassAovBindingVector GetAovBindings() const;
 
-    int GetNumCompletedSamples() const;
-    // returns -1 if adaptive sampling is not used
-    int GetNumActivePixels() const;
+    double GetPercentDone() const;
 
     void CommitResources();
     void Render(HdRprRenderThread* renderThread);
@@ -150,7 +155,8 @@ public:
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
     bool IsArbitraryShapedLightSupported() const;
-    int GetCurrentRenderQuality() const;
+    bool IsSphereAndDiskLightSupported() const;
+    TfToken const& GetCurrentRenderQuality() const;
     void ExportRprSceneOnNextRender(const char* exportPath);
 
     static std::string GetAppDataPath();

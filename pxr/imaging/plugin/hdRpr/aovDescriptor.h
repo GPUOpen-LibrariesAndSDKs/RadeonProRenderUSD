@@ -33,7 +33,7 @@ PXR_NAMESPACE_OPEN_SCOPE
     (worldCoordinate) \
     (opacity) \
     ((primvarsSt, "primvars:st")) \
-    (materialIdx) \
+    (materialId) \
     (geometricNormal) \
     (objectGroupId) \
     (shadowCatcher) \

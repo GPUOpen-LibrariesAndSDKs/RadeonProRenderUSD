@@ -381,7 +381,7 @@ void HdRprVolume::Sync(
         decltype(m_fieldSubscriptions) activeFieldSubscriptions;
 
         auto volumeFieldDescriptorVector = sceneDelegate->GetVolumeFieldDescriptors(GetId());
-        for (auto const& desc : sceneDelegate->GetVolumeFieldDescriptors(GetId())) {
+        for (auto const& desc : volumeFieldDescriptorVector) {
             GridInfo* targetInfo;
             if (desc.fieldName == HdRprVolumeTokens->density) {
                 targetInfo = &densityGridInfo;

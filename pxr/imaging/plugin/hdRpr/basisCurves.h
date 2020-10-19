@@ -14,6 +14,8 @@ limitations under the License.
 #ifndef HDRPR_BASIS_CURVES_H
 #define HDRPR_BASIS_CURVES_H
 
+#include "baseRprim.h"
+
 #include "pxr/imaging/hd/basisCurves.h"
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/vec2f.h"
@@ -27,7 +29,7 @@ class RprUsdMaterial;
 
 class HdRprMaterial;
 
-class HdRprBasisCurves : public HdBasisCurves {
+class HdRprBasisCurves : public HdRprBaseRprim<HdBasisCurves> {
 
 public:
     HdRprBasisCurves(SdfPath const& id,
@@ -57,8 +59,6 @@ private:
 private:
     rpr::Curve* m_rprCurve = nullptr;
     RprUsdMaterial* m_fallbackMaterial = nullptr;
-
-    HdRprMaterial const* m_cachedMaterial;
 
     HdBasisCurvesTopology m_topology;
     VtIntArray m_indices;

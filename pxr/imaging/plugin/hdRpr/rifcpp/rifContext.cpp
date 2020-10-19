@@ -146,7 +146,7 @@ std::unique_ptr<Image> ContextOpenCL::CreateImage(HdRprApiFramebuffer* rprFrameB
     }
 
     auto rifImageDesc = GetRifImageDesc(rprFrameBuffer);
-    RIF_ERROR_CHECK_THROW(rifContextCreateImageFromOpenClMemory(m_context, &rifImageDesc, clMem, false, &rifImage), "Failed to create RIF image from OpenCL memory");
+    RIF_ERROR_CHECK_THROW(rifContextCreateImageFromOpenClMemory(m_context, &rifImageDesc, clMem, &rifImage), "Failed to create RIF image from OpenCL memory");
 
     return std::unique_ptr<Image>(new Image(rifImage));
 }
@@ -268,6 +268,7 @@ ContextMetal::ContextMetal(rpr::Context* rprContext, std::string const& modelPat
 }
 
 std::unique_ptr<Image> ContextMetal::CreateImage(HdRprApiFramebuffer* rprFrameBuffer) {
+#ifdef __APPLE__
     if (!rprFrameBuffer) {
         return nullptr;
     }
@@ -296,6 +297,9 @@ std::unique_ptr<Image> ContextMetal::CreateImage(HdRprApiFramebuffer* rprFrameBu
     RIF_ERROR_CHECK_THROW(rifContextCreateImageFromMetalMemory(m_context, &desc, clMem, size, &rifImage), "Failed to create RIF image from metal memory");
 
     return std::unique_ptr<Image>(new Image(rifImage));
+#else
+    return nullptr;
+#endif
 }
 
 bool HasGpuContext(rpr_creation_flags contextFlags) {

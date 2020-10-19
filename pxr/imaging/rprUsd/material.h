@@ -42,6 +42,9 @@ public:
     RPRUSD_API
     static void DetachFrom(rpr::Curve* curve);
 
+    RPRUSD_API
+    void SetName(const char* name);
+
 protected:
     rpr::MaterialNode* m_surfaceNode = nullptr;
     rpr::MaterialNode* m_displacementNode = nullptr;

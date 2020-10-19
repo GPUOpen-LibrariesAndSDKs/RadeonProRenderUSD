@@ -23,5 +23,5 @@
 #
 # Versioning information
 set(HD_RPR_MAJOR_VERSION "1")
-set(HD_RPR_MINOR_VERSION "2")
-set(HD_RPR_PATCH_VERSION "12")
+set(HD_RPR_MINOR_VERSION "3")
+set(HD_RPR_PATCH_VERSION "16")

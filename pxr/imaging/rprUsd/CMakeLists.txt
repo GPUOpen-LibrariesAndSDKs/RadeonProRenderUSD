@@ -48,6 +48,7 @@ target_sources(rprUsd PRIVATE
     materialNodes/rpr/nodeInfo.h
     materialNodes/rpr/catcherNode.cpp
     materialNodes/rpr/displaceNode.cpp
+    materialNodes/rpr/materialXNode.cpp
     materialNodes/rpr/arithmeticNode.h
     materialNodes/rpr/arithmeticNode.cpp
     materialNodes/rpr/combineShadersNode.cpp

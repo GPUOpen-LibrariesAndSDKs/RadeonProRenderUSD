@@ -305,7 +305,7 @@ void HdRprApiColorAov::SetTonemap(TonemapParams const& params) {
 }
 
 void HdRprApiColorAov::SetTonemapFilterParams(rif::Filter* filter) {
-    filter->SetParam("exposure", m_tonemap.exposure);
+    filter->SetParam("exposureTime", m_tonemap.exposureTime);
     filter->SetParam("sensitivity", m_tonemap.sensitivity);
     filter->SetParam("fstop", m_tonemap.fstop);
     filter->SetParam("gamma", m_tonemap.gamma);
@@ -547,10 +547,10 @@ void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     auto viewProjectionMatrix = rprApi->GetCameraViewMatrix() * rprApi->GetCameraProjectionMatrix();
     m_ndcFilter->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
 
+    m_ndcFilter->Update();
     if (m_remapFilter) {
         m_remapFilter->Update();
     }
-    m_ndcFilter->Update();
 }
 
 void HdRprApiDepthAov::Resize(int width, int height, HdFormat format) {
@@ -563,6 +563,15 @@ void HdRprApiDepthAov::Resize(int width, int height, HdFormat format) {
         m_width = width;
         m_height = height;
         m_dirtyBits |= ChangeTracker::DirtySize;
+    }
+}
+
+void HdRprApiDepthAov::Resolve() {
+    if (m_ndcFilter) {
+        m_ndcFilter->Resolve();
+    }
+    if (m_remapFilter) {
+        m_remapFilter->Resolve();
     }
 }
 
