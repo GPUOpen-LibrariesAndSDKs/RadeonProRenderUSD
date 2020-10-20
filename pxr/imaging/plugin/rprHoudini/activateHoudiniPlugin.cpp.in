@@ -230,7 +230,15 @@ int main() {
         packageJson << '{';
         packageJson << '\"' << it->first << '\"';
         packageJson << ':';
+#if defined(_WIN32) || defined(_WIN64)
+        packageJson << '\"';
+        auto path = it->second.string();
+        std::replace(path.begin(), path.end(), '\\', '/');
+        packageJson << path;
+        packageJson << '\"';
+#else
         packageJson << it->second;
+#endif
         packageJson << '}';
         if (std::next(it) != env.end()) {
             packageJson << ',';
