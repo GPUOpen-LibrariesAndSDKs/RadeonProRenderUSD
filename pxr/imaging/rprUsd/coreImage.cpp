@@ -40,7 +40,17 @@ rpr::ImageDesc GetRprImageDesc(rpr::ImageFormat format, uint32_t width, uint32_t
 
 rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData) {
     rpr::ImageFormat format = {};
-    switch (textureData->GLType()) {
+
+#if PXR_VERSION >= 2011
+    auto hioFormat = textureData->GetHioFormat();
+    GLenum glType = GlfGetGLType(hioFormat);
+    GLenum glFormat = GlfGetGLFormat(hioFormat);
+#else
+    GLenum glType = textureData->GLType();
+    GLenum glFormat = textureData->GLFormat();
+#endif
+
+    switch (glType) {
         case GL_UNSIGNED_BYTE:
             format.type = RPR_COMPONENT_TYPE_UINT8;
             break;
@@ -51,11 +61,11 @@ rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData)
             format.type = RPR_COMPONENT_TYPE_FLOAT32;
             break;
         default:
-            TF_RUNTIME_ERROR("Unsupported pixel data GLtype: %#x", textureData->GLType());
+            TF_RUNTIME_ERROR("Unsupported pixel data GLtype: %#x", glType);
             return nullptr;
     }
 
-    switch (textureData->GLFormat()) {
+    switch (glFormat) {
         case GL_RED:
             format.num_components = 1;
             break;
@@ -66,7 +76,7 @@ rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData)
             format.num_components = 4;
             break;
         default:
-            TF_RUNTIME_ERROR("Unsupported pixel data GLformat: %#x", textureData->GLFormat());
+            TF_RUNTIME_ERROR("Unsupported pixel data GLformat: %#x", glFormat);
             return nullptr;
     }
     rpr::ImageDesc desc = GetRprImageDesc(format, textureData->ResizedWidth(), textureData->ResizedHeight());

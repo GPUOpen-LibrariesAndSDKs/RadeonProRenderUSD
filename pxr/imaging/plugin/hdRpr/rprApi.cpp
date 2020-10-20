@@ -1227,12 +1227,12 @@ public:
             auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
             if (outputRenderBufferIt == retainedOutputRenderBuffers.end()) {
                 // Create new RPR AOV
-                outRb.rprAov = CreateAov(aovName, rprRenderBuffer->GetCommitWidth(), rprRenderBuffer->GetCommitHeight(), aovFormat);
+                outRb.rprAov = CreateAov(aovName, rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat);
             } else {
                 // Reuse previously created RPR AOV
                 std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
                 // Update underlying format if needed
-                outRb.rprAov->Resize(rprRenderBuffer->GetCommitWidth(), rprRenderBuffer->GetCommitHeight(), aovFormat);
+                outRb.rprAov->Resize(rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat);
             }
 
             if (!outRb.rprAov) return nullptr;
@@ -1245,14 +1245,12 @@ public:
             if (!aovBinding.renderBuffer) {
                 continue;
             }
-            auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
-            auto outputRb = registerAovBinding(aovBinding);
-            auto mappedData = rprRenderBuffer->Commit(outputRb != nullptr);
 
-            if (outputRb) {
+            if (auto outputRb = registerAovBinding(aovBinding)) {
+                auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
                 outputRb->isMultiSampled = rprRenderBuffer->IsMultiSampled();
-                outputRb->mappedData = mappedData;
-                outputRb->mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetCommitFormat()) * rprRenderBuffer->GetCommitWidth() * rprRenderBuffer->GetCommitHeight();
+                outputRb->mappedData = rprRenderBuffer->GetPointerForWriting();
+                outputRb->mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetFormat()) * rprRenderBuffer->GetWidth() * rprRenderBuffer->GetHeight();
             }
         }
     }
@@ -1281,9 +1279,6 @@ public:
         for (auto& outRb : m_outputRenderBuffers) {
             if (outRb.mappedData && (isFirstSample || outRb.isMultiSampled)) {
                 outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
-                if (isFirstSample) {
-                    static_cast<HdRprRenderBuffer*>(outRb.aovBinding->renderBuffer)->MarkAsReadyForMapping();
-                }
             }
         }
 
@@ -1662,7 +1657,7 @@ public:
         auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(aovBinding.aovName);
         if (aovDesc.id != kAovNone && aovDesc.format != HdFormatInvalid) {
             *aovName = aovBinding.aovName;
-            *format = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)->GetCommitFormat();
+            *format = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)->GetFormat();
             return true;
         }
 
@@ -1703,8 +1698,8 @@ public:
             if ((m_dirtyFlags & ChangeTracker::DirtyAOVBindings) == 0) {
                 for (auto& outputRb : m_outputRenderBuffers) {
                     auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(outputRb.aovBinding->renderBuffer);
-                    outputRb.mappedData = rprRenderBuffer->Commit(true);
-                    outputRb.mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetCommitFormat()) * rprRenderBuffer->GetCommitWidth() * rprRenderBuffer->GetCommitHeight();
+                    outputRb.mappedData = rprRenderBuffer->GetPointerForWriting();
+                    outputRb.mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetFormat()) * rprRenderBuffer->GetWidth() * rprRenderBuffer->GetHeight();
                 }
             }
         }
@@ -2637,29 +2632,38 @@ private:
             imageDesc.image_row_pitch = 0;
             imageDesc.image_slice_pitch = 0;
 
+            #if PXR_VERSION >= 2011
+                auto hioFormat = textureData->GetHioFormat();
+                GLenum glType = GlfGetGLType(hioFormat);
+                GLenum glFormat = GlfGetGLFormat(hioFormat);
+            #else
+                GLenum glType = textureData->GLType();
+                GLenum glFormat = textureData->GLFormat();
+            #endif
+
             uint8_t bytesPerComponent;
-            if (textureData->GLType() == GL_UNSIGNED_BYTE) {
+            if (glType == GL_UNSIGNED_BYTE) {
                 imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
                 bytesPerComponent = 1;
-            } else if (textureData->GLType() == GL_HALF_FLOAT) {
+            } else if (glType == GL_HALF_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
                 bytesPerComponent = 2;
-            } else if (textureData->GLType() == GL_FLOAT) {
+            } else if (glType == GL_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
                 bytesPerComponent = 2;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureData->GLType());
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), glType);
                 return false;
             }
 
-            if (textureData->GLFormat() == GL_RGBA) {
+            if (glFormat == GL_RGBA) {
                 imageDesc.num_components = 4;
-            } else if (textureData->GLFormat() == GL_RGB) {
+            } else if (glFormat == GL_RGB) {
                 imageDesc.num_components = 3;
-            } else if (textureData->GLFormat() == GL_RED) {
+            } else if (glFormat == GL_RED) {
                 imageDesc.num_components = 1;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), textureData->GLFormat());
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), glFormat);
                 return false;
             }
 
@@ -2703,7 +2707,7 @@ private:
                 )");
                 blitFilter->SetInput("srcImage", rifImage->GetHandle());
                 blitFilter->SetParam("code", blitKernelCode);
-                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetCommitWidth(), colorRb->GetCommitHeight(), colorRb->GetCommitFormat()));
+                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorRb->GetFormat()));
                 blitFilter->SetInput(rif::Color, blitFilter->GetOutput());
                 blitFilter->Update();
 
@@ -2712,10 +2716,10 @@ private:
                 if (RIF_ERROR_CHECK(rifImageMap(blitFilter->GetOutput(), RIF_IMAGE_MAP_READ, &mappedData), "Failed to map rif image") || !mappedData) {
                     return false;
                 }
-                size_t size = HdDataSizeOfFormat(colorRb->GetCommitFormat()) * colorRb->GetCommitWidth() * colorRb->GetCommitHeight();
-                auto colorRbData = colorRb->Commit(true);
-                std::memcpy(colorRbData, mappedData, size);
-                colorRb->MarkAsReadyForMapping();
+                size_t size = HdDataSizeOfFormat(colorRb->GetFormat()) * colorRb->GetWidth() * colorRb->GetHeight();
+                if (auto colorRbData = colorRb->GetPointerForWriting()) {
+                    std::memcpy(colorRbData, mappedData, size);
+                }
 
                 RIF_ERROR_CHECK(rifImageUnmap(blitFilter->GetOutput(), mappedData), "Failed to unmap rif image");
                 return true;
