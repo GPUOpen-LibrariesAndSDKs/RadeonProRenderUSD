@@ -437,13 +437,9 @@ PRM_Template* VOP_MaterialX::GetTemplates(RprUsdMaterialNodeInfo const* shaderIn
                 if (ArchGetModificationTime(vop->m_file, &modificationTime)) {
                     if (vop->m_fileModificationTime != modificationTime) {
 
-                        // If the file did not exist before, update UI
+                        // Update UI
                         //
-                        if (vop->m_fileModificationTime == 0.0) {
-                            vop->opChanged(OP_PARM_CHANGED, (void*)vop->getParmIndex("file"));
-                        }
-
-                        vop->m_fileModificationTime = modificationTime;
+                        vop->opChanged(OP_PARM_CHANGED, (void*)vop->getParmIndex("file"));
 
                         // Force Hydra material reload
                         //
@@ -512,10 +508,26 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
         int parmIndex = int(reinterpret_cast<intptr_t>(data));
         auto& changedParm = getParm(parmIndex);
         if (std::strcmp(changedParm.getToken(), "file") == 0) {
-            changedParm.getValue(0.0, m_file, 0, true, 0);
-            if (!ArchGetModificationTime(m_file, &m_fileModificationTime)) {
-                m_fileModificationTime = 0.0;
+            bool keepSelections = false;
+
+            UT_String newFile;
+            double newFileModificationTime;
+            changedParm.getValue(0.0, newFile, 0, true, 0);
+            if (!ArchGetModificationTime(newFile, &newFileModificationTime)) {
+                newFileModificationTime = 0.0;
             }
+
+            // Keep selected renderable elements if file was edited
+            //
+            if (m_file == newFile) {
+                if (m_fileModificationTime != newFileModificationTime &&
+                    m_fileModificationTime != 0.0) {
+                    keepSelections = true;
+                }
+            } else {
+                m_file = std::move(newFile);
+            }
+            m_fileModificationTime = newFileModificationTime;
 
             // Rebuild renderable elements cache
             //
@@ -535,7 +547,7 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
             //
             bool isUiVisible = bool(m_file);
 
-            // Reset element parameters
+            // Reset element parameters if previously selected ones not valid
             //
             bool hasAnyElements = false;
             const char* parmNames[RPRMtlxLoader::kOutputsTotal] = {
@@ -544,17 +556,36 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
             for (int i = 0; i < RPRMtlxLoader::kOutputsTotal; ++i) {
                 if (auto parm = getParmPtr(parmNames[i])) {
                     auto& namePaths = m_renderableElements.namePaths[i];
-
-                    const char* parmValue = "";
                     bool parmVisible = false;
                     if (!namePaths.empty()) {
-                        parmValue = namePaths[0].c_str();
                         parmVisible = true;
                         hasAnyElements = true;
                     }
-
-                    parm->setValue(0.0, parmValue, CH_STRING_LITERAL);
                     parm->setVisibleState(isUiVisible && parmVisible);
+
+                    if (keepSelections) {
+                        UT_String prevNamePath;
+                        parm->getValue(0.0, prevNamePath, 0, true, 0);
+
+                        // Keep renderable element disabled
+                        //
+                        if (!prevNamePath.isstring()) {
+                            continue;
+                        }
+
+                        // Or if this renderable element is still available
+                        //
+                        auto namePathIt = std::find_if(namePaths.begin(), namePaths.end(),
+                            [&prevNamePath](std::string const& namePath) {
+                                return prevNamePath == namePath.c_str();
+                            }
+                        );
+                        if (namePathIt != namePaths.end()) {
+                            continue;
+                        }
+                    }
+
+                    parm->setValue(0.0, namePaths.empty() ? "" : namePaths[0].c_str(), CH_STRING_LITERAL);
                 }
             }
 
