@@ -55,6 +55,7 @@ limitations under the License.
 #include <RprLoadStore.h>
 
 #include <fstream>
+#include <chrono>
 #include <vector>
 #include <mutex>
 
@@ -1264,6 +1265,8 @@ public:
             return;
         }
 
+        auto startTime = std::chrono::high_resolution_clock::now();
+
         const bool isFirstSample = m_numSamples == (m_isRenderUpdateCallbackEnabled ? 0 : 1);
 
         m_resolveData.ForAllAovs([&](ResolveData::AovEntry& e) {
@@ -1283,6 +1286,8 @@ public:
         }
 
         m_isFbDirty = false;
+
+        m_frameResolveTotalTime += std::chrono::high_resolution_clock::now() - startTime;
     }
 
     void Update() {
@@ -1733,6 +1738,8 @@ public:
             m_numSamples = 0;
             m_numSamplesPerIter = 1;
             m_activePixels = -1;
+            m_frameRenderTotalTime = {};
+            m_frameResolveTotalTime = {};
         }
     }
 
@@ -1852,10 +1859,14 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, frameCount), "Failed to set framecount");
             }
 
+            auto startTime = std::chrono::high_resolution_clock::now();
+
             m_isFbDirty = true;
             m_rucData.previousProgress = -1.0f;
             auto status = m_rprContext->Render();
             m_rucData.previousProgress = -1.0f;
+
+            m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
 
             if (status == RPR_ERROR_ABORTED ||
                 RPR_ERROR_CHECK(status, "Fail context render framebuffer", m_rprContext.get())) {
@@ -2014,7 +2025,9 @@ Don't show this message again?
         }
     }
 
-    double GetPercentDone() const {
+    HdRprApi::RenderStats GetRenderStats() const {
+        HdRprApi::RenderStats stats = {};
+
         double progress = double(m_numSamples) / m_maxSamples;
         if (m_activePixels != -1) {
             int numPixels = m_viewportSize[0] * m_viewportSize[1];
@@ -2022,7 +2035,26 @@ Don't show this message again?
         } else if (m_isRenderUpdateCallbackEnabled && m_rucData.previousProgress > 0.0f) {
             progress += m_rucData.previousProgress * (double(m_numSamplesPerIter) / m_maxSamples);
         }
-        return 100.0 * progress;
+        stats.percentDone = 100.0 * progress;
+
+        if (m_numSamples > 0) {
+            double numRenderedSamples = progress * m_maxSamples;
+            auto resolveTime = m_frameResolveTotalTime / numRenderedSamples;
+            auto renderTime = m_frameRenderTotalTime / numRenderedSamples;
+
+            // When RUC is enabled, we do resolves in between of rendering
+            // TODO (optimization): move resolves in a background thread
+            //
+            if (m_isRenderUpdateCallbackEnabled) {
+                renderTime -= resolveTime;
+            }
+
+            using FloatingPointSecond = std::chrono::duration<double>;
+            stats.averageRenderTimePerSample = std::chrono::duration_cast<FloatingPointSecond>(renderTime).count();
+            stats.averageResolveTimePerSample = std::chrono::duration_cast<FloatingPointSecond>(resolveTime).count();
+        }
+
+        return stats;
     }
 
     bool IsCameraChanged() const {
@@ -2838,6 +2870,10 @@ private:
     float m_varianceThreshold = 0.0f;
     TfToken m_currentRenderQuality;
 
+    using Duration = std::chrono::high_resolution_clock::duration;
+    Duration m_frameRenderTotalTime;
+    Duration m_frameResolveTotalTime;
+
     struct RenderUpdateCallbackData {
         HdRprApiImpl* rprApi = nullptr;
         float previousProgress = 0.0f;
@@ -3112,8 +3148,8 @@ bool HdRprApi::IsChanged() const {
     return m_impl->IsChanged();
 }
 
-double HdRprApi::GetPercentDone() const {
-    return m_impl->GetPercentDone();
+HdRprApi::RenderStats HdRprApi::GetRenderStats() const {
+    return m_impl->GetRenderStats();
 }
 
 bool HdRprApi::IsGlInteropEnabled() const {
