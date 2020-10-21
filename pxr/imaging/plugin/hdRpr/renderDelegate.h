@@ -119,8 +119,6 @@ HDRPR_API char* HdRprGetRenderQuality();
 
 HDRPR_API void HdRprFree(void* ptr);
 
-HDRPR_API int HdRprExportRprSceneOnNextRender(const char* exportPath);
-
 } // extern "C"
 
 #endif // HDRPR_RENDER_DELEGATE_H

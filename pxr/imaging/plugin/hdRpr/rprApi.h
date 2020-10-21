@@ -157,7 +157,6 @@ public:
     bool IsArbitraryShapedLightSupported() const;
     bool IsSphereAndDiskLightSupported() const;
     TfToken const& GetCurrentRenderQuality() const;
-    void ExportRprSceneOnNextRender(const char* exportPath);
 
     static std::string GetAppDataPath();
     static std::string GetCachePath();

@@ -54,6 +54,9 @@ limitations under the License.
 #include <RadeonProRender_Baikal.h>
 #include <RprLoadStore.h>
 
+#include <json/json.hpp>
+using json = nlohmann::json;
+
 #include <fstream>
 #include <vector>
 #include <mutex>
@@ -1323,6 +1326,10 @@ public:
             instantaneousShutter.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
             instantaneousShutter.value = config->GetInstantaneousShutter();
 
+            if (config->IsDirty(HdRprConfig::DirtyRprExport)) {
+                m_rprSceneExportPath = config->GetRprExportPath();
+            }
+
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 m_currentRenderQuality = GetRenderQuality(*config);
             }
@@ -1924,31 +1931,7 @@ public:
         }
 
         if (!m_rprSceneExportPath.empty()) {
-            std::string exportPath;
-            {
-                std::lock_guard<std::mutex> lock(m_rprSceneExportPathMutex);
-                std::swap(m_rprSceneExportPath, exportPath);
-            }
-            if (!exportPath.empty()) {
-                uint32_t currentYFlip;
-                if (m_isOutputFlipped) {
-                    currentYFlip = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP);
-
-                    currentYFlip = !currentYFlip;
-                    RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, currentYFlip), "Failed to set context Y FLIP parameter");
-                }
-
-                auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
-                auto rprSceneHandle = rpr::GetRprObject(m_scene.get());
-                if (!RPR_ERROR_CHECK(rprsExport(exportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, 0), "Failed to export .rpr file")) {
-                    printf("Successfully exported \"%s\"\n", exportPath.c_str());
-                }
-
-                if (m_isOutputFlipped) {
-                    currentYFlip = !currentYFlip;
-                    RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, currentYFlip), "Failed to set context Y FLIP parameter");
-                }
-            }
+            return ExportRpr();
         }
 
         if (m_state == kStateRender) {
@@ -1979,6 +1962,164 @@ Don't show this message again?
             if (!RenderImage(path)) {
                 fprintf(stderr, "Please restart render\n");
             }
+        }
+    }
+
+    void ExportRpr() {
+        uint32_t currentYFlip;
+        if (m_isOutputFlipped) {
+            currentYFlip = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP);
+
+            currentYFlip = !currentYFlip;
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, currentYFlip), "Failed to set context Y FLIP parameter");
+        }
+
+        auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
+        auto rprSceneHandle = rpr::GetRprObject(m_scene.get());
+        if (RPR_ERROR_CHECK(rprsExport(m_rprSceneExportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, 0), "Failed to export .rpr file")) {
+            return;
+        }
+
+        if (m_isOutputFlipped) {
+            currentYFlip = !currentYFlip;
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, currentYFlip), "Failed to set context Y FLIP parameter");
+        }
+
+        TfStringReplace(m_rprSceneExportPath, ".rpr", ".json");
+        auto configFilename = m_rprSceneExportPath.substr(0, m_rprSceneExportPath.size() - 4) + ".json";
+        std::ofstream configFile(configFilename);
+        if (!configFile.is_open()) {
+            fprintf(stderr, "Failed to create config file: %s\n", configFilename.c_str());
+            return;
+        }
+
+        try {
+            json config;
+            config["width"] = m_viewportSize[0];
+            config["height"] = m_viewportSize[1];
+            config["iterations"] = m_maxSamples;
+            config["batchsize"] = m_maxSamples;
+
+            auto basename = TfStringGetBeforeSuffix(TfGetBaseName(m_rprSceneExportPath));
+            config["output"] = basename + ".exr";
+            config["output.json"] = basename + ".output.json";
+
+            static std::map<rpr_creation_flags, const char*> kRprsContextFlags = {
+                {RPR_CREATION_FLAGS_ENABLE_CPU, "cpu"},
+                {RPR_CREATION_FLAGS_ENABLE_DEBUG, "debug"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU0, "gpu0"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU1, "gpu1"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU2, "gpu2"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU3, "gpu3"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU4, "gpu4"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU5, "gpu5"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU6, "gpu6"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU7, "gpu7"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU8, "gpu8"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU9, "gpu9"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU10, "gpu10"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU11, "gpu11"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU12, "gpu12"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU13, "gpu13"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU14, "gpu14"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU15, "gpu15"},
+            };
+
+            json context;
+            auto creationFlags = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_CREATION_FLAGS);
+            for (auto& entry : kRprsContextFlags) {
+                if (creationFlags & entry.first) {
+                    context[entry.second] = 1;
+                }
+            }
+            if (creationFlags & RPR_CREATION_FLAGS_ENABLE_CPU) {
+                context["threads"] = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_CPU_THREAD_LIMIT);
+            }
+            config["context"] = context;
+
+            static const char* kRprsAovNames[] = {
+                /* RPR_AOV_COLOR = */ "color",
+                /* RPR_AOV_OPACITY = */ "opacity",
+                /* RPR_AOV_WORLD_COORDINATE = */ "world.coordinate",
+                /* RPR_AOV_UV = */ "uv",
+                /* RPR_AOV_MATERIAL_ID = */ "material.id",
+                /* RPR_AOV_GEOMETRIC_NORMAL = */ "geometric.normal",
+                /* RPR_AOV_SHADING_NORMAL = */ "shading.normal",
+                /* RPR_AOV_DEPTH = */ "depth",
+                /* RPR_AOV_OBJECT_ID = */ "object.id",
+                /* RPR_AOV_OBJECT_GROUP_ID = */ "object.group.id",
+                /* RPR_AOV_SHADOW_CATCHER = */ "shadow.catcher",
+                /* RPR_AOV_BACKGROUND = */ "background",
+                /* RPR_AOV_EMISSION = */ "emission",
+                /* RPR_AOV_VELOCITY = */ "velocity",
+                /* RPR_AOV_DIRECT_ILLUMINATION = */ "direct.illumination",
+                /* RPR_AOV_INDIRECT_ILLUMINATION = */ "indirect.illumination",
+                /* RPR_AOV_AO = */ "ao",
+                /* RPR_AOV_DIRECT_DIFFUSE = */ "direct.diffuse",
+                /* RPR_AOV_DIRECT_REFLECT = */ "direct.reflect",
+                /* RPR_AOV_INDIRECT_DIFFUSE = */ "indirect.diffuse",
+                /* RPR_AOV_INDIRECT_REFLECT = */ "indirect.reflect",
+                /* RPR_AOV_REFRACT = */ "refract",
+                /* RPR_AOV_VOLUME = */ "volume",
+                /* RPR_AOV_LIGHT_GROUP0 = */ "light.group0",
+                /* RPR_AOV_LIGHT_GROUP1 = */ "light.group1",
+                /* RPR_AOV_LIGHT_GROUP2 = */ "light.group2",
+                /* RPR_AOV_LIGHT_GROUP3 = */ "light.group3",
+                /* RPR_AOV_DIFFUSE_ALBEDO = */ "diffuse.albedo",
+                /* RPR_AOV_VARIANCE = */ "variance",
+                /* RPR_AOV_VIEW_SHADING_NORMAL = */ "view.shading.normal",
+                /* RPR_AOV_REFLECTION_CATCHER = */ "reflection.catcher",
+                /* RPR_AOV_COLOR_RIGHT = */ "color.right",
+                /* RPR_AOV_LPE_0 = */ "lpe0",
+                /* RPR_AOV_LPE_1 = */ "lpe1",
+                /* RPR_AOV_LPE_2 = */ "lpe2",
+                /* RPR_AOV_LPE_3 = */ "lpe3",
+                /* RPR_AOV_LPE_4 = */ "lpe4",
+                /* RPR_AOV_LPE_5 = */ "lpe5",
+                /* RPR_AOV_LPE_6 = */ "lpe6",
+                /* RPR_AOV_LPE_7 = */ "lpe7",
+                /* RPR_AOV_LPE_8 = */ "lpe8",
+            };
+            static const size_t kNumRprsAovNames = sizeof(kRprsAovNames) / sizeof(kRprsAovNames[0]);
+
+            json configAovs;
+            for (auto& outputRb : m_outputRenderBuffers) {
+                auto aovDesc = &outputRb.rprAov->GetDesc();
+                if (aovDesc->computed) {
+                    if (aovDesc->id == kColorAlpha) {
+                        aovDesc = &HdRprAovRegistry::GetInstance().GetAovDesc(RPR_AOV_COLOR, false);
+                    } else if (aovDesc->id == kNdcDepth) {
+                        // RprsRender does not support it...yet?
+                        continue;
+                    } else {
+                        fprintf(stderr, "Unprocessed computed AOV: %u\n", aovDesc->id);
+                        continue;
+                    }
+                }
+
+                if (TF_VERIFY(aovDesc->id < kNumRprsAovNames) &&
+                    TF_VERIFY(!aovDesc->computed)) {
+                    auto aovName = kRprsAovNames[aovDesc->id];
+                    auto outputName = TfStringPrintf("%s.%s.exr", basename.c_str(), aovName);
+                    if (aovDesc->id >= RPR_AOV_LPE_0 && aovDesc->id <= RPR_AOV_LPE_8) {
+                        try {
+                            json lpeAov;
+                            lpeAov["output"] = outputName;
+                            lpeAov["lpe"] = RprUsdGetInfo<std::string>(outputRb.rprAov->GetAovFb()->GetRprObject(), RPR_FRAMEBUFFER_LPE);
+                            configAovs[aovName] = lpeAov;
+                        } catch (RprUsdError& e) {
+                            fprintf(stderr, "Failed to export %s AOV: %s\n", aovName, e.what());
+                        }
+                    } else {
+                        configAovs[aovName] = outputName;
+                    }
+                }
+            }
+            config["aovs"] = configAovs;
+
+            configFile << config;
+        } catch (json::exception& e) {
+            fprintf(stderr, "Failed to fill config file: %s\n", configFilename.c_str());
         }
     }
 
@@ -2015,6 +2156,11 @@ Don't show this message again?
     }
 
     double GetPercentDone() const {
+        // rprsExport has no progress callback
+        if (!m_rprSceneExportPath.empty()) {
+            return 0.0;
+        }
+
         double progress = double(m_numSamples) / m_maxSamples;
         if (m_activePixels != -1) {
             int numPixels = m_viewportSize[0] * m_viewportSize[1];
@@ -2067,11 +2213,6 @@ Don't show this message again?
 
     TfToken const& GetCurrentRenderQuality() const {
         return m_currentRenderQuality;
-    }
-
-    void ExportRprSceneOnNextRender(const char* exportPath) {
-        std::lock_guard<std::mutex> lock(m_rprSceneExportPathMutex);
-        m_rprSceneExportPath = exportPath;
     }
 
 private:
@@ -2858,7 +2999,6 @@ private:
     std::atomic<bool> m_isAbortingEnabled;
     std::atomic<bool> m_abortRender;
 
-    std::mutex m_rprSceneExportPathMutex;
     std::string m_rprSceneExportPath;
 };
 
@@ -3132,10 +3272,6 @@ bool HdRprApi::IsSphereAndDiskLightSupported() const {
 
 TfToken const& HdRprApi::GetCurrentRenderQuality() const {
     return m_impl->GetCurrentRenderQuality();
-}
-
-void HdRprApi::ExportRprSceneOnNextRender(const char* exportPath) {
-    m_impl->ExportRprSceneOnNextRender(exportPath);
 }
 
 std::string HdRprApi::GetAppDataPath() {

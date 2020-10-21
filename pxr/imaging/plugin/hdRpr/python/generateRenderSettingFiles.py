@@ -356,6 +356,16 @@ render_setting_categories = [
                 'defaultValue': False,
             },
         ]
+    },
+    {
+        'name': 'RprExport',
+        'settings': [
+            {
+                'name': 'rprExportPath',
+                'defaultValue': '',
+                'c_type': 'std::string'
+            }
+        ]
     }
 ]
 
@@ -556,9 +566,12 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
             default_value = setting['defaultValue']
 
-            c_type_str = type(default_value).__name__
-            if c_type_str == 'str':
-                c_type_str = 'TfToken'
+            if 'c_type' in setting:
+                c_type_str = setting['c_type']
+            else:
+                c_type_str = type(default_value).__name__
+                if c_type_str == 'str':
+                    c_type_str = 'TfToken'
             type_str = c_type_str
 
             if 'values' in setting:
