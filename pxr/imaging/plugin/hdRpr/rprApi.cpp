@@ -11,6 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
+#include <json/json.hpp>
+using json = nlohmann::json;
+
 #include "rprApi.h"
 #include "rprApiAov.h"
 #include "aovDescriptor.h"
@@ -53,9 +56,6 @@ limitations under the License.
 
 #include <RadeonProRender_Baikal.h>
 #include <RprLoadStore.h>
-
-#include <json/json.hpp>
-using json = nlohmann::json;
 
 #include <fstream>
 #include <chrono>
