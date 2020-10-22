@@ -57,6 +57,10 @@ using json = nlohmann::json;
 #include <RadeonProRender_Baikal.h>
 #include <RprLoadStore.h>
 
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+#include <HOM/HOM_Module.h>
+#endif // BUILD_AS_HOUDINI_PLUGIN
+
 #include <fstream>
 #include <chrono>
 #include <vector>
@@ -1977,6 +1981,13 @@ Don't show this message again?
     }
 
     void ExportRpr() {
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+        if (HOM().isApprentice()) {
+            fprintf(stderr, "Cannot export .rpr from Apprentice");
+            return;
+        }
+#endif // BUILD_AS_HOUDINI_PLUGIN
+
         uint32_t currentYFlip;
         if (m_isOutputFlipped) {
             currentYFlip = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP);
