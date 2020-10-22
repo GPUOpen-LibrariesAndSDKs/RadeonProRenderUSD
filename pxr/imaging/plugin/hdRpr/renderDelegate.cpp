@@ -422,11 +422,3 @@ char* HdRprGetRenderQuality() {
 void HdRprFree(void* ptr) {
     free(ptr);
 }
-
-int HdRprExportRprSceneOnNextRender(const char* exportPath) {
-    if (!PXR_INTERNAL_NS::g_rprApi) {
-        return -1;
-    }
-    PXR_INTERNAL_NS::g_rprApi->ExportRprSceneOnNextRender(exportPath);
-    return 0;
-}
