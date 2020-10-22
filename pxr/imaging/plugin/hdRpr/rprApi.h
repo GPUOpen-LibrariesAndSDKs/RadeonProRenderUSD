@@ -146,7 +146,12 @@ public:
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings);
     HdRenderPassAovBindingVector GetAovBindings() const;
 
-    double GetPercentDone() const;
+    struct RenderStats {
+        double percentDone;
+        double averageRenderTimePerSample;
+        double averageResolveTimePerSample;
+    };
+    RenderStats GetRenderStats() const;
 
     void CommitResources();
     void Render(HdRprRenderThread* renderThread);

@@ -350,8 +350,12 @@ HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const
 }
 
 VtDictionary HdRprDelegate::GetRenderStats() const {
+    auto rprStats = m_rprApi->GetRenderStats();
+
     VtDictionary stats;
-    stats[_tokens->percentDone.GetString()] = m_rprApi->GetPercentDone();
+    stats[_tokens->percentDone.GetString()] = rprStats.percentDone;
+    stats["averageRenderTimePerSample"] = rprStats.averageRenderTimePerSample;
+    stats["averageResolveTimePerSample"] = rprStats.averageResolveTimePerSample;
     return stats;
 }
 
