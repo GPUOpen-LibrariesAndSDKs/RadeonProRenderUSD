@@ -349,6 +349,31 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'OCIO',
+        'settings': [
+            {
+                'name': 'ocioConfigPath',
+                'ui_name': 'OpenColorIO Config Path',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'help': 'The file path of the OpenColorIO config file to be used. Overrides any value specified in OCIO environment variable.',
+                'houdini': {
+                    'type': 'file',
+                    'hidewhen': hidewhen_not_northstar
+                }
+            },
+            {
+                'name': 'ocioRenderingColorSpace',
+                'ui_name': 'OpenColorIO Rendering Color Space',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
+            }
+        ]
+    },
+    {
         'name': 'Seed',
         'settings': [
             {
@@ -573,9 +598,12 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
             default_value = setting['defaultValue']
 
-            c_type_str = type(default_value).__name__
-            if c_type_str == 'str':
-                c_type_str = 'TfToken'
+            if 'c_type' in setting:
+                c_type_str = setting['c_type']
+            else:
+                c_type_str = type(default_value).__name__
+                if c_type_str == 'str':
+                    c_type_str = 'TfToken'
             type_str = c_type_str
 
             if 'values' in setting:

@@ -129,6 +129,11 @@ void RprUsdMaterialRegistry::CommitResources(
     std::string formatString;
     for (size_t i = 0; i < m_textureCommits.size(); ++i) {
         auto& commit = m_textureCommits[i];
+        if (auto rprImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType)) {
+            commit.setTextureCallback(rprImage);
+            continue;
+        }
+
         auto& commitTexIndices = uniqueTextureIndicesPerCommit[i];
 
         if (RprUsdGetUDIMFormatString(commit.filepath, &formatString)) {
@@ -178,7 +183,7 @@ void RprUsdMaterialRegistry::CommitResources(
         }
 
         auto& commit = m_textureCommits[i];
-        auto coreImage = imageCache->GetImage(commit.filepath, commit.forceLinearSpace, commit.wrapType, tiles);
+        auto coreImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, tiles);
         commit.setTextureCallback(coreImage);
     }
 

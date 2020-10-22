@@ -48,6 +48,7 @@ limitations under the License.
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
+#include "pxr/base/tf/getenv.h"
 
 #include "notify/message.h"
 
@@ -1482,6 +1483,24 @@ public:
         if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
             if (preferences.IsDirty(HdRprConfig::DirtyMotionBlur) || force) {
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_BEAUTY_MOTION_BLUR, uint32_t(preferences.GetEnableBeautyMotionBlur())), "Failed to set beauty motion blur");
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyOCIO) || force) {
+                std::string ocioConfigPath;
+
+                // OpenColorIO doc recommends to use `OCIO` environment variable to
+                // globally define path to OCIO config. See the docs for details about the motivation for this.
+                // Houdini handles it in the same while leaving possibility to override it through UI.
+                // We allow the OCIO config path to be overridden through render settings.
+                if (!preferences.GetOcioConfigPath().empty()) {
+                    ocioConfigPath = preferences.GetOcioConfigPath();
+                } else {
+                    ocioConfigPath = TfGetenv("OCIO");
+                }
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_CONFIG_PATH, ocioConfigPath.c_str()), "Faled to set OCIO config path");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_RENDERING_COLOR_SPACE, preferences.GetOcioRenderingColorSpace().c_str()), "Faled to set OCIO rendering color space");
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         }

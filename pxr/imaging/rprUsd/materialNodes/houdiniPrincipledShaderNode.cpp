@@ -488,7 +488,7 @@ VtValue RprUsd_HoudiniPrincipledNode::GetTextureOutput(
     };
 
     if (forceLinearSpace) {
-        uvTextureParams.emplace(RprUsd_UsdUVTextureTokens->colorSpace, RprUsd_UsdUVTextureTokens->linear);
+        uvTextureParams.emplace(RprUsd_UsdUVTextureTokens->sourceColorSpace, RprUsd_UsdUVTextureTokens->srgblinear);
     }
 
     if (scale != 1.0f) {
