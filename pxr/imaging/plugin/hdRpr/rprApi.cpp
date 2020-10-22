@@ -916,26 +916,40 @@ public:
     }
 
     void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples) {
+        // TODO: Implement C++ wrapper methods
+        auto rprShapeHandle = rpr::GetRprObject(shape);
+
         if (numSamples == 1) {
+            RPR_ERROR_CHECK(rprShapeSetMotionTransformCount(rprShapeHandle, 0), "Failed to set shape motion transform count");
+
             return SetTransform(shape, GfMatrix4f(transformSamples[0]));
         }
 
-        // XXX (RPR): there is no way to sample all transforms via current RPR API
+        // XXX (RPR): for the moment, RPR supports only 1 motion matrix
         auto& startTransform = transformSamples[0];
         auto& endTransform = transformSamples[numSamples - 1];
 
-        GfVec3f linearMotion, scaleMotion, rotateAxis;
-        float rotateAngle;
-        GetMotion(startTransform, endTransform, &linearMotion, &scaleMotion, &rotateAxis, &rotateAngle);
-
         auto rprStartTransform = GfMatrix4f(startTransform);
 
-        LockGuard rprLock(m_rprContext->GetMutex());
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            LockGuard rprLock(m_rprContext->GetMutex());
+            RPR_ERROR_CHECK(shape->SetTransform(rprStartTransform.GetArray(), false), "Fail set shape transform");
 
-        RPR_ERROR_CHECK(shape->SetTransform(rprStartTransform.GetArray(), false), "Fail set shape transform");
-        RPR_ERROR_CHECK(shape->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Fail to set shape linear motion");
-        RPR_ERROR_CHECK(shape->SetScaleMotion(scaleMotion[0], scaleMotion[1], scaleMotion[2]), "Fail to set shape scale motion");
-        RPR_ERROR_CHECK(shape->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Fail to set shape angular motion");
+            auto rprEndTransform = GfMatrix4f(endTransform);
+            RPR_ERROR_CHECK(rprShapeSetMotionTransformCount(rprShapeHandle, 1), "Failed to set shape motion transform count");
+            RPR_ERROR_CHECK(rprShapeSetMotionTransform(rprShapeHandle, false, rprEndTransform.GetArray(), 1), "Failed to set shape motion transform count");
+        } else {
+            GfVec3f linearMotion, scaleMotion, rotateAxis;
+            float rotateAngle;
+            GetMotion(startTransform, endTransform, &linearMotion, &scaleMotion, &rotateAxis, &rotateAngle);
+
+            LockGuard rprLock(m_rprContext->GetMutex());
+
+            RPR_ERROR_CHECK(shape->SetTransform(rprStartTransform.GetArray(), false), "Fail set shape transform");
+            RPR_ERROR_CHECK(shape->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Fail to set shape linear motion");
+            RPR_ERROR_CHECK(shape->SetScaleMotion(scaleMotion[0], scaleMotion[1], scaleMotion[2]), "Fail to set shape scale motion");
+            RPR_ERROR_CHECK(shape->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Fail to set shape angular motion");
+        }
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
@@ -1441,7 +1455,7 @@ public:
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode)) {
+        if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || force) {
             m_isInteractive = preferences.GetInteractiveMode();
             auto maxRayDepth = m_isInteractive ? preferences.GetInteractiveMaxRayDepth() : preferences.GetMaxRayDepth();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
@@ -1450,7 +1464,7 @@ public:
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtyRenderMode)) {
+        if (preferences.IsDirty(HdRprConfig::DirtyRenderMode) || force) {
             auto& renderMode = preferences.GetRenderMode();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, GetRprRenderMode(renderMode)), "Failed to set render mode");
             if (renderMode == HdRprRenderModeTokens->AmbientOcclusion) {
@@ -1459,10 +1473,17 @@ public:
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtySeed)) {
+        if (preferences.IsDirty(HdRprConfig::DirtySeed) || force) {
             m_isUniformSeed = preferences.GetUniformSeed();
             m_frameCount = 0;
             m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            if (preferences.IsDirty(HdRprConfig::DirtyMotionBlur) || force) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_BEAUTY_MOTION_BLUR, uint32_t(preferences.GetEnableBeautyMotionBlur())), "Failed to set beauty motion blur");
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
         }
     }
 
