@@ -167,7 +167,7 @@ fs::path GetHoudiniUserPrefDir(const char* hver) {
 #if defined(_WIN32) || defined(_WIN64)
     auto userprofile = _wgetenv(L"USERPROFILE");
     if (!userprofile) {
-        printf("USERPROFILE environment variable is not set\n");
+        std::cout << "USERPROFILE environment variable is not set" << std::endl;
         return {};
     }
 
@@ -186,17 +186,17 @@ fs::path GetHoudiniUserPrefDir(const char* hver) {
     return {};
 }
 
-int main() {
+int ActivateHoudiniPlugin() {
     auto houdiniUserPrefDir = GetHoudiniUserPrefDir("@HOUDINI_MAJOR_MINOR_VERSION@");
     if (houdiniUserPrefDir.empty()) {
-        printf("Can not determine HOUDINI_USER_PREF_DIR. Please check your environment and specify HOUDINI_USER_PREF_DIR\n");
+        std::cout << "Can not determine HOUDINI_USER_PREF_DIR. Please check your environment and specify HOUDINI_USER_PREF_DIR" << std::endl;
         return EXIT_FAILURE;
     }
     std::cout << "HOUDINI_USER_PREF_DIR: " << houdiniUserPrefDir << std::endl;
 
     auto executablePath = ArchGetExecutablePath();
     if (executablePath.empty()) {
-        printf("Can not determine executable path\n");
+        std::cout << "Can not determine executable path" << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -253,10 +253,15 @@ int main() {
     }
 
     std::cout << "Successfully activated RPR plugin" << std::endl;
+    return EXIT_SUCCESS;
+}
+
+int main() {
+    int exitCode = ActivateHoudiniPlugin();
 
 #if defined(_WIN32) || defined(_WIN64)
     system("pause");
 #endif
 
-    return EXIT_SUCCESS;
+    return exitCode;
 }
