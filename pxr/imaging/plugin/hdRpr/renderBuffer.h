@@ -18,6 +18,8 @@ limitations under the License.
 #include "RadeonProRender.hpp"
 #include "rprApi.h"
 
+#include <condition_variable>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprRenderBuffer final : public HdRenderBuffer {
@@ -43,7 +45,7 @@ public:
 
     HdFormat GetFormat() const override { return m_format; }
 
-    bool IsMultiSampled() const override { return false; }
+    bool IsMultiSampled() const override { return m_multiSampled; }
 
     void* Map() override;
 
@@ -57,7 +59,7 @@ public:
 
     void SetConverged(bool converged);
 
-    void SetStatus(bool isValid);
+    void* GetPointerForWriting() { return m_mappedBuffer.data(); }
 
 #if PXR_VERSION >= 2005
 
@@ -71,16 +73,23 @@ protected:
     void _Deallocate() override;
 
 private:
+    std::vector<uint8_t> m_mappedBuffer;
     uint32_t m_width = 0u;
     uint32_t m_height = 0u;
     HdFormat m_format = HdFormat::HdFormatInvalid;
+    bool m_multiSampled = false;
 
-    std::vector<uint8_t> m_mappedBuffer;
-    std::atomic<int> m_numMappers;
     std::atomic<bool> m_isConverged;
 
     bool m_isValid = true;
     HdRprApi* m_api = nullptr;
+    
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    std::mutex m_mapMutex;
+    std::condition_variable m_mapConditionVar;
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
+
+    int m_numMappers;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

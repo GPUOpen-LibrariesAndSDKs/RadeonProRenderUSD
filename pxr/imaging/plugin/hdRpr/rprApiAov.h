@@ -172,6 +172,7 @@ public:
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
     void Resize(int width, int height, HdFormat format) override;
+    void Resolve() override;
 
 private:
     std::unique_ptr<rif::Filter> m_retainedFilter;

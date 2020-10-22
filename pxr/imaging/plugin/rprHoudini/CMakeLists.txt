@@ -5,9 +5,14 @@ endif()
 add_library(RPR_for_Houdini SHARED
     plugin.cpp
     VOP_RPRMaterial.h
-    VOP_RPRMaterial.cpp)
+    VOP_RPRMaterial.cpp
+    LOP_RPRExportHelper.h
+    LOP_RPRExportHelper.cpp)
 
 target_link_libraries(RPR_for_Houdini
+    usd
+    usdGeom
+    usdRender
     rprUsd
     Houdini)
 
@@ -30,3 +35,8 @@ target_compile_definitions(activateHoudiniPlugin PRIVATE GHC_WIN_WSTRING_STRING_
 install(
     TARGETS activateHoudiniPlugin
     RUNTIME DESTINATION .)
+install(
+    FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_exportRpr1.hda
+        ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_standard_rendervars.hda
+    DESTINATION "houdini/otls")

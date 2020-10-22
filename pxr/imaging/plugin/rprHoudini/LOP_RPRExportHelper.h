@@ -11,34 +11,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#ifndef HDRPR_RENDER_PASS_H
-#define HDRPR_RENDER_PASS_H
+#ifndef RPR_LOP_RPREXPORTHELPER_H
+#define RPR_LOP_RPREXPORTHELPER_H
 
-#include "pxr/imaging/hd/renderPass.h"
+#include "pxr/pxr.h"
 
-#include "rprApi.h"
+#include <LOP/LOP_Node.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-class HdRprRenderParam;
-
-class HdRprRenderPass final : public HdRenderPass {
+/// This node sets rprExportPath render settings to a particular UsdRenderSettings primitive.
+/// It's impossible to implement needed functionality in a custom HDA, that's why this node was implemented.
+class LOP_RPRExportHelper : public LOP_Node {
 public:
-    HdRprRenderPass(HdRenderIndex* index,
-                    HdRprimCollection const& collection,
-                    HdRprRenderParam* renderParam);
+    LOP_RPRExportHelper(OP_Network *net, const char *name, OP_Operator *op);
+    ~LOP_RPRExportHelper() override = default;
 
-    ~HdRprRenderPass() override;
+    static void Register(OP_OperatorTable *table);
 
-    bool IsConverged() const override;
-
-    void _Execute(HdRenderPassStateSharedPtr const& renderPassState,
-                  TfTokenVector const& renderTags) override;
-
-private:
-    HdRprRenderParam* m_renderParam;
+protected:
+    OP_ERROR cookMyLop(OP_Context &context) override;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-#endif // HDRPR_RENDER_PASS_H
+#endif // RPR_LOP_RPREXPORTHELPER_H

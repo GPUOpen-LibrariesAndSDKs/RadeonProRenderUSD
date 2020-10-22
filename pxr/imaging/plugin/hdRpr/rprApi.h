@@ -147,7 +147,12 @@ public:
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings);
     HdRenderPassAovBindingVector GetAovBindings() const;
 
-    double GetPercentDone() const;
+    struct RenderStats {
+        double percentDone;
+        double averageRenderTimePerSample;
+        double averageResolveTimePerSample;
+    };
+    RenderStats GetRenderStats() const;
 
     void CommitResources();
     void Render(HdRprRenderThread* renderThread);
@@ -158,7 +163,6 @@ public:
     bool IsArbitraryShapedLightSupported() const;
     bool IsSphereAndDiskLightSupported() const;
     TfToken const& GetCurrentRenderQuality() const;
-    void ExportRprSceneOnNextRender(const char* exportPath);
     rpr::FrameBuffer* GetColorFramebuffer();
     void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);
     RprUsdContextMetadata GetContextMetadata();

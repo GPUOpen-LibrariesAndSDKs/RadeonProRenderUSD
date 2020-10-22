@@ -71,7 +71,12 @@ bool RprUsdImageCache::InitCacheEntryDesc(
     CacheEntry::Desc* desc) {
     if (!data) return false;
 
-    auto internalFormat = data->GLInternalFormat();
+#if PXR_VERSION >= 2011
+    GLenum internalFormat = GlfGetGLInternalFormat(data->GetHioFormat());
+#else
+    GLenum internalFormat = data->GLInternalFormat();
+#endif
+
     if (!forceLinearSpace &&
         (internalFormat == GL_SRGB ||
         internalFormat == GL_SRGB8 ||

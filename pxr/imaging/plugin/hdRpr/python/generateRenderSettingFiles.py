@@ -27,8 +27,8 @@ def get_render_setting(render_setting_categories, category_name, name):
                 return setting
 
 def hidewhen_render_quality(operator, quality, render_setting_categories=None):
-    if operator == '==':
-        return 'renderQuality == "{}"'.format(quality)
+    if operator in ('==', '!='):
+        return 'renderQuality {} "{}"'.format(operator, quality)
     elif operator == '<':
         render_quality = get_render_setting(render_setting_categories, 'RenderQuality', 'renderQuality')
         values = render_quality['values']
@@ -45,6 +45,9 @@ def hidewhen_render_quality(operator, quality, render_setting_categories=None):
 
 def hidewhen_hybrid(render_setting_categories):
     return hidewhen_render_quality('<', 'Full', render_setting_categories)
+
+def hidewhen_not_northstar(render_setting_categories):
+    return hidewhen_render_quality('!=', 'Northstar', render_setting_categories)
 
 HYBRID_DISABLED_PLATFORM = 'Darwin'
 
@@ -332,6 +335,20 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'MotionBlur',
+        'settings': [
+            {
+                'name': 'enableBeautyMotionBlur',
+                'ui_name': 'Enable Beaty Motion Blur',
+                'defaultValue': True,
+                'help': 'If disabled, only velocity AOV will store information about movement on the scene. Required for motion blur that is generated in post-processing.',
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
+            }
+        ]
+    },
+    {
         'name': 'Seed',
         'settings': [
             {
@@ -355,6 +372,16 @@ render_setting_categories = [
                 'name': 'instantaneousShutter',
                 'defaultValue': False,
             },
+        ]
+    },
+    {
+        'name': 'RprExport',
+        'settings': [
+            {
+                'name': 'rprExportPath',
+                'defaultValue': '',
+                'c_type': 'std::string'
+            }
         ]
     }
 ]
@@ -556,9 +583,12 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
             default_value = setting['defaultValue']
 
-            c_type_str = type(default_value).__name__
-            if c_type_str == 'str':
-                c_type_str = 'TfToken'
+            if 'c_type' in setting:
+                c_type_str = setting['c_type']
+            else:
+                c_type_str = type(default_value).__name__
+                if c_type_str == 'str':
+                    c_type_str = 'TfToken'
             type_str = c_type_str
 
             if 'values' in setting:

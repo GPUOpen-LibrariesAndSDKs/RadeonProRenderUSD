@@ -351,8 +351,12 @@ HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const
 }
 
 VtDictionary HdRprDelegate::GetRenderStats() const {
+    auto rprStats = m_rprApi->GetRenderStats();
+
     VtDictionary stats;
-    stats[_tokens->percentDone.GetString()] = m_rprApi->GetPercentDone();
+    stats[_tokens->percentDone.GetString()] = rprStats.percentDone;
+    stats["averageRenderTimePerSample"] = rprStats.averageRenderTimePerSample;
+    stats["averageResolveTimePerSample"] = rprStats.averageResolveTimePerSample;
     return stats;
 }
 
@@ -448,12 +452,4 @@ char* HdRprGetRenderQuality() {
 
 void HdRprFree(void* ptr) {
     free(ptr);
-}
-
-int HdRprExportRprSceneOnNextRender(const char* exportPath) {
-    if (!PXR_INTERNAL_NS::g_rprApi) {
-        return -1;
-    }
-    PXR_INTERNAL_NS::g_rprApi->ExportRprSceneOnNextRender(exportPath);
-    return 0;
 }

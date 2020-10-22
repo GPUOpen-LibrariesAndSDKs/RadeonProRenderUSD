@@ -20,6 +20,7 @@ set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
 if(HoudiniUSD_FOUND)
     list(APPEND OptLibs Houdini)
     add_definitions(-DBUILD_AS_HOUDINI_PLUGIN)
+    add_definitions(-DENABLE_MULTITHREADED_RENDER_BUFFER)
     add_definitions(-DHDRPR_DEFAULT_MATERIAL_NETWORK_SELECTOR="karma")
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Houdini.png${_sep}images/restartRequired.png)
 else(HoudiniUSD_FOUND)
@@ -55,9 +56,6 @@ if(HoudiniUSD_FOUND)
             ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
             ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds
         DESTINATION "houdini/soho/parameters")
-    install(
-        FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/rpr_exportRpr1.hda
-        DESTINATION "houdini/otls")
 
     install(
         CODE
