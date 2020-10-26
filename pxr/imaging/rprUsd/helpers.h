@@ -16,6 +16,8 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/error.h"
 
+#include <memory>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 template <typename T, typename U, typename R>
@@ -24,6 +26,24 @@ T RprUsdGetInfo(U* object, R info) {
     size_t dummy;
     RPR_ERROR_CHECK_THROW(object->GetInfo(info, sizeof(value), &value, &dummy), "Failed to get object info");
     return value;
+}
+
+template <typename U, typename R>
+std::string RprUsdGetStringInfo(U* object, R info) {
+    size_t size = 0;
+    RPR_ERROR_CHECK_THROW(object->GetInfo(info, sizeof(size), nullptr, &size), "Failed to get object info");
+
+    if (size <= 1) {
+        return {};
+    }
+
+    auto buffer = std::make_unique<char[]>(size);
+    RPR_ERROR_CHECK_THROW(object->GetInfo(info, size, buffer.get(), &size), "Failed to get object info");
+
+    // discard null-terminator
+    --size;
+
+    return std::string(buffer.get(), size);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
