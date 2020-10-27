@@ -2396,20 +2396,23 @@ private:
             m_isRenderUpdateCallbackEnabled = true;
         }
 
-        // We need it for correct rendering of ID AOVs (e.g. RPR_AOV_OBJECT_ID)
-        // XXX: it takes approximately 32ms due to RPR API indirection,
-        //      replace with rprContextSetAOVindexLookupRange when ready
-        // XXX: only up to 2^16 indices, internal LUT limit
-        for (uint32_t i = 0; i < (1 << 16); ++i) {
-            // Split uint32_t into 4 float values - every 8 bits correspond to one float.
-            // Such an encoding scheme simplifies the conversion of RPR ID texture (float4) to the int32 texture (as required by Hydra).
-            // Conversion is currently implemented like this:
-            //   * convert float4 texture to uchar4 using RIF
-            //   * reinterpret uchar4 data as int32_t (works on little-endian CPU only)
-            m_rprContext->SetAOVindexLookup(rpr_int(i),
-                float((i >> 0) & 0xFF) / 255.0f,
-                float((i >> 8) & 0xFF) / 255.0f,
-                0.0f, 0.0f);
+        bool isTracingEnabled = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_TRACING_ENABLED);
+        if (!isTracingEnabled) {
+            // We need it for correct rendering of ID AOVs (e.g. RPR_AOV_OBJECT_ID)
+            // XXX: it takes approximately 32ms due to RPR API indirection,
+            //      replace with rprContextSetAOVindexLookupRange when ready
+            // XXX: only up to 2^16 indices, internal LUT limit
+            for (uint32_t i = 0; i < (1 << 16); ++i) {
+                // Split uint32_t into 4 float values - every 8 bits correspond to one float.
+                // Such an encoding scheme simplifies the conversion of RPR ID texture (float4) to the int32 texture (as required by Hydra).
+                // Conversion is currently implemented like this:
+                //   * convert float4 texture to uchar4 using RIF
+                //   * reinterpret uchar4 data as int32_t (works on little-endian CPU only)
+                m_rprContext->SetAOVindexLookup(rpr_int(i),
+                    float((i >> 0) & 0xFF) / 255.0f,
+                    float((i >> 8) & 0xFF) / 255.0f,
+                    0.0f, 0.0f);
+            }
         }
 
         {
