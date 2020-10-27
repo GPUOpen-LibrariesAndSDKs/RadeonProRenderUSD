@@ -255,7 +255,12 @@ render_setting_categories = [
                 'defaultValue': 0.0,
                 'minValue': 0.0,
                 'maxValue': 1e6
-            },
+            }
+        ]
+    },
+    {
+        'name': 'InteractiveQuality',
+        'settings': [
             {
                 'name': 'interactiveMaxRayDepth',
                 'ui_name': 'Interactive Max Ray Depth',
@@ -263,6 +268,17 @@ render_setting_categories = [
                 'defaultValue': 2,
                 'minValue': 1,
                 'maxValue': 50
+            },
+            {
+                'name': 'interactiveResolutionDownscale',
+                'ui_name': 'Interactive Resolution Downscale',
+                'help': 'Controls how much rendering resolution is downscaled in interactive mode. Formula: resolution / (2 ^ downscale). E.g. downscale==2 will give you 4 times smaller rendering resolution.',
+                'defaultValue': 3,
+                'minValue': 0,
+                'maxValue': 10,
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
             }
         ]
     },
