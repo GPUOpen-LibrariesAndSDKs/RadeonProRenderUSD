@@ -1288,10 +1288,8 @@ public:
 
         auto startTime = std::chrono::high_resolution_clock::now();
 
-        const bool isFirstSample = m_numSamples == (m_isRenderUpdateCallbackEnabled ? 0 : 1);
-
         m_resolveData.ForAllAovs([&](ResolveData::AovEntry& e) {
-            if (isFirstSample || e.isMultiSampled) {
+            if (m_isFirstSample || e.isMultiSampled) {
                 e.aov->Resolve();
             }
         });
@@ -1301,14 +1299,23 @@ public:
         }
 
         for (auto& outRb : m_outputRenderBuffers) {
-            if (outRb.mappedData && (isFirstSample || outRb.isMultiSampled)) {
+            if (outRb.mappedData && (m_isFirstSample || outRb.isMultiSampled)) {
                 outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
             }
         }
 
         m_isFbDirty = false;
+        m_isFirstSample = false;
 
-        m_frameResolveTotalTime += std::chrono::high_resolution_clock::now() - startTime;
+        auto resolveTime = std::chrono::high_resolution_clock::now() - startTime;
+        m_frameResolveTotalTime += resolveTime;
+
+        if (m_resolveMode == kResolveInRenderUpdateCallback) {
+            // When RUC is enabled, we do resolves in between of rendering on the same thread
+            // TODO (optimization): move resolves in a background thread (makes sense for non-interactive, GPU-only rendering)
+            //
+            m_frameRenderTotalTime -= resolveTime;
+        }
     }
 
     void Update() {
@@ -1466,13 +1473,25 @@ public:
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || force) {
+        if ((preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) ||
+            preferences.IsDirty(HdRprConfig::DirtyInteractiveQuality)) || force) {
             m_isInteractive = preferences.GetInteractiveMode();
             auto maxRayDepth = m_isInteractive ? preferences.GetInteractiveMaxRayDepth() : preferences.GetMaxRayDepth();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(m_isInteractive)), "Failed to set preview mode");
 
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
+            if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                int downscale = 0;
+                if (m_isInteractive) {
+                    downscale = preferences.GetInteractiveResolutionDownscale();
+                }
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
+            } else {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(m_isInteractive)), "Failed to set preview mode");
+            }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyRenderMode) || force) {
@@ -1770,6 +1789,7 @@ public:
             m_numSamples = 0;
             m_numSamplesPerIter = 1;
             m_activePixels = -1;
+            m_isFirstSample = true;
             m_frameRenderTotalTime = {};
             m_frameResolveTotalTime = {};
         }
@@ -1811,27 +1831,30 @@ public:
     static void RenderUpdateCallback(float progress, void* dataPtr) {
         auto data = static_cast<RenderUpdateCallbackData*>(dataPtr);
 
-        // Update framebuffer ASAP on the very first sample
-        if (data->rprApi->m_numSamples > 0) {
-            static const float kResolveFrequency = 0.1f;
-            int previousStep = static_cast<int>(data->previousProgress / kResolveFrequency);
-            int currentStep = static_cast<int>(progress / kResolveFrequency);
-            if (currentStep == previousStep) {
-                return;
-            }
-            data->previousProgress = progress;
-        } else if (data->rprApi->m_numSamples == 0) {
+        if (data->rprApi->m_numSamples == 0 &&
+            !data->rprApi->m_isInteractive) {
             // Enable aborting as soon as possible
             data->rprApi->m_isAbortingEnabled.store(true);
 
             // If abort was called when it was disabled, abort now
             if (data->rprApi->m_abortRender) {
                 data->rprApi->AbortRender();
+
+                return;
             }
         }
 
-        data->rprApi->m_isFbDirty = true;
-        data->rprApi->ResolveFramebuffers();
+        if (data->rprApi->m_resolveMode == kResolveInRenderUpdateCallback) {
+            static const float kResolveFrequency = 0.1f;
+            int previousStep = static_cast<int>(data->previousProgress / kResolveFrequency);
+            int currentStep = static_cast<int>(progress / kResolveFrequency);
+            if (currentStep != previousStep) {
+                data->rprApi->m_isFbDirty = true;
+                data->rprApi->ResolveFramebuffers();
+            }
+        }
+
+        data->previousProgress = progress;
     }
 
     void RenderImpl(HdRprRenderThread* renderThread) {
@@ -1869,12 +1892,17 @@ public:
 
         bool stopRequested = false;
         m_isFbDirty = true;
+        m_resolveMode = kResolveAfterRender;
 
-        while (!IsConverged() || stopRequested) {
+        while (!IsConverged()) {
             renderThread->WaitUntilPaused();
             stopRequested = renderThread->IsStopRequested();
             if (stopRequested) {
-                break;
+                // Render at least one frame when in interactive mode,
+                // otherwise disturbing full-screen flickering will be visible
+                if (!m_isInteractive) {
+                    break;
+                }
             }
 
             if (m_rprContextMetadata.pluginType != kPluginHybrid) {
@@ -1900,17 +1928,16 @@ public:
 
             m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
 
-            if (status == RPR_ERROR_ABORTED ||
+            // XXX(Northstar): workaround abort status code until RPRNEXT-401 resolved
+            bool isAborted = status == RPR_ERROR_ABORTED || m_abortRender.load();
+            if (isAborted ||
                 RPR_ERROR_CHECK(status, "Fail context render framebuffer", m_rprContext.get())) {
                 stopRequested = true;
                 break;
             }
 
-            if (m_numSamples == 0 && !m_isRenderUpdateCallbackEnabled) {
-                // As soon as the first sample has been rendered, we enable aborting,
-                // if it was not already enabled from the render update callback
-                m_isAbortingEnabled.store(true);
-            }
+            // As soon as the first sample has been rendered, we enable aborting
+            m_isAbortingEnabled.store(true);
 
             m_numSamples += m_numSamplesPerIter;
             if (m_varianceThreshold > 0.0f) {
@@ -1927,6 +1954,11 @@ public:
                 // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
                 m_numSamplesPerIter *= 2;
 
+                // Enable resolves in the render update callback after RPR_CONTEXT_ITERATIONS gets high enough
+                if (m_numSamplesPerIter >= 32) {
+                    m_resolveMode = kResolveInRenderUpdateCallback;
+                }
+
                 // But do not oversample the image
                 int numSamplesLeft = m_maxSamples - m_numSamples;
                 int newContextIterations = std::min(m_numSamplesPerIter, numSamplesLeft);
@@ -1942,9 +1974,13 @@ public:
             }
 
             stopRequested = renderThread->IsStopRequested();
+            if (stopRequested) {
+                break;
+            }
         }
 
-        if (!stopRequested) {
+        if (!stopRequested || m_isInteractive) {
+            // Resolve at least one frame when in interactive mode
             ResolveFramebuffers();
         }
     }
@@ -2191,11 +2227,11 @@ Don't show this message again?
 
         if (m_isAbortingEnabled) {
             RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
-            m_abortRender.store(false);
-        } else {
-            // In case aborting is disabled, we postpone abort until it's enabled
-            m_abortRender.store(true);
         }
+
+        // XXX(RPRNEXT-401)
+        // In case aborting is disabled, we postpone abort until it's enabled
+        m_abortRender.store(true);
     }
 
     HdRprApi::RenderStats GetRenderStats() const {
@@ -2219,13 +2255,6 @@ Don't show this message again?
             double numRenderedSamples = progress * m_maxSamples;
             auto resolveTime = m_frameResolveTotalTime / numRenderedSamples;
             auto renderTime = m_frameRenderTotalTime / numRenderedSamples;
-
-            // When RUC is enabled, we do resolves in between of rendering
-            // TODO (optimization): move resolves in a background thread
-            //
-            if (m_isRenderUpdateCallbackEnabled) {
-                renderTime -= resolveTime;
-            }
 
             using FloatingPointSecond = std::chrono::duration<double>;
             stats.averageRenderTimePerSample = std::chrono::duration_cast<FloatingPointSecond>(renderTime).count();
@@ -3024,6 +3053,12 @@ private:
         }
     };
     ResolveData m_resolveData;
+
+    enum {
+        kResolveAfterRender,
+        kResolveInRenderUpdateCallback,
+    } m_resolveMode = kResolveAfterRender;
+    bool m_isFirstSample = true;
 
     GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
