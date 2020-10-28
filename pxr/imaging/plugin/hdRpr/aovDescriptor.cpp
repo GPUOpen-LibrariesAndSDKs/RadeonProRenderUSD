@@ -25,32 +25,48 @@ TF_INSTANTIATE_SINGLETON(HdRprAovRegistry);
 TF_DEFINE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_AOV_TOKENS);
 
 HdRprAovRegistry::HdRprAovRegistry() {
-    const auto rprAovMax = RPR_AOV_COLOR_RIGHT + 1;
+    const auto rprAovMax = RPR_AOV_LPE_8 + 1;
     const GfVec4f idClearValue(255.0f, 255.0f, 255.0f, 0.0f);
 
     m_aovDescriptors.resize(rprAovMax);
-    m_aovDescriptors[RPR_AOV_COLOR] = HdRprAovDescriptor(RPR_AOV_COLOR);
-    m_aovDescriptors[RPR_AOV_DIFFUSE_ALBEDO] = HdRprAovDescriptor(RPR_AOV_DIFFUSE_ALBEDO); // XXX: RPR's albedo can be noisy in some cases, so we left it as multisampled
-    m_aovDescriptors[RPR_AOV_VARIANCE] = HdRprAovDescriptor(RPR_AOV_VARIANCE);
-    m_aovDescriptors[RPR_AOV_OPACITY] = HdRprAovDescriptor(RPR_AOV_OPACITY);
-    m_aovDescriptors[RPR_AOV_EMISSION] = HdRprAovDescriptor(RPR_AOV_EMISSION);
-    m_aovDescriptors[RPR_AOV_DIRECT_ILLUMINATION] = HdRprAovDescriptor(RPR_AOV_DIRECT_ILLUMINATION);
-    m_aovDescriptors[RPR_AOV_INDIRECT_ILLUMINATION] = HdRprAovDescriptor(RPR_AOV_INDIRECT_ILLUMINATION);
-    m_aovDescriptors[RPR_AOV_AO] = HdRprAovDescriptor(RPR_AOV_AO);
-    m_aovDescriptors[RPR_AOV_DIRECT_DIFFUSE] = HdRprAovDescriptor(RPR_AOV_DIRECT_DIFFUSE);
-    m_aovDescriptors[RPR_AOV_DIRECT_REFLECT] = HdRprAovDescriptor(RPR_AOV_DIRECT_REFLECT);
-    m_aovDescriptors[RPR_AOV_INDIRECT_DIFFUSE] = HdRprAovDescriptor(RPR_AOV_INDIRECT_DIFFUSE);
-    m_aovDescriptors[RPR_AOV_INDIRECT_REFLECT] = HdRprAovDescriptor(RPR_AOV_INDIRECT_REFLECT);
-    m_aovDescriptors[RPR_AOV_REFRACT] = HdRprAovDescriptor(RPR_AOV_REFRACT);
-    m_aovDescriptors[RPR_AOV_VOLUME] = HdRprAovDescriptor(RPR_AOV_VOLUME);
-    m_aovDescriptors[RPR_AOV_LIGHT_GROUP0] = HdRprAovDescriptor(RPR_AOV_LIGHT_GROUP0);
-    m_aovDescriptors[RPR_AOV_LIGHT_GROUP1] = HdRprAovDescriptor(RPR_AOV_LIGHT_GROUP1);
-    m_aovDescriptors[RPR_AOV_LIGHT_GROUP2] = HdRprAovDescriptor(RPR_AOV_LIGHT_GROUP2);
-    m_aovDescriptors[RPR_AOV_LIGHT_GROUP3] = HdRprAovDescriptor(RPR_AOV_LIGHT_GROUP3);
-    m_aovDescriptors[RPR_AOV_COLOR_RIGHT] = HdRprAovDescriptor(RPR_AOV_COLOR_RIGHT);
-    m_aovDescriptors[RPR_AOV_SHADOW_CATCHER] = HdRprAovDescriptor(RPR_AOV_SHADOW_CATCHER);
-    m_aovDescriptors[RPR_AOV_REFLECTION_CATCHER] = HdRprAovDescriptor(RPR_AOV_REFLECTION_CATCHER);
 
+    // multisampled vec4f AOVs
+    for (auto rprAovId : {
+            RPR_AOV_COLOR,
+            RPR_AOV_DIFFUSE_ALBEDO, // XXX: RPR's albedo can be noisy in some cases, so we left it as multisampled
+            RPR_AOV_VARIANCE,
+            RPR_AOV_OPACITY,
+            RPR_AOV_EMISSION,
+            RPR_AOV_DIRECT_ILLUMINATION,
+            RPR_AOV_INDIRECT_ILLUMINATION,
+            RPR_AOV_AO,
+            RPR_AOV_DIRECT_DIFFUSE,
+            RPR_AOV_DIRECT_REFLECT,
+            RPR_AOV_INDIRECT_DIFFUSE,
+            RPR_AOV_INDIRECT_REFLECT,
+            RPR_AOV_REFRACT,
+            RPR_AOV_VOLUME,
+            RPR_AOV_LIGHT_GROUP0,
+            RPR_AOV_LIGHT_GROUP1,
+            RPR_AOV_LIGHT_GROUP2,
+            RPR_AOV_LIGHT_GROUP3,
+            RPR_AOV_COLOR_RIGHT,
+            RPR_AOV_SHADOW_CATCHER,
+            RPR_AOV_REFLECTION_CATCHER,
+            RPR_AOV_LPE_0,
+            RPR_AOV_LPE_1,
+            RPR_AOV_LPE_2,
+            RPR_AOV_LPE_3,
+            RPR_AOV_LPE_4,
+            RPR_AOV_LPE_5,
+            RPR_AOV_LPE_6,
+            RPR_AOV_LPE_7,
+            RPR_AOV_LPE_8
+        }) {
+        m_aovDescriptors[rprAovId] = HdRprAovDescriptor(rprAovId);
+    }
+
+    // singlesampled AOVs
     m_aovDescriptors[RPR_AOV_DEPTH] = HdRprAovDescriptor(RPR_AOV_DEPTH, false, HdFormatFloat32, GfVec4f(std::numeric_limits<float>::infinity()));
     m_aovDescriptors[RPR_AOV_UV] = HdRprAovDescriptor(RPR_AOV_UV, false, HdFormatFloat32Vec3);
     m_aovDescriptors[RPR_AOV_SHADING_NORMAL] = HdRprAovDescriptor(RPR_AOV_SHADING_NORMAL, false, HdFormatFloat32Vec3);
@@ -110,6 +126,15 @@ HdRprAovRegistry::HdRprAovRegistry() {
     addAovNameLookup(HdRprAovTokens->background, m_aovDescriptors[RPR_AOV_BACKGROUND]);
     addAovNameLookup(HdRprAovTokens->velocity, m_aovDescriptors[RPR_AOV_VELOCITY]);
     addAovNameLookup(HdRprAovTokens->viewShadingNormal, m_aovDescriptors[RPR_AOV_VIEW_SHADING_NORMAL]);
+    addAovNameLookup(HdRprAovTokens->lpe0, m_aovDescriptors[RPR_AOV_LPE_0]);
+    addAovNameLookup(HdRprAovTokens->lpe1, m_aovDescriptors[RPR_AOV_LPE_1]);
+    addAovNameLookup(HdRprAovTokens->lpe2, m_aovDescriptors[RPR_AOV_LPE_2]);
+    addAovNameLookup(HdRprAovTokens->lpe3, m_aovDescriptors[RPR_AOV_LPE_3]);
+    addAovNameLookup(HdRprAovTokens->lpe4, m_aovDescriptors[RPR_AOV_LPE_4]);
+    addAovNameLookup(HdRprAovTokens->lpe5, m_aovDescriptors[RPR_AOV_LPE_5]);
+    addAovNameLookup(HdRprAovTokens->lpe6, m_aovDescriptors[RPR_AOV_LPE_6]);
+    addAovNameLookup(HdRprAovTokens->lpe7, m_aovDescriptors[RPR_AOV_LPE_7]);
+    addAovNameLookup(HdRprAovTokens->lpe8, m_aovDescriptors[RPR_AOV_LPE_8]);
 }
 
 HdRprAovDescriptor const& HdRprAovRegistry::GetAovDesc(TfToken const& name) {
