@@ -15,7 +15,6 @@ limitations under the License.
 #include "nodeInfo.h"
 
 #include "pxr/usd/sdf/assetPath.h"
-#include "pxr/base/tf/envSetting.h"
 #include "pxr/base/arch/attributes.h"
 #include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/coreImage.h"
@@ -249,7 +248,6 @@ public:
                 for (size_t i = 0; i < mtlxPtr->numImageNodes; ++i) {
                     auto& mtlxImageNode = mtlxPtr->imageNodes[i];
 
-                    // TODO: support Image Filename Substitutions
                     textureCommit.filepath = std::move(mtlxImageNode.file);
 
                     std::string& addressmode = !mtlxImageNode.uaddressmode.empty() ? mtlxImageNode.uaddressmode : mtlxImageNode.vaddressmode;

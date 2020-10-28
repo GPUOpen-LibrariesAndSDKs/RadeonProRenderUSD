@@ -39,9 +39,9 @@ TF_INSTANTIATE_SINGLETON(RprUsdMaterialRegistry);
 
 TF_DEFINE_ENV_SETTING(RPRUSD_MATERIAL_NETWORK_SELECTOR, "rpr",
     "Material network selector to be used in hdRpr");
-TF_DEFINE_ENV_SETTING(RPRUSD_USE_HSMTLXLOADER, true,
+TF_DEFINE_ENV_SETTING(RPRUSD_USE_RPRMTLXLOADER, true,
     "Whether to use RPRMtlxLoader or rprLoadMateriaX");
-TF_DEFINE_ENV_SETTING(RPRUSD_HSMTLXLOADER_ENABLE_LOGGING, true,
+TF_DEFINE_ENV_SETTING(RPRUSD_RPRMTLXLOADER_ENABLE_LOGGING, false,
     "Enable logging of RPRMtlxLoader");
 
 RprUsdMaterialRegistry::RprUsdMaterialRegistry()
@@ -62,12 +62,12 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
             return m_registeredNodes;
         }
 
-        if (TfGetEnvSetting(RPRUSD_USE_HSMTLXLOADER)) {
+        if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
             MaterialX::FilePathVec libraryNames = {"libraries"};
             MaterialX::FileSearchPath searchPath = RPR;
             m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
             m_mtlxLoader->SetupStdlib(libraryNames, searchPath);
-            m_mtlxLoader->SetLogging(TfGetEnvSetting(RPRUSD_HSMTLXLOADER_ENABLE_LOGGING));
+            m_mtlxLoader->SetLogging(TfGetEnvSetting(RPRUSD_RPRMTLXLOADER_ENABLE_LOGGING));
         }
 
         auto rprMaterialsPath = TfAbsPath(TfNormPath(RPR + "/materials"));

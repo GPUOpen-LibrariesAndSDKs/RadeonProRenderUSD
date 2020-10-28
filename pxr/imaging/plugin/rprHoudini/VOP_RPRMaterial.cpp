@@ -409,7 +409,7 @@ PRM_Template* VOP_MaterialX::GetTemplates(RprUsdMaterialNodeInfo const* shaderIn
     templates->pop_back();
 
     // Add error message parm.
-    // It will be displayed if selected mtlx has not renderable elements only
+    // It will be displayed if the selected mtlx have no renderable elements
     //
     auto msgName = LEAKED(new PRM_Name("msg"));
     auto msgDefault = LEAKED(new PRM_Default(0.0, "No renderable elements"));
