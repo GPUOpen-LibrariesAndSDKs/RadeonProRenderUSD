@@ -1928,7 +1928,9 @@ public:
 
             m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
 
-            if (status == RPR_ERROR_ABORTED ||
+            // XXX(Northstar): workaround abort status code until RPRNEXT-401 resolved
+            bool isAborted = status == RPR_ERROR_ABORTED || m_abortRender.load();
+            if (isAborted ||
                 RPR_ERROR_CHECK(status, "Fail context render framebuffer", m_rprContext.get())) {
                 stopRequested = true;
                 break;
@@ -2225,11 +2227,11 @@ Don't show this message again?
 
         if (m_isAbortingEnabled) {
             RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
-            m_abortRender.store(false);
-        } else {
-            // In case aborting is disabled, we postpone abort until it's enabled
-            m_abortRender.store(true);
         }
+
+        // XXX(RPRNEXT-401)
+        // In case aborting is disabled, we postpone abort until it's enabled
+        m_abortRender.store(true);
     }
 
     HdRprApi::RenderStats GetRenderStats() const {
