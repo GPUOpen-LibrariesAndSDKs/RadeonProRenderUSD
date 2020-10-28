@@ -139,8 +139,15 @@ public:
                     return false;
                 }
 
+                bool hasAnySelectedElement = std::any_of(std::begin(m_selectedRenderElements), std::end(m_selectedRenderElements),
+                    [](std::string const& elem) {
+                        return !elem.empty();
+                    }
+                );
+                std::string* selectedElements = hasAnySelectedElement ? m_selectedRenderElements : nullptr;
+
                 MaterialX::FileSearchPath searchPath(basePath);
-                mtlx = m_ctx->mtlxLoader->Load(mtlxDoc.get(), m_selectedRenderElements, searchPath, matSys);
+                mtlx = m_ctx->mtlxLoader->Load(mtlxDoc.get(), selectedElements, searchPath, matSys);
             } catch (MaterialX::ExceptionParseError& e) {
                 fprintf(stderr, "Failed to parse %s: %s\n", m_mtlxFilepath.c_str(), e.what());
             } catch (MaterialX::ExceptionFileMissing& e) {
