@@ -59,13 +59,13 @@ render_setting_categories = [
                 'name': 'renderQuality',
                 'ui_name': 'Render Quality',
                 'help': 'Render restart might be required',
-                'defaultValue': 'Full',
+                'defaultValue': 'Northstar',
                 'values': [
                     SettingValue('Low', disabled_platform=HYBRID_DISABLED_PLATFORM),
                     SettingValue('Medium', disabled_platform=HYBRID_DISABLED_PLATFORM),
                     SettingValue('High', disabled_platform=HYBRID_DISABLED_PLATFORM),
-                    SettingValue('Full'),
-                    SettingValue('Northstar', 'Full 2.0 (Beta)')
+                    SettingValue('Full', 'Full (Legacy)'),
+                    SettingValue('Northstar', 'Full')
                 ]
             }
         ]
