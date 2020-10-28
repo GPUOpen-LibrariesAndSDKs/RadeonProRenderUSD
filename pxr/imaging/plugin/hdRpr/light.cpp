@@ -20,6 +20,7 @@ limitations under the License.
 
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/gf/rotation.h"
+#include "pxr/base/gf/matrix4d.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/usdLux/blackbody.h"
 #include "pxr/usd/usdLux/tokens.h"
@@ -386,7 +387,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
     HdDirtyBits bits = *dirtyBits;
 
     if (bits & DirtyBits::DirtyTransform) {
-        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>());
+        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
     }
 
     if (bits & DirtyParams) {

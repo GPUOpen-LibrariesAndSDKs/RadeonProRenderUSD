@@ -57,8 +57,11 @@ private:
     (clamp) \
     (mirror) \
     (repeat) \
-    (colorSpace) \
-    (linear) \
+    (sourceColorSpace) \
+    (sRGB) \
+    (srgblinear) \
+    (raw) \
+    ((colorSpaceAuto, "auto")) \
     (st) \
     (rgba) \
     (rgb) \

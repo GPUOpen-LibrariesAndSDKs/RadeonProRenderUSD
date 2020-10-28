@@ -121,7 +121,7 @@ def generate_houdini_ds(install_path, ds_name, settings):
             c_type_str = type(default_value).__name__
             controlled_type = c_type_str
             if c_type_str == 'str':
-                c_type_str = 'token'
+                c_type_str = 'string'
                 controlled_type = 'string'
             render_param_type = c_type_str
             render_param_default = default_value
@@ -132,6 +132,7 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 default_value = next(value for value in setting['values'] if value == default_value)
                 render_param_default = '"{}"'.format(default_value.get_key())
                 render_param_type = 'string'
+                c_type_str = 'token'
 
                 is_values_constant = True
                 for value in setting['values']:
@@ -153,6 +154,9 @@ def generate_houdini_ds(install_path, ds_name, settings):
                         render_param_values += '[ "{}" ]\n'.format(expression)
                     render_param_values += '[ "return menu_values" ]\n'.format(expression)
                     render_param_values += 'language python\n'
+
+            if 'type' in houdini_settings:
+                render_param_type = houdini_settings['type']
 
             render_param_range = None
             if 'minValue' in setting and 'maxValue' in setting and not 'values' in setting:

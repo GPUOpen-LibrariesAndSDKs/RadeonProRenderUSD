@@ -22,13 +22,9 @@ limitations under the License.
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/sdf/assetPath.h"
 #include "pxr/usd/usdLux/blackbody.h"
-#include "pxr/base/tf/envSetting.h"
+#include "pxr/base/gf/matrix4d.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-
-TF_DEFINE_ENV_SETTING(HDRPR_INVERT_DOME_LIGHT_Z_AXIS, true,
-    "In Houdini 18.0.287 we needed to invert X-axis of dome light to match with Karma,"
-    "but in Houdini 18.0.311 this behavior is changed so now we need to invert Z-axis");
 
 static void removeFirstSlash(std::string& string) {
     // Don't need this for *nix/Mac
@@ -54,13 +50,8 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
     HdDirtyBits bits = *dirtyBits;
 
     if (bits & HdLight::DirtyTransform) {
-        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>());
-        // XXX: Required to match orientation with Houdini's Karma
-        if (TfGetEnvSetting(HDRPR_INVERT_DOME_LIGHT_Z_AXIS)) {
-            m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(1.0f, 1.0f, -1.0f));
-        } else {
-            m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(-1.0f, 1.0f, 1.0f));
-        }
+        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
+        m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(1.0f, 1.0f, -1.0f));
     }
 
     bool newLight = false;

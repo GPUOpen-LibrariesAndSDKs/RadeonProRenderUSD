@@ -278,6 +278,10 @@ rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* 
         RPR_ERROR_CHECK(status, "Failed to create RPR context");
     }
 
+    if (TfGetEnvSetting(RPRUSD_ENABLE_TRACING)) {
+        RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
+    }
+
     return context;
 }
 

@@ -11,6 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
+#include <json/json.hpp>
+using json = nlohmann::json;
+
 #include "rprApi.h"
 #include "rprApiAov.h"
 #include "aovDescriptor.h"
@@ -48,13 +51,19 @@ limitations under the License.
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
+#include "pxr/base/tf/getenv.h"
 
 #include "notify/message.h"
 
 #include <RadeonProRender_Baikal.h>
 #include <RprLoadStore.h>
 
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+#include <HOM/HOM_Module.h>
+#endif // BUILD_AS_HOUDINI_PLUGIN
+
 #include <fstream>
+#include <chrono>
 #include <vector>
 #include <mutex>
 
@@ -915,26 +924,40 @@ public:
     }
 
     void SetTransform(rpr::Shape* shape, size_t numSamples, float* timeSamples, GfMatrix4d* transformSamples) {
+        // TODO: Implement C++ wrapper methods
+        auto rprShapeHandle = rpr::GetRprObject(shape);
+
         if (numSamples == 1) {
+            RPR_ERROR_CHECK(rprShapeSetMotionTransformCount(rprShapeHandle, 0), "Failed to set shape motion transform count");
+
             return SetTransform(shape, GfMatrix4f(transformSamples[0]));
         }
 
-        // XXX (RPR): there is no way to sample all transforms via current RPR API
+        // XXX (RPR): for the moment, RPR supports only 1 motion matrix
         auto& startTransform = transformSamples[0];
         auto& endTransform = transformSamples[numSamples - 1];
 
-        GfVec3f linearMotion, scaleMotion, rotateAxis;
-        float rotateAngle;
-        GetMotion(startTransform, endTransform, &linearMotion, &scaleMotion, &rotateAxis, &rotateAngle);
-
         auto rprStartTransform = GfMatrix4f(startTransform);
 
-        LockGuard rprLock(m_rprContext->GetMutex());
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            LockGuard rprLock(m_rprContext->GetMutex());
+            RPR_ERROR_CHECK(shape->SetTransform(rprStartTransform.GetArray(), false), "Fail set shape transform");
 
-        RPR_ERROR_CHECK(shape->SetTransform(rprStartTransform.GetArray(), false), "Fail set shape transform");
-        RPR_ERROR_CHECK(shape->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Fail to set shape linear motion");
-        RPR_ERROR_CHECK(shape->SetScaleMotion(scaleMotion[0], scaleMotion[1], scaleMotion[2]), "Fail to set shape scale motion");
-        RPR_ERROR_CHECK(shape->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Fail to set shape angular motion");
+            auto rprEndTransform = GfMatrix4f(endTransform);
+            RPR_ERROR_CHECK(rprShapeSetMotionTransformCount(rprShapeHandle, 1), "Failed to set shape motion transform count");
+            RPR_ERROR_CHECK(rprShapeSetMotionTransform(rprShapeHandle, false, rprEndTransform.GetArray(), 1), "Failed to set shape motion transform count");
+        } else {
+            GfVec3f linearMotion, scaleMotion, rotateAxis;
+            float rotateAngle;
+            GetMotion(startTransform, endTransform, &linearMotion, &scaleMotion, &rotateAxis, &rotateAngle);
+
+            LockGuard rprLock(m_rprContext->GetMutex());
+
+            RPR_ERROR_CHECK(shape->SetTransform(rprStartTransform.GetArray(), false), "Fail set shape transform");
+            RPR_ERROR_CHECK(shape->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Fail to set shape linear motion");
+            RPR_ERROR_CHECK(shape->SetScaleMotion(scaleMotion[0], scaleMotion[1], scaleMotion[2]), "Fail to set shape scale motion");
+            RPR_ERROR_CHECK(shape->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Fail to set shape angular motion");
+        }
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
@@ -1227,12 +1250,12 @@ public:
             auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
             if (outputRenderBufferIt == retainedOutputRenderBuffers.end()) {
                 // Create new RPR AOV
-                outRb.rprAov = CreateAov(aovName, rprRenderBuffer->GetCommitWidth(), rprRenderBuffer->GetCommitHeight(), aovFormat);
+                outRb.rprAov = CreateAov(aovName, rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat);
             } else {
                 // Reuse previously created RPR AOV
                 std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
                 // Update underlying format if needed
-                outRb.rprAov->Resize(rprRenderBuffer->GetCommitWidth(), rprRenderBuffer->GetCommitHeight(), aovFormat);
+                outRb.rprAov->Resize(rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat);
             }
 
             if (!outRb.rprAov) return nullptr;
@@ -1245,14 +1268,12 @@ public:
             if (!aovBinding.renderBuffer) {
                 continue;
             }
-            auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
-            auto outputRb = registerAovBinding(aovBinding);
-            auto mappedData = rprRenderBuffer->Commit(outputRb != nullptr);
 
-            if (outputRb) {
+            if (auto outputRb = registerAovBinding(aovBinding)) {
+                auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);
                 outputRb->isMultiSampled = rprRenderBuffer->IsMultiSampled();
-                outputRb->mappedData = mappedData;
-                outputRb->mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetCommitFormat()) * rprRenderBuffer->GetCommitWidth() * rprRenderBuffer->GetCommitHeight();
+                outputRb->mappedData = rprRenderBuffer->GetPointerForWriting();
+                outputRb->mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetFormat()) * rprRenderBuffer->GetWidth() * rprRenderBuffer->GetHeight();
             }
         }
     }
@@ -1266,10 +1287,10 @@ public:
             return;
         }
 
-        const bool isFirstSample = m_numSamples == (m_isRenderUpdateCallbackEnabled ? 0 : 1);
+        auto startTime = std::chrono::high_resolution_clock::now();
 
         m_resolveData.ForAllAovs([&](ResolveData::AovEntry& e) {
-            if (isFirstSample || e.isMultiSampled) {
+            if (m_isFirstSample || e.isMultiSampled) {
                 e.aov->Resolve();
             }
         });
@@ -1279,15 +1300,23 @@ public:
         }
 
         for (auto& outRb : m_outputRenderBuffers) {
-            if (outRb.mappedData && (isFirstSample || outRb.isMultiSampled)) {
+            if (outRb.mappedData && (m_isFirstSample || outRb.isMultiSampled)) {
                 outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
-                if (isFirstSample) {
-                    static_cast<HdRprRenderBuffer*>(outRb.aovBinding->renderBuffer)->MarkAsReadyForMapping();
-                }
             }
         }
 
         m_isFbDirty = false;
+        m_isFirstSample = false;
+
+        auto resolveTime = std::chrono::high_resolution_clock::now() - startTime;
+        m_frameResolveTotalTime += resolveTime;
+
+        if (m_resolveMode == kResolveInRenderUpdateCallback) {
+            // When RUC is enabled, we do resolves in between of rendering on the same thread
+            // TODO (optimization): move resolves in a background thread (makes sense for non-interactive, GPU-only rendering)
+            //
+            m_frameRenderTotalTime -= resolveTime;
+        }
     }
 
     void Update() {
@@ -1327,6 +1356,10 @@ public:
             aspectRatioPolicy.value = config->GetAspectRatioConformPolicy();
             instantaneousShutter.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
             instantaneousShutter.value = config->GetInstantaneousShutter();
+
+            if (config->IsDirty(HdRprConfig::DirtyRprExport)) {
+                m_rprSceneExportPath = config->GetRprExportPath();
+            }
 
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 m_currentRenderQuality = GetRenderQuality(*config);
@@ -1441,16 +1474,28 @@ public:
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode)) {
+        if ((preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) ||
+            preferences.IsDirty(HdRprConfig::DirtyInteractiveQuality)) || force) {
             m_isInteractive = preferences.GetInteractiveMode();
             auto maxRayDepth = m_isInteractive ? preferences.GetInteractiveMaxRayDepth() : preferences.GetMaxRayDepth();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(m_isInteractive)), "Failed to set preview mode");
 
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
+            if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                int downscale = 0;
+                if (m_isInteractive) {
+                    downscale = preferences.GetInteractiveResolutionDownscale();
+                }
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
+            } else {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(m_isInteractive)), "Failed to set preview mode");
+            }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtyRenderMode)) {
+        if (preferences.IsDirty(HdRprConfig::DirtyRenderMode) || force) {
             auto& renderMode = preferences.GetRenderMode();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, GetRprRenderMode(renderMode)), "Failed to set render mode");
             if (renderMode == HdRprRenderModeTokens->AmbientOcclusion) {
@@ -1459,10 +1504,35 @@ public:
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtySeed)) {
+        if (preferences.IsDirty(HdRprConfig::DirtySeed) || force) {
             m_isUniformSeed = preferences.GetUniformSeed();
             m_frameCount = 0;
             m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            if (preferences.IsDirty(HdRprConfig::DirtyMotionBlur) || force) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_BEAUTY_MOTION_BLUR, uint32_t(preferences.GetEnableBeautyMotionBlur())), "Failed to set beauty motion blur");
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyOCIO) || force) {
+                std::string ocioConfigPath;
+
+                // OpenColorIO doc recommends to use `OCIO` environment variable to
+                // globally define path to OCIO config. See the docs for details about the motivation for this.
+                // Houdini handles it in the same while leaving possibility to override it through UI.
+                // We allow the OCIO config path to be overridden through render settings.
+                if (!preferences.GetOcioConfigPath().empty()) {
+                    ocioConfigPath = preferences.GetOcioConfigPath();
+                } else {
+                    ocioConfigPath = TfGetenv("OCIO");
+                }
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_CONFIG_PATH, ocioConfigPath.c_str()), "Faled to set OCIO config path");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_RENDERING_COLOR_SPACE, preferences.GetOcioRenderingColorSpace().c_str()), "Faled to set OCIO rendering color space");
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
         }
     }
 
@@ -1662,7 +1732,7 @@ public:
         auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(aovBinding.aovName);
         if (aovDesc.id != kAovNone && aovDesc.format != HdFormatInvalid) {
             *aovName = aovBinding.aovName;
-            *format = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)->GetCommitFormat();
+            *format = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)->GetFormat();
             return true;
         }
 
@@ -1703,8 +1773,8 @@ public:
             if ((m_dirtyFlags & ChangeTracker::DirtyAOVBindings) == 0) {
                 for (auto& outputRb : m_outputRenderBuffers) {
                     auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(outputRb.aovBinding->renderBuffer);
-                    outputRb.mappedData = rprRenderBuffer->Commit(true);
-                    outputRb.mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetCommitFormat()) * rprRenderBuffer->GetCommitWidth() * rprRenderBuffer->GetCommitHeight();
+                    outputRb.mappedData = rprRenderBuffer->GetPointerForWriting();
+                    outputRb.mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetFormat()) * rprRenderBuffer->GetWidth() * rprRenderBuffer->GetHeight();
                 }
             }
         }
@@ -1738,6 +1808,9 @@ public:
             m_numSamples = 0;
             m_numSamplesPerIter = 1;
             m_activePixels = -1;
+            m_isFirstSample = true;
+            m_frameRenderTotalTime = {};
+            m_frameResolveTotalTime = {};
         }
     }
 
@@ -1777,27 +1850,30 @@ public:
     static void RenderUpdateCallback(float progress, void* dataPtr) {
         auto data = static_cast<RenderUpdateCallbackData*>(dataPtr);
 
-        // Update framebuffer ASAP on the very first sample
-        if (data->rprApi->m_numSamples > 0) {
-            static const float kResolveFrequency = 0.1f;
-            int previousStep = static_cast<int>(data->previousProgress / kResolveFrequency);
-            int currentStep = static_cast<int>(progress / kResolveFrequency);
-            if (currentStep == previousStep) {
-                return;
-            }
-            data->previousProgress = progress;
-        } else if (data->rprApi->m_numSamples == 0) {
+        if (data->rprApi->m_numSamples == 0 &&
+            !data->rprApi->m_isInteractive) {
             // Enable aborting as soon as possible
             data->rprApi->m_isAbortingEnabled.store(true);
 
             // If abort was called when it was disabled, abort now
             if (data->rprApi->m_abortRender) {
                 data->rprApi->AbortRender();
+
+                return;
             }
         }
 
-        data->rprApi->m_isFbDirty = true;
-        data->rprApi->ResolveFramebuffers();
+        if (data->rprApi->m_resolveMode == kResolveInRenderUpdateCallback) {
+            static const float kResolveFrequency = 0.1f;
+            int previousStep = static_cast<int>(data->previousProgress / kResolveFrequency);
+            int currentStep = static_cast<int>(progress / kResolveFrequency);
+            if (currentStep != previousStep) {
+                data->rprApi->m_isFbDirty = true;
+                data->rprApi->ResolveFramebuffers();
+            }
+        }
+
+        data->previousProgress = progress;
     }
 
     void RenderImpl(HdRprRenderThread* renderThread) {
@@ -1835,12 +1911,17 @@ public:
 
         bool stopRequested = false;
         m_isFbDirty = true;
+        m_resolveMode = kResolveAfterRender;
 
-        while (!IsConverged() || stopRequested) {
+        while (!IsConverged()) {
             renderThread->WaitUntilPaused();
             stopRequested = renderThread->IsStopRequested();
             if (stopRequested) {
-                break;
+                // Render at least one frame when in interactive mode,
+                // otherwise disturbing full-screen flickering will be visible
+                if (!m_isInteractive) {
+                    break;
+                }
             }
 
             if (m_rprContextMetadata.pluginType != kPluginHybrid) {
@@ -1857,22 +1938,25 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, frameCount), "Failed to set framecount");
             }
 
+            auto startTime = std::chrono::high_resolution_clock::now();
+
             m_isFbDirty = true;
             m_rucData.previousProgress = -1.0f;
             auto status = m_rprContext->Render();
             m_rucData.previousProgress = -1.0f;
 
-            if (status == RPR_ERROR_ABORTED ||
+            m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
+
+            // XXX(Northstar): workaround abort status code until RPRNEXT-401 resolved
+            bool isAborted = status == RPR_ERROR_ABORTED || m_abortRender.load();
+            if (isAborted ||
                 RPR_ERROR_CHECK(status, "Fail context render framebuffer", m_rprContext.get())) {
                 stopRequested = true;
                 break;
             }
 
-            if (m_numSamples == 0 && !m_isRenderUpdateCallbackEnabled) {
-                // As soon as the first sample has been rendered, we enable aborting,
-                // if it was not already enabled from the render update callback
-                m_isAbortingEnabled.store(true);
-            }
+            // As soon as the first sample has been rendered, we enable aborting
+            m_isAbortingEnabled.store(true);
 
             m_numSamples += m_numSamplesPerIter;
             if (m_varianceThreshold > 0.0f) {
@@ -1889,6 +1973,11 @@ public:
                 // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
                 m_numSamplesPerIter *= 2;
 
+                // Enable resolves in the render update callback after RPR_CONTEXT_ITERATIONS gets high enough
+                if (m_numSamplesPerIter >= 32) {
+                    m_resolveMode = kResolveInRenderUpdateCallback;
+                }
+
                 // But do not oversample the image
                 int numSamplesLeft = m_maxSamples - m_numSamples;
                 int newContextIterations = std::min(m_numSamplesPerIter, numSamplesLeft);
@@ -1904,9 +1993,13 @@ public:
             }
 
             stopRequested = renderThread->IsStopRequested();
+            if (stopRequested) {
+                break;
+            }
         }
 
-        if (!stopRequested) {
+        if (!stopRequested || m_isInteractive) {
+            // Resolve at least one frame when in interactive mode
             ResolveFramebuffers();
         }
     }
@@ -1929,18 +2022,7 @@ public:
         }
 
         if (!m_rprSceneExportPath.empty()) {
-            std::string exportPath;
-            {
-                std::lock_guard<std::mutex> lock(m_rprSceneExportPathMutex);
-                std::swap(m_rprSceneExportPath, exportPath);
-            }
-            if (!exportPath.empty()) {
-                auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
-                auto rprSceneHandle = rpr::GetRprObject(m_scene.get());
-                if (!RPR_ERROR_CHECK(rprsExport(exportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, 0), "Failed to export .rpr file")) {
-                    printf("Successfully exported \"%s\"\n", exportPath.c_str());
-                }
-            }
+            return ExportRpr();
         }
 
         if (m_state == kStateRender) {
@@ -1974,6 +2056,175 @@ Don't show this message again?
         }
     }
 
+    void ExportRpr() {
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+        if (HOM().isApprentice()) {
+            fprintf(stderr, "Cannot export .rpr from Apprentice");
+            return;
+        }
+#endif // BUILD_AS_HOUDINI_PLUGIN
+
+        uint32_t currentYFlip;
+        if (m_isOutputFlipped) {
+            currentYFlip = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP);
+
+            currentYFlip = !currentYFlip;
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, currentYFlip), "Failed to set context Y FLIP parameter");
+        }
+
+        auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
+        auto rprSceneHandle = rpr::GetRprObject(m_scene.get());
+        if (RPR_ERROR_CHECK(rprsExport(m_rprSceneExportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, 0), "Failed to export .rpr file")) {
+            return;
+        }
+
+        if (m_isOutputFlipped) {
+            currentYFlip = !currentYFlip;
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, currentYFlip), "Failed to set context Y FLIP parameter");
+        }
+
+        TfStringReplace(m_rprSceneExportPath, ".rpr", ".json");
+        auto configFilename = m_rprSceneExportPath.substr(0, m_rprSceneExportPath.size() - 4) + ".json";
+        std::ofstream configFile(configFilename);
+        if (!configFile.is_open()) {
+            fprintf(stderr, "Failed to create config file: %s\n", configFilename.c_str());
+            return;
+        }
+
+        try {
+            json config;
+            config["width"] = m_viewportSize[0];
+            config["height"] = m_viewportSize[1];
+            config["iterations"] = m_maxSamples;
+            config["batchsize"] = m_maxSamples;
+
+            auto basename = TfStringGetBeforeSuffix(TfGetBaseName(m_rprSceneExportPath));
+            config["output"] = basename + ".exr";
+            config["output.json"] = basename + ".output.json";
+
+            static std::map<rpr_creation_flags, const char*> kRprsContextFlags = {
+                {RPR_CREATION_FLAGS_ENABLE_CPU, "cpu"},
+                {RPR_CREATION_FLAGS_ENABLE_DEBUG, "debug"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU0, "gpu0"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU1, "gpu1"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU2, "gpu2"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU3, "gpu3"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU4, "gpu4"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU5, "gpu5"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU6, "gpu6"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU7, "gpu7"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU8, "gpu8"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU9, "gpu9"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU10, "gpu10"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU11, "gpu11"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU12, "gpu12"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU13, "gpu13"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU14, "gpu14"},
+                {RPR_CREATION_FLAGS_ENABLE_GPU15, "gpu15"},
+            };
+
+            json context;
+            auto creationFlags = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_CREATION_FLAGS);
+            for (auto& entry : kRprsContextFlags) {
+                if (creationFlags & entry.first) {
+                    context[entry.second] = 1;
+                }
+            }
+            if (creationFlags & RPR_CREATION_FLAGS_ENABLE_CPU) {
+                context["threads"] = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_CPU_THREAD_LIMIT);
+            }
+            config["context"] = context;
+
+            static const char* kRprsAovNames[] = {
+                /* RPR_AOV_COLOR = */ "color",
+                /* RPR_AOV_OPACITY = */ "opacity",
+                /* RPR_AOV_WORLD_COORDINATE = */ "world.coordinate",
+                /* RPR_AOV_UV = */ "uv",
+                /* RPR_AOV_MATERIAL_ID = */ "material.id",
+                /* RPR_AOV_GEOMETRIC_NORMAL = */ "geometric.normal",
+                /* RPR_AOV_SHADING_NORMAL = */ "shading.normal",
+                /* RPR_AOV_DEPTH = */ "depth",
+                /* RPR_AOV_OBJECT_ID = */ "object.id",
+                /* RPR_AOV_OBJECT_GROUP_ID = */ "object.group.id",
+                /* RPR_AOV_SHADOW_CATCHER = */ "shadow.catcher",
+                /* RPR_AOV_BACKGROUND = */ "background",
+                /* RPR_AOV_EMISSION = */ "emission",
+                /* RPR_AOV_VELOCITY = */ "velocity",
+                /* RPR_AOV_DIRECT_ILLUMINATION = */ "direct.illumination",
+                /* RPR_AOV_INDIRECT_ILLUMINATION = */ "indirect.illumination",
+                /* RPR_AOV_AO = */ "ao",
+                /* RPR_AOV_DIRECT_DIFFUSE = */ "direct.diffuse",
+                /* RPR_AOV_DIRECT_REFLECT = */ "direct.reflect",
+                /* RPR_AOV_INDIRECT_DIFFUSE = */ "indirect.diffuse",
+                /* RPR_AOV_INDIRECT_REFLECT = */ "indirect.reflect",
+                /* RPR_AOV_REFRACT = */ "refract",
+                /* RPR_AOV_VOLUME = */ "volume",
+                /* RPR_AOV_LIGHT_GROUP0 = */ "light.group0",
+                /* RPR_AOV_LIGHT_GROUP1 = */ "light.group1",
+                /* RPR_AOV_LIGHT_GROUP2 = */ "light.group2",
+                /* RPR_AOV_LIGHT_GROUP3 = */ "light.group3",
+                /* RPR_AOV_DIFFUSE_ALBEDO = */ "diffuse.albedo",
+                /* RPR_AOV_VARIANCE = */ "variance",
+                /* RPR_AOV_VIEW_SHADING_NORMAL = */ "view.shading.normal",
+                /* RPR_AOV_REFLECTION_CATCHER = */ "reflection.catcher",
+                /* RPR_AOV_COLOR_RIGHT = */ "color.right",
+                /* RPR_AOV_LPE_0 = */ "lpe0",
+                /* RPR_AOV_LPE_1 = */ "lpe1",
+                /* RPR_AOV_LPE_2 = */ "lpe2",
+                /* RPR_AOV_LPE_3 = */ "lpe3",
+                /* RPR_AOV_LPE_4 = */ "lpe4",
+                /* RPR_AOV_LPE_5 = */ "lpe5",
+                /* RPR_AOV_LPE_6 = */ "lpe6",
+                /* RPR_AOV_LPE_7 = */ "lpe7",
+                /* RPR_AOV_LPE_8 = */ "lpe8",
+            };
+            static const size_t kNumRprsAovNames = sizeof(kRprsAovNames) / sizeof(kRprsAovNames[0]);
+
+            json configAovs;
+            for (auto& outputRb : m_outputRenderBuffers) {
+                auto aovDesc = &outputRb.rprAov->GetDesc();
+                if (aovDesc->computed) {
+                    if (aovDesc->id == kColorAlpha) {
+                        aovDesc = &HdRprAovRegistry::GetInstance().GetAovDesc(RPR_AOV_COLOR, false);
+                    } else if (aovDesc->id == kNdcDepth) {
+                        // RprsRender does not support it...yet?
+                        continue;
+                    } else {
+                        fprintf(stderr, "Unprocessed computed AOV: %u\n", aovDesc->id);
+                        continue;
+                    }
+                }
+
+                if (TF_VERIFY(aovDesc->id < kNumRprsAovNames) &&
+                    TF_VERIFY(!aovDesc->computed)) {
+                    auto aovName = kRprsAovNames[aovDesc->id];
+                    if (aovDesc->id >= RPR_AOV_LPE_0 && aovDesc->id <= RPR_AOV_LPE_8) {
+                        try {
+                            auto name = outputRb.aovBinding->aovName.GetText();
+                            if (!*name) {
+                                name = aovName;
+                            }
+
+                            json lpeAov;
+                            lpeAov["output"] = TfStringPrintf("%s.%s.exr", basename.c_str(), name);
+                            lpeAov["lpe"] = RprUsdGetStringInfo(outputRb.rprAov->GetAovFb()->GetRprObject(), RPR_FRAMEBUFFER_LPE);
+                            configAovs[aovName] = lpeAov;
+                        } catch (RprUsdError& e) {
+                            fprintf(stderr, "Failed to export %s AOV: %s\n", aovName, e.what());
+                        }
+                    } else {
+                        configAovs[aovName] = TfStringPrintf("%s.%s.exr", basename.c_str(), aovName);
+                    }
+                }
+            }
+            config["aovs"] = configAovs;
+
+            configFile << config;
+        } catch (json::exception& e) {
+            fprintf(stderr, "Failed to fill config file: %s\n", configFilename.c_str());
+        }
+    }
+
     void CommitResources() {
         if (!m_rprContext) {
             return;
@@ -1999,14 +2250,21 @@ Don't show this message again?
 
         if (m_isAbortingEnabled) {
             RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
-            m_abortRender.store(false);
-        } else {
-            // In case aborting is disabled, we postpone abort until it's enabled
-            m_abortRender.store(true);
         }
+
+        // XXX(RPRNEXT-401)
+        // In case aborting is disabled, we postpone abort until it's enabled
+        m_abortRender.store(true);
     }
 
-    double GetPercentDone() const {
+    HdRprApi::RenderStats GetRenderStats() const {
+        HdRprApi::RenderStats stats = {};
+
+        // rprsExport has no progress callback
+        if (!m_rprSceneExportPath.empty()) {
+            return stats;
+        }
+
         double progress = double(m_numSamples) / m_maxSamples;
         if (m_activePixels != -1) {
             int numPixels = m_viewportSize[0] * m_viewportSize[1];
@@ -2014,7 +2272,19 @@ Don't show this message again?
         } else if (m_isRenderUpdateCallbackEnabled && m_rucData.previousProgress > 0.0f) {
             progress += m_rucData.previousProgress * (double(m_numSamplesPerIter) / m_maxSamples);
         }
-        return 100.0 * progress;
+        stats.percentDone = 100.0 * progress;
+
+        if (m_numSamples > 0) {
+            double numRenderedSamples = progress * m_maxSamples;
+            auto resolveTime = m_frameResolveTotalTime / numRenderedSamples;
+            auto renderTime = m_frameRenderTotalTime / numRenderedSamples;
+
+            using FloatingPointSecond = std::chrono::duration<double>;
+            stats.averageRenderTimePerSample = std::chrono::duration_cast<FloatingPointSecond>(renderTime).count();
+            stats.averageResolveTimePerSample = std::chrono::duration_cast<FloatingPointSecond>(resolveTime).count();
+        }
+
+        return stats;
     }
 
     bool IsCameraChanged() const {
@@ -2059,11 +2329,6 @@ Don't show this message again?
 
     TfToken const& GetCurrentRenderQuality() const {
         return m_currentRenderQuality;
-    }
-
-    void ExportRprSceneOnNextRender(const char* exportPath) {
-        std::lock_guard<std::mutex> lock(m_rprSceneExportPathMutex);
-        m_rprSceneExportPath = exportPath;
     }
 
 private:
@@ -2170,7 +2435,10 @@ private:
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
-        RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Fail to set context Y FLIP parameter");
+        m_isOutputFlipped = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP) != 0;
+        if (m_isOutputFlipped) {
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Failed to set context Y FLIP parameter");
+        }
 
         m_isRenderUpdateCallbackEnabled = false;
         if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
@@ -2180,20 +2448,23 @@ private:
             m_isRenderUpdateCallbackEnabled = true;
         }
 
-        // We need it for correct rendering of ID AOVs (e.g. RPR_AOV_OBJECT_ID)
-        // XXX: it takes approximately 32ms due to RPR API indirection,
-        //      replace with rprContextSetAOVindexLookupRange when ready
-        // XXX: only up to 2^16 indices, internal LUT limit
-        for (uint32_t i = 0; i < (1 << 16); ++i) {
-            // Split uint32_t into 4 float values - every 8 bits correspond to one float.
-            // Such an encoding scheme simplifies the conversion of RPR ID texture (float4) to the int32 texture (as required by Hydra).
-            // Conversion is currently implemented like this:
-            //   * convert float4 texture to uchar4 using RIF
-            //   * reinterpret uchar4 data as int32_t (works on little-endian CPU only)
-            m_rprContext->SetAOVindexLookup(rpr_int(i),
-                float((i >> 0) & 0xFF) / 255.0f,
-                float((i >> 8) & 0xFF) / 255.0f,
-                0.0f, 0.0f);
+        bool isTracingEnabled = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_TRACING_ENABLED);
+        if (!isTracingEnabled) {
+            // We need it for correct rendering of ID AOVs (e.g. RPR_AOV_OBJECT_ID)
+            // XXX: it takes approximately 32ms due to RPR API indirection,
+            //      replace with rprContextSetAOVindexLookupRange when ready
+            // XXX: only up to 2^16 indices, internal LUT limit
+            for (uint32_t i = 0; i < (1 << 16); ++i) {
+                // Split uint32_t into 4 float values - every 8 bits correspond to one float.
+                // Such an encoding scheme simplifies the conversion of RPR ID texture (float4) to the int32 texture (as required by Hydra).
+                // Conversion is currently implemented like this:
+                //   * convert float4 texture to uchar4 using RIF
+                //   * reinterpret uchar4 data as int32_t (works on little-endian CPU only)
+                m_rprContext->SetAOVindexLookup(rpr_int(i),
+                    float((i >> 0) & 0xFF) / 255.0f,
+                    float((i >> 8) & 0xFF) / 255.0f,
+                    0.0f, 0.0f);
+            }
         }
 
         {
@@ -2621,29 +2892,38 @@ private:
             imageDesc.image_row_pitch = 0;
             imageDesc.image_slice_pitch = 0;
 
+            #if PXR_VERSION >= 2011
+                auto hioFormat = textureData->GetHioFormat();
+                GLenum glType = GlfGetGLType(hioFormat);
+                GLenum glFormat = GlfGetGLFormat(hioFormat);
+            #else
+                GLenum glType = textureData->GLType();
+                GLenum glFormat = textureData->GLFormat();
+            #endif
+
             uint8_t bytesPerComponent;
-            if (textureData->GLType() == GL_UNSIGNED_BYTE) {
+            if (glType == GL_UNSIGNED_BYTE) {
                 imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
                 bytesPerComponent = 1;
-            } else if (textureData->GLType() == GL_HALF_FLOAT) {
+            } else if (glType == GL_HALF_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
                 bytesPerComponent = 2;
-            } else if (textureData->GLType() == GL_FLOAT) {
+            } else if (glType == GL_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
                 bytesPerComponent = 2;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureData->GLType());
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), glType);
                 return false;
             }
 
-            if (textureData->GLFormat() == GL_RGBA) {
+            if (glFormat == GL_RGBA) {
                 imageDesc.num_components = 4;
-            } else if (textureData->GLFormat() == GL_RGB) {
+            } else if (glFormat == GL_RGB) {
                 imageDesc.num_components = 3;
-            } else if (textureData->GLFormat() == GL_RED) {
+            } else if (glFormat == GL_RED) {
                 imageDesc.num_components = 1;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), textureData->GLFormat());
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), glFormat);
                 return false;
             }
 
@@ -2687,7 +2967,7 @@ private:
                 )");
                 blitFilter->SetInput("srcImage", rifImage->GetHandle());
                 blitFilter->SetParam("code", blitKernelCode);
-                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetCommitWidth(), colorRb->GetCommitHeight(), colorRb->GetCommitFormat()));
+                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorRb->GetFormat()));
                 blitFilter->SetInput(rif::Color, blitFilter->GetOutput());
                 blitFilter->Update();
 
@@ -2696,10 +2976,10 @@ private:
                 if (RIF_ERROR_CHECK(rifImageMap(blitFilter->GetOutput(), RIF_IMAGE_MAP_READ, &mappedData), "Failed to map rif image") || !mappedData) {
                     return false;
                 }
-                size_t size = HdDataSizeOfFormat(colorRb->GetCommitFormat()) * colorRb->GetCommitWidth() * colorRb->GetCommitHeight();
-                auto colorRbData = colorRb->Commit(true);
-                std::memcpy(colorRbData, mappedData, size);
-                colorRb->MarkAsReadyForMapping();
+                size_t size = HdDataSizeOfFormat(colorRb->GetFormat()) * colorRb->GetWidth() * colorRb->GetHeight();
+                if (auto colorRbData = colorRb->GetPointerForWriting()) {
+                    std::memcpy(colorRbData, mappedData, size);
+                }
 
                 RIF_ERROR_CHECK(rifImageUnmap(blitFilter->GetOutput(), mappedData), "Failed to unmap rif image");
                 return true;
@@ -2757,6 +3037,7 @@ private:
     using RprContextPtr = std::unique_ptr<rpr::Context, decltype(&RprContextDeleter)>;
     RprContextPtr m_rprContext{nullptr, RprContextDeleter};
     RprUsdContextMetadata m_rprContextMetadata;
+    bool m_isOutputFlipped;
 
     std::unique_ptr<rif::Context> m_rifContext;
 
@@ -2796,6 +3077,12 @@ private:
     };
     ResolveData m_resolveData;
 
+    enum {
+        kResolveAfterRender,
+        kResolveInRenderUpdateCallback,
+    } m_resolveMode = kResolveAfterRender;
+    bool m_isFirstSample = true;
+
     GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
     HdRprCamera const* m_hdCamera = nullptr;
@@ -2817,6 +3104,10 @@ private:
     float m_varianceThreshold = 0.0f;
     TfToken m_currentRenderQuality;
 
+    using Duration = std::chrono::high_resolution_clock::duration;
+    Duration m_frameRenderTotalTime;
+    Duration m_frameResolveTotalTime;
+
     struct RenderUpdateCallbackData {
         HdRprApiImpl* rprApi = nullptr;
         float previousProgress = 0.0f;
@@ -2837,7 +3128,6 @@ private:
     std::atomic<bool> m_isAbortingEnabled;
     std::atomic<bool> m_abortRender;
 
-    std::mutex m_rprSceneExportPathMutex;
     std::string m_rprSceneExportPath;
 };
 
@@ -3091,8 +3381,8 @@ bool HdRprApi::IsChanged() const {
     return m_impl->IsChanged();
 }
 
-double HdRprApi::GetPercentDone() const {
-    return m_impl->GetPercentDone();
+HdRprApi::RenderStats HdRprApi::GetRenderStats() const {
+    return m_impl->GetRenderStats();
 }
 
 bool HdRprApi::IsGlInteropEnabled() const {
@@ -3111,10 +3401,6 @@ bool HdRprApi::IsSphereAndDiskLightSupported() const {
 
 TfToken const& HdRprApi::GetCurrentRenderQuality() const {
     return m_impl->GetCurrentRenderQuality();
-}
-
-void HdRprApi::ExportRprSceneOnNextRender(const char* exportPath) {
-    m_impl->ExportRprSceneOnNextRender(exportPath);
 }
 
 std::string HdRprApi::GetAppDataPath() {

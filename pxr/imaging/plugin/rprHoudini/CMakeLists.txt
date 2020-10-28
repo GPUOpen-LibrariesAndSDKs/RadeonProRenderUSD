@@ -5,10 +5,15 @@ endif()
 add_library(RPR_for_Houdini SHARED
     plugin.cpp
     VOP_RPRMaterial.h
-    VOP_RPRMaterial.cpp)
+    VOP_RPRMaterial.cpp
+    LOP_RPRExportHelper.h
+    LOP_RPRExportHelper.cpp)
 
 target_link_libraries(RPR_for_Houdini
     arch
+    usd
+    usdGeom
+    usdRender
     rprUsd
     Houdini)
 

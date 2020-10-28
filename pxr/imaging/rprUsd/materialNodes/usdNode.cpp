@@ -235,10 +235,20 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
         throw RprUsd_NodeError("UsdUVTexture: empty file path");
     }
 
-    auto colorSpaceIt = hydraParameters.find(RprUsd_UsdUVTextureTokens->colorSpace);
-    if (colorSpaceIt != hydraParameters.end() &&
-        colorSpaceIt->second.Get<TfToken>() == RprUsd_UsdUVTextureTokens->linear) {
-        textureCommit.forceLinearSpace = true;
+    auto colorSpaceIt = hydraParameters.find(RprUsd_UsdUVTextureTokens->sourceColorSpace);
+    if (colorSpaceIt != hydraParameters.end()) {
+        if (colorSpaceIt->second.IsHolding<TfToken>()) {
+            auto& colorSpace = colorSpaceIt->second.UncheckedGet<TfToken>();
+            if (colorSpace == RprUsd_UsdUVTextureTokens->sRGB) {
+                textureCommit.colorspace = "srgb";
+            } else if (colorSpace == RprUsd_UsdUVTextureTokens->raw) {
+                textureCommit.colorspace = "raw";
+            } else if (colorSpace == RprUsd_UsdUVTextureTokens->colorSpaceAuto) {
+                textureCommit.colorspace = "";
+            } else {
+                textureCommit.colorspace = colorSpace.GetString();
+            }
+        }
     }
 
     rpr::ImageWrapType wrapS = {};
