@@ -1759,9 +1759,11 @@ public:
                 return false;
             }
 
-            if (sourceName == "C.*" && aovBinding.aovName == HdAovTokens->color) {
+            *format = ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
+
+            if (sourceName == "C.*") {
                 // We can use RPR_AOV_COLOR here instead of reserving one of the available LPE AOV slots
-                // TODO: check if we can map some other LPEs to non-lpe RPR AOVs
+                *aovName = HdRprAovTokens->rawColor;
             } else {
                 if (m_rprContextMetadata.pluginType != kPluginNorthstar) {
                     TF_RUNTIME_ERROR("LPE AOV is supported in Northstar only");
@@ -1769,9 +1771,9 @@ public:
                 }
 
                 *lpe = sourceName;
-                *format = ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
-                return *format != HdFormatInvalid;
             }
+
+            return *format != HdFormatInvalid;
         }
 
         // Default AOV: aovName from `aovBinding.aovName`, format is controlled by HdRenderBuffer
