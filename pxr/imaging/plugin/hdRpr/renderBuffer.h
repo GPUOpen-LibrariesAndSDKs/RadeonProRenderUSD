@@ -15,12 +15,12 @@ limitations under the License.
 #define HDRPR_RENDER_BUFFER_H
 
 #include "pxr/imaging/hd/renderBuffer.h"
-#include "RadeonProRender.hpp"
-#include "rprApi.h"
 
 #include <condition_variable>
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+class HdRprApi;
 
 class HdRprRenderBuffer final : public HdRenderBuffer {
 public:
@@ -61,13 +61,9 @@ public:
 
     void* GetPointerForWriting() { return m_mappedBuffer.data(); }
 
-#if PXR_VERSION >= 2005
-
     // HdRprRenderBuffer should hold actual framebuffer
     // But for now just take it from HdRprApi in order to provide valid API
-    VtValue GetResource(bool multiSampled) const override;
-
-#endif // PXR_VERSION >= 2005
+    VtValue GetResource(bool multiSampled) const;
 
 protected:
     void _Deallocate() override;
@@ -81,8 +77,7 @@ private:
 
     std::atomic<bool> m_isConverged;
 
-    bool m_isValid = true;
-    HdRprApi* m_api = nullptr;
+    HdRprApi* m_rprApi = nullptr;
     
 #ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
     std::mutex m_mapMutex;

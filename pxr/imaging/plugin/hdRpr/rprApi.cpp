@@ -244,17 +244,6 @@ public:
         : m_delegate(delegate) {
         // Postpone initialization as further as possible to allow Hydra user to set custom render settings before creating a context
         //InitIfNeeded();
-    
-    }
-
-    rpr::FrameBuffer* GetColorFramebuffer() {
-        if (auto colorAov = GetAov(HdRprAovTokens->rawColor, 0, 0, HdFormat::HdFormatInvalid)) {
-            if (auto fb = colorAov->GetAovFb()) {
-                return fb->GetRprObject();
-            }
-        }
-
-        return nullptr;
     }
 
     ~HdRprApiImpl() {
@@ -1850,8 +1839,6 @@ public:
             return InteropRenderImpl(renderThread);
         }
 
-        int numSamplesPerIter = 1;
-        
         if (m_numSamples == 0) {
             // Disable aborting on the very first sample
             //
@@ -2310,6 +2297,10 @@ Don't show this message again?
         return m_rprContext && m_rprContextMetadata.isGlInteropEnabled;
     }
 
+    bool IsVulkanInteropEnabled() const {
+        return m_rprContext && m_rprContextMetadata.pluginType == kPluginHybrid && m_rprContextMetadata.interopInfo;
+    }
+
     bool IsArbitraryShapedLightSupported() const {
         return m_rprContextMetadata.pluginType != kPluginHybrid;
     }
@@ -2330,8 +2321,17 @@ Don't show this message again?
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     }
 
-    RprUsdContextMetadata GetContextMetadata() {
-        return m_rprContextMetadata;
+    rpr::FrameBuffer* GetRawColorFramebuffer() {
+        auto it = m_aovRegistry.find(HdRprAovTokens->rawColor);
+        if (it != m_aovRegistry.end()) {
+            if (auto aov = it->second.lock()) {
+                if (auto fb = aov->GetAovFb()) {
+                    return fb->GetRprObject();
+                }
+            }
+        }
+
+        return nullptr;
     }
 
 private:
@@ -2438,19 +2438,18 @@ private:
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
-        uint32_t yFlip = 0;
+        uint32_t requiredYFlip = 0;
         if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid && m_rprContextMetadata.interopInfo) {
             RPR_ERROR_CHECK_THROW(m_rprContext->GetFunctionPtr(
                 RPR_CONTEXT_FLUSH_FRAMEBUFFERS_FUNC_NAME, 
                 (void**)(&m_rprContextFlushFrameBuffers)
             ), "Fail to get rprContextFlushFramebuffers function");
-            yFlip = 1;
+            requiredYFlip = 1;
         }
 
-        RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, yFlip), "Failed to set context Y FLIP parameter");
-        m_isOutputFlipped = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP) != 0;
+        m_isOutputFlipped = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP) != requiredYFlip;
         if (m_isOutputFlipped) {
-            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Failed to set context Y FLIP parameter");
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, requiredYFlip), "Failed to set context Y FLIP parameter");
         }
 
         m_isRenderUpdateCallbackEnabled = false;
@@ -3397,6 +3396,10 @@ bool HdRprApi::IsGlInteropEnabled() const {
     return m_impl->IsGlInteropEnabled();
 }
 
+bool HdRprApi::IsVulkanInteropEnabled() const {
+    return m_impl->IsVulkanInteropEnabled();
+}
+
 bool HdRprApi::IsArbitraryShapedLightSupported() const {
     m_impl->InitIfNeeded();
     return m_impl->IsArbitraryShapedLightSupported();
@@ -3457,8 +3460,8 @@ std::string HdRprApi::GetCachePath() {
     return path;
 }
 
-rpr::FrameBuffer* HdRprApi::GetColorFramebuffer() {
-    return m_impl->GetColorFramebuffer();
+rpr::FrameBuffer* HdRprApi::GetRawColorFramebuffer() {
+    return m_impl->GetRawColorFramebuffer();
 }
 
 void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
@@ -3466,10 +3469,6 @@ void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presen
 
     // Temporary should be force inited here, because otherwise has issues with GPU synchronization
     m_impl->InitIfNeeded();
-}
-
-RprUsdContextMetadata HdRprApi::GetContextMetadata() {
-    return m_impl->GetContextMetadata();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

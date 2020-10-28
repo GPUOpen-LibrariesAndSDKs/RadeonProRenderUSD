@@ -394,7 +394,7 @@ bool HdRprDelegate::Restart() {
 void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
     for (HdDriver* hdDriver : drivers) {
         if (hdDriver->name == _tokens->RPR && hdDriver->driver.IsHolding<VtDictionary>()) {
-            VtDictionary dictionary = hdDriver->driver.Get<VtDictionary>();
+            VtDictionary dictionary = hdDriver->driver.UncheckedGet<VtDictionary>();
 
             // Interop info is used to create context
             void* interopInfo = dictionary["interop_info"].Get<void*>();

@@ -27,7 +27,6 @@ limitations under the License.
 #include "pxr/imaging/hd/material.h"
 #include "pxr/imaging/hd/renderPassState.h"
 #include "pxr/imaging/hd/renderDelegate.h"
-#include "pxr/imaging/rprUsd/contextMetadata.h"
 
 #include <RadeonProRender.hpp>
 
@@ -147,6 +146,8 @@ public:
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings);
     HdRenderPassAovBindingVector GetAovBindings() const;
 
+    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);
+
     struct RenderStats {
         double percentDone;
         double averageRenderTimePerSample;
@@ -160,12 +161,11 @@ public:
 
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
+    bool IsVulkanInteropEnabled() const;
     bool IsArbitraryShapedLightSupported() const;
     bool IsSphereAndDiskLightSupported() const;
     TfToken const& GetCurrentRenderQuality() const;
-    rpr::FrameBuffer* GetColorFramebuffer();
-    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);
-    RprUsdContextMetadata GetContextMetadata();
+    rpr::FrameBuffer* GetRawColorFramebuffer();
 
     static std::string GetAppDataPath();
     static std::string GetCachePath();

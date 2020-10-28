@@ -16,7 +16,6 @@ limitations under the License.
 #include "rprApi.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
-#include "pxr/imaging/rprUsd/contextMetadata.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -24,7 +23,7 @@ HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id, HdRprApi* api)
     : HdRenderBuffer(id)
     , m_numMappers(0)
     , m_isConverged(false)
-    , m_api(api) {
+    , m_rprApi(api) {
 
 }
 
@@ -152,32 +151,21 @@ void HdRprRenderBuffer::SetConverged(bool converged) {
     return m_isConverged.store(converged);
 }
 
-#if PXR_VERSION >= 2005
-
 VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
     if ("aov_color" == GetId().GetElementString()) {
-        rpr::FrameBuffer* color = m_api->GetColorFramebuffer();
+        rpr::FrameBuffer* color = m_rprApi->GetRawColorFramebuffer();
         // RPR framebuffer not created yet
-        if (color == nullptr)
-        {
+        if (!color) {
             return VtValue();
         }
 
-        RprUsdPluginType type = m_api->GetContextMetadata().pluginType;
-        bool isHybrid = false;
-        if (type == RprUsdPluginType::kPluginHybrid) {
-            isHybrid = true;
-        }
-
         VtDictionary dictionary;
-        dictionary["is_hybrid"] = isHybrid;
+        dictionary["isVulkanInteropEnabled"] = m_rprApi->IsVulkanInteropEnabled();
         dictionary["framebuffer"] = color;
 
         return VtValue(dictionary);
     }
     return VtValue();
 }
-
-#endif // PXR_VERSION >= 2005
 
 PXR_NAMESPACE_CLOSE_SCOPE
