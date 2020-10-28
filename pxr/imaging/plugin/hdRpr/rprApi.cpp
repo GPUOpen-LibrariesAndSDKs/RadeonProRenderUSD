@@ -2179,18 +2179,22 @@ Don't show this message again?
                 if (TF_VERIFY(aovDesc->id < kNumRprsAovNames) &&
                     TF_VERIFY(!aovDesc->computed)) {
                     auto aovName = kRprsAovNames[aovDesc->id];
-                    auto outputName = TfStringPrintf("%s.%s.exr", basename.c_str(), aovName);
                     if (aovDesc->id >= RPR_AOV_LPE_0 && aovDesc->id <= RPR_AOV_LPE_8) {
                         try {
+                            auto name = outputRb.aovBinding->aovName.GetText();
+                            if (!*name) {
+                                name = aovName;
+                            }
+
                             json lpeAov;
-                            lpeAov["output"] = outputName;
-                            lpeAov["lpe"] = RprUsdGetInfo<std::string>(outputRb.rprAov->GetAovFb()->GetRprObject(), RPR_FRAMEBUFFER_LPE);
+                            lpeAov["output"] = TfStringPrintf("%s.%s.exr", basename.c_str(), name);
+                            lpeAov["lpe"] = RprUsdGetStringInfo(outputRb.rprAov->GetAovFb()->GetRprObject(), RPR_FRAMEBUFFER_LPE);
                             configAovs[aovName] = lpeAov;
                         } catch (RprUsdError& e) {
                             fprintf(stderr, "Failed to export %s AOV: %s\n", aovName, e.what());
                         }
                     } else {
-                        configAovs[aovName] = outputName;
+                        configAovs[aovName] = TfStringPrintf("%s.%s.exr", basename.c_str(), aovName);
                     }
                 }
             }
