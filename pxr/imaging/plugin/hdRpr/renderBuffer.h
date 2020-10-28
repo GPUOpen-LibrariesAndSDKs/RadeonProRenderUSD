@@ -16,6 +16,8 @@ limitations under the License.
 
 #include "pxr/imaging/hd/renderBuffer.h"
 
+#include <condition_variable>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprRenderBuffer final : public HdRenderBuffer {
@@ -33,7 +35,7 @@ public:
                   HdFormat format,
                   bool multiSampled) override;
 
-    unsigned int GetWidth() const override;
+    unsigned int GetWidth() const override { return m_width; }
 
     unsigned int GetHeight() const override { return m_height; }
 
@@ -55,33 +57,26 @@ public:
 
     void SetConverged(bool converged);
 
-    bool IsMappable() const;
-
-    void MarkAsReadyForMapping();
-
-    unsigned int GetCommitWidth() const { return m_commitWidth; }
-    unsigned int GetCommitHeight() const { return m_commitHeight; }
-    HdFormat GetCommitFormat() const { return m_commitFormat; }
-    void* Commit(bool isValid);
+    void* GetPointerForWriting() { return m_mappedBuffer.data(); }
 
 protected:
     void _Deallocate() override;
 
 private:
+    std::vector<uint8_t> m_mappedBuffer;
     uint32_t m_width = 0u;
     uint32_t m_height = 0u;
     HdFormat m_format = HdFormat::HdFormatInvalid;
     bool m_multiSampled = false;
 
-    std::vector<uint8_t> m_mappedBuffer;
-    std::atomic<int> m_numMappers;
     std::atomic<bool> m_isConverged;
 
-    bool m_isValid = true;
-    uint32_t m_commitWidth = 0u;
-    uint32_t m_commitHeight = 0u;
-    HdFormat m_commitFormat = HdFormat::HdFormatInvalid;
-    std::atomic<bool> m_isDataAvailable;
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    std::mutex m_mapMutex;
+    std::condition_variable m_mapConditionVar;
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
+
+    int m_numMappers;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -20,6 +20,7 @@ limitations under the License.
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/usdLux/blackbody.h"
 #include "pxr/usd/usdLux/tokens.h"
+#include "pxr/base/gf/matrix4d.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -38,7 +39,7 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
     auto& id = GetId();
 
     if (bits & HdLight::DirtyTransform) {
-        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>());
+        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
     }
 
     bool newLight = false;
