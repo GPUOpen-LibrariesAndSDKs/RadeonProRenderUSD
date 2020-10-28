@@ -480,6 +480,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     ((houdiniInteractive, "houdini:interactive"))
+    ((rprInteractive, "rpr:interactive"))
 );
 
 {rs_public_token_definitions}
@@ -518,8 +519,13 @@ void HdRprConfig::Sync(HdRenderDelegate* renderDelegate) {{
             return defaultValue;
         }};
 
-        auto interactiveMode = renderDelegate->GetRenderSetting<std::string>(_tokens->houdiniInteractive, "normal");
-        SetInteractiveMode(interactiveMode != "normal");
+        bool interactiveMode = getBoolSetting(_tokens->rprInteractive, false);
+
+        if (renderDelegate->GetRenderSetting<std::string>(_tokens->houdiniInteractive, "normal") != "normal") {{
+            interactiveMode = true;
+        }}
+
+        SetInteractiveMode(interactiveMode);
 
 {rs_sync}
     }}
