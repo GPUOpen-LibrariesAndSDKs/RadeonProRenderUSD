@@ -1,8 +1,6 @@
 set(PXR_PREFIX pxr/imaging)
 set(PXR_PACKAGE rprUsd)
 
-find_package(Vulkan REQUIRED)
-
 pxr_library(rprUsd
     DISABLE_PRECOMPILED_HEADERS
 
@@ -18,10 +16,6 @@ pxr_library(rprUsd
         cpprpr
         MaterialXCore
         MaterialXFormat
-        ${Vulkan_LIBRARIES}
-
-    INCLUDE_DIRS
-        ${Vulkan_INCLUDE_DIRS}
 
     PUBLIC_CLASSES
         util
@@ -64,3 +58,9 @@ target_sources(rprUsd PRIVATE
 add_subdirectory(materialNodes/mtlxFiles)
 
 GroupSources(rprUsd)
+
+if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
+    target_link_libraries(rprUsd ${Vulkan_LIBRARIES})
+    target_include_directories(rprUsd PRIVATE ${Vulkan_INCLUDE_DIRS})
+    target_compile_definitions(rprUsd PUBLIC HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT)
+endif()

@@ -22,9 +22,12 @@ limitations under the License.
 #include "pxr/base/tf/envSetting.h"
 
 #include <RadeonProRender.hpp>
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 #include <RadeonProRender_VK.h>
 #include <RadeonProRender_Baikal.h>
 #include <vulkan/vulkan.h>
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
@@ -270,31 +273,34 @@ rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* 
         flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
     }
 
-    rpr::Status status;
-    rpr::Context* context = nullptr;
+    std::vector<rpr_context_properties> contextProperties;
+    auto appendContextProperty = [&contextProperties](uint64_t propertyKey, void* propertyValue) {
+        contextProperties.push_back((rpr_context_properties)propertyKey);
+        contextProperties.push_back((rpr_context_properties)propertyValue);
+    };
 
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     if (metadata->pluginType == RprUsdPluginType::kPluginHybrid && metadata->interopInfo) {
         // Create interop context for hybrid
+        // TODO: should not it be configurable?
         constexpr std::uint32_t MB = 1024u * 1024u;
-        std::uint32_t acc_size = 1024 * MB;
-        std::uint32_t vbuf_size = 1024 * MB;
-        std::uint32_t ibuf_size = 512 * MB;
-        std::uint32_t sbuf_size = 512 * MB;
+        static std::uint32_t acc_size = 1024 * MB;
+        static std::uint32_t vbuf_size = 1024 * MB;
+        static std::uint32_t ibuf_size = 512 * MB;
+        static std::uint32_t sbuf_size = 512 * MB;
 
-        rpr_context_properties properties[] {
-            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO, (rpr_context_properties)metadata->interopInfo,
-            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE, (rpr_context_properties)&acc_size,
-            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, (rpr_context_properties)&vbuf_size,
-            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, (rpr_context_properties)&ibuf_size,
-            (rpr_context_properties)RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, (rpr_context_properties)&sbuf_size,
-            0
-        };
-
-        context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, properties, cachePath, &status);
-    } else {
-        // Create non-interop context
-        context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, nullptr, cachePath, &status);
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO, metadata->interopInfo);
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE, &acc_size);
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, &vbuf_size);
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, &ibuf_size);
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, &sbuf_size);
     }
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+    contextProperties.push_back(nullptr);
+
+    rpr::Status status;
+    rpr::Context* context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, contextProperties.data(), cachePath, &status);
 
     if (context) {
         if (RPR_ERROR_CHECK(context->SetActivePlugin(pluginID), "Failed to set active plugin")) {

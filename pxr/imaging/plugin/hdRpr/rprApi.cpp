@@ -2323,9 +2323,11 @@ Don't show this message again?
     }
 
     void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
         m_rprContextMetadata.interopInfo = interopInfo;
         m_presentedConditionVariable = presentedConditionVariable;
         m_presentedCondition = presentedCondition;
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     }
 
     RprUsdContextMetadata GetContextMetadata() {
