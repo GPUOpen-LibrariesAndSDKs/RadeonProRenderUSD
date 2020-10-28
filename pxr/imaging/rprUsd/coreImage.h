@@ -62,6 +62,9 @@ public:
     rpr::Status SetGamma(float gamma);
 
     RPRUSD_API
+    rpr::Status SetColorSpace(const char* colorSpace);
+
+    RPRUSD_API
     rpr::Status SetMipmapEnabled(bool enabled);
 
     RPRUSD_API

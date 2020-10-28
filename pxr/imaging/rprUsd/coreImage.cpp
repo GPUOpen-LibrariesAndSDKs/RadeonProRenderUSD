@@ -217,6 +217,14 @@ rpr::Status RprUsdCoreImage::SetGamma(float gamma) {
     return ForEachImage([gamma](rpr::Image* image) { return image->SetGamma(gamma); });
 }
 
+rpr::Status RprUsdCoreImage::SetColorSpace(const char* colorSpace) {
+    return ForEachImage([colorSpace](rpr::Image* image) {
+        // TODO: add C++ wrapper
+        auto rprImageHandle = rpr::GetRprObject(image);
+        return rprImageSetOcioColorspace(rprImageHandle, colorSpace);
+    });
+}
+
 rpr::Status RprUsdCoreImage::SetMipmapEnabled(bool enabled) {
     return ForEachImage([enabled](rpr::Image* image) { return image->SetMipmapEnabled(enabled); });
 }

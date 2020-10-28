@@ -30,52 +30,35 @@ public:
     RPRUSD_API
     std::shared_ptr<RprUsdCoreImage> GetImage(
         std::string const& path,
-        bool forceLinearSpace,
+        std::string const& colorspace,
         rpr::ImageWrapType wrapType,
-        std::vector<RprUsdCoreImage::UDIMTile> const& data);
+        std::vector<RprUsdCoreImage::UDIMTile> const& data = {});
 
 private:
     rpr::Context* m_context;
 
     struct CacheKey {
         std::string path;
-        struct TileMetadata {
-            size_t size;
-            double modificationTime;
+        std::string colorspace;
+        rpr::ImageWrapType wrapType;
 
-            TileMetadata(size_t size, double modificationTime)
-                : size(size), modificationTime(modificationTime) {
-            }
-            bool operator==(TileMetadata const& rhs) const {
-                return size == rhs.size && modificationTime == rhs.modificationTime;
-            }
-        };
-        std::vector<TileMetadata> tiles;
+        bool operator==(CacheKey const& rhs) const {
+            return wrapType == rhs.wrapType && colorspace == rhs.colorspace && path == rhs.path;
+        }
 
         size_t hash;
-
-        struct Equal { bool operator()(CacheKey const& lhs, CacheKey const& rhs) const; };
         struct Hash { size_t operator()(CacheKey const& key) const { return key.hash; }; };
     };
-    bool InitCacheKey(std::string const& path, std::vector<RprUsdCoreImage::UDIMTile> const&, CacheKey*);
 
-    struct CacheEntry {
-        struct Desc {
-            float gamma;
-            rpr::ImageWrapType wrapType;
-
-            bool operator==(Desc const& rhs) const;
-        };
-        Desc desc;
+    struct CacheValue {
+        std::vector<std::pair<uint32_t, double>> tileModificationTimes;
         std::weak_ptr<RprUsdCoreImage> handle;
+
+        // Convenience wrapper over std::weak_ptr::lock that includes checking if image files are outdated
+        std::shared_ptr<RprUsdCoreImage> Lock(CacheKey const& key) const;
     };
-    bool InitCacheEntryDesc(GlfUVTextureData*, rpr::ImageWrapType, bool forceLinearSpace, CacheEntry::Desc*);
 
-    using CacheValue = std::vector<CacheEntry>;
-    std::unordered_map<CacheKey, CacheValue, CacheKey::Hash, CacheKey::Equal> m_cache;
-
-private:
-    void PopCacheEntry(CacheKey const& key, CacheEntry::Desc const& desc);
+    std::unordered_map<CacheKey, CacheValue, CacheKey::Hash> m_cache;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

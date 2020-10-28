@@ -26,74 +26,10 @@ size_t GetHash(T const& value) {
     return std::hash<T>{}(value);
 }
 
-bool RprUsdImageCache::InitCacheKey(
-    std::string const& path,
-    std::vector<RprUsdCoreImage::UDIMTile> const& tiles,
-    CacheKey* key) {
-
-    key->path = path;
-    key->hash = GetHash(path);
-
-    auto processTile = [key](std::string const& path) {
-        double modificationTime;
-        int64_t sizeInt = ArchGetFileLength(path.c_str());
-        if (sizeInt == -1 || !ArchGetModificationTime(path.c_str(), &modificationTime)) {
-            // If the path points to a non-filesystem image (e.g. usdz embedded image)
-            // we rely on the user of the Hydra to correctly reload all materials that use this image
-            return;
-        }
-
-        key->tiles.emplace_back(size_t(sizeInt), modificationTime);
-        key->hash ^= size_t(sizeInt) ^ GetHash(modificationTime);
-    };
-
-    if (tiles.size() != 1 || tiles[0].id != 0) {
-        // UDIM tiles
-        std::string formatString;
-        if (!RprUsdGetUDIMFormatString(path, &formatString)) {
-            return false;
-        }
-
-        for (auto& tile : tiles) {
-            processTile(TfStringPrintf(formatString.c_str(), tile.id));
-        }
-    } else {
-        processTile(path);
-    }
-
-    return true;
-}
-
-bool RprUsdImageCache::InitCacheEntryDesc(
-    GlfUVTextureData* data,
-    rpr::ImageWrapType wrapType,
-    bool forceLinearSpace,
-    CacheEntry::Desc* desc) {
-    if (!data) return false;
-
-#if PXR_VERSION >= 2011
-    GLenum internalFormat = GlfGetGLInternalFormat(data->GetHioFormat());
-#else
-    GLenum internalFormat = data->GLInternalFormat();
-#endif
-
-    if (!forceLinearSpace &&
-        (internalFormat == GL_SRGB ||
-        internalFormat == GL_SRGB8 ||
-        internalFormat == GL_SRGB_ALPHA ||
-        internalFormat == GL_SRGB8_ALPHA8)) {
-        // XXX(RPR): sRGB formula is different from straight pow decoding, but it's the best we can do right now
-        desc->gamma = 2.2f;
-    } else {
-        desc->gamma = 1.0f;
-    }
-
-    if (!wrapType) {
-        wrapType = RPR_IMAGE_WRAP_TYPE_REPEAT;
-    }
-    desc->wrapType = wrapType;
-
-    return true;
+double GetModificationTime(std::string const& path) {
+    double modificationTime = 0.0;
+    ArchGetModificationTime(path.c_str(), &modificationTime);
+    return modificationTime;
 }
 
 RprUsdImageCache::RprUsdImageCache(rpr::Context* context)
@@ -104,39 +40,27 @@ RprUsdImageCache::RprUsdImageCache(rpr::Context* context)
 std::shared_ptr<RprUsdCoreImage>
 RprUsdImageCache::GetImage(
     std::string const& path,
-    bool forceLinearSpace,
+    std::string const& colorspace,
     rpr::ImageWrapType wrapType,
     std::vector<RprUsdCoreImage::UDIMTile> const& tiles) {
-    if (tiles.empty()) {
-        return nullptr;
+    if (!wrapType) {
+        wrapType = RPR_IMAGE_WRAP_TYPE_REPEAT;
     }
 
-    CacheKey key;
-    CacheEntry::Desc desc;
-    if (!InitCacheKey(path, tiles, &key) ||
-        !InitCacheEntryDesc(tiles[0].textureData, wrapType, forceLinearSpace, &desc)) {
-        return nullptr;
-    }
+    CacheKey key = {};
+    key.path = path;
+    key.colorspace = colorspace;
+    key.wrapType = wrapType;
+    key.hash = GetHash(path) ^ GetHash(colorspace) ^ GetHash(wrapType);
 
     auto it = m_cache.find(key);
     if (it != m_cache.end()) {
-        auto& entries = it->second;
-        for (size_t i = 0; i < entries.size(); ++i) {
-            auto& entry = entries[i];
-            if (entry.desc == desc) {
-                if (auto image = entry.handle.lock()) {
-                    return image;
-                } else {
-                    TF_CODING_ERROR("Expired cache entry was not removed");
-
-                    if (i + 1 != entries.size()) {
-                        std::swap(entry, entries.back());
-                    }
-                    entries.pop_back();
-
-                    break;
-                }
-            }
+        CacheValue& cacheValue = it->second;
+        if (auto image = cacheValue.Lock(key)) {
+            return image;
+        } else {
+            m_cache.erase(it);
+            it = m_cache.end();
         }
     }
 
@@ -149,70 +73,103 @@ RprUsdImageCache::GetImage(
         coreImage->SetName(path.c_str());
     }
 
-    RPR_ERROR_CHECK(coreImage->SetGamma(desc.gamma), "Failed to set image gamma");
-    RPR_ERROR_CHECK(coreImage->SetWrap(desc.wrapType), "Failed to set image wrap type");
+    float gamma = 1.0f;
+    if (key.colorspace == "srgb") {
+        gamma = 2.2f;
+    } else if (key.colorspace.empty()) {
+        // Figure out gamma from the internal format.
+        // Assume that all tiles have the same colorspace
+        //
+        auto data = tiles[0].textureData;
+#if PXR_VERSION >= 2011
+        GLenum internalFormat = GlfGetGLInternalFormat(data->GetHioFormat());
+#else
+        GLenum internalFormat = data->GLInternalFormat();
+#endif
+        if (internalFormat == GL_SRGB ||
+            internalFormat == GL_SRGB8 ||
+            internalFormat == GL_SRGB_ALPHA ||
+            internalFormat == GL_SRGB8_ALPHA8) {
+            // XXX(RPR): sRGB formula is different from straight pow decoding, but it's the best we can do without OCIO
+            gamma = 2.2f;
+        } else {
+            gamma = 1.0f;
+        }
+    }
 
-    if (it == m_cache.end()) {
-        it = m_cache.emplace(key, CacheValue()).first;
+    RPR_ERROR_CHECK(coreImage->SetGamma(gamma), "Failed to set image gamma");
+    RPR_ERROR_CHECK(coreImage->SetWrap(key.wrapType), "Failed to set image wrap type");
+
+    CacheValue cacheValue;
+    if (tiles.size() != 1 || tiles[0].id != 0) {
+        // UDIM tiles
+        std::string formatString;
+        if (!RprUsdGetUDIMFormatString(path, &formatString)) {
+            return nullptr;
+        }
+
+        cacheValue.tileModificationTimes.reserve(tiles.size());
+        for (auto& tile : tiles) {
+            auto tilePath = TfStringPrintf(formatString.c_str(), tile.id);
+            cacheValue.tileModificationTimes.emplace_back(tile.id, GetModificationTime(tilePath));
+        }
+    } else {
+        cacheValue.tileModificationTimes.emplace_back(0, GetModificationTime(path));
     }
 
     std::shared_ptr<RprUsdCoreImage> cachedImage(coreImage,
-        [this, key, desc](RprUsdCoreImage* coreImage) {
+        [this, key](RprUsdCoreImage* coreImage) {
             delete coreImage;
-            PopCacheEntry(key, desc);
+            m_cache.erase(key);
         }
     );
+    cacheValue.handle = cachedImage;
 
-    CacheEntry cacheEntry;
-    cacheEntry.desc = desc;
-    cacheEntry.handle = cachedImage;
-    it->second.push_back(std::move(cacheEntry));
+    it = m_cache.emplace(std::move(key), std::move(cacheValue)).first;
 
     return cachedImage;
 }
 
-void RprUsdImageCache::PopCacheEntry(
-    CacheKey const& key,
-    CacheEntry::Desc const& desc) {
-
-    auto it = m_cache.find(key);
-    if (it == m_cache.end()) {
-        TF_CODING_ERROR("Failed to release cache entry: no entry with such key - path=%s", key.path.c_str());
-        return;
+std::shared_ptr<RprUsdCoreImage> RprUsdImageCache::CacheValue::Lock(CacheKey const& key) const {
+    auto image = handle.lock();
+    if (!image) {
+        return nullptr;
     }
 
-    auto& entries = it->second;
+    std::string udimFormatString;
 
-    for (size_t i = 0; i < entries.size(); ++i) {
-        auto& entry = entries[i];
-        if (entry.desc == desc) {
-            if (entries.size() == 1) {
-                // if this is the latest entry, remove whole key-value pair
-                m_cache.erase(it);
-            } else {
-                // avoid removing from the middle by swapping with the end element
-                if (i + 1 != entries.size()) {
-                    std::swap(entry, entries.back());
-                }
-                entries.pop_back();
+    // Check if image files were not changed
+    //
+    for (auto& entry : tileModificationTimes) {
+        double modificationTime = entry.second;
+        if (modificationTime == 0.0) {
+            // If the path points to a non-filesystem image (e.g. usdz embedded image)
+            // we rely on the user of the Hydra to correctly reload all materials that use this image
+            //
+            continue;
+        }
+
+        double currentModificationTime;
+
+        uint32_t tileId = entry.first;
+        if (tileId == 0) {
+            currentModificationTime = GetModificationTime(key.path);
+        } else {
+            if (udimFormatString.empty()) {
+                RprUsdGetUDIMFormatString(key.path, &udimFormatString);
             }
-            return;
+
+            auto tilePath = TfStringPrintf(udimFormatString.c_str(), tileId);
+            currentModificationTime = GetModificationTime(tilePath);
+        }
+
+        if (modificationTime != currentModificationTime) {
+            return nullptr;
         }
     }
 
-    TF_CODING_ERROR("Failed to release cache entry: no entry with such desc - path=%s, gamma=%g, wrapType=%u",
-        key.path.c_str(), desc.gamma, desc.wrapType);
-}
+    return image;
 
-bool RprUsdImageCache::CacheKey::Equal::operator()(CacheKey const& lhs, CacheKey const& rhs) const {
-    return lhs.tiles == rhs.tiles &&
-           lhs.path == rhs.path;
-}
-
-bool RprUsdImageCache::CacheEntry::Desc::operator==(Desc const& rhs) const {
-    constexpr static float kGammaEpsilon = 0.1f;
-    return wrapType == rhs.wrapType &&
-           std::abs(gamma - rhs.gamma) < kGammaEpsilon;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

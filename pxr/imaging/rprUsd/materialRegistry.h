@@ -77,7 +77,7 @@ public:
 
     struct TextureCommit {
         std::string filepath;
-        bool forceLinearSpace;
+        std::string colorspace;
         rpr::ImageWrapType wrapType;
 
         std::function<void(std::shared_ptr<RprUsdCoreImage> const&)> setTextureCallback;

@@ -365,6 +365,31 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'OCIO',
+        'settings': [
+            {
+                'name': 'ocioConfigPath',
+                'ui_name': 'OpenColorIO Config Path',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'help': 'The file path of the OpenColorIO config file to be used. Overrides any value specified in OCIO environment variable.',
+                'houdini': {
+                    'type': 'file',
+                    'hidewhen': hidewhen_not_northstar
+                }
+            },
+            {
+                'name': 'ocioRenderingColorSpace',
+                'ui_name': 'OpenColorIO Rendering Color Space',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
+            }
+        ]
+    },
+    {
         'name': 'Seed',
         'settings': [
             {
