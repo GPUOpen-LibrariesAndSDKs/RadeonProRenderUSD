@@ -55,7 +55,16 @@ PXR_NAMESPACE_OPEN_SCOPE
     (lightGroup3) \
     (viewShadingNormal) \
     (reflectionCatcher) \
-    (colorRight)
+    (colorRight) \
+    (lpe0) \
+    (lpe1) \
+    (lpe2) \
+    (lpe3) \
+    (lpe4) \
+    (lpe5) \
+    (lpe6) \
+    (lpe7) \
+    (lpe8) \
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_AOV_TOKENS);
 
