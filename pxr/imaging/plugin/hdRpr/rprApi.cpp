@@ -1283,7 +1283,7 @@ public:
                     if (m_lpeAovPool.empty()) {
                         TF_RUNTIME_ERROR("Cannot create \"%s\" LPE AOV: exceeded the number of LPE AOVs at the same time - %d",
                             outRb.lpe.c_str(), +RPR_AOV_LPE_8 - +RPR_AOV_LPE_0 + 1);
-                        return false;
+                        return nullptr;
                     }
 
                     outRb.aovName = m_lpeAovPool.back();
@@ -1303,7 +1303,7 @@ public:
 
             if (!outRb.lpe.empty() &&
                 RPR_ERROR_CHECK(outRb.rprAov->GetAovFb()->GetRprObject()->SetLPE(outRb.lpe.c_str()), "Failed to set LPE")) {
-                return false;
+                return nullptr;
             }
 
             m_outputRenderBuffers.push_back(std::move(outRb));

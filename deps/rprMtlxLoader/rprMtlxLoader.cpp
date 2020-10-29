@@ -511,15 +511,6 @@ mx::OutputPtr GetOutput(mx::InterfaceElement const* interfaceElement, mx::PortEl
     return GetFirst<mx::Output>(interfaceElement);
 }
 
-mx::NodeDefPtr GetNodeDef(mx::Element const* element) {
-    if (auto shaderRef = element->asA<mx::ShaderRef>()) {
-        return shaderRef->getNodeDef();
-    } else if (auto node = element->asA<mx::Node>()) {
-        return node->getNodeDef();
-    }
-    return nullptr;
-}
-
 template <typename T>
 size_t GetHash(T const& value) {
     return std::hash<T>{}(value);
@@ -1495,7 +1486,7 @@ void ForEachOutput(mx::ElementPtr const& element, F&& func) {
         if (nodeType == "material") {
             for (auto& shaderType : {"surfaceshader", "displacementshader"}) {
                 if (auto shader = node->getInput(shaderType)) {
-                    if (auto shaderNodeElement = element->getParent()->getChild(shader->getNodeName())) {
+                    if (mx::ElementPtr shaderNodeElement = element->getParent()->getChild(shader->getNodeName())) {
                         if (auto shaderNode = shaderNodeElement->asA<mx::Node>()) {
                             if (!processShaderNode(shaderNode)) {
                                 return;
