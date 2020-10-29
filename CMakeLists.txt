@@ -42,8 +42,52 @@ if(NOT MaterialX_FOUND)
     set(MATERIALX_BUILD_GEN_GLSL OFF)
     set(MATERIALX_BUILD_GEN_OSL OFF)
     set(MATERIALX_BUILD_TESTS OFF)
-    add_subdirectory(deps/MaterialX)
+    add_subdirectory(deps/MaterialX EXCLUDE_FROM_ALL) # EXCLUDE_FROM_ALL allows us to skip installation of mtlx static libraries
+
+    install(
+        FILES
+            deps/MaterialX/libraries/bxdf/standard_surface.mtlx
+            deps/MaterialX/libraries/bxdf/usd_preview_surface.mtlx
+        DESTINATION
+            libraries/bxdf)
+    foreach(mtlx_lib stdlib pbrlib)
+        install(
+            FILES
+                deps/MaterialX/libraries/${mtlx_lib}/${mtlx_lib}_ng.mtlx
+                deps/MaterialX/libraries/${mtlx_lib}/${mtlx_lib}_defs.mtlx
+            DESTINATION
+                libraries/${mtlx_lib})
+    endforeach()
 endif()
+
+# RPR C++ wrapper
+# ----------------------------------------------
+
+if(NOT RPR_TOOLS_LOCATION)
+    set(RPR_TOOLS_LOCATION ${RPR_LOCATION_INCLUDE}/../rprTools)
+endif()
+
+if(NOT RPRMTLXLOADER_LOCATION)
+    set(RPRMTLXLOADER_LOCATION deps/rprMtlxLoader)
+endif()
+
+if(NOT RPR_CPP_WRAPPER_LOCATION)
+    set(RPR_CPP_WRAPPER_LOCATION ${RPR_TOOLS_LOCATION})
+endif()
+
+add_library(cpprpr STATIC
+    ${RPRMTLXLOADER_LOCATION}/rprMtlxLoader.h
+    ${RPRMTLXLOADER_LOCATION}/rprMtlxLoader.cpp
+    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRender.hpp
+    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRenderCpp.cpp)
+set_target_properties(cpprpr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(cpprpr PUBLIC ${RPR_CPP_WRAPPER_LOCATION} ${RPRMTLXLOADER_LOCATION})
+target_link_libraries(cpprpr PUBLIC rpr MaterialXCore MaterialXFormat)
+target_compile_definitions(cpprpr PUBLIC
+    RPR_CPPWRAPER_DISABLE_MUTEXLOCK
+    RPR_API_USE_HEADER_V2)
+
+# ----------------------------------------------
 
 if(HoudiniUSD_FOUND)
     # Currently we use it only in activateHoudiniPlugin utility

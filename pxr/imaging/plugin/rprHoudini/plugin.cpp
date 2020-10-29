@@ -24,7 +24,7 @@ void newVopOperator(OP_OperatorTable* io_table) {
         if (!nodeDesc.info) continue;
 
         try {
-            io_table->addOperator(new VOP_RPRMaterialOperator(nodeDesc.info));
+            io_table->addOperator(VOP_RPRMaterialOperator::Create(nodeDesc.info));
         } catch (std::exception& e) {
             fprintf(stderr, "Failed to add %s VOP", nodeDesc.info->GetName());
         }

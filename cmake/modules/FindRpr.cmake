@@ -83,10 +83,6 @@ if(NOT RPR_PLUGINS)
     message(FATAL_ERROR "At least one RPR plugin required")
 endif()
 
-if(NOT DEFINED RPR_TOOLS_LOCATION)
-    set(RPR_TOOLS_LOCATION ${RPR_LOCATION_INCLUDE}/../rprTools)
-endif()
-
 include(FindPackageHandleStandardArgs)
 
 find_package_handle_standard_args(Rpr
@@ -99,17 +95,3 @@ find_package_handle_standard_args(Rpr
 add_library(rpr INTERFACE)
 target_include_directories(rpr INTERFACE ${RPR_LOCATION_INCLUDE})
 target_link_libraries(rpr INTERFACE ${RPR_LIBRARY} ${RPR_LOADSTORE_LIBRARY})
-
-if(NOT DEFINED RPR_CPP_WRAPPER_LOCATION)
-    set(RPR_CPP_WRAPPER_LOCATION ${RPR_TOOLS_LOCATION})
-endif()
-
-add_library(cpprpr STATIC
-    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRender.hpp
-    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRenderCpp.cpp)
-set_target_properties(cpprpr PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(cpprpr PUBLIC ${RPR_CPP_WRAPPER_LOCATION})
-target_link_libraries(cpprpr PUBLIC rpr)
-target_compile_definitions(cpprpr PUBLIC
-    RPR_CPPWRAPER_DISABLE_MUTEXLOCK
-    RPR_API_USE_HEADER_V2)

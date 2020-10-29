@@ -15,6 +15,9 @@ limitations under the License.
 #define RPR_VOPS_MATERIAL_H
 
 #include "pxr/pxr.h"
+#include "pxr/imaging/rprUsd/materialRegistry.h"
+
+#include <rprMtlxLoader.h>
 
 #include <UT/UT_HDKVersion.h>
 #include <VOP/VOP_Node.h>
@@ -28,18 +31,23 @@ PXR_NAMESPACE_OPEN_SCOPE
 class RprUsdMaterialNodeInfo;
 
 struct VOP_RPRMaterialOperator : public VOP_Operator {
-    VOP_RPRMaterialOperator(RprUsdMaterialNodeInfo const* shaderInfo);
-
     RprUsdMaterialNodeInfo const* shaderInfo;
+
+    static VOP_RPRMaterialOperator* Create(RprUsdMaterialNodeInfo const* shaderInfo);
+
+private:
+    template <typename VOP>
+    static VOP_RPRMaterialOperator* _Create(RprUsdMaterialNodeInfo const* shaderInfo);
+
+    VOP_RPRMaterialOperator(RprUsdMaterialNodeInfo const* shaderInfo, OP_Constructor construct, PRM_Template* templates);
 };
 
 class VOP_RPRMaterial : public VOP_Node {
 public:
-    /// Adds an instance of VOP_RPRMaterial to a network.
-    static OP_Node* Create(OP_Network* net, const char* name, OP_Operator* entry);
-
     /// Returns the templates for the shader's input parameters
     static PRM_Template* GetTemplates(RprUsdMaterialNodeInfo const* shaderInfo);
+
+    VOP_RPRMaterial(OP_Network* parent, const char* name, OP_Operator* entry);
 
     /// Returns the label for input port at index i_idx
     const char* inputLabel(unsigned i_idx) const override;
@@ -65,8 +73,6 @@ public:
 #endif
 
 protected:
-    VOP_RPRMaterial(OP_Network* parent, const char* name, VOP_RPRMaterialOperator* entry);
-
     /// Returns the internal name of an input parameter.
     void getInputNameSubclass(UT_String &in, int i_idx) const override;
     /// Returns the index of the named input
@@ -93,6 +99,25 @@ protected:
 private:
     RprUsdMaterialNodeInfo const* m_shaderInfo;
     VOP_Type m_shaderType = VOP_SURFACE_SHADER;
+};
+
+class VOP_MaterialX : public VOP_RPRMaterial {
+public:
+    VOP_MaterialX(OP_Network* parent, const char* name, OP_Operator* entry);
+
+    static PRM_Template* GetTemplates(RprUsdMaterialNodeInfo const* shaderInfo);
+
+    void opChanged(OP_EventType reason, void* data) override;
+    bool runCreateScript() override;
+
+private:
+    static void ElementChoiceGenFunc(void* op, PRM_Name* choices, int maxChoicesSize, const PRM_SpareData*, const PRM_Parm*);
+
+private:
+    UT_String m_file;
+    int m_reloadDummy = 0;
+    double m_fileModificationTime;
+    RPRMtlxLoader::RenderableElements m_renderableElements;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -14,8 +14,6 @@ pxr_library(rprUsd
         arch
         work
         cpprpr
-        MaterialXCore
-        MaterialXFormat
 
     PUBLIC_CLASSES
         util
