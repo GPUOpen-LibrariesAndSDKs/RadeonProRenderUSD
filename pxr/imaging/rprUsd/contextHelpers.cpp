@@ -23,6 +23,12 @@ limitations under the License.
 
 #include <RadeonProRender.hpp>
 
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+#include <RadeonProRender_VK.h>
+#include <RadeonProRender_Baikal.h>
+#include <vulkan/vulkan.h>
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
@@ -267,8 +273,35 @@ rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* 
         flags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
     }
 
+    std::vector<rpr_context_properties> contextProperties;
+    auto appendContextProperty = [&contextProperties](uint64_t propertyKey, void* propertyValue) {
+        contextProperties.push_back((rpr_context_properties)propertyKey);
+        contextProperties.push_back((rpr_context_properties)propertyValue);
+    };
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+    if (metadata->pluginType == RprUsdPluginType::kPluginHybrid && metadata->interopInfo) {
+        // Create interop context for hybrid
+        // TODO: should not it be configurable?
+        constexpr std::uint32_t MB = 1024u * 1024u;
+        static std::uint32_t acc_size = 1024 * MB;
+        static std::uint32_t vbuf_size = 1024 * MB;
+        static std::uint32_t ibuf_size = 512 * MB;
+        static std::uint32_t sbuf_size = 512 * MB;
+
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO, metadata->interopInfo);
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE, &acc_size);
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, &vbuf_size);
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, &ibuf_size);
+        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, &sbuf_size);
+    }
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+    contextProperties.push_back(nullptr);
+
     rpr::Status status;
-    auto context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, nullptr, cachePath, &status);
+    rpr::Context* context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, contextProperties.data(), cachePath, &status);
+
     if (context) {
         if (RPR_ERROR_CHECK(context->SetActivePlugin(pluginID), "Failed to set active plugin")) {
             delete context;

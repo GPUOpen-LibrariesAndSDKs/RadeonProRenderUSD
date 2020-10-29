@@ -58,3 +58,9 @@ target_sources(rprUsd PRIVATE
 add_subdirectory(materialNodes/mtlxFiles)
 
 GroupSources(rprUsd)
+
+if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
+    target_link_libraries(rprUsd ${Vulkan_LIBRARIES})
+    target_include_directories(rprUsd PRIVATE ${Vulkan_INCLUDE_DIRS})
+    target_compile_definitions(rprUsd PUBLIC HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT)
+endif()

@@ -27,6 +27,8 @@ option(PXR_ENABLE_PYTHON_SUPPORT "Enable Python based components for USD" ON)
 option(PXR_USE_PYTHON_3 "Build Python bindings for Python 3" OFF)
 option(PXR_ENABLE_NAMESPACES "Enable C++ namespaces." ON)
 
+option(RPR_ENABLE_VULKAN_INTEROP_SUPPORT OFF "Build hdRpr with Vulkan interop support. Requires Vulkan cmake package")
+
 option(PXR_SYMLINK_HEADER_FILES "Symlink the header files from, ie, pxr/base/lib/tf to CMAKE_DIR/pxr/base/tf, instead of copying; ensures that you may edit the header file in either location, and improves experience in IDEs which find normally the \"copied\" header, ie, CLion; has no effect on windows" OFF)
 
 # Precompiled headers are a win on Windows, not on gcc.

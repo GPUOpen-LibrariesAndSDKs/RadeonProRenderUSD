@@ -19,10 +19,11 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id)
+HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id, HdRprApi* api)
     : HdRenderBuffer(id)
     , m_numMappers(0)
-    , m_isConverged(false) {
+    , m_isConverged(false)
+    , m_rprApi(api) {
 
 }
 
@@ -148,6 +149,23 @@ bool HdRprRenderBuffer::IsConverged() const {
 
 void HdRprRenderBuffer::SetConverged(bool converged) {
     return m_isConverged.store(converged);
+}
+
+VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
+    if ("aov_color" == GetId().GetElementString()) {
+        rpr::FrameBuffer* color = m_rprApi->GetRawColorFramebuffer();
+        // RPR framebuffer not created yet
+        if (!color) {
+            return VtValue();
+        }
+
+        VtDictionary dictionary;
+        dictionary["isVulkanInteropEnabled"] = m_rprApi->IsVulkanInteropEnabled();
+        dictionary["framebuffer"] = color;
+
+        return VtValue(dictionary);
+    }
+    return VtValue();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

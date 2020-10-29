@@ -20,9 +20,11 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class HdRprApi;
+
 class HdRprRenderBuffer final : public HdRenderBuffer {
 public:
-    HdRprRenderBuffer(SdfPath const& id);
+    HdRprRenderBuffer(SdfPath const& id, HdRprApi* api = nullptr);
     ~HdRprRenderBuffer() override = default;
 
     void Sync(HdSceneDelegate* sceneDelegate,
@@ -59,6 +61,10 @@ public:
 
     void* GetPointerForWriting() { return m_mappedBuffer.data(); }
 
+    // HdRprRenderBuffer should hold actual framebuffer
+    // But for now just take it from HdRprApi in order to provide valid API
+    VtValue GetResource(bool multiSampled) const;
+
 protected:
     void _Deallocate() override;
 
@@ -71,6 +77,8 @@ private:
 
     std::atomic<bool> m_isConverged;
 
+    HdRprApi* m_rprApi = nullptr;
+    
 #ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
     std::mutex m_mapMutex;
     std::condition_variable m_mapConditionVar;
