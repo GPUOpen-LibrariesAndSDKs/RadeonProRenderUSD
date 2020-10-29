@@ -96,12 +96,16 @@ else()
 endif()
 
 if(OpenVDB_FOUND)
-    find_package(OpenEXR QUIET COMPONENTS Half)
-    if(NOT OpenEXR_FOUND) # Houdini 18.5 starting from some version ships Half_sidefx lib instead of just Half
+    if(HoudiniUSD_FOUND)
         find_package(OpenEXR QUIET COMPONENTS Half_sidefx)
-        if(NOT OpenEXR_FOUND)
-            message(FATAL_ERROR "Failed to find Half library")
-        endif()
+    endif()
+
+    if(NOT OpenEXR_FOUND)
+        find_package(OpenEXR QUIET COMPONENTS Half)
+    endif()
+
+    if(NOT OpenEXR_FOUND)
+        message(FATAL_ERROR "Failed to find Half library")
     endif()
 else()
     message(STATUS "Skipping OpenVDB support")
