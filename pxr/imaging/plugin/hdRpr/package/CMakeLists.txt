@@ -33,7 +33,8 @@ if(DUMP_PACKAGE_FILE_NAME)
     set(PACKAGE_VERSION "${HD_RPR_MAJOR_VERSION}.${HD_RPR_MINOR_VERSION}.${HD_RPR_PATCH_VERSION}")
 
     if(HoudiniUSD_FOUND)
-        set(TARGET "Houdini-${Houdini_VERSION}")
+        set(TARGET "Houdini-${Houdini_VERSION}-py${_houdini_python_version}")
+
     else()
         set(TARGET "USD-${USD_MINOR_VERSION}.${USD_PATCH_VERSION}")
     endif()
