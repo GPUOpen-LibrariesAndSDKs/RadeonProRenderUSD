@@ -33,6 +33,7 @@ limitations under the License.
 #include <memory>
 #include <vector>
 #include <string>
+#include <condition_variable>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
