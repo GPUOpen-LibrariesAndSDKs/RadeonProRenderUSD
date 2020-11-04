@@ -103,6 +103,7 @@ if(NOT HYTHON_EXECUTABLE)
     message(FATAL "Could not find hython executable")
 endif()
 list(APPEND HUSD_REQ_VARS "HYTHON_EXECUTABLE")
+set(PYTHON_EXECUTABLE ${HYTHON_EXECUTABLE})
 
 if(WIN32)
     set(Houdini_LIB_DIR ${HOUDINI_ROOT}/custom/houdini/dsolib)

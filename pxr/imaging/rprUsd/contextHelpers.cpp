@@ -14,6 +14,7 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/contextHelpers.h"
 #include "pxr/imaging/rprUsd/contextMetadata.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
+#include "pxr/imaging/rprUsd/config.h"
 #include "pxr/imaging/rprUsd/error.h"
 
 #include "pxr/imaging/glf/glew.h"
@@ -136,7 +137,7 @@ rpr::CreationFlags getAllCompatibleGpuFlags(rpr_int pluginID, const char* cacheP
     additionalFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
 #endif
 
-    auto contextIsCreatable = [additionalFlags, pluginID, cachePath](rpr::CreationFlags creationFlag, rpr_context_info contextInfo) {
+    auto contextIsCreatable = [additionalFlags, pluginID, &cachePath](rpr::CreationFlags creationFlag, rpr_context_info contextInfo) {
         rpr_context temporaryContext = nullptr;
         rpr_int id = pluginID;
         auto status = rprCreateContext(RPR_API_VERSION, &id, 1, creationFlag | additionalFlags, nullptr, cachePath, &temporaryContext);
@@ -215,8 +216,12 @@ rpr::CreationFlags getRprCreationFlags(RprUsdRenderDeviceType renderDevice, rpr_
 
 } // namespace anonymous
 
-rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* metadata) {
+rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
     SetupRprTracing();
+
+    RprUsdConfig* config;
+    auto configLock = RprUsdConfig::GetInstance(&config);
+    auto cachePath = config->GetKernelCacheDir().c_str();
 
     auto pluginLibNameIter = kPluginLibNames.find(metadata->pluginType);
     if (pluginLibNameIter == kPluginLibNames.end()) {
@@ -314,6 +319,8 @@ rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* 
     if (TfGetEnvSetting(RPRUSD_ENABLE_TRACING)) {
         RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
     }
+
+    RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, config->GetTextureCacheDir().c_str()), "Failed to set texture cache path");
 
     return context;
 }

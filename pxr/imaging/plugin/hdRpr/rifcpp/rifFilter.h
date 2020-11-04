@@ -17,7 +17,7 @@ limitations under the License.
 #include "rifContext.h"
 #include "rifImage.h"
 
-#include "boostIncludePath.h"
+#include "pxr/imaging/rprUsd/boostIncludePath.h"
 #include BOOST_INCLUDE_PATH(variant.hpp)
 
 #include "pxr/base/gf/matrix4f.h"

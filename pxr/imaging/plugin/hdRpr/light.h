@@ -18,7 +18,7 @@ limitations under the License.
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/imaging/hd/light.h"
 
-#include "boostIncludePath.h"
+#include "pxr/imaging/rprUsd/boostIncludePath.h"
 #include BOOST_INCLUDE_PATH(variant.hpp)
 
 namespace rpr { class Shape; class PointLight; class SpotLight; class IESLight; class DiskLight; class SphereLight; }
