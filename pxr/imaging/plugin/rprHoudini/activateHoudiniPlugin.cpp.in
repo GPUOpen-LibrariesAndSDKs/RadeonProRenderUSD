@@ -217,6 +217,7 @@ int ActivateHoudiniPlugin() {
     std::map<std::string, fs::path> env = {
         {"RPR", rprPath},
         {"HOUDINI_PATH", "$RPR/houdini"},
+        {"PYTHONPATH", "$RPR/lib/python"},
 #if defined(_WIN32) || defined(_WIN64)
         {"PATH", "$RPR/lib"}
 #endif

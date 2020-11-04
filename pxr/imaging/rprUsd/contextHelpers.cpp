@@ -137,7 +137,7 @@ rpr::CreationFlags getAllCompatibleGpuFlags(rpr_int pluginID, const char* cacheP
     additionalFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
 #endif
 
-    auto contextIsCreatable = [additionalFlags, pluginID, &cachePath](rpr::CreationFlags creationFlag, rpr_context_info contextInfo) {
+    auto contextIsCreatable = [additionalFlags, pluginID, cachePath](rpr::CreationFlags creationFlag, rpr_context_info contextInfo) {
         rpr_context temporaryContext = nullptr;
         rpr_int id = pluginID;
         auto status = rprCreateContext(RPR_API_VERSION, &id, 1, creationFlag | additionalFlags, nullptr, cachePath, &temporaryContext);

@@ -59,6 +59,23 @@ std::string GetAppDataPath() {
     return ".";
 }
 
+std::string GetDefaultCacheDir(const char* cacheType) {
+    auto cacheDir = ArchGetEnv("RPR");
+    if (cacheDir.empty()) {
+        // Fallback to AppData
+        cacheDir = GetAppDataPath() + (ARCH_PATH_SEP "hdRpr");
+        ArchCreateDirectory(cacheDir.c_str());
+    }
+
+    cacheDir += (ARCH_PATH_SEP "cache");
+    ArchCreateDirectory(cacheDir.c_str());
+
+    cacheDir = cacheDir + ARCH_PATH_SEP + cacheType;
+    ArchCreateDirectory(cacheDir.c_str());
+
+    return cacheDir;
+}
+
 template <typename T>
 bool InitJsonProperty(const char* propertyName, T const& defaultValue, json* json) {
     bool setDefaultValue = false;
@@ -79,6 +96,21 @@ bool InitJsonProperty(const char* propertyName, T const& defaultValue, json* jso
         (*json)[propertyName] = defaultValue;
     }
     return setDefaultValue;
+}
+
+template <typename T>
+bool GetJsonProperty(const char* propertyName, json const& json, T* property) {
+    auto it = json.find(propertyName);
+    if (it != json.end()) {
+        try {
+            *property = it->get<T>();
+            return true;
+        } catch (json::exception& e) {
+            TF_UNUSED(e);
+        }
+    }
+
+    return false;
 }
 
 const char* kShowRestartRequiredMessage = "ShowRestartRequiredMessage";
@@ -119,12 +151,8 @@ RprUsdConfig::RprUsdConfig()
         cfgFile >> m_impl->cfg;
     }
 
-    auto defaultCacheDir = configDir + (ARCH_PATH_SEP "cache");
-
     bool configDirty = false;
     configDirty |= InitJsonProperty(kShowRestartRequiredMessage, true, &m_impl->cfg);
-    configDirty |= InitJsonProperty(kTextureCacheDir, defaultCacheDir, &m_impl->cfg);
-    configDirty |= InitJsonProperty(kKernelCacheDir, defaultCacheDir, &m_impl->cfg);
     if (configDirty) {
         Save();
     }
@@ -157,7 +185,11 @@ void RprUsdConfig::SetTextureCacheDir(std::string const& newValue) {
     }
 }
 std::string const& RprUsdConfig::GetTextureCacheDir() const {
-    return m_impl->cfg[kTextureCacheDir].get_ref<std::string const&>();
+    std::string ret;
+    if (!GetJsonProperty(kTextureCacheDir, m_impl->cfg, &ret)) {
+        ret = GetDefaultCacheDir("texture");
+    }
+    return ret;
 }
 
 void RprUsdConfig::SetKernelCacheDir(std::string const& newValue) {
@@ -167,7 +199,11 @@ void RprUsdConfig::SetKernelCacheDir(std::string const& newValue) {
     }
 }
 std::string const& RprUsdConfig::GetKernelCacheDir() const {
-    return m_impl->cfg.at(kKernelCacheDir).get_ref<std::string const&>();
+    std::string ret;
+    if (!GetJsonProperty(kKernelCacheDir, m_impl->cfg, &ret)) {
+        ret = GetDefaultCacheDir("kernel");
+    }
+    return ret;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
