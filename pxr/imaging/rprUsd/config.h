@@ -18,6 +18,7 @@ limitations under the License.
 #include "pxr/base/tf/singleton.h"
 
 #include <mutex>
+#include <memory>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
