@@ -39,12 +39,12 @@ public:
     void SetRestartWarning(bool);
 
     RPRUSD_API
-    std::string const& GetTextureCacheDir() const;
+    std::string GetTextureCacheDir() const;
     RPRUSD_API
     void SetTextureCacheDir(std::string const&);
 
     RPRUSD_API
-    std::string const& GetKernelCacheDir() const;
+    std::string GetKernelCacheDir() const;
     RPRUSD_API
     void SetKernelCacheDir(std::string const&);
 

@@ -184,7 +184,7 @@ void RprUsdConfig::SetTextureCacheDir(std::string const& newValue) {
         Save();
     }
 }
-std::string const& RprUsdConfig::GetTextureCacheDir() const {
+std::string RprUsdConfig::GetTextureCacheDir() const {
     std::string ret;
     if (!GetJsonProperty(kTextureCacheDir, m_impl->cfg, &ret)) {
         ret = GetDefaultCacheDir("texture");
@@ -198,7 +198,7 @@ void RprUsdConfig::SetKernelCacheDir(std::string const& newValue) {
         Save();
     }
 }
-std::string const& RprUsdConfig::GetKernelCacheDir() const {
+std::string RprUsdConfig::GetKernelCacheDir() const {
     std::string ret;
     if (!GetJsonProperty(kKernelCacheDir, m_impl->cfg, &ret)) {
         ret = GetDefaultCacheDir("kernel");

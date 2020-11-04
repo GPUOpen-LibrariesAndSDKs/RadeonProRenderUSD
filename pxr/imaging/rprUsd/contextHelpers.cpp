@@ -221,7 +221,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
     RprUsdConfig* config;
     auto configLock = RprUsdConfig::GetInstance(&config);
-    auto cachePath = config->GetKernelCacheDir().c_str();
+    auto cachePath = config->GetKernelCacheDir();
 
     auto pluginLibNameIter = kPluginLibNames.find(metadata->pluginType);
     if (pluginLibNameIter == kPluginLibNames.end()) {
@@ -247,12 +247,12 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         //   3) MultiGPU can be enabled only through vulkan interop
         flags = RPR_CREATION_FLAGS_ENABLE_GPU0;
     } else {
-        flags = getRprCreationFlags(metadata->renderDeviceType, pluginID, cachePath);
+        flags = getRprCreationFlags(metadata->renderDeviceType, pluginID, cachePath.c_str());
         if (!flags) {
             bool isGpuIncompatible = metadata->renderDeviceType == RprUsdRenderDeviceType::GPU;
             PRINT_CONTEXT_CREATION_DEBUG_INFO("%s is not compatible", isGpuIncompatible ? "GPU" : "CPU");
             metadata->renderDeviceType = isGpuIncompatible ? RprUsdRenderDeviceType::CPU : RprUsdRenderDeviceType::GPU;
-            flags = getRprCreationFlags(metadata->renderDeviceType, pluginID, cachePath);
+            flags = getRprCreationFlags(metadata->renderDeviceType, pluginID, cachePath.c_str());
             if (!flags) {
                 PRINT_CONTEXT_CREATION_DEBUG_INFO("Could not find compatible device");
                 return nullptr;
@@ -305,7 +305,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
     contextProperties.push_back(nullptr);
 
     rpr::Status status;
-    rpr::Context* context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, contextProperties.data(), cachePath, &status);
+    rpr::Context* context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, contextProperties.data(), cachePath.c_str(), &status);
 
     if (context) {
         if (RPR_ERROR_CHECK(context->SetActivePlugin(pluginID), "Failed to set active plugin")) {
