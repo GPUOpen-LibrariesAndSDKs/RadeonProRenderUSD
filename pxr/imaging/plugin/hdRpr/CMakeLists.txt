@@ -1,6 +1,5 @@
 set(PXR_PREFIX pxr/imaging)
 set(PXR_PACKAGE hdRpr)
-add_custom_target(shared_libs)
 
 set(OptLibs ${ARGN})
 set(OptBin ${ARGN})
@@ -19,7 +18,6 @@ endif(OpenVDB_FOUND)
 set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
 if(HoudiniUSD_FOUND)
     list(APPEND OptLibs Houdini)
-    add_definitions(-DBUILD_AS_HOUDINI_PLUGIN)
     add_definitions(-DENABLE_MULTITHREADED_RENDER_BUFFER)
     add_definitions(-DHDRPR_DEFAULT_MATERIAL_NETWORK_SELECTOR="karma")
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Houdini.png${_sep}images/restartRequired.png)
@@ -41,7 +39,6 @@ set(GENERATION_DEPENDENT_FILES ${GEN_SCRIPT}
     ${GENERATION_SCRIPTS_DIR}/generateRenderSettingFiles.py
     ${GENERATION_SCRIPTS_DIR}/generateGeometrySettingFiles.py)
 if(HoudiniUSD_FOUND)
-    set(GEN_SCRIPT_PYTHON ${HYTHON_EXECUTABLE})
     set(GEN_SCRIPT_ARGS --houdini_root \"${HOUDINI_ROOT}\" ${GEN_SCRIPT_ARGS})
     set(GENERATED_FILES ${GENERATED_FILES}
         ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Light.ds
@@ -83,7 +80,9 @@ list(APPEND RIF_MODEL_RESOURCE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
 
 pxr_plugin(hdRpr
-   LIBRARIES
+    DISABLE_PRECOMPILED_HEADERS
+
+    LIBRARIES
         ar
         trace
         plug
@@ -100,6 +99,7 @@ pxr_plugin(hdRpr
         pxOsd
         cameraUtil
         rprUsd
+        json
         ${RIF_LIBRARY}
         ${OPENEXR_LIBRARIES}
 
@@ -139,7 +139,6 @@ pxr_plugin(hdRpr
         ${OptClass}
 
     PRIVATE_HEADERS
-        boostIncludePath.h
         baseRprim.h
         api.h
 

@@ -11,20 +11,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#ifndef PXR_IMAGING_RPR_USD_CONTEXT_HELPERS_H
-#define PXR_IMAGING_RPR_USD_CONTEXT_HELPERS_H
+#include "pxr/pxr.h"
+#include "pxr/base/tf/registryManager.h"
+#include "pxr/base/tf/scriptModuleLoader.h"
+#include "pxr/base/tf/token.h"
 
-#include "pxr/imaging/rprUsd/api.h"
-
-namespace rpr { class Context; }
+#include <vector>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-struct RprUsdContextMetadata;
-
-RPRUSD_API
-rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata);
+TF_REGISTRY_FUNCTION(TfScriptModuleLoader) {
+    // List of direct dependencies for this library.
+    const std::vector<TfToken> reqs = {
+        TfToken("tf"),
+    };
+    TfScriptModuleLoader::GetInstance().
+        RegisterLibrary(TfToken("rprUsd"), TfToken("rpr.RprUsd"), reqs);
+}
 
 PXR_NAMESPACE_CLOSE_SCOPE
-
-#endif // PXR_IMAGING_RPR_USD_CONTEXT_HELPERS_H

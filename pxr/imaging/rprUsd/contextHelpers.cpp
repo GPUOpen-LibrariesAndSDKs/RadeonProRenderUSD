@@ -14,6 +14,7 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/contextHelpers.h"
 #include "pxr/imaging/rprUsd/contextMetadata.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
+#include "pxr/imaging/rprUsd/config.h"
 #include "pxr/imaging/rprUsd/error.h"
 
 #include "pxr/imaging/glf/glew.h"
@@ -215,8 +216,12 @@ rpr::CreationFlags getRprCreationFlags(RprUsdRenderDeviceType renderDevice, rpr_
 
 } // namespace anonymous
 
-rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* metadata) {
+rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
     SetupRprTracing();
+
+    RprUsdConfig* config;
+    auto configLock = RprUsdConfig::GetInstance(&config);
+    auto cachePath = config->GetKernelCacheDir();
 
     auto pluginLibNameIter = kPluginLibNames.find(metadata->pluginType);
     if (pluginLibNameIter == kPluginLibNames.end()) {
@@ -242,12 +247,12 @@ rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* 
         //   3) MultiGPU can be enabled only through vulkan interop
         flags = RPR_CREATION_FLAGS_ENABLE_GPU0;
     } else {
-        flags = getRprCreationFlags(metadata->renderDeviceType, pluginID, cachePath);
+        flags = getRprCreationFlags(metadata->renderDeviceType, pluginID, cachePath.c_str());
         if (!flags) {
             bool isGpuIncompatible = metadata->renderDeviceType == RprUsdRenderDeviceType::GPU;
             PRINT_CONTEXT_CREATION_DEBUG_INFO("%s is not compatible", isGpuIncompatible ? "GPU" : "CPU");
             metadata->renderDeviceType = isGpuIncompatible ? RprUsdRenderDeviceType::CPU : RprUsdRenderDeviceType::GPU;
-            flags = getRprCreationFlags(metadata->renderDeviceType, pluginID, cachePath);
+            flags = getRprCreationFlags(metadata->renderDeviceType, pluginID, cachePath.c_str());
             if (!flags) {
                 PRINT_CONTEXT_CREATION_DEBUG_INFO("Could not find compatible device");
                 return nullptr;
@@ -300,7 +305,7 @@ rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* 
     contextProperties.push_back(nullptr);
 
     rpr::Status status;
-    rpr::Context* context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, contextProperties.data(), cachePath, &status);
+    rpr::Context* context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, flags, contextProperties.data(), cachePath.c_str(), &status);
 
     if (context) {
         if (RPR_ERROR_CHECK(context->SetActivePlugin(pluginID), "Failed to set active plugin")) {
@@ -314,6 +319,8 @@ rpr::Context* RprUsdCreateContext(char const* cachePath, RprUsdContextMetadata* 
     if (TfGetEnvSetting(RPRUSD_ENABLE_TRACING)) {
         RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
     }
+
+    RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, config->GetTextureCacheDir().c_str()), "Failed to set texture cache path");
 
     return context;
 }

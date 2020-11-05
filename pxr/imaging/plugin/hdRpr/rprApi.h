@@ -168,9 +168,6 @@ public:
     TfToken const& GetCurrentRenderQuality() const;
     rpr::FrameBuffer* GetRawColorFramebuffer();
 
-    static std::string GetAppDataPath();
-    static std::string GetCachePath();
-
 private:
     HdRprApiImpl* m_impl = nullptr;
 };

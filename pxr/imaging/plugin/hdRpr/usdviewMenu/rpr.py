@@ -12,11 +12,42 @@
 from pxr import Tf
 from pxr.Plug import Registry
 from pxr.Usdviewq.plugin import PluginContainer
+from pxr.Usdviewq.qt import QtWidgets
 
 from ctypes import cdll, c_void_p, c_char_p, cast
 from ctypes.util import find_library
 
 import os
+import glob
+
+from rpr import RprUsd
+
+def setCacheDir(usdviewApi, type, startDirectory, setter):
+    directory = QtWidgets.QFileDialog.getExistingDirectory(
+        usdviewApi._UsdviewApi__appController._mainWindow,
+        caption='RPR {} Cache Directory'.format(type),
+        dir=startDirectory)
+
+    if directory:
+        setter(directory)
+
+def SetTextureCacheDir(usdviewApi):
+    setCacheDir(usdviewApi, 'Texture', RprUsd.Config.GetTextureCacheDir(), RprUsd.Config.SetTextureCacheDir)
+def SetKernelCacheDir(usdviewApi):
+    setCacheDir(usdviewApi, 'Kernel', RprUsd.Config.GetKernelCacheDir(), RprUsd.Config.SetKernelCacheDir)
+
+def clearCache(cache_dir):
+    num_files_removed = 0
+    for pattern in ('*.bin.check', '*.bin', '*.cache'):
+        for cache_file in glob.iglob(os.path.join(cache_dir, pattern)):
+            os.remove(cache_file)
+            num_files_removed += 1
+    print('RPR: removed {} cache files'.format(num_files_removed))
+
+def ClearTextureCache(usdviewApi):
+    clearCache(RprUsd.Config.GetTextureCacheDir())
+def ClearKernelCache(usdviewApi):
+    clearCache(RprUsd.Config.GetKernelCacheDir())
 
 def getRprPath(_pathCache=[None]):
     if _pathCache[0]:
@@ -118,6 +149,23 @@ class RprPluginContainer(PluginContainer):
             "Full 2.0 (Beta)",
             SetRenderNorthstarQuality)
 
+        self.setTextureCacheDir = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setTextureCacheDir",
+            "Set Texture Cache Directory",
+            SetTextureCacheDir)
+        self.setKernelCacheDir = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setKernelCacheDir",
+            "Set Kernel Cache Directory",
+            SetKernelCacheDir)
+        self.clearTextureCache = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.clearTextureCache",
+            "Clear Texture Cache",
+            ClearTextureCache)
+        self.clearKernelCache = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.clearKernelCache",
+            "Clear Kernel Cache",
+            ClearKernelCache)
+
         self.restartAction = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.restartAction",
             "Restart",
@@ -138,6 +186,12 @@ class RprPluginContainer(PluginContainer):
         renderQualityMenu.addItem(self.setRenderHighQuality)
         renderQualityMenu.addItem(self.setRenderFullQuality)
         renderQualityMenu.addItem(self.setRenderNorthstarQuality)
+
+        cacheMenu = rprMenu.findOrCreateSubmenu('Cache')
+        cacheMenu.addItem(self.setTextureCacheDir)
+        cacheMenu.addItem(self.setKernelCacheDir)
+        cacheMenu.addItem(self.clearTextureCache)
+        cacheMenu.addItem(self.clearKernelCache)
 
         rprMenu.addItem(self.restartAction)
 

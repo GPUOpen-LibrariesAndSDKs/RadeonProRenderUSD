@@ -17,12 +17,6 @@ target_link_libraries(RPR_for_Houdini
     rprUsd
     Houdini)
 
-install(
-    FILES
-        ui/RPR.svg
-    DESTINATION
-        houdini/config/Icons)
-
 GroupSources(RPR_for_Houdini)
 
 houdini_configure_target(RPR_for_Houdini "INSTDIR" "${CMAKE_INSTALL_PREFIX}/houdini/dso")
@@ -41,3 +35,19 @@ install(
         ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_exportRpr1.hda
         ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_standard_rendervars.hda
     DESTINATION "houdini/otls")
+install(
+    FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/__init__.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/cache.py
+    DESTINATION
+        houdini/scripts/python/houRpr)
+install(
+    FILES
+        ui/RPR.svg
+    DESTINATION
+        houdini/config/Icons)
+install(
+    FILES
+        ui/MainMenuCommon.xml
+    DESTINATION
+        houdini)
