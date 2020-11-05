@@ -24,7 +24,7 @@ class HdRprApi;
 
 class HdRprRenderBuffer final : public HdRenderBuffer {
 public:
-    HdRprRenderBuffer(SdfPath const& id, HdRprApi* rprApi);
+    HdRprRenderBuffer(SdfPath const& id, HdRprApi* api = nullptr);
     ~HdRprRenderBuffer() override = default;
 
     void Sync(HdSceneDelegate* sceneDelegate,
@@ -77,8 +77,8 @@ private:
 
     std::atomic<bool> m_isConverged;
 
-    HdRprApi* m_rprApi;
-
+    HdRprApi* m_rprApi = nullptr;
+    
 #ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
     std::mutex m_mapMutex;
     std::condition_variable m_mapConditionVar;

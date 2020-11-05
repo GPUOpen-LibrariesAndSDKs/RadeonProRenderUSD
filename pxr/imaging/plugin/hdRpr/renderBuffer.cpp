@@ -12,7 +12,6 @@ limitations under the License.
 ************************************************************************/
 
 #include "renderBuffer.h"
-#include "renderDelegate.h"
 #include "renderParam.h"
 #include "rprApi.h"
 
@@ -20,11 +19,11 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id, HdRprApi* rprApi)
+HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id, HdRprApi* api)
     : HdRenderBuffer(id)
-    , m_rprApi(rprApi)
     , m_numMappers(0)
-    , m_isConverged(false) {
+    , m_isConverged(false)
+    , m_rprApi(api) {
 
 }
 
