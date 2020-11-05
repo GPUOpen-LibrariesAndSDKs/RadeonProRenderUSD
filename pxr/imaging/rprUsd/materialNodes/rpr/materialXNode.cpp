@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
+#include "materialXNode.h"
 #include "baseNode.h"
 #include "nodeInfo.h"
 
@@ -26,12 +27,7 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PRIVATE_TOKENS(RprUsdRprMaterialXNodeTokens,
-    (rpr_materialx_node)
-    (file)
-    (surfaceElement)
-    (displacementElement)
-);
+TF_DEFINE_PUBLIC_TOKENS(RprUsdRprMaterialXNodeTokens, RPRUSD_RPR_MATERIALX_NODE_TOKENS);
 
 static rpr_material_node ReleaseOutputNodeOwnership(RPRMtlxLoader::Result* mtlx, RPRMtlxLoader::OutputType outputType) {
     auto idx = mtlx->rootNodeIndices[outputType];
@@ -75,13 +71,9 @@ public:
         if (inputId == RprUsdRprMaterialXNodeTokens->file) {
             if (value.IsHolding<SdfAssetPath>()) {
                 auto& assetPath = value.UncheckedGet<SdfAssetPath>();
-                auto& path = assetPath.GetResolvedPath();
 
-                if (m_mtlxFilepath != path) {
-                    m_mtlxFilepath = path;
-
-                    ResetNodeOutput();
-                }
+                m_mtlxFilepath = assetPath.GetResolvedPath();
+                ResetNodeOutput();
 
                 return true;
             } else {

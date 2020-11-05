@@ -12,9 +12,12 @@ limitations under the License.
 ************************************************************************/
 
 #include "material.h"
+#include "pxr/imaging/rprUsd/materialNodes/rpr/materialXNode.h"
 
 #include "renderParam.h"
 #include "rprApi.h"
+
+#include "pxr/usd/sdf/assetPath.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -39,6 +42,36 @@ void HdRprMaterial::Sync(HdSceneDelegate* sceneDelegate,
         if (vtMat.IsHolding<HdMaterialNetworkMap>()) {
             auto& networkMap = vtMat.UncheckedGet<HdMaterialNetworkMap>();
             m_rprMaterial = rprApi->CreateMaterial(sceneDelegate, networkMap);
+        }
+
+        if (!m_rprMaterial) {
+            // Autodesk's Hydra Scene delegate may give us a mtlx file path directly,
+            // to reuse existing material processing code, we create HdMaterialNetworkMap
+            // that holds rpr_materialx_node
+            //
+            static TfToken materialXFilenameToken("MaterialXFilename", TfToken::Immortal);
+            auto materialXFilename = sceneDelegate->Get(GetId(), materialXFilenameToken);
+            if (materialXFilename.IsHolding<SdfAssetPath>()) {
+                auto& mtlxAssetPath = materialXFilename.UncheckedGet<SdfAssetPath>();
+                auto& mtlxPath = mtlxAssetPath.GetResolvedPath();
+                if (!mtlxPath.empty()) {
+                    HdMaterialNetwork network;
+                    network.nodes.emplace_back();
+                    HdMaterialNode& mtlxNode = network.nodes.back();
+                    mtlxNode.identifier = RprUsdRprMaterialXNodeTokens->rpr_materialx_node;
+                    mtlxNode.parameters.emplace(RprUsdRprMaterialXNodeTokens->file, materialXFilename);
+
+                    // Use the same network for both surface and displacement terminals,
+                    // RprUsdMaterialRegistry handles automatically shared nodes between terminal networks
+                    //
+                    HdMaterialNetworkMap networkMap;
+                    networkMap.map[HdMaterialTerminalTokens->surface] = network;
+                    networkMap.map[HdMaterialTerminalTokens->displacement] = network;
+                    networkMap.terminals.push_back(mtlxNode.path);
+
+                    m_rprMaterial = rprApi->CreateMaterial(sceneDelegate, networkMap);
+                }
+            }
         }
 
         rprRenderParam->MaterialDidChange(sceneDelegate, GetId());

@@ -813,6 +813,16 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
     } else if (mtlxNode->getCategory() == "normal") {
         rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &rprNode);
         rprMaterialNodeSetInputUByKey(rprNode, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_N);
+    } else if (mtlxNode->getCategory() == "sqrt") {
+        rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_ARITHMETIC, &rprNode);
+        rprMaterialNodeSetInputUByKey(rprNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_POW);
+        rprMaterialNodeSetInputFByKey(rprNode, RPR_MATERIAL_INPUT_COLOR1, 0.5f, 0.5f, 0.5f, 1.0f);
+        static Mtlx2Rpr::Node s_sqrtMapping = {
+            RPR_MATERIAL_NODE_ARITHMETIC, {
+                {"in", RPR_MATERIAL_INPUT_COLOR0}
+            }
+        };
+        rprNodeMapping = &s_sqrtMapping;
     } else if (mtlxNode->getCategory() == "image") {
         return std::make_unique<RprImageNode>(context);
     } else if (mtlxNode->getCategory() == "swizzle") {

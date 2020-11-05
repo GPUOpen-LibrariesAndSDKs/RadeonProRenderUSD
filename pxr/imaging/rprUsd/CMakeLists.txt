@@ -31,6 +31,7 @@ pxr_library(rprUsd
         error.h
         helpers.h
         materialHelpers.h
+        materialNodes/rpr/materialXNode.h
 
     RESOURCE_FILES
 )
