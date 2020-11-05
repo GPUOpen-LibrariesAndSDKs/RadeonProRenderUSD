@@ -386,8 +386,8 @@ function(pxr_setup_python)
     # Join these with a ', '
     string(REPLACE ";" ", " pyModulesStr "${converted}")
 
-    # Install a pxr __init__.py with an appropriate __all__
-    _get_install_dir(lib/python/pxr installPrefix)
+    # Install a rpr __init__.py with an appropriate __all__
+    _get_install_dir(lib/python/rpr installPrefix)
 
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated_modules_init.py"
          "__all__ = [${pyModulesStr}]\n")

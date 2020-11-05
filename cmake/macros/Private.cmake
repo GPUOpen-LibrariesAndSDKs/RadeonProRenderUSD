@@ -127,7 +127,7 @@ function(_install_python LIBRARY_NAME)
     foreach(file ${ip_FILES})
         set(filesToInstall "")
         set(installDest 
-            "${libPythonPrefix}/pxr/${LIBRARY_INSTALLNAME}")
+            "${libPythonPrefix}/rpr/${LIBRARY_INSTALLNAME}")
 
         # Only attempt to compile .py files. Files like plugInfo.json may also
         # be in this list
@@ -163,10 +163,6 @@ function(_install_python LIBRARY_NAME)
             message(FATAL_ERROR "Cannot have non-Python file ${file} in PYTHON_FILES.")
         endif()
 
-        # Note that we always install under lib/python/pxr, even if we are in 
-        # the third_party project. This means the import will always look like
-        # 'from pxr import X'. We need to do this per-loop iteration because
-        # the installDest may be different due to the presence of subdirs.
         install(
             FILES
                 ${filesToInstall}
@@ -273,7 +269,7 @@ function(_install_pyside_ui_files LIBRARY_NAME)
 
     install(
         FILES ${uiFiles}
-        DESTINATION "${libPythonPrefix}/pxr/${LIBRARY_INSTALLNAME}"
+        DESTINATION "${libPythonPrefix}/rpr/${LIBRARY_INSTALLNAME}"
     )
 endfunction() # _install_pyside_ui_files
 
@@ -945,12 +941,7 @@ function(_pxr_python_module NAME)
         APPEND PROPERTY PXR_PYTHON_MODULES ${pyModuleName}
     )
 
-    # Always install under the 'pxr' module, rather than base on the
-    # project name. This makes importing consistent, e.g. 
-    # 'from pxr import X'. Additionally, python libraries always install
-    # into the default lib install, not into the third_party subdirectory
-    # or similar.
-    set(libInstallPrefix "lib/python/pxr/${pyModuleName}")
+    set(libInstallPrefix "lib/python/rpr/${pyModuleName}")
 
     # Python modules need to be able to access their corresponding
     # wrapped library and the install lib directory.

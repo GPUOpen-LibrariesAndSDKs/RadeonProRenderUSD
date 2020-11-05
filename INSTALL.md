@@ -16,6 +16,9 @@ Add a new Houdini package with such configuration json:
         },
         {
             "PATH":"$RPR/lib"
+        },
+        {
+            "PYTHONPATH":"$RPR/lib/python"
         }
     ]
 }

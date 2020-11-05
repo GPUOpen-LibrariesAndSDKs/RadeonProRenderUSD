@@ -14,9 +14,11 @@ pxr_library(rprUsd
         arch
         work
         cpprpr
+        json
 
     PUBLIC_CLASSES
         util
+        config
         contextHelpers
         coreImage
         debugCodes
@@ -31,10 +33,23 @@ pxr_library(rprUsd
         error.h
         helpers.h
         materialHelpers.h
+        boostIncludePath.h
         materialNodes/rpr/materialXNode.h
 
-    RESOURCE_FILES
+    PYTHON_CPPFILES
+        moduleDeps.cpp
+
+    PYMODULE_CPPFILES
+        module.cpp
+        wrapConfig.cpp
+
+    PYMODULE_FILES
+        __init__.py
 )
+
+if(HoudiniUSD_FOUND)
+    target_compile_definitions(rprUsd PUBLIC BUILD_AS_HOUDINI_PLUGIN)
+endif()
 
 target_sources(rprUsd PRIVATE
     materialNodes/materialNode.h

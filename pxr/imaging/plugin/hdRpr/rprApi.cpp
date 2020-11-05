@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#include <json/json.hpp>
+#include <json.hpp>
 using json = nlohmann::json;
 
 #include "rprApi.h"
@@ -32,6 +32,7 @@ using json = nlohmann::json;
 #include "pxr/imaging/glf/glew.h"
 #include "pxr/imaging/glf/uvTextureData.h"
 
+#include "pxr/imaging/rprUsd/config.h"
 #include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/helpers.h"
 #include "pxr/imaging/rprUsd/coreImage.h"
@@ -67,14 +68,6 @@ using json = nlohmann::json;
 #include <vector>
 #include <mutex>
 
-#ifdef WIN32
-#include <shlobj_core.h>
-#pragma comment(lib,"Shell32.lib")
-#elif defined(__linux__)
-#include <limits.h>
-#include <sys/stat.h>
-#endif // __APPLE__
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
@@ -94,14 +87,6 @@ TfToken GetRenderQuality(HdRprConfig const& config) {
 }
 
 using LockGuard = std::lock_guard<std::mutex>;
-
-bool ArchCreateDirectory(const char* path) {
-#ifdef WIN32
-    return CreateDirectory(path, NULL) == TRUE;
-#else
-    return mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
-#endif
-}
 
 template <typename T>
 struct RenderSetting {
@@ -299,9 +284,7 @@ public:
         } catch (RprUsdError& e) {
             TF_RUNTIME_ERROR("%s", e.what());
             m_state = kStateInvalid;
-        } 
-
-        UpdateRestartRequiredMessageStatus();
+        }
     }
 
     rpr::Shape* CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes,
@@ -1782,7 +1765,7 @@ public:
 
             if (sourceName == "C.*") {
                 // We can use RPR_AOV_COLOR here instead of reserving one of the available LPE AOV slots
-                *aovName = HdRprAovTokens->rawColor;
+                *aovName = HdAovTokens->color;
             } else {
                 if (m_rprContextMetadata.pluginType != kPluginNorthstar) {
                     TF_RUNTIME_ERROR("LPE AOV is supported in Northstar only");
@@ -2129,18 +2112,22 @@ public:
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
             }
         } else if (m_state == kStateRestartRequired) {
-            if (m_showRestartRequiredWarning) {
+            {
+                RprUsdConfig* config;
+                auto configLock = RprUsdConfig::GetInstance(&config);
 
-                std::string message =
-R"(Restart required when you change "Render Device" or "Render Quality" (To "Full" or vice versa).
+                if (config->IsRestartWarningEnabled()) {
+                    std::string message =
+                        R"(Restart required when you change "Render Device" or "Render Quality" (To "Full" or vice versa).
 You can revert your changes now and you will not lose any rendering progress.
 You can restart renderer by pressing "RPR Persp" - "Restart Render".
 
 Don't show this message again?
 )";
 
-                if (HdRprShowMessage("Restart required", message)) {
-                    UpdateRestartRequiredMessageStatus(true);
+                    if (HdRprShowMessage("Restart required", message)) {
+                        config->SetRestartWarning(false);
+                    }
                 }
             }
 
@@ -2551,8 +2538,7 @@ private:
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
-        auto cachePath = HdRprApi::GetCachePath();
-        m_rprContext = RprContextPtr(RprUsdCreateContext(cachePath.c_str(), &m_rprContextMetadata), RprContextDeleter);
+        m_rprContext = RprContextPtr(RprUsdCreateContext(&m_rprContextMetadata), RprContextDeleter);
         if (!m_rprContext) {
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
@@ -2685,23 +2671,6 @@ private:
         }
 
         RPR_ERROR_CHECK_THROW(m_scene->SetCamera(m_camera.get()), "Failed to to set scene camera");
-    }
-
-    void UpdateRestartRequiredMessageStatus(bool createIfMissing = false) {
-        auto statusFilePath = (HdRprApi::GetCachePath() + ARCH_PATH_SEP) + "dontShowRestartRequiredMessage";
-
-        bool fileExists = false;
-        if (createIfMissing) {
-            auto f = fopen(statusFilePath.c_str(), "w");
-            if (f) {
-                fileExists = true;
-                fclose(f);
-            }
-        } else {
-            fileExists = ArchFileAccess(statusFilePath.c_str(), F_OK) == 0;
-        }
-
-        m_showRestartRequiredWarning = !fileExists;
     }
 
     void AddDefaultLight() {
@@ -3270,8 +3239,6 @@ private:
     };
     State m_state = kStateUninitialized;
 
-    bool m_showRestartRequiredWarning = true;
-
     std::atomic<bool> m_isAbortingEnabled;
     std::atomic<bool> m_abortRender;
 
@@ -3556,52 +3523,6 @@ bool HdRprApi::IsSphereAndDiskLightSupported() const {
 
 TfToken const& HdRprApi::GetCurrentRenderQuality() const {
     return m_impl->GetCurrentRenderQuality();
-}
-
-std::string HdRprApi::GetAppDataPath() {
-    auto appDataPath = []() -> std::string {
-#ifdef WIN32
-        char appDataPath[MAX_PATH];
-        if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, appDataPath))) {
-            return appDataPath + std::string("\\hdRpr");
-        }
-#elif defined(__linux__)
-        if (auto homeEnv = getenv("XDG_DATA_HOME")) {
-            if (homeEnv[0] == '/') {
-                return homeEnv + std::string("/hdRpr");
-            }
-        }
-
-        int uid = getuid();
-        auto homeEnv = std::getenv("HOME");
-        if (uid != 0 && homeEnv) {
-            return homeEnv + std::string("/.config/hdRpr");
-        }
-
-#elif defined(__APPLE__)
-        if (auto homeEnv = getenv("HOME")) {
-            if (homeEnv[0] == '/') {
-                return homeEnv + std::string("/Library/Application Support/hdRPR");
-            }
-        }
-#else
-#warning "Unknown platform"
-#endif
-        return "";
-    }();
-    if (!appDataPath.empty()) {
-        ArchCreateDirectory(appDataPath.c_str());
-    }
-    return appDataPath;
-}
-
-std::string HdRprApi::GetCachePath() {
-    auto path = GetAppDataPath();
-    if (!path.empty()) {
-        path = (path + ARCH_PATH_SEP) + "cache";
-        ArchCreateDirectory(path.c_str());
-    }
-    return path;
 }
 
 rpr::FrameBuffer* HdRprApi::GetRawColorFramebuffer() {

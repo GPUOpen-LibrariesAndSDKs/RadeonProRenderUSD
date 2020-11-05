@@ -11,20 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#ifndef PXR_IMAGING_RPR_USD_CONTEXT_HELPERS_H
-#define PXR_IMAGING_RPR_USD_CONTEXT_HELPERS_H
+#include "pxr/pxr.h"
+#include "pxr/base/tf/pyModule.h"
 
-#include "pxr/imaging/rprUsd/api.h"
+PXR_NAMESPACE_USING_DIRECTIVE
 
-namespace rpr { class Context; }
-
-PXR_NAMESPACE_OPEN_SCOPE
-
-struct RprUsdContextMetadata;
-
-RPRUSD_API
-rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata);
-
-PXR_NAMESPACE_CLOSE_SCOPE
-
-#endif // PXR_IMAGING_RPR_USD_CONTEXT_HELPERS_H
+TF_WRAP_MODULE
+{
+    TF_WRAP(Config);
+}
