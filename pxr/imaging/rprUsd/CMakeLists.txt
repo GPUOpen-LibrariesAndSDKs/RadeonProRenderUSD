@@ -34,6 +34,7 @@ pxr_library(rprUsd
         helpers.h
         materialHelpers.h
         boostIncludePath.h
+        materialNodes/rpr/materialXNode.h
 
     PYTHON_CPPFILES
         moduleDeps.cpp
