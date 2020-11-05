@@ -36,6 +36,7 @@ struct RprUsdContextMetadata {
     RprUsdPluginType pluginType = kPluginInvalid;
     RprUsdRenderDeviceType renderDeviceType = RprUsdRenderDeviceType::Invalid;
     bool isGlInteropEnabled = false;
+    void* interopInfo = nullptr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

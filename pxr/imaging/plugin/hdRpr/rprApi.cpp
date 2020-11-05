@@ -1283,7 +1283,7 @@ public:
                     if (m_lpeAovPool.empty()) {
                         TF_RUNTIME_ERROR("Cannot create \"%s\" LPE AOV: exceeded the number of LPE AOVs at the same time - %d",
                             outRb.lpe.c_str(), +RPR_AOV_LPE_8 - +RPR_AOV_LPE_0 + 1);
-                        return false;
+                        return nullptr;
                     }
 
                     outRb.aovName = m_lpeAovPool.back();
@@ -1303,7 +1303,7 @@ public:
 
             if (!outRb.lpe.empty() &&
                 RPR_ERROR_CHECK(outRb.rprAov->GetAovFb()->GetRprObject()->SetLPE(outRb.lpe.c_str()), "Failed to set LPE")) {
-                return false;
+                return nullptr;
             }
 
             m_outputRenderBuffers.push_back(std::move(outRb));
@@ -2224,6 +2224,32 @@ public:
         }
     }
 
+    void InteropRenderImpl(HdRprRenderThread* renderThread) {
+        if (m_rprContextMetadata.pluginType != RprUsdPluginType::kPluginHybrid) {
+            TF_CODING_ERROR("InteropRenderImpl should be called for Hybrid plugin only");
+            return;
+        }
+
+        // For now render 5 frames before each present
+        for (int i = 0; i < 5; i++) {
+            rpr::Status status = m_rprContext->Render();
+            if (status != rpr::Status::RPR_SUCCESS) {
+                TF_WARN("rprContextRender returns: %d", status);
+            }
+        }
+
+        // Next frame couldn't be flushed before previous was presented. We should wait for presenter
+        std::unique_lock<std::mutex> lock(m_rprContext->GetMutex());
+        m_presentedConditionVariable->wait(lock, [this] { return *m_presentedCondition == true; });
+
+        rpr_int status = m_rprContextFlushFrameBuffers(rpr::GetRprObject(m_rprContext.get()));
+        if (status != RPR_SUCCESS) {
+            TF_WARN("rprContextFlushFrameBuffers returns: %d", status);
+        }
+
+        *m_presentedCondition = false;
+    }
+
     void RenderFrame(HdRprRenderThread* renderThread) {
         if (!m_rprContext ||
             m_aovRegistry.empty()) {
@@ -2250,7 +2276,12 @@ public:
                 if (m_delegate->IsBatch()) {
                     BatchRenderImpl(renderThread);
                 } else {
-                    RenderImpl(renderThread);
+                    if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid &&
+                        m_rprContextMetadata.interopInfo) {
+                        InteropRenderImpl(renderThread);
+                    } else {
+                        RenderImpl(renderThread);
+                    }
                 }
             } catch (std::runtime_error const& e) {
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
@@ -2562,6 +2593,10 @@ Don't show this message again?
         return m_rprContext && m_rprContextMetadata.isGlInteropEnabled;
     }
 
+    bool IsVulkanInteropEnabled() const {
+        return m_rprContext && m_rprContextMetadata.pluginType == kPluginHybrid && m_rprContextMetadata.interopInfo;
+    }
+
     bool IsArbitraryShapedLightSupported() const {
         return m_rprContextMetadata.pluginType != kPluginHybrid;
     }
@@ -2572,6 +2607,27 @@ Don't show this message again?
 
     TfToken const& GetCurrentRenderQuality() const {
         return m_currentRenderQuality;
+    }
+
+    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+        m_rprContextMetadata.interopInfo = interopInfo;
+        m_presentedConditionVariable = presentedConditionVariable;
+        m_presentedCondition = presentedCondition;
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+    }
+
+    rpr::FrameBuffer* GetRawColorFramebuffer() {
+        auto it = m_aovRegistry.find(HdRprAovTokens->rawColor);
+        if (it != m_aovRegistry.end()) {
+            if (auto aov = it->second.lock()) {
+                if (auto fb = aov->GetAovFb()) {
+                    return fb->GetRprObject();
+                }
+            }
+        }
+
+        return nullptr;
     }
 
 private:
@@ -2678,9 +2734,18 @@ private:
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
-        m_isOutputFlipped = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP) != 0;
+        uint32_t requiredYFlip = 0;
+        if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid && m_rprContextMetadata.interopInfo) {
+            RPR_ERROR_CHECK_THROW(m_rprContext->GetFunctionPtr(
+                RPR_CONTEXT_FLUSH_FRAMEBUFFERS_FUNC_NAME, 
+                (void**)(&m_rprContextFlushFrameBuffers)
+            ), "Fail to get rprContextFlushFramebuffers function");
+            requiredYFlip = 1;
+        }
+
+        m_isOutputFlipped = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_Y_FLIP) != requiredYFlip;
         if (m_isOutputFlipped) {
-            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, 0), "Failed to set context Y FLIP parameter");
+            RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, requiredYFlip), "Failed to set context Y FLIP parameter");
         }
 
         m_isRenderUpdateCallbackEnabled = false;
@@ -3427,6 +3492,10 @@ private:
     std::atomic<bool> m_abortRender;
 
     std::string m_rprSceneExportPath;
+
+    std::condition_variable* m_presentedConditionVariable = nullptr;
+    bool* m_presentedCondition = nullptr;
+    rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
 };
 
 HdRprApi::HdRprApi(HdRprDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
@@ -3691,6 +3760,10 @@ bool HdRprApi::IsGlInteropEnabled() const {
     return m_impl->IsGlInteropEnabled();
 }
 
+bool HdRprApi::IsVulkanInteropEnabled() const {
+    return m_impl->IsVulkanInteropEnabled();
+}
+
 bool HdRprApi::IsArbitraryShapedLightSupported() const {
     m_impl->InitIfNeeded();
     return m_impl->IsArbitraryShapedLightSupported();
@@ -3749,6 +3822,17 @@ std::string HdRprApi::GetCachePath() {
         ArchCreateDirectory(path.c_str());
     }
     return path;
+}
+
+rpr::FrameBuffer* HdRprApi::GetRawColorFramebuffer() {
+    return m_impl->GetRawColorFramebuffer();
+}
+
+void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
+    m_impl->SetInteropInfo(interopInfo, presentedConditionVariable, presentedCondition);
+
+    // Temporary should be force inited here, because otherwise has issues with GPU synchronization
+    m_impl->InitIfNeeded();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

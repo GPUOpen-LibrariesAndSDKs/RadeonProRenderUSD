@@ -163,16 +163,16 @@ RprUsdMaterialNodeInput::Type RprUsd_GetMaterialNodeElementType(MaterialX::Typed
         {"displacementshader", RprUsdMaterialNodeElement::kDisplacementShader},
         {"vector3", RprUsdMaterialNodeElement::kVector3},
         {"vector2", RprUsdMaterialNodeElement::kVector2},
-        {"string", RprUsdMaterialNodeElement::kToken},
+        {"string", RprUsdMaterialNodeElement::kString},
     };
 
     auto it = s_mapping.find(element->getType());
     if (it == s_mapping.end()) return RprUsdMaterialNodeElement::kInvalid;
 
-    if (it->second == RprUsdMaterialNodeElement::kToken) {
-        // enum attribute is required
+    if (it->second == RprUsdMaterialNodeElement::kString) {
+        // If enum attribute is specified, we have kToken type
         auto& enumAttr = element->getAttribute(MaterialX::ValueElement::ENUM_ATTRIBUTE);
-        if (enumAttr.empty()) return RprUsdMaterialNodeElement::kInvalid;
+        if (!enumAttr.empty()) return RprUsdMaterialNodeElement::kToken;
     }
 
     return it->second;

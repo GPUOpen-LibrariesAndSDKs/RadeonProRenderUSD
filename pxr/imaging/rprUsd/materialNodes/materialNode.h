@@ -18,6 +18,8 @@ limitations under the License.
 
 namespace rpr { class Context; }
 
+class RPRMtlxLoader;
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 class RprUsdImageCache;
@@ -31,6 +33,8 @@ struct RprUsd_MaterialBuilderContext {
     bool isReflectionCatcher;
 
     VtValue displacementScale;
+
+    RPRMtlxLoader* mtlxLoader;
 };
 
 class RprUsd_MaterialNode {

@@ -21,6 +21,8 @@ limitations under the License.
 
 #include <RadeonProRender.hpp>
 
+class RPRMtlxLoader;
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 class RprUsdImageCache;
@@ -50,6 +52,8 @@ struct RprUsdMaterialNodeDesc {
 ///
 class RprUsdMaterialRegistry {
 public:
+    ~RprUsdMaterialRegistry();
+
     RPRUSD_API
     static RprUsdMaterialRegistry& GetInstance() {
         return TfSingleton<RprUsdMaterialRegistry>::GetInstance();
@@ -67,6 +71,9 @@ public:
 
     RPRUSD_API
     std::vector<RprUsdMaterialNodeDesc> const& GetRegisteredNodes();
+
+    RPRUSD_API
+    RPRMtlxLoader* GetMtlxLoader() const { return m_mtlxLoader.get(); }
 
     /// Register implementation of the Node with \p id
     RPRUSD_API
@@ -96,6 +103,8 @@ private:
 private:
     /// Material network selector for the current session, controlled via env variable
     TfToken m_materialNetworkSelector;
+
+    std::unique_ptr<RPRMtlxLoader> m_mtlxLoader;
 
     std::vector<RprUsdMaterialNodeDesc> m_registeredNodes;
     std::map<TfToken, size_t> m_registeredNodesLookup;
@@ -148,6 +157,7 @@ public:
         kBoolean,
         kInteger,
         kToken,
+        kString,
         kFilepath,
         kVolumeShader,
         kSurfaceShader,

@@ -13,11 +13,13 @@ limitations under the License.
 
 #include "VOP_RPRMaterial.h"
 
-#include "pxr/imaging/rprUsd/materialRegistry.h"
-#include "pxr/base/tf/stringUtils.h"
+#include <pxr/base/tf/stringUtils.h>
+#include <pxr/base/arch/fileSystem.h>
 
 #include <PRM/PRM_Include.h>
 #include <PRM/PRM_SpareData.h>
+
+#include <MaterialXFormat/XmlIo.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -44,6 +46,7 @@ static VOP_Type GetVOPType(RprUsdMaterialNodeInput::Type rprType) {
         case RprUsdMaterialNodeElement::kInteger:
             return VOP_TYPE_INTEGER;
         case RprUsdMaterialNodeElement::kToken:
+        case RprUsdMaterialNodeElement::kString:
         case RprUsdMaterialNodeElement::kFilepath:
             return VOP_TYPE_STRING;
         case RprUsdMaterialNodeElement::kVolumeShader:
@@ -75,6 +78,8 @@ static PRM_Type const& GetPRMType(RprUsdMaterialNodeInput::Type rprType) {
             return PRM_TOGGLE;
         case RprUsdMaterialNodeElement::kToken:
             return PRM_ORD_E;
+        case RprUsdMaterialNodeElement::kString:
+            return PRM_STRING_E;
         case RprUsdMaterialNodeElement::kFilepath:
             return PRM_FILE;
         default:
@@ -192,25 +197,7 @@ static unsigned GetNumChannels(RprUsdMaterialNodeInput const* input) {
     return 1;
 }
 
-/*
-static void AddSubPageHeading(
-    std::vector<PRM_Template>* templates,
-    std::string const& headingName) {
-    std::string identifier = headingName + "_heading";
-    std::replace(identifier.begin(), identifier.end(), ' ', '_');
-    char* label_name = LEAKED(strdup(identifier.c_str()));
-    char* label_string = LEAKED(strdup(headingName.c_str()));
-    PRM_Name* name = LEAKED(new PRM_Name(label_name, label_string));
-    templates->push_back(PRM_Template(PRM_HEADING, 0, name));
-}
-*/
-
-OP_Node* VOP_RPRMaterial::Create(OP_Network* net, const char* name, OP_Operator* entry) {
-    auto rpr_entry = dynamic_cast<VOP_RPRMaterialOperator*>(entry);
-    return new VOP_RPRMaterial(net, name, rpr_entry);
-}
-
-PRM_Template* VOP_RPRMaterial::GetTemplates(RprUsdMaterialNodeInfo const* shaderInfo) {
+static std::vector<PRM_Template>* GetShaderTemplates(RprUsdMaterialNodeInfo const* shaderInfo) {
     /*
         The templates and their components (names and such) are dynamically
         allocated here but never deleted, since they're expected to be valid for
@@ -289,12 +276,19 @@ PRM_Template* VOP_RPRMaterial::GetTemplates(RprUsdMaterialNodeInfo const* shader
     }
 
     templates->push_back(PRM_Template());
-    return &templates->at(0);
+    return templates;
 }
 
-VOP_RPRMaterial::VOP_RPRMaterial(OP_Network* parent, const char* name, VOP_RPRMaterialOperator* entry)
-    : VOP_Node(parent, name, entry)
-    , m_shaderInfo(entry->shaderInfo) {
+PRM_Template* VOP_RPRMaterial::GetTemplates(RprUsdMaterialNodeInfo const* shaderInfo) {
+    return &GetShaderTemplates(shaderInfo)->at(0);
+}
+
+VOP_RPRMaterial::VOP_RPRMaterial(OP_Network* parent, const char* name, OP_Operator* entry)
+    : VOP_Node(parent, name, entry) {
+
+    auto rpr_entry = dynamic_cast<VOP_RPRMaterialOperator*>(entry);
+    m_shaderInfo = rpr_entry->shaderInfo;
+
     for (size_t i = 0; i < m_shaderInfo->GetNumOutputs(); ++i) {
         auto output = m_shaderInfo->GetOutput(i);
 
@@ -393,6 +387,231 @@ void VOP_RPRMaterial::getOutputTypeInfoSubclass(
     o_type_info.setType(GetVOPType(m_shaderInfo->GetOutput(i_idx)->GetType()));
 }
 
+VOP_MaterialX::VOP_MaterialX(OP_Network* parent, const char* name, OP_Operator* entry)
+    : VOP_RPRMaterial(parent, name, entry) {
+
+}
+
+PRM_Template* VOP_MaterialX::GetTemplates(RprUsdMaterialNodeInfo const* shaderInfo) {
+    auto templates = GetShaderTemplates(shaderInfo);
+
+    for (auto& prm : *templates) {
+        if (prm.getType() == PRM_STRING_E) {
+            if (std::strcmp("surfaceElement", prm.getToken()) == 0 ||
+                std::strcmp("displacementElement", prm.getToken()) == 0) {
+                auto choiceListType = PRM_ChoiceListType(PRM_CHOICELIST_SINGLE | PRM_CHOICELIST_USE_TOKEN);
+                auto choiceList = LEAKED(new PRM_ChoiceList(choiceListType, &VOP_MaterialX::ElementChoiceGenFunc));
+                prm.setChoiceListPtr(choiceList);
+            }
+        }
+    }
+
+    templates->pop_back();
+
+    // Add error message parm.
+    // It will be displayed if the selected mtlx have no renderable elements
+    //
+    auto msgName = LEAKED(new PRM_Name("msg"));
+    auto msgDefault = LEAKED(new PRM_Default(0.0, "No renderable elements"));
+    templates->emplace_back(PRM_LABEL, PRM_TYPE_NO_LABEL, 1, msgName, msgDefault);
+
+    // Reload button
+
+    // Currently, the only way to reload a material in Houdini is to modify the material node itself.
+    // So we add dummy parameter that will be changed on reload button press
+    //
+    static const char* dummyParmName = "reloadDummy";
+    templates->emplace_back(PRM_INT_E, 1, LEAKED(new PRM_Name(dummyParmName)));
+    templates->back().setInvisible(true);
+
+    // Add reload button parm
+    //
+    auto separatorName = LEAKED(new PRM_Name("reloadSeparator"));
+    templates->emplace_back(PRM_SEPARATOR, 1, separatorName);
+    auto buttonName = LEAKED(new PRM_Name("reload", "Reload"));
+    PRM_Callback buttonCallback([](void* data, int, float time, const PRM_Template*) -> int {
+        auto vop = static_cast<VOP_MaterialX*>(CAST_VOPNODE((OP_Node*)data));
+        if (vop->m_file.isstring()) {
+            if (auto reloadDummy = vop->getParmPtr(dummyParmName)) {
+                double modificationTime;
+                if (ArchGetModificationTime(vop->m_file, &modificationTime)) {
+                    if (vop->m_fileModificationTime != modificationTime) {
+
+                        // Update UI
+                        //
+                        vop->opChanged(OP_PARM_CHANGED, (void*)vop->getParmIndex("file"));
+
+                        // Force Hydra material reload
+                        //
+                        reloadDummy->setValue(time, ++vop->m_reloadDummy);
+
+                        return 1;
+                    }
+                }
+            }
+        }
+
+        return 0;
+    });
+    templates->emplace_back(PRM_CALLBACK_NOREFRESH, 1, buttonName, nullptr, nullptr, nullptr, buttonCallback);
+
+    templates->emplace_back();
+
+    return &templates->at(0);
+}
+
+void VOP_MaterialX::ElementChoiceGenFunc(
+    void* op,
+    PRM_Name* choices, int maxChoicesSize,
+    const PRM_SpareData* spare, const PRM_Parm* parm) {
+    if (maxChoicesSize <= 0) {
+        return;
+    }
+
+    auto parmToken = parm->getToken();
+    RPRMtlxLoader::OutputType outputType;
+    if (std::strcmp("surfaceElement", parmToken) == 0) {
+        outputType = RPRMtlxLoader::kOutputSurface;
+    } else if (std::strcmp("displacementElement", parmToken) == 0) {
+        outputType = RPRMtlxLoader::kOutputDisplacement;
+    } else {
+        return;
+    }
+
+    auto vop = static_cast<VOP_MaterialX*>(CAST_VOPNODE((OP_Node*)op));
+    auto renderElementPaths = vop->m_renderableElements.namePaths[outputType];
+    size_t choiceCount = size_t(maxChoicesSize - 1); // -1 for sentinel PRM_Name
+    size_t iChoice = 0;
+    if (!renderElementPaths.empty()) {
+        size_t maxNumElementPaths = choiceCount - 1; // -1 for None choice
+        size_t namePathCount = std::min(maxNumElementPaths, renderElementPaths.size());
+        for (; iChoice < namePathCount; ++iChoice) {
+            auto path = renderElementPaths[iChoice].c_str();
+            choices[iChoice].setToken(path);
+            choices[iChoice].setLabel(path);
+        }
+    }
+
+    if (iChoice < choiceCount) {
+        choices[iChoice].setToken("");
+        choices[iChoice].setLabel("None");
+        ++iChoice;
+    }
+
+    choices[iChoice] = PRM_Name();
+}
+
+void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
+    VOP_RPRMaterial::opChanged(reason, data);
+
+    if (reason == OP_PARM_CHANGED) {
+        int parmIndex = int(reinterpret_cast<intptr_t>(data));
+        auto& changedParm = getParm(parmIndex);
+        if (std::strcmp(changedParm.getToken(), "file") == 0) {
+            bool keepSelections = false;
+
+            UT_String newFile;
+            double newFileModificationTime;
+            changedParm.getValue(0.0, newFile, 0, true, 0);
+            if (!ArchGetModificationTime(newFile, &newFileModificationTime)) {
+                newFileModificationTime = 0.0;
+            }
+
+            // Keep selected renderable elements if file was edited
+            //
+            if (m_file == newFile) {
+                if (m_fileModificationTime != newFileModificationTime &&
+                    m_fileModificationTime != 0.0) {
+                    keepSelections = true;
+                }
+            } else {
+                m_file = std::move(newFile);
+            }
+            m_fileModificationTime = newFileModificationTime;
+
+            // Rebuild renderable elements cache
+            //
+            m_renderableElements = {};
+            if (auto mtlxLoader = RprUsdMaterialRegistry::GetInstance().GetMtlxLoader()) {
+                try {
+                    auto mtlxDoc = MaterialX::createDocument();
+                    MaterialX::readFromXmlFile(mtlxDoc, m_file.toStdString());
+                    mtlxDoc->importLibrary(mtlxLoader->GetStdlib());
+                    m_renderableElements = mtlxLoader->GetRenderableElements(mtlxDoc.get());
+                } catch (MaterialX::Exception& e) {
+                    // no-op
+                }
+            }
+
+            // Hide everything but file parm when a file is not specified
+            //
+            bool isUiVisible = bool(m_file);
+
+            // Reset element parameters if previously selected ones not valid
+            //
+            bool hasAnyElements = false;
+            const char* parmNames[RPRMtlxLoader::kOutputsTotal] = {
+                "surfaceElement", "displacementElement"
+            };
+            for (int i = 0; i < RPRMtlxLoader::kOutputsTotal; ++i) {
+                if (auto parm = getParmPtr(parmNames[i])) {
+                    auto& namePaths = m_renderableElements.namePaths[i];
+                    bool parmVisible = false;
+                    if (!namePaths.empty()) {
+                        parmVisible = true;
+                        hasAnyElements = true;
+                    }
+                    parm->setVisibleState(isUiVisible && parmVisible);
+
+                    if (keepSelections) {
+                        UT_String prevNamePath;
+                        parm->getValue(0.0, prevNamePath, 0, true, 0);
+
+                        // Keep renderable element disabled
+                        //
+                        if (!prevNamePath.isstring()) {
+                            continue;
+                        }
+
+                        // Or if this renderable element is still available
+                        //
+                        auto namePathIt = std::find_if(namePaths.begin(), namePaths.end(),
+                            [&prevNamePath](std::string const& namePath) {
+                                return prevNamePath == namePath.c_str();
+                            }
+                        );
+                        if (namePathIt != namePaths.end()) {
+                            continue;
+                        }
+                    }
+
+                    parm->setValue(0.0, namePaths.empty() ? "" : namePaths[0].c_str(), CH_STRING_LITERAL);
+                }
+            }
+
+            if (auto msgParm = getParmPtr("msg")) {
+                msgParm->setVisibleState(isUiVisible && !hasAnyElements);
+            }
+
+            if (auto buttonParm = getParmPtr("reload")) {
+                buttonParm->setVisibleState(isUiVisible);
+                if (auto separatorParm = getParmPtr("reloadSeparator")) {
+                    separatorParm->setVisibleState(isUiVisible);
+                }
+            }
+        }
+    }
+}
+
+bool VOP_MaterialX::runCreateScript() {
+    int numParms = getNumParms();
+    for (int i = 1; i < numParms; ++i) {
+        getParm(i).setVisibleState(false);
+    }
+
+    return true;
+}
+
 static const char* GetUIName(RprUsdMaterialNodeInfo const* shaderInfo) {
     if (shaderInfo->GetUIName()) return shaderInfo->GetUIName();
 
@@ -426,13 +645,35 @@ static const char* GetUIName(RprUsdMaterialNodeInfo const* shaderInfo) {
     return LEAKED(strdup(name.c_str()));
 }
 
-VOP_RPRMaterialOperator::VOP_RPRMaterialOperator(RprUsdMaterialNodeInfo const* shaderInfo)
+VOP_RPRMaterialOperator* VOP_RPRMaterialOperator::Create(RprUsdMaterialNodeInfo const* shaderInfo) {
+    if (shaderInfo->GetName()) {
+        if (std::strcmp("rpr_materialx_node", shaderInfo->GetName()) == 0) {
+            return VOP_RPRMaterialOperator::_Create<VOP_MaterialX>(shaderInfo);
+        }
+    }
+
+    return VOP_RPRMaterialOperator::_Create<VOP_RPRMaterial>(shaderInfo);
+}
+
+template <typename VOP>
+VOP_RPRMaterialOperator* VOP_RPRMaterialOperator::_Create(RprUsdMaterialNodeInfo const* shaderInfo) {
+    auto templates = VOP::GetTemplates(shaderInfo);
+    auto construct = [](OP_Network* parent, const char* name, OP_Operator* entry) -> OP_Node* {
+        return new VOP(parent, name, entry);
+    };
+    return new VOP_RPRMaterialOperator(shaderInfo, construct, templates);
+}
+
+VOP_RPRMaterialOperator::VOP_RPRMaterialOperator(
+    RprUsdMaterialNodeInfo const* shaderInfo,
+    OP_Constructor construct,
+    PRM_Template* templates)
     : VOP_Operator(
         TfStringPrintf("RPR::%s", shaderInfo->GetName()).c_str(),
         GetUIName(shaderInfo),
-        VOP_RPRMaterial::Create,
-        VOP_RPRMaterial::GetTemplates(shaderInfo),
-        VOP_RPRMaterial::theChildTableName,
+        construct,
+        templates,
+        VOP_Node::theChildTableName,
         shaderInfo->GetNumInputs(), shaderInfo->GetNumInputs(),
         // Put rpr here so Houdini's Material Builder won't see our VOPs
         "rpr",

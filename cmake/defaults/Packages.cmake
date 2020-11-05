@@ -86,6 +86,10 @@ endif()
 
 find_package(MaterialX QUIET)
 
+if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
+    find_package(Vulkan REQUIRED)
+endif()
+
 # Third Party Plugin Package Requirements
 # ----------------------------------------------
 

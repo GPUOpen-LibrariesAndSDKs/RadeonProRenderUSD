@@ -120,7 +120,8 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (percentDone) \
     (renderMode) \
     (batch) \
-    (progressive)
+    (progressive) \
+    (RPR)
 );
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES = {
@@ -388,6 +389,36 @@ bool HdRprDelegate::Restart() {
     m_renderParam->RestartRender();
     m_renderThread.StartRender();
     return true;
+}
+
+void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
+    for (HdDriver* hdDriver : drivers) {
+        if (hdDriver->name == _tokens->RPR && hdDriver->driver.IsHolding<VtDictionary>()) {
+            VtDictionary dictionary = hdDriver->driver.UncheckedGet<VtDictionary>();
+
+            // Interop info is used to create context
+            void* interopInfo = dictionary["interop_info"].Get<void*>();
+
+            // Condition variable is used to prevent this issue:
+            // [Plugin] Render_Frame_1 & Flush_Frame_1
+            // [Plugin] Render_Frame_2 & Flush_Frame_2
+            // [Client] Present frame
+            // Hybrid correct usage prohibit flushing next frame before previous was presented
+            // Render thread would wait on next flush till previous frame would be presented, example:
+            // [Plugin] Render_Frame_1 & Flush_Frame_1
+            // [Plugin] Render_Frame_2 & [Wait for present] <- Here frame wasn't presented yet
+            // [Client] Present Frame_1
+            // [Plugin] [Wake up] Flush Frame_2, continue work
+            std::condition_variable* presentedConditionVariable = dictionary["presented_condition_variable"].Get<std::condition_variable*>();
+            bool* presentedCondition = dictionary["presented_condition"].Get<bool*>();
+
+            // Set condition to true to render first frame
+            *presentedCondition = true;
+
+            m_rprApi->SetInteropInfo(interopInfo, presentedConditionVariable, presentedCondition);
+            break;
+        }
+    }
 }
 
 #endif // PXR_VERSION >= 2005

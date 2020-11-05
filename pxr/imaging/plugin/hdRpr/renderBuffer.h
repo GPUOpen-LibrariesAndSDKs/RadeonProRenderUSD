@@ -61,6 +61,10 @@ public:
 
     void* GetPointerForWriting() { return m_mappedBuffer.data(); }
 
+    // HdRprRenderBuffer should hold actual framebuffer
+    // But for now just take it from HdRprApi in order to provide valid API
+    VtValue GetResource(bool multiSampled) const;
+
 protected:
     void _Deallocate() override;
 

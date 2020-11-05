@@ -10,6 +10,7 @@ add_library(RPR_for_Houdini SHARED
     LOP_RPRExportHelper.cpp)
 
 target_link_libraries(RPR_for_Houdini
+    arch
     usd
     usdGeom
     usdRender

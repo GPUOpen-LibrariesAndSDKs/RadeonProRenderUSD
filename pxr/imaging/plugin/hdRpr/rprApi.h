@@ -33,6 +33,7 @@ limitations under the License.
 #include <memory>
 #include <vector>
 #include <string>
+#include <condition_variable>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -146,6 +147,8 @@ public:
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings);
     HdRenderPassAovBindingVector GetAovBindings() const;
 
+    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);
+
     struct RenderStats {
         double percentDone;
         double averageRenderTimePerSample;
@@ -160,9 +163,11 @@ public:
 
     bool IsChanged() const;
     bool IsGlInteropEnabled() const;
+    bool IsVulkanInteropEnabled() const;
     bool IsArbitraryShapedLightSupported() const;
     bool IsSphereAndDiskLightSupported() const;
     TfToken const& GetCurrentRenderQuality() const;
+    rpr::FrameBuffer* GetRawColorFramebuffer();
 
     static std::string GetAppDataPath();
     static std::string GetCachePath();
