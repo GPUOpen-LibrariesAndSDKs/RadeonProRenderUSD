@@ -92,6 +92,7 @@ void HdRprRenderBuffer::_Deallocate() {
 }
 
 void* HdRprRenderBuffer::Map() {
+    m_rprApi->Resolve();
 
 #ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
     std::unique_lock<std::mutex> lock(m_mapMutex);
