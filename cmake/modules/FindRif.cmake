@@ -18,10 +18,8 @@ elseif(WIN32)
     SET_RIF_VARIABLES(Windows)
 elseif(RPR_SDK_PLATFORM STREQUAL "ubuntu18.04")
     SET_RIF_VARIABLES(Ubuntu18)
-elseif(RPR_SDK_PLATFORM STREQUAL "centos7")
-    SET_RIF_VARIABLES(CentOS7)
 else()
-    message(FATAL_ERROR "Unknown platform: ${RPR_SDK_PLATFORM}")
+    SET_RIF_VARIABLES(CentOS7)
 endif()
 
 find_library(RIF_LIBRARY
