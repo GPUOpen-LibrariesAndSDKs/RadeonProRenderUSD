@@ -23,7 +23,8 @@ PXR_NAMESPACE_OPEN_SCOPE
     (rpr_materialx_node) \
     (file) \
     (surfaceElement) \
-    (displacementElement)
+    (displacementElement) \
+    (stPrimvarName)
 
 TF_DECLARE_PUBLIC_TOKENS(RprUsdRprMaterialXNodeTokens, RPRUSD_API, RPRUSD_RPR_MATERIALX_NODE_TOKENS);
 
