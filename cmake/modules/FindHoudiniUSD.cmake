@@ -147,11 +147,6 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
             set_target_properties(${targetName} PROPERTIES
                 IMPORTED_IMPLIB "${Houdini_USD_IMPLIB_DIR}/libpxr_${targetName}.lib")
         endif()
-        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-            # Houdini builds with the old ABI. We need to match.
-            target_compile_definitions(${targetName}
-                INTERFACE "_GLIBCXX_USE_CXX11_ABI=0")
-        endif()
         if(WIN32)
             # Shut up compiler about warnings from USD.
             target_compile_options(${targetName} INTERFACE
@@ -161,6 +156,10 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
                 INTERFACE "${HOUDINI_ROOT}/custom/houdini/dsolib")
         endif()
     endforeach()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Houdini builds with the old ABI. We need to match.
+        add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+    endif()
     # Add python to tf, usdImagingGL targets.
     target_include_directories(tf INTERFACE ${Houdini_Python_INCLUDE_DIR})
     target_link_libraries(tf INTERFACE ${Houdini_Python_LIB})

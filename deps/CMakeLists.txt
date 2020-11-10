@@ -4,10 +4,6 @@
 if(NOT MaterialX_FOUND)
     # If MaterialX was not explicitly provided, use the one from a submodule
     set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
-    if(HoudiniUSD_FOUND AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        # Houdini builds with the old ABI. We need to match.
-        set(EXTERNAL_COMPILE_FLAGS "-D_GLIBCXX_USE_CXX11_ABI=0")
-    endif()
     set(MATERIALX_PYTHON_LTO OFF)
     set(MATERIALX_INSTALL_PYTHON OFF)
     set(MATERIALX_BUILD_RENDER OFF)
