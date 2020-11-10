@@ -85,6 +85,15 @@ public:
             return SetRenderElement(RPRMtlxLoader::kOutputSurface, value);
         } else if (inputId == RprUsdRprMaterialXNodeTokens->displacementElement) {
             return SetRenderElement(RPRMtlxLoader::kOutputDisplacement, value);
+        } else if (inputId == RprUsdRprMaterialXNodeTokens->stPrimvarName) {
+            if (value.IsHolding<std::string>()) {
+                m_ctx->uvPrimvarName = TfToken(value.UncheckedGet<std::string>());
+                return true;
+            } else {
+                TF_RUNTIME_ERROR("[%s] file input should be of string type: %s",
+                    RprUsdRprMaterialXNodeTokens->rpr_materialx_node.GetText(), value.GetTypeName().c_str());
+                return false;
+            }
         }
 
         TF_RUNTIME_ERROR("[%s] Unknown input %s",
@@ -318,6 +327,12 @@ public:
         fileInput.name = RprUsdRprMaterialXNodeTokens->file.GetText();
         fileInput.uiName = "File";
         nodeInfo.inputs.push_back(fileInput);
+
+        RprUsd_RprNodeInput stPrimvarNameInput(RprUsdMaterialNodeElement::kString);
+        stPrimvarNameInput.name = RprUsdRprMaterialXNodeTokens->stPrimvarName.GetText();
+        stPrimvarNameInput.uiName = "UV Primvar Name";
+        stPrimvarNameInput.valueString = "st";
+        nodeInfo.inputs.push_back(stPrimvarNameInput);
 
         RprUsd_RprNodeInput surfaceElementInput(RprUsdMaterialNodeElement::kString);
         surfaceElementInput.name = RprUsdRprMaterialXNodeTokens->surfaceElement.GetText();

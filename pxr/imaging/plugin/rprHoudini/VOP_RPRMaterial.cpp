@@ -172,6 +172,8 @@ static PRM_Default* NewPRMDefault(
         choiceList = LEAKED(new PRM_ChoiceList(choiceListType, items->data()));
 
         return defau1t;
+    } else if (input->GetType() == RprUsdMaterialNodeElement::kString) {
+        return LEAKED(new PRM_Default(0, LEAKED(strdup(valueStr))));
     }
 
     if (values.size() == i_nb_defaults) {
@@ -605,7 +607,7 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
 
 bool VOP_MaterialX::runCreateScript() {
     int numParms = getNumParms();
-    for (int i = 1; i < numParms; ++i) {
+    for (int i = getParmIndex("stPrimvarName") + 1; i < numParms; ++i) {
         getParm(i).setVisibleState(false);
     }
 
