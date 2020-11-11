@@ -24,8 +24,18 @@ geometry_settings = [
                 'defaultValue': 0,
                 'minValue': 0,
                 'maxValue': 7
+            },
+            {
+                'name': 'primvars:rpr:ignoreContour',
+                'ui_name': 'Ignore Contour',
+                'defaultValue': False,
+                'help': 'Whether to extract contour for a mesh or not'
+            },
+            {
+                'folder': 'Visibility Settings',
+                'settings': visibility_flag_settings
             }
-        ] + visibility_flag_settings
+        ]
     }
 ]
 

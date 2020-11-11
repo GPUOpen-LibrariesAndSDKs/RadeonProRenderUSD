@@ -360,6 +360,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
     }
 
+    bool isIgnoreContourDirty = false;
     bool isVisibilityMaskDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
         HdRprGeometrySettings geomSettings = {};
@@ -375,6 +376,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
             isVisibilityMaskDirty = true;
+        }
+
+        if (m_ignoreContour != geomSettings.ignoreContour) {
+            m_ignoreContour = geomSettings.ignoreContour;
+            isIgnoreContourDirty = true;
         }
     }
 
@@ -693,6 +699,12 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         rprApi->SetMeshVisibility(rprMesh, visibilityMask);
                     }
                 }
+            }
+        }
+
+        if (newMesh || isIgnoreContourDirty) {
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetMeshIgnoreContour(rprMesh, m_ignoreContour);
             }
         }
 
