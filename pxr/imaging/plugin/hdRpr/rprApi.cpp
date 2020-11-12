@@ -1658,17 +1658,18 @@ public:
             }
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force) {
-            m_isAlphaEnabled = preferences.GetEnableAlpha();
-
-            UpdateColorAlpha();
-        }
-
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
             m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
         } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             UpdateHybridSettings(preferences, force);
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force ||
+            (m_rprContextMetadata.pluginType == kPluginNorthstar && preferences.IsDirty(HdRprConfig::DirtyRenderMode))) {
+            m_isAlphaEnabled = preferences.GetEnableAlpha();
+
+            UpdateColorAlpha();
         }
     }
 
@@ -3104,6 +3105,25 @@ private:
         if (!colorAov) {
             colorAov = GetColorAov();
             if (!colorAov) return;
+        }
+
+        // Force disable alpha for some render modes when we render with Northstar
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            // XXX (RPRNEXT-479): contour integrator resets opacity after some amount of samples
+            if (m_contourAovs) {
+                m_isAlphaEnabled = false;
+            } else {
+                auto currentRenderMode = RprUsdGetInfo<rpr_render_mode>(m_rprContext.get(), RPR_CONTEXT_RENDER_MODE);
+
+                // XXX (RPRNEXT-343): opacity is always zero when such render modes are active:
+                if (currentRenderMode == RPR_RENDER_MODE_NORMAL ||
+                    currentRenderMode == RPR_RENDER_MODE_POSITION ||
+                    currentRenderMode == RPR_RENDER_MODE_TEXCOORD ||
+                    currentRenderMode == RPR_RENDER_MODE_WIREFRAME ||
+                    currentRenderMode == RPR_RENDER_MODE_MATERIAL_INDEX) {
+                    m_isAlphaEnabled = false;
+                }
+            }
         }
 
         if (m_isAlphaEnabled) {
