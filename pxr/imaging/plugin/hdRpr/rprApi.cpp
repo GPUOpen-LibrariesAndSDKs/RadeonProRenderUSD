@@ -1627,7 +1627,11 @@ public:
             m_hdCamera->GetShutterClose(&shutterClose);
         }
         double exposure = std::max(shutterClose - shutterOpen, 0.0);
-        RPR_ERROR_CHECK(m_camera->SetExposure(exposure), "Failed to set camera exposure");
+
+        // Hydra always sample transforms in such a way that
+        // starting transform matches shutterOpen and
+        // ending transform matches shutterClose
+        RPR_ERROR_CHECK(m_camera->SetExposure(1.0f), "Failed to set camera exposure");
 
         auto setCameraLookAt = [this](GfMatrix4d const& viewMatrix, GfMatrix4d const& inverseViewMatrix) {
             auto& iwvm = inverseViewMatrix;
