@@ -466,13 +466,21 @@ public:
 
     void SetMeshMaterial(rpr::Shape* mesh, RprUsdMaterial const* material, bool displacementEnabled) {
         LockGuard rprLock(m_rprContext->GetMutex());
-        material->AttachTo(mesh, displacementEnabled);
+        if (material) {
+            material->AttachTo(mesh, displacementEnabled);
+        } else {
+            RprUsdMaterial::DetachFrom(mesh);
+        }
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
     void SetCurveMaterial(rpr::Curve* curve, RprUsdMaterial const* material) {
         LockGuard rprLock(m_rprContext->GetMutex());
-        material->AttachTo(curve);
+        if (material) {
+            material->AttachTo(curve);
+        } else {
+            RprUsdMaterial::DetachFrom(curve);
+        }
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
