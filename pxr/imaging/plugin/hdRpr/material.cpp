@@ -12,7 +12,7 @@ limitations under the License.
 ************************************************************************/
 
 #include "material.h"
-#include "materialAdapter.h"
+#include "pxr/imaging/rprUsd/materialNodes/rpr/materialXNode.h"
 
 #include "renderParam.h"
 #include "rprApi.h"
@@ -20,57 +20,6 @@ limitations under the License.
 #include "pxr/usd/sdf/assetPath.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-
-TF_DEFINE_PRIVATE_TOKENS(_tokens,
-    ((infoSourceAsset, "info:sourceAsset")) \
-    ((infoImplementationSource, "info:implementationSource")) \
-    (sourceAsset)
-);
-
-static bool GetMaterialNetwork(
-    TfToken const& terminal, HdSceneDelegate* delegate, HdMaterialNetworkMap const& networkMap, HdRprRenderParam const& renderParam,
-    EMaterialType* out_materialType, HdMaterialNetwork const** out_network) {
-    auto mapIt = networkMap.map.find(terminal);
-    if (mapIt == networkMap.map.end()) {
-        return false;
-    }
-
-    auto& network = mapIt->second;
-    if (network.nodes.empty()) {
-        return false;
-    }
-
-    *out_network = &network;
-
-    for (auto& node : network.nodes) {
-        if (node.identifier == HdRprMaterialTokens->UsdPreviewSurface) {
-            *out_materialType = EMaterialType::USD_PREVIEW_SURFACE;
-            return true;
-        } else {
-            if (renderParam.GetMaterialNetworkSelector() == HdRprMaterialNetworkSelectorTokens->karma) {
-                auto implementationSource = delegate->Get(node.path, _tokens->infoImplementationSource);
-                if (implementationSource.IsHolding<TfToken>() &&
-                    implementationSource.UncheckedGet<TfToken>() == _tokens->sourceAsset) {
-                    auto nodeAsset = delegate->Get(node.path, _tokens->infoSourceAsset);
-                    if (nodeAsset.IsHolding<SdfAssetPath>()) {
-                        auto& asset = nodeAsset.UncheckedGet<SdfAssetPath>();
-                        if (!asset.GetAssetPath().empty()) {
-                            static const std::string kPrincipledShaderDef = "opdef:/Vop/principledshader::2.0";
-                            if (asset.GetAssetPath().compare(0, kPrincipledShaderDef.size(), kPrincipledShaderDef.c_str())) {
-                                return false;
-                            }
-
-                            *out_materialType = EMaterialType::HOUDINI_PRINCIPLED_SHADER;
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    return false;
-}
 
 HdRprMaterial::HdRprMaterial(SdfPath const& id) : HdMaterial(id) {
 
@@ -84,29 +33,48 @@ void HdRprMaterial::Sync(HdSceneDelegate* sceneDelegate,
     auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     if (*dirtyBits & HdMaterial::DirtyResource) {
+        if (m_rprMaterial) {
+            rprApi->Release(m_rprMaterial);
+            m_rprMaterial = nullptr;
+        }
+
         VtValue vtMat = sceneDelegate->GetMaterialResource(GetId());
         if (vtMat.IsHolding<HdMaterialNetworkMap>()) {
             auto& networkMap = vtMat.UncheckedGet<HdMaterialNetworkMap>();
+            m_rprMaterial = rprApi->CreateMaterial(sceneDelegate, networkMap);
+        }
 
-            EMaterialType surfaceType = EMaterialType::NONE;
-            HdMaterialNetwork const* surface = nullptr;
+        if (!m_rprMaterial) {
+            // Autodesk's Hydra Scene delegate may give us a mtlx file path directly,
+            // to reuse existing material processing code, we create HdMaterialNetworkMap
+            // that holds rpr_materialx_node
+            //
+            static TfToken materialXFilenameToken("MaterialXFilename", TfToken::Immortal);
+            auto materialXFilename = sceneDelegate->Get(GetId(), materialXFilenameToken);
+            if (materialXFilename.IsHolding<SdfAssetPath>()) {
+                auto& mtlxAssetPath = materialXFilename.UncheckedGet<SdfAssetPath>();
+                auto& mtlxPath = mtlxAssetPath.GetResolvedPath();
+                if (!mtlxPath.empty()) {
+                    HdMaterialNetwork network;
+                    network.nodes.emplace_back();
+                    HdMaterialNode& mtlxNode = network.nodes.back();
+                    mtlxNode.identifier = RprUsdRprMaterialXNodeTokens->rpr_materialx_node;
+                    mtlxNode.parameters.emplace(RprUsdRprMaterialXNodeTokens->file, materialXFilename);
 
-            EMaterialType displacementType = EMaterialType::NONE;
-            HdMaterialNetwork const* displacement = nullptr;
+                    // Use the same network for both surface and displacement terminals,
+                    // RprUsdMaterialRegistry handles automatically shared nodes between terminal networks
+                    //
+                    HdMaterialNetworkMap networkMap;
+                    networkMap.map[HdMaterialTerminalTokens->surface] = network;
+                    networkMap.map[HdMaterialTerminalTokens->displacement] = network;
+                    networkMap.terminals.push_back(mtlxNode.path);
 
-            if (GetMaterialNetwork(HdMaterialTerminalTokens->surface, sceneDelegate, networkMap, *rprRenderParam, &surfaceType, &surface)) {
-                if (GetMaterialNetwork(HdMaterialTerminalTokens->displacement, sceneDelegate, networkMap, *rprRenderParam, &displacementType, &displacement)) {
-                    if (displacementType != surfaceType) {
-                        displacement = nullptr;
-                    }
+                    m_rprMaterial = rprApi->CreateMaterial(sceneDelegate, networkMap);
                 }
-
-                MaterialAdapter matAdapter(surfaceType, *surface, displacement ? *displacement : HdMaterialNetwork{});
-                m_rprMaterial = rprApi->CreateMaterial(matAdapter);
-            } else {
-                TF_CODING_WARNING("Material type not supported");
             }
         }
+
+        rprRenderParam->MaterialDidChange(sceneDelegate, GetId());
     }
 
     *dirtyBits = Clean;
@@ -117,7 +85,7 @@ HdDirtyBits HdRprMaterial::GetInitialDirtyBitsMask() const {
 }
 
 void HdRprMaterial::Reload() {
-    // no-op
+    // possibly we can use it to reload .mtlx definition if it's changed but I don't know when and how Reload is actually called
 }
 
 void HdRprMaterial::Finalize(HdRenderParam* renderParam) {
@@ -127,7 +95,7 @@ void HdRprMaterial::Finalize(HdRenderParam* renderParam) {
     HdMaterial::Finalize(renderParam);
 }
 
-HdRprApiMaterial const* HdRprMaterial::GetRprMaterialObject() const {
+RprUsdMaterial const* HdRprMaterial::GetRprMaterialObject() const {
     return m_rprMaterial;
 }
 

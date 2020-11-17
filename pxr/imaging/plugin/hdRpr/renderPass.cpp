@@ -33,6 +33,10 @@ HdRprRenderPass::HdRprRenderPass(HdRenderIndex* index,
 
 }
 
+HdRprRenderPass::~HdRprRenderPass() {
+    m_renderParam->GetRenderThread()->StopRender();
+}
+
 void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState, TfTokenVector const& renderTags) {
     // To avoid potential deadlock:
     //   main thread locks config instance and requests render stop and

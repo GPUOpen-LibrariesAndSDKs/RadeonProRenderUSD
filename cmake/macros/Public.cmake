@@ -23,6 +23,24 @@
 #
 include(Private)
 
+function(GroupSources target)
+    get_target_property(${target}_SOURCES ${target} SOURCES)
+    foreach(FILE ${${target}_SOURCES}) 
+        get_filename_component(ABS_FILE ${FILE} ABSOLUTE)
+        file(RELATIVE_PATH relPath ${CMAKE_CURRENT_SOURCE_DIR} ${ABS_FILE})
+
+        string(FIND "${relPath}" ".." out)
+        if("${out}" EQUAL 0)
+            source_group("external" FILES "${FILE}")
+        else()
+            get_filename_component(PARENT_DIR "${FILE}" DIRECTORY)
+            string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" GROUP "${PARENT_DIR}")
+            string(REPLACE "/" "\\" GROUP "${GROUP}")
+            source_group("${GROUP}" FILES "${FILE}")
+        endif()
+    endforeach()
+endfunction()
+
 macro(GetAppDataPath retVal)
     if(WIN32)
         if(DEFINED ENV{PROGRAMDATA})
@@ -274,10 +292,6 @@ function(pxr_library NAME)
         set(prefix "")
         set(suffix ${CMAKE_SHARED_LIBRARY_SUFFIX})
 
-        if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-            set(subdir "usd_plugins")
-        endif()
-
         # Katana plugins install into a specific sub directory structure.
         # In particular, shared objects install into plugin/Libs
         if(args_KATANA_PLUGIN)
@@ -372,8 +386,8 @@ function(pxr_setup_python)
     # Join these with a ', '
     string(REPLACE ";" ", " pyModulesStr "${converted}")
 
-    # Install a pxr __init__.py with an appropriate __all__
-    _get_install_dir(lib/python/pxr installPrefix)
+    # Install a rpr __init__.py with an appropriate __all__
+    _get_install_dir(lib/python/rpr installPrefix)
 
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated_modules_init.py"
          "__all__ = [${pyModulesStr}]\n")

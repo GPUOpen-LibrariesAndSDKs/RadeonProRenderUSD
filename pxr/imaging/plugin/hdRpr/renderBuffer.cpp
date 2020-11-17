@@ -19,10 +19,11 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id)
+HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id, HdRprApi* api)
     : HdRenderBuffer(id)
     , m_numMappers(0)
-    , m_isConverged(false) {
+    , m_isConverged(false)
+    , m_rprApi(api) {
 
 }
 
@@ -49,52 +50,94 @@ void HdRprRenderBuffer::Finalize(HdRenderParam* renderParam) {
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
                                  HdFormat format,
                                  bool multiSampled) {
-    TF_VERIFY(!IsMapped());
-    TF_UNUSED(multiSampled);
-
     if (dimensions[2] != 1) {
         TF_WARN("HdRprRenderBuffer supports 2D buffers only");
         return false;
     }
 
-    _Deallocate();
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    std::unique_lock<std::mutex> lock(m_mapMutex);
+    m_mapConditionVar.wait(lock, [this]() { return m_numMappers == 0; });
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
 
     m_width = dimensions[0];
     m_height = dimensions[1];
     m_format = format;
-    size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
-    m_mappedBuffer.resize(dataByteSize, 0);
+    m_multiSampled = multiSampled;
+    m_isConverged.store(false);
 
-    return false;
+    size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
+    if (dataByteSize) {
+        m_mappedBuffer.reserve(dataByteSize);
+        std::memset(m_mappedBuffer.data(), 0, dataByteSize);
+    } else {
+        m_mappedBuffer = std::vector<uint8_t>();
+    }
+
+    return true;
 }
 
 void HdRprRenderBuffer::_Deallocate() {
-    TF_VERIFY(!IsMapped());
+
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    std::unique_lock<std::mutex> lock(m_mapMutex);
+    m_mapConditionVar.wait(lock, [this]() { return m_numMappers == 0; });
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
 
     m_width = 0u;
     m_height = 0u;
     m_format = HdFormatInvalid;
     m_isConverged.store(false);
-    m_numMappers.store(0);
-    m_mappedBuffer.resize(0);
+    m_mappedBuffer = std::vector<uint8_t>();
 }
 
 void* HdRprRenderBuffer::Map() {
+    m_rprApi->Resolve();
+
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    std::unique_lock<std::mutex> lock(m_mapMutex);
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
+
     ++m_numMappers;
     return m_mappedBuffer.data();
 }
 
 void HdRprRenderBuffer::Unmap() {
+
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    bool isLastMapper;
+    {
+        std::unique_lock<std::mutex> lock(m_mapMutex);
+        if (!TF_VERIFY(m_numMappers)) {
+            TF_CODING_ERROR("Invalid HdRenderBuffer usage detected. Over-use of Unmap.");
+            return;
+        }
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
+
+        --m_numMappers;
+        TF_VERIFY(m_numMappers >= 0);
+
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+        isLastMapper = m_numMappers == 0;
+    }
+
+    if (isLastMapper) {
+        m_mapConditionVar.notify_one();
+    }
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
+
     // XXX We could consider clearing _mappedBuffer here to free RAM.
     //     For now we assume that Map() will be called frequently so we prefer
     //     to avoid the cost of clearing the buffer over memory savings.
-    // m_mappedBuffer.clear();
-    // m_mappedBuffer.shrink_to_fit();
-    --m_numMappers;
+    //if (m_numMappers == 0) {
+    //    m_mappedBuffer = std::vector<uint8_t>();
+    //}
 }
 
 bool HdRprRenderBuffer::IsMapped() const {
-    return m_numMappers.load() != 0;
+    // There is no point to lock this read because HdRenderBuffer user has no idea about internal synchronization.
+    // Calling this function to check if they need to unmap a render buffer is just wrong and should not happen.
+    return m_numMappers != 0;
 }
 
 void HdRprRenderBuffer::Resolve() {
@@ -107,6 +150,23 @@ bool HdRprRenderBuffer::IsConverged() const {
 
 void HdRprRenderBuffer::SetConverged(bool converged) {
     return m_isConverged.store(converged);
+}
+
+VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
+    if ("aov_color" == GetId().GetElementString()) {
+        rpr::FrameBuffer* color = m_rprApi->GetRawColorFramebuffer();
+        // RPR framebuffer not created yet
+        if (!color) {
+            return VtValue();
+        }
+
+        VtDictionary dictionary;
+        dictionary["isVulkanInteropEnabled"] = m_rprApi->IsVulkanInteropEnabled();
+        dictionary["framebuffer"] = color;
+
+        return VtValue(dictionary);
+    }
+    return VtValue();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

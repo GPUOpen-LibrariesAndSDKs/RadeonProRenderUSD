@@ -18,6 +18,10 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_PRIVATE_TOKENS(HdRprCameraTokens,
+    (apertureBlades)
+);
+
 namespace {
 
 template<typename T>
@@ -60,6 +64,7 @@ HdRprCamera::HdRprCamera(SdfPath const& id)
     m_focalLength(std::numeric_limits<float>::quiet_NaN()),
     m_fStop(std::numeric_limits<float>::quiet_NaN()),
     m_focusDistance(std::numeric_limits<float>::quiet_NaN()),
+    m_apertureBlades(0),
     m_shutterOpen(std::numeric_limits<double>::quiet_NaN()),
     m_shutterClose(std::numeric_limits<double>::quiet_NaN()),
     m_clippingRange(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN()) {
@@ -95,6 +100,8 @@ void HdRprCamera::Sync(HdSceneDelegate* sceneDelegate,
         EvalCameraParam(&m_clippingRange, HdCameraTokens->clippingRange, sceneDelegate, id, GfRange1f(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN()));
 
         EvalCameraParam(&m_projectionType, UsdGeomTokens->projection, sceneDelegate, id, TfToken());
+
+        EvalCameraParam(&m_apertureBlades, HdRprCameraTokens->apertureBlades, sceneDelegate, id, 16);
     }
 
     if (*dirtyBits & HdCamera::DirtyViewMatrix) {

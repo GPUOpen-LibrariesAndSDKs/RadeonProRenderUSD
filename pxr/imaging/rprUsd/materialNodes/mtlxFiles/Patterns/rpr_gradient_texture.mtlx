@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_gradient_texture" node="rpr_gradient_texture" uiname="RPR Gradient Texture" doc="Gradient between two textures, based on a UV index between 0-1, mixes between color0 and color1.">
+      <input name="uv" type="vector2" value="0,0" uimin="0,0" uimax="1,1" uiname="UV" doc="UV value for lookup 0 gives color0, 1 gives color1."/>
+      <input name="color0" type="color3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Color 0"/>
+      <input name="color1" type="color3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Color 1"/>
+      <output name="out" type="color3" />
+  </nodedef>
+</materialx>

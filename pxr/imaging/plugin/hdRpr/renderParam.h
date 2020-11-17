@@ -20,12 +20,6 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-#define HDRPR_MATERIAL_NETWORK_SELECTOR_TOKENS \
-    (rpr) \
-    (karma)
-
-TF_DECLARE_PUBLIC_TOKENS(HdRprMaterialNetworkSelectorTokens, HDRPR_MATERIAL_NETWORK_SELECTOR_TOKENS);
-
 class HdRprApi;
 class HdRprVolume;
 
@@ -36,10 +30,7 @@ class HdRprRenderParam final : public HdRenderParam {
 public:
     HdRprRenderParam(HdRprApi* rprApi, HdRprRenderThread* renderThread)
         : m_rprApi(rprApi)
-        , m_renderThread(renderThread) {
-        m_numLights.store(0);
-        InitializeEnvParameters();
-    }
+        , m_renderThread(renderThread) {}
     ~HdRprRenderParam() override = default;
 
     HdRprApi const* GetRprApi() const { return m_rprApi; }
@@ -50,33 +41,31 @@ public:
 
     HdRprRenderThread* GetRenderThread() { return m_renderThread; }
 
-    void AddLight() { ++m_numLights; }
-    void RemoveLight() { --m_numLights; }
-    bool HasLights() const { return m_numLights != 0; }
-
-    TfToken const& GetMaterialNetworkSelector() const { return m_materialNetworkSelector; }
-
     // Hydra does not mark HdVolume as changed if HdField used by it is changed
     // We implement this volume-to-field dependency by ourself until it's implemented in Hydra
     // More info: https://groups.google.com/forum/#!topic/usd-interest/pabUE0B_5X4
     HdRprVolumeFieldSubscription SubscribeVolumeForFieldUpdates(HdRprVolume* volume, SdfPath const& fieldId);
     void NotifyVolumesAboutFieldChange(HdSceneDelegate* sceneDelegate, SdfPath const& fieldId);
 
+    // Hydra does not always mark HdRprim as changed if HdMaterial used by it has been changed.
+    // HdStorm marks all existing rprims as dirty when a material is changed.
+    // We instead mark only those rprims that use the changed material.
+    void SubscribeForMaterialUpdates(SdfPath const& materialId, SdfPath const& rPrimId);
+    void UnsubscribeFromMaterialUpdates(SdfPath const& materialId, SdfPath const& rPrimId);
+    void MaterialDidChange(HdSceneDelegate* sceneDelegate, SdfPath const materialId);
+
     void RestartRender() { m_restartRender.store(true); }
     bool IsRenderShouldBeRestarted() { return m_restartRender.exchange(false); }
 
 private:
-    void InitializeEnvParameters();
-
     HdRprApi* m_rprApi;
     HdRprRenderThread* m_renderThread;
 
-    std::atomic<uint32_t> m_numLights;
-
-    TfToken m_materialNetworkSelector;
-
     std::mutex m_subscribedVolumesMutex;
     std::map<SdfPath, std::vector<HdRprVolumeFieldSubscriptionHandle>> m_subscribedVolumes;
+
+    std::mutex m_materialSubscriptionsMutex;
+    std::map<SdfPath, std::set<SdfPath>> m_materialSubscriptions;
 
     std::atomic<bool> m_restartRender;
 };

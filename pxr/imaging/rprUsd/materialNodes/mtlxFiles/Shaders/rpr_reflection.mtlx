@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_reflection" node="rpr_reflection" uiname="RPR Reflection" doc="Represents perfectly smooth reflective surfaces, like chrome.">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Reflection color."/>
+      <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" doc="Normal direction used for shading."/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

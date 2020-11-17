@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_microfacet" node="rpr_microfacet" uiname="RPR Microfacet" doc="Microfacet reflecance for specular surfaces either rough or smooth.">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Reflection color."/>
+      <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" doc="Normal direction used for shading."/>
+      <input name="ior" type="float" value="1.5" uimin="1" uisoftmax="5" uiname="IOR" doc="Index of refraction, usually 1-5."/>
+      <input name="roughness" type="float" value="0" uimin="0" uimax="1" uiname="Roughness" doc="Reflection Rougness"/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

@@ -15,10 +15,12 @@ limitations under the License.
 #include "renderParam.h"
 #include "rprApi.h"
 
+#include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/usdLux/blackbody.h"
 #include "pxr/usd/usdLux/tokens.h"
+#include "pxr/base/gf/matrix4d.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -37,7 +39,7 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
     auto& id = GetId();
 
     if (bits & HdLight::DirtyTransform) {
-        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>());
+        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
     }
 
     bool newLight = false;
@@ -61,7 +63,10 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
                 *dirtyBits = HdLight::Clean;
                 return;
             }
-            rprRenderParam->AddLight();
+
+            if (RprUsdIsLeakCheckEnabled()) {
+                rprApi->SetName(m_rprLight, id.GetText());
+            }
         }
 
         float angle = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->angle).Get<float>();
@@ -88,8 +93,6 @@ void HdRprDistantLight::Finalize(HdRenderParam* renderParam) {
         auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
         rprRenderParam->AcquireRprApiForEdit()->Release(m_rprLight);
         m_rprLight = nullptr;
-
-        rprRenderParam->RemoveLight();
     }
 
     HdSprim::Finalize(renderParam);

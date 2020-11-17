@@ -51,7 +51,7 @@ function(_copy_headers LIBRARY_NAME)
                 OUTPUT ${outfile}
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${dir_to_create}"
                 COMMAND ${CMAKE_COMMAND} -Dinfile="${infile}" -Doutfile="${outfile}" -P "${PROJECT_SOURCE_DIR}/cmake/macros/copyHeaderForBuild.cmake"
-                MAIN_DEPENDENCY "${infile}"
+                DEPENDS "${infile}"
                 COMMENT "Copying ${f} ..."
                 VERBATIM
             )
@@ -127,7 +127,7 @@ function(_install_python LIBRARY_NAME)
     foreach(file ${ip_FILES})
         set(filesToInstall "")
         set(installDest 
-            "${libPythonPrefix}/pxr/${LIBRARY_INSTALLNAME}")
+            "${libPythonPrefix}/rpr/${LIBRARY_INSTALLNAME}")
 
         # Only attempt to compile .py files. Files like plugInfo.json may also
         # be in this list
@@ -163,10 +163,6 @@ function(_install_python LIBRARY_NAME)
             message(FATAL_ERROR "Cannot have non-Python file ${file} in PYTHON_FILES.")
         endif()
 
-        # Note that we always install under lib/python/pxr, even if we are in 
-        # the third_party project. This means the import will always look like
-        # 'from pxr import X'. We need to do this per-loop iteration because
-        # the installDest may be different due to the presence of subdirs.
         install(
             FILES
                 ${filesToInstall}
@@ -273,7 +269,7 @@ function(_install_pyside_ui_files LIBRARY_NAME)
 
     install(
         FILES ${uiFiles}
-        DESTINATION "${libPythonPrefix}/pxr/${LIBRARY_INSTALLNAME}"
+        DESTINATION "${libPythonPrefix}/rpr/${LIBRARY_INSTALLNAME}"
     )
 endfunction() # _install_pyside_ui_files
 
@@ -619,29 +615,32 @@ function(_pxr_add_rpath rpathRef target)
 endfunction()
 
 function(_pxr_install_rpath rpathRef NAME)
-    if(APPLE)
-        set(final "@loader_path/.")
-    else()
-        # Get and remove the origin.
-        list(GET ${rpathRef} 0 origin)
-        set(rpath ${${rpathRef}})
-        list(REMOVE_AT rpath 0)
+    # Get and remove the origin.
+    list(GET ${rpathRef} 0 origin)
+    set(rpath ${${rpathRef}})
+    list(REMOVE_AT rpath 0)
 
-        set(final "")
-        # Canonicalize and uniquify paths.
-        foreach(path ${rpath})
-            # Strip trailing slashes.
-            string(REGEX REPLACE "/+$" "" path "${path}")
-
-            # Ignore paths we already have.
-            if (NOT ";${final};" MATCHES ";${path};")
-                list(APPEND final "${path}")
+    # Canonicalize and uniquify paths.
+    set(final "")
+    foreach(path ${rpath})
+        if(APPLE)
+            if("${path}/" MATCHES "^[$]ORIGIN/")
+                # Replace with origin path.
+                string(REPLACE "$ORIGIN/" "@loader_path/" path "${path}/")
             endif()
-        endforeach()
-    endif()
+        endif()
+
+        # Strip trailing slashes.
+        string(REGEX REPLACE "/+$" "" path "${path}")
+
+        # Ignore paths we already have.
+        if (NOT ";${final};" MATCHES ";${path};")
+            list(APPEND final "${path}")
+        endif()
+    endforeach()
 
     set_target_properties(${NAME}
-        PROPERTIES 
+        PROPERTIES
             INSTALL_RPATH_USE_LINK_PATH FALSE
             INSTALL_RPATH "${final}"
     )
@@ -942,12 +941,7 @@ function(_pxr_python_module NAME)
         APPEND PROPERTY PXR_PYTHON_MODULES ${pyModuleName}
     )
 
-    # Always install under the 'pxr' module, rather than base on the
-    # project name. This makes importing consistent, e.g. 
-    # 'from pxr import X'. Additionally, python libraries always install
-    # into the default lib install, not into the third_party subdirectory
-    # or similar.
-    set(libInstallPrefix "lib/python/pxr/${pyModuleName}")
+    set(libInstallPrefix "lib/python/rpr/${pyModuleName}")
 
     # Python modules need to be able to access their corresponding
     # wrapped library and the install lib directory.
@@ -1142,15 +1136,11 @@ function(_pxr_library NAME)
     _get_install_dir("include/${PXR_PREFIX}/${NAME}" headerInstallPrefix)
     _get_install_dir("lib" libInstallPrefix)
     if(isPlugin)
-        if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-            _get_install_dir("${HOUDINI_PLUGIN_INSTALL_RELPATH}" pluginInstallPrefix)
-        else(RPR_BUILD_AS_HOUDINI_PLUGIN)
-            _get_install_dir("plugin" pluginInstallPrefix)
-            if(NOT PXR_INSTALL_SUBDIR)
-                # XXX -- Why this difference?
-                _get_install_dir("plugin/usd" pluginInstallPrefix)
-            endif()
-        endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
+        _get_install_dir("plugin" pluginInstallPrefix)
+        if(NOT PXR_INSTALL_SUBDIR)
+            # XXX -- Why this difference?
+            _get_install_dir("plugin/usd" pluginInstallPrefix)
+        endif()
 
         if(NOT isObject)
             # A plugin embedded in the monolithic library is found in
@@ -1260,10 +1250,9 @@ function(_pxr_library NAME)
             ${PXR_PREFIX}
     )
     target_include_directories(${NAME}
-        PRIVATE
+        PUBLIC
             "${CMAKE_BINARY_DIR}/include"
             "${CMAKE_BINARY_DIR}/${PXR_INSTALL_SUBDIR}/include"
-        PUBLIC
             ${args_INCLUDE_DIRS}
     )
 
@@ -1271,11 +1260,7 @@ function(_pxr_library NAME)
     _pxr_target_link_libraries(${NAME} ${args_LIBRARIES})
 
     _pxr_init_rpath(rpath "${libInstallPrefix}")
-    if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-        _pxr_add_rpath(rpath "${HOUDINI_LIB}")
-    else()
-        _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/lib")
-    endif()
+    _pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/lib")
     _pxr_install_rpath(rpath ${NAME})
 
     #

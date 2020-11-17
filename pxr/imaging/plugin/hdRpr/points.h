@@ -22,7 +22,7 @@ namespace rpr { class Shape; }
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-struct HdRprApiMaterial;
+class RprUsdMaterial;
 
 class HdRprPoints : public HdPoints {
 public:
@@ -48,7 +48,7 @@ protected:
 private:
     rpr::Shape* m_prototypeMesh = nullptr;
     std::vector<rpr::Shape*> m_instances;
-    HdRprApiMaterial* m_material = nullptr;
+    RprUsdMaterial* m_material = nullptr;
 
     GfMatrix4f m_transform;
 

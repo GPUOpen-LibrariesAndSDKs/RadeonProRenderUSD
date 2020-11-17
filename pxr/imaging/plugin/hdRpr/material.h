@@ -18,7 +18,7 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-struct HdRprApiMaterial;
+class RprUsdMaterial;
 
 class HdRprMaterial final : public HdMaterial {
 public:
@@ -32,15 +32,15 @@ public:
 
     HdDirtyBits GetInitialDirtyBitsMask() const override;
 
-    void Reload() override;
+    void Reload();
     void Finalize(HdRenderParam* renderParam) override;
 
     /// Get pointer to RPR material
     /// In case material сreation failure return nullptr
-    HdRprApiMaterial const* GetRprMaterialObject() const;
+    RprUsdMaterial const* GetRprMaterialObject() const;
 
 private:
-    HdRprApiMaterial* m_rprMaterial = nullptr;
+    RprUsdMaterial* m_rprMaterial = nullptr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_diffuse_refraction" node="rpr_diffuse_refraction" uiname="RPR Diffuse Refraction" doc="Diffuse refraction, simply transmits with no scattering and applies color. Often used for see-through plastic or thin diffuse surfaces like leaves.">
+      <input name="color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" doc="Diffuse Color"/>
+      <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" doc="Normal direction used for shading."/>
+      <input name="roughness" type="float" value="0" uimin="0" uimax="1" uiname="Roughness" doc="Diffuse Rougness"/>
+      <output name="surface" type="surfaceshader" />
+  </nodedef>
+</materialx>

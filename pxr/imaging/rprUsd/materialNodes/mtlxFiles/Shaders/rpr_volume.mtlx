@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_volume" node="rpr_volume" uiname="RPR Volume" doc="Volume shader for light traveling through a medium. At each step through the material light is scatter or absorbed. Can be used for anything from Fog/Clouds to subsurface scattering organic material.">
+      <input name="scattering" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Scattering Color"/>
+      <input name="absorption" type="color3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Absorption Color"/>
+      <input name="emission" type="color3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Emissive Color"/>
+      <input name="g" type="float" value="0" uimin="-1" uimax="1" uiname="Phase" doc="Forward or back scattering."/>
+      <input name="multiscatter" type="boolean" value="true" uiname="Multiple Scattering" doc="Whether to apply multiple scatter calculations."/>
+      <output name="volume" type="volumeshader" />
+  </nodedef>
+</materialx>

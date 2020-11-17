@@ -18,15 +18,15 @@ limitations under the License.
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/imaging/hd/light.h"
 
-#include "boostIncludePath.h"
+#include "pxr/imaging/rprUsd/boostIncludePath.h"
 #include BOOST_INCLUDE_PATH(variant.hpp)
 
-namespace rpr { class Shape; class PointLight; class SpotLight; class IESLight; }
+namespace rpr { class Shape; class PointLight; class SpotLight; class IESLight; class DiskLight; class SphereLight; }
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
-struct HdRprApiMaterial;
+class RprUsdMaterial;
 
 class HdRprLight : public HdLight {
 public:
@@ -55,7 +55,7 @@ private:
     rpr::Shape* CreateCylinderLightMesh(HdRprApi* rprApi);
 
     struct AreaLight;
-    void SyncAreaLightGeomParams(AreaLight* light, HdSceneDelegate* sceneDelegate, float* intensity);
+    void SyncAreaLightGeomParams(HdSceneDelegate* sceneDelegate, float* intensity);
 
     void ReleaseLight(HdRprApi* rprApi);
 
@@ -63,26 +63,22 @@ private:
     const TfToken m_lightType;
 
     struct AreaLight {
-        HdRprApiMaterial* material = nullptr;
+        RprUsdMaterial* material = nullptr;
         std::vector<rpr::Shape*> meshes;
-        GfMatrix4f localTransform;
     };
 
     struct LightVariantEmpty {};
-    using Light = BOOST_NS::variant<LightVariantEmpty, rpr::PointLight*, rpr::SpotLight*, rpr::IESLight*, AreaLight*>;
-    enum LightType {
-        kLightTypeNone,
-        kLightTypePoint,
-        kLightTypeSpot,
-        kLightIES,
-        kLightTypeArea
-    };
+    using Light = BOOST_NS::variant<LightVariantEmpty, rpr::PointLight*, rpr::SpotLight*, rpr::IESLight*, rpr::DiskLight*, rpr::SphereLight*, AreaLight*>;
     Light m_light;
+
+    struct LightParameterSetter;
+    struct LightTransformSetter;
+    struct LightNameSetter;
+    struct LightReleaser;
 
     GfVec3f m_emisionColor = GfVec3f(0.0f);
     GfMatrix4f m_transform;
-
-    bool m_created = false;
+    GfMatrix4f m_localTransform;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

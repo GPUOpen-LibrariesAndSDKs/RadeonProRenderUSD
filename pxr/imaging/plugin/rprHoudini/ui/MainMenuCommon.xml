@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mainMenu>
+    <menuBar>
+        <subMenu id="rpr_menu">
+            <label>RPR</label>
+            <insertBefore>help_menu</insertBefore>
+
+            <scriptItem id="rpr_user_guide">
+                <label>User Guide (TODO)</label>
+                <scriptCode><![CDATA[__import__('webbrowser').open('https://radeon-pro.github.io/RadeonProRenderDocs/en/plugins/about.html')]]></scriptCode>
+            </scriptItem>
+
+            <separatorItem />
+
+            <subMenu id="rpr_cache">
+                <label>Cache</label>
+
+                <scriptItem id="rpr_set_texture_cache_dir">
+                    <label>Set Texture Cache Directory...</label>
+                    <scriptCode><![CDATA[__import__('houRpr.cache').cache.set_texture_cache_dir()]]></scriptCode>
+                </scriptItem>
+
+                <scriptItem id="rpr_set_kernel_cache_dir">
+                    <label>Set Kernel Cache Directory...</label>
+                    <scriptCode><![CDATA[__import__('houRpr.cache').cache.set_kernel_cache_dir()]]></scriptCode>
+                </scriptItem>
+
+                <scriptItem id="rpr_clear_texture_cache">
+                    <label>Clear Texture Cache</label>
+                    <scriptCode><![CDATA[__import__('houRpr.cache').cache.clear_texture_cache()]]></scriptCode>
+                </scriptItem>
+
+                <scriptItem id="rpr_clear_kernel_cache">
+                    <label>Clear Kernel Cache</label>
+                    <scriptCode><![CDATA[__import__('houRpr.cache').cache.clear_kernel_cache()]]></scriptCode>
+                </scriptItem>
+
+            </subMenu>
+
+        </subMenu>
+    </menuBar>
+</mainMenu>

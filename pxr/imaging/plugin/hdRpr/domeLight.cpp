@@ -15,18 +15,16 @@ limitations under the License.
 #include "renderParam.h"
 #include "rprApi.h"
 
+#include "pxr/imaging/rprUsd/debugCodes.h"
+
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/sdf/assetPath.h"
 #include "pxr/usd/usdLux/blackbody.h"
-#include "pxr/base/tf/envSetting.h"
+#include "pxr/base/gf/matrix4d.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-
-TF_DEFINE_ENV_SETTING(HDRPR_INVERT_DOME_LIGHT_Z_AXIS, true,
-    "In Houdini 18.0.287 we needed to invert X-axis of dome light to match with Karma,"
-    "but in Houdini 18.0.311 this behavior is changed so now we need to invert Z-axis");
 
 static void removeFirstSlash(std::string& string) {
     // Don't need this for *nix/Mac
@@ -52,18 +50,26 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
     HdDirtyBits bits = *dirtyBits;
 
     if (bits & HdLight::DirtyTransform) {
-        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdLightTokens->transform).Get<GfMatrix4d>());
-        // XXX: Required to match orientation with Houdini's Karma
-        if (TfGetEnvSetting(HDRPR_INVERT_DOME_LIGHT_Z_AXIS)) {
-            m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(1.0f, 1.0f, -1.0f));
-        } else {
-            m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(-1.0f, 1.0f, 1.0f));
-        }
+        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
+        m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(1.0f, 1.0f, -1.0f));
     }
 
     bool newLight = false;
     if (bits & HdLight::DirtyParams) {
-        m_rprLight = nullptr;
+        if (m_rprLight) {
+            rprApi->Release(m_rprLight);
+            m_rprLight = nullptr;
+        }
+
+        bool isVisible = sceneDelegate->GetVisible(id);
+        if (!isVisible) {
+            // Invisible light does not produces any emission on a scene.
+            // So we simply keep light primitive empty in that case.
+            // We can do it in such a way because Hydra releases light object
+            // whenever it changed and creates it from scratch
+            *dirtyBits = HdLight::Clean;
+            return;
+        }
 
         float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
         float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
@@ -101,16 +107,15 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
 
         if (m_rprLight) {
             newLight = true;
+
+            if (RprUsdIsLeakCheckEnabled()) {
+                rprApi->SetName(m_rprLight, id.GetText());
+            }
         }
     }
 
     if (newLight || ((bits & HdLight::DirtyTransform) && m_rprLight)) {
         rprApi->SetTransform(m_rprLight, m_transform);
-    }
-
-    if (newLight && !m_created) {
-        m_created = true;
-        rprRenderParam->AddLight();
     }
 
     *dirtyBits = HdLight::Clean;
@@ -126,11 +131,6 @@ void HdRprDomeLight::Finalize(HdRenderParam* renderParam) {
     if (m_rprLight) {
         rprRenderParam->AcquireRprApiForEdit()->Release(m_rprLight);
         m_rprLight = nullptr;
-    }
-
-    if (m_created) {
-        rprRenderParam->RemoveLight();
-        m_created = false;
     }
 
     HdSprim::Finalize(renderParam);

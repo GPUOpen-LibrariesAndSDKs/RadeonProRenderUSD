@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_fresnel_schlick" node="rpr_fresnel_schlick" uiname="RPR Fresnel Schlick" doc="Fresnel output using Schlick approsimation.">
+      <input name="invec" type="vector3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Direction" doc="Direction (usually view direction)."/>
+      <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" doc="Surface normal direction."/>
+      <input name="reflectance" type="float" value="0.5" uimin="0" uimax="1" uiname="Reflectance factor"/>
+      <output name="out" type="color3" />
+  </nodedef>
+</materialx>

@@ -19,22 +19,18 @@ limitations under the License.
 #include <string>
 #include <memory>
 
-namespace rpr {
-
-class Context;
-struct ContextMetadata;
-
-} // namespace rpr
+namespace rpr { class Context; }
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+struct RprUsdContextMetadata;
 class HdRprApiFramebuffer;
 
 namespace rif {
 
 class Context {
 public:
-    static std::unique_ptr<Context> Create(rpr::Context* rprContext, rpr::ContextMetadata const& rprContextMetadata, std::string const& modelPath);
+    static std::unique_ptr<Context> Create(rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::string const& modelPath);
 
     virtual ~Context();
 

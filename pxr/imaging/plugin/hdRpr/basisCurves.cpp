@@ -12,19 +12,19 @@ limitations under the License.
 ************************************************************************/
 
 #include "basisCurves.h"
-#include "materialAdapter.h"
 #include "material.h"
 #include "renderParam.h"
 #include "primvarUtil.h"
 #include "rprApi.h"
 
-#include "pxr/usd/usdUtils/pipeline.h"
+#include "pxr/imaging/rprUsd/material.h"
+#include "pxr/imaging/rprUsd/debugCodes.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id,
                                    SdfPath const& instancerId)
-    : HdBasisCurves(id, instancerId)
+    : HdRprBaseRprim(id, instancerId)
     , m_visibilityMask(kVisibleAll) {
 
 }
@@ -94,12 +94,28 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
         newCurve = true;
     }
 
+    if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
+        UpdateMaterialId(sceneDelegate, rprRenderParam);
+    }
+
+    auto material = static_cast<const HdRprMaterial*>(
+        sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_materialId)
+    );
+
     bool isVisibilityMaskDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
         HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-        auto stToken = UsdUtilsGetPrimaryUVSetName();
-        if (HdRprIsPrimvarExists(stToken, primvarDescsPerInterpolation, &m_uvsInterpolation)) {
-            m_uvs = sceneDelegate->Get(id, stToken).Get<VtVec2fArray>();
+
+        static TfToken st("st", TfToken::Immortal);
+        TfToken const* uvPrimvarName = &st;
+        if (material) {
+            if (auto rprMaterial = material->GetRprMaterialObject()) {
+                uvPrimvarName = &rprMaterial->GetUvPrimvarName();
+            }
+        }
+
+        if (HdRprIsPrimvarExists(*uvPrimvarName, primvarDescsPerInterpolation, &m_uvsInterpolation)) {
+            m_uvs = sceneDelegate->Get(id, *uvPrimvarName).Get<VtVec2fArray>();
         } else {
             m_uvs = VtVec2fArray();
         }
@@ -107,7 +123,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
 
         HdRprGeometrySettings geomSettings = {};
         geomSettings.visibilityMask = kVisibleAll;
-        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation.at(HdInterpolationConstant), &geomSettings);
+        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation, &geomSettings);
 
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
@@ -120,16 +136,15 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
         newCurve = true;
     }
 
-    if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
-        m_cachedMaterial = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, sceneDelegate->GetMaterialId(id)));
-    }
-
     if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
         _sharedData.visible = sceneDelegate->GetVisible(id);
     }
 
     if (newCurve) {
-        m_rprCurve = nullptr;
+        if (m_rprCurve) {
+            rprApi->Release(m_rprCurve);
+            m_rprCurve = nullptr;
+        }
 
         if (m_points.empty()) {
             TF_RUNTIME_ERROR("[%s] Curve could not be created: missing points", id.GetText());
@@ -171,13 +186,17 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                        m_topology.GetCurveBasis() == HdTokens->bezier) {
                 m_rprCurve = CreateBezierRprCurve(rprApi);
             }
+
+            if (m_rprCurve && RprUsdIsLeakCheckEnabled()) {
+                rprApi->SetName(m_rprCurve, id.GetText());
+            }
         }
     }
 
     if (m_rprCurve) {
         if (newCurve || (*dirtyBits & HdChangeTracker::DirtyMaterialId)) {
-            if (m_cachedMaterial && m_cachedMaterial->GetRprMaterialObject()) {
-                rprApi->SetCurveMaterial(m_rprCurve, m_cachedMaterial->GetRprMaterialObject());
+            if (material && material->GetRprMaterialObject()) {
+                rprApi->SetCurveMaterial(m_rprCurve, material->GetRprMaterialObject());
             } else {
                 GfVec3f color(0.18f);
 
@@ -191,10 +210,12 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                     }
                 }
 
-                MaterialAdapter matAdapter(EMaterialType::COLOR, MaterialParams{{HdRprMaterialTokens->color, VtValue(color)}});
-                m_fallbackMaterial = rprApi->CreateMaterial(matAdapter);
-
+                m_fallbackMaterial = rprApi->CreateDiffuseMaterial(color);
                 rprApi->SetCurveMaterial(m_rprCurve, m_fallbackMaterial);
+
+                if (RprUsdIsLeakCheckEnabled()) {
+                    rprApi->SetName(m_fallbackMaterial, id.GetText());
+                }
             }
         }
 
@@ -259,6 +280,10 @@ rpr::Curve* HdRprBasisCurves::CreateLinearRprCurve(HdRprApi* rprApi) {
     auto& curveCounts = m_topology.GetCurveVertexCounts();
     rprSegmentPerCurve.reserve(curveCounts.size());
 
+    // Validate Hydra curve data and calculate amount of required memory.
+    //
+    size_t numRadiuses = 0;
+    size_t numIndices = 0;
     int curveSegmentOffset = 0;
     int curveIndicesOffset = 0;
     for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
@@ -281,12 +306,41 @@ rpr::Curve* HdRprBasisCurves::CreateLinearRprCurve(HdRprApi* rprApi) {
             return nullptr;
         }
 
-        int numNewRprIndices = numSegments * kNumPointsPerSegment;
         if (isCurveTapered) {
-            rprRadiuses.reserve(rprRadiuses.size() + numNewRprIndices);
-            numNewRprIndices *= 2;
+            numRadiuses += numSegments * 2;
+            numIndices += numSegments * 4;
+        } else {
+            if (m_widthsInterpolation == HdInterpolationUniform ||
+                m_widthsInterpolation == HdInterpolationConstant) {
+                ++numRadiuses;
+            }
+            numIndices += numSegments * 2;
+
+            // RPR requires curves to consist only of segments of kRprNumPointsPerSegment length
+            auto numPointsInCurve = (numVertices - 1) * 2;
+            auto numTrailingPoints = numPointsInCurve % kRprNumPointsPerSegment;
+            if (numTrailingPoints > 0) {
+                numIndices += kRprNumPointsPerSegment - numTrailingPoints;
+            }
         }
-        rprIndices.reserve(rprIndices.size() + numNewRprIndices);
+
+        curveSegmentOffset += numSegments;
+        curveIndicesOffset += numVertices;
+    }
+    rprRadiuses.reserve(numRadiuses);
+    rprIndices.reserve(numIndices);
+
+    // Convert Hydra curve data to RPR data.
+    //
+    curveIndicesOffset = 0;
+    for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
+        auto numVertices = curveCounts[iCurve];
+        if (numVertices < 2) {
+            continue;
+        }
+
+        int numSegments = (numVertices - (kNumPointsPerSegment - kVstep)) / kVstep;
+        if (periodic) numSegments++;
 
         if (isCurveTapered) {
             rprSegmentPerCurve.push_back(numVertices - 1);
@@ -336,7 +390,6 @@ rpr::Curve* HdRprBasisCurves::CreateLinearRprCurve(HdRprApi* rprApi) {
             rprSegmentPerCurve.push_back((numPointsInCurve + extraPoints) / kRprNumPointsPerSegment);
         }
 
-        curveSegmentOffset += numSegments;
         curveIndicesOffset += numVertices;
     }
 
@@ -391,6 +444,10 @@ rpr::Curve* HdRprBasisCurves::CreateBezierRprCurve(HdRprApi* rprApi) {
         indexSampler = [this](int idx) { return m_indices.cdata()[idx]; };
     }
 
+    // Validate Hydra curve data and calculate amount of required memory.
+    //
+    size_t numRadiuses = 0;
+    size_t numIndices = 0;
     int curveSegmentOffset = 0;
     int curveIndicesOffset = 0;
     for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
@@ -406,7 +463,6 @@ rpr::Curve* HdRprBasisCurves::CreateBezierRprCurve(HdRprApi* rprApi) {
             return nullptr;
         }
 
-
         int numSegments = (numVertices - (kNumPointsPerSegment - kVstep)) / kVstep;
         if (periodic) numSegments++;
 
@@ -416,10 +472,33 @@ rpr::Curve* HdRprBasisCurves::CreateBezierRprCurve(HdRprApi* rprApi) {
             return nullptr;
         }
 
-        rprIndices.reserve(rprIndices.size() + numSegments * kNumPointsPerSegment);
+        numIndices += numSegments * kNumPointsPerSegment;
         if (isCurveTapered) {
-            rprRadiuses.reserve(rprRadiuses.size() + numSegments * 2);
+            numRadiuses += numSegments * 2;
+        } else {
+            if (m_widthsInterpolation == HdInterpolationUniform ||
+                m_widthsInterpolation == HdInterpolationConstant) {
+                numRadiuses++;
+            }
         }
+
+        curveSegmentOffset += numSegments;
+        curveIndicesOffset += numVertices;
+    }
+    rprRadiuses.reserve(numRadiuses);
+    rprIndices.reserve(numIndices);
+
+    // Convert Hydra curve data to RPR data.
+    //
+    curveIndicesOffset = 0;
+    for (size_t iCurve = 0; iCurve < curveCounts.size(); ++iCurve) {
+        auto numVertices = curveCounts[iCurve];
+        if (numVertices < kNumPointsPerSegment) {
+            continue;
+        }
+
+        int numSegments = (numVertices - (kNumPointsPerSegment - kVstep)) / kVstep;
+        if (periodic) numSegments++;
 
         rprSegmentPerCurve.push_back(numSegments);
 
@@ -452,7 +531,6 @@ rpr::Curve* HdRprBasisCurves::CreateBezierRprCurve(HdRprApi* rprApi) {
             }
         }
 
-        curveSegmentOffset += numSegments;
         curveIndicesOffset += numVertices;
     }
 
@@ -476,7 +554,7 @@ void HdRprBasisCurves::Finalize(HdRenderParam* renderParam) {
     rprApi->Release(m_fallbackMaterial);
     m_fallbackMaterial = nullptr;
  
-    HdBasisCurves::Finalize(renderParam);
+    HdRprBaseRprim::Finalize(renderParam);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

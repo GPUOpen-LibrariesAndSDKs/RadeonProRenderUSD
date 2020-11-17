@@ -15,8 +15,8 @@ limitations under the License.
 #include "rprApi.h"
 #include "primvarUtil.h"
 #include "renderParam.h"
-#include "materialAdapter.h"
 
+#include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/hd/extComputationUtils.h"
 #include "pxr/usdImaging/usdImaging/implicitSurfaceMeshUtils.h"
 
@@ -106,7 +106,7 @@ void HdRprPoints::Sync(
         HdRprGeometrySettings geomSettings;
         geomSettings.visibilityMask = kVisibleAll;
         HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation[HdInterpolationConstant], &geomSettings);
+        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation, &geomSettings);
 
         if (m_subdivisionLevel != geomSettings.subdivisionLevel) {
             m_subdivisionLevel = geomSettings.subdivisionLevel;
@@ -128,8 +128,11 @@ void HdRprPoints::Sync(
         if (m_colorsInterpolation == HdInterpolationVertex) {
             m_material = rprApi->CreatePointsMaterial(m_colors);
         } else if (!m_colors.empty()) {
-            auto matAdapter = MaterialAdapter(EMaterialType::COLOR, MaterialParams{{HdRprMaterialTokens->color, VtValue(m_colors[0])}});
-            m_material = rprApi->CreateMaterial(matAdapter);
+            m_material = rprApi->CreateDiffuseMaterial(m_colors[0]);
+        }
+
+        if (m_material && RprUsdIsLeakCheckEnabled()) {
+            rprApi->SetName(m_material, id.GetText());
         }
     }
 
@@ -148,6 +151,10 @@ void HdRprPoints::Sync(
             rprApi->SetMeshRefineLevel(m_prototypeMesh, m_subdivisionLevel);
 
             dirtyPrototypeMesh = true;
+
+            if (RprUsdIsLeakCheckEnabled()) {
+                rprApi->SetName(m_prototypeMesh, id.GetText());
+            }
         }
 
         if (m_instances.size() > m_points.size()) {
@@ -161,6 +168,10 @@ void HdRprPoints::Sync(
                 if (auto instance = rprApi->CreateMeshInstance(m_prototypeMesh)) {
                     rprApi->SetMeshId(instance, i);
                     m_instances.push_back(instance);
+
+                    if (RprUsdIsLeakCheckEnabled()) {
+                        rprApi->SetName(instance, id.GetText());
+                    }
                 }
             }
 
@@ -199,7 +210,7 @@ void HdRprPoints::Sync(
 
         if (dirtyDisplayColors || dirtyInstances) {
             for (size_t i = 0; i < m_instances.size(); ++i) {
-                rprApi->SetMeshMaterial(m_instances[i], m_material, false, false);
+                rprApi->SetMeshMaterial(m_instances[i], m_material, false);
             }
         }
 

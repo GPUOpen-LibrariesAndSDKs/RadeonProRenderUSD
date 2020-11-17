@@ -23,7 +23,6 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApiFramebuffer {
 public:
-    static constexpr rpr::Aov kAovNone = static_cast<rpr::Aov>(-1);
     static constexpr uint32_t kNumChannels = 4;
 
     HdRprApiFramebuffer(rpr::Context* context, uint32_t width, uint32_t height);
@@ -33,7 +32,7 @@ public:
     HdRprApiFramebuffer& operator=(HdRprApiFramebuffer&& fb) noexcept;
 
     void AttachAs(rpr::Aov aov);
-    void Clear();
+    void Clear(float r, float g, float b, float a);
     void Resolve(HdRprApiFramebuffer* dstFrameBuffer);
     /// Return true if framebuffer was actually resized
     bool Resize(uint32_t width, uint32_t height);
@@ -41,6 +40,7 @@ public:
     bool GetData(void* dstBuffer, size_t dstBufferSize);
     size_t GetSize() const;
     rpr::FramebufferDesc GetDesc() const;
+    rpr::Aov GetAovId() const { return m_aov; }
 
     rpr_cl_mem GetCLMem();
     rpr::FrameBuffer* GetRprObject() { return m_rprFb; }

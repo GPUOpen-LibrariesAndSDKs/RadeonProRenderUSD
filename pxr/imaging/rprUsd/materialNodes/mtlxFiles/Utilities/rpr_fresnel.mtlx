@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_fresnel" node="rpr_fresnel" uiname="RPR Fresnel" doc="Fresnel term, used for weighting blend between diffuse and specular BRDFs, or more generally, outputs the Fresnel falloff on edges facing away from the camera on geometry.">
+      <input name="invec" type="vector3" value="0,0,0" uimin="0,0,0" uimax="1,1,1" uiname="Direction" doc="Direction (usually view direction)."/>
+      <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" doc="Surface normal direction."/>
+      <input name="ior" type="float" value="1.5" uimin="1" uisoftmax="5" uiname="IOR" doc="Index of refraction, controls falloff towards edges."/>
+      <input name="schlick_approximation" type="float" value="0.0" uisoftmin="0" uisoftmax="1" uiname="Schlick factor"/>
+      <output name="out" type="color3" />
+  </nodedef>
+</materialx>

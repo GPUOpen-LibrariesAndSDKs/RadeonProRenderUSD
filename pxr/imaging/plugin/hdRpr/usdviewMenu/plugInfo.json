@@ -1,0 +1,16 @@
+{
+    "Plugins": [
+        {
+            "Type": "python",
+            "Name": "rprUsdviewMenu",
+            "Info": {
+                "Types": {
+                    "rprUsdviewMenu.RprPluginContainer": {
+                        "bases": ["pxr.Usdviewq.plugin.PluginContainer"],
+                        "displayName": "Usdview Radeon ProRender Plugin Menu"
+                    }
+                }
+            }
+        }
+    ]
+}

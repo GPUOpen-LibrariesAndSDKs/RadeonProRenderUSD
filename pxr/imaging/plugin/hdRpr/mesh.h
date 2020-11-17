@@ -14,6 +14,8 @@ limitations under the License.
 #ifndef HDRPR_MESH_H
 #define HDRPR_MESH_H
 
+#include "baseRprim.h"
+
 #include "pxr/imaging/hd/mesh.h"
 #include "pxr/imaging/hd/vertexAdjacency.h"
 #include "pxr/base/vt/array.h"
@@ -25,9 +27,9 @@ namespace rpr { class Shape; }
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
-struct HdRprApiMaterial;
+class RprUsdMaterial;
 
-class HdRprMesh final : public HdMesh {
+class HdRprMesh final : public HdRprBaseRprim<HdMesh> {
 public:
     HF_MALLOC_TAG_NEW("new HdRprMesh");
 
@@ -52,18 +54,23 @@ private:
     template <typename T>
     bool GetPrimvarData(TfToken const& name,
                         HdSceneDelegate* sceneDelegate,
-                        std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation,
+                        std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
                         VtArray<T>& out_data,
                         VtIntArray& out_indices);
 
-    HdRprApiMaterial const* GetFallbackMaterial(HdSceneDelegate* sceneDelegate, HdRprApi* rprApi, HdDirtyBits dirtyBits);
+    RprUsdMaterial const* GetFallbackMaterial(
+        HdSceneDelegate* sceneDelegate,
+        HdRprApi* rprApi,
+        HdDirtyBits dirtyBits,
+        std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation);
+
+    uint32_t GetVisibilityMask() const;
 
 private:
     std::vector<rpr::Shape*> m_rprMeshes;
     std::vector<std::vector<rpr::Shape*>> m_rprMeshInstances;
-    HdRprApiMaterial* m_fallbackMaterial = nullptr;
+    RprUsdMaterial* m_fallbackMaterial = nullptr;
 
-    SdfPath m_cachedMaterialId;
     static constexpr int kDefaultNumTimeSamples = 2;
     HdTimeSampleArray<GfMatrix4d, kDefaultNumTimeSamples> m_transformSamples;
 
@@ -88,7 +95,6 @@ private:
 
     HdDisplayStyle m_displayStyle;
     int m_refineLevel = 0;
-    bool m_doublesided = false;
 
     uint32_t m_visibilityMask;
 };

@@ -1,71 +1,30 @@
 set(PXR_PREFIX pxr/imaging)
 set(PXR_PACKAGE hdRpr)
-add_custom_target(shared_libs)
 
 set(OptLibs ${ARGN})
 set(OptBin ${ARGN})
 set(OptIncludeDir ${ARGN})
 set(OptClass${ARGN})
 
-if(RPR_ENABLE_OPENVDB_SUPPORT)
+if(OpenVDB_FOUND)
     add_definitions(-DUSE_VOLUME -DOPENVDB_DLL)
     
     set(OptLibs ${OptLibs} ${OpenVDB_LIBRARIES})
     set(OptBin ${OptBin} ${OpenVDB_BINARIES})
     set(OptIncludeDir ${OptIncludeDir} ${OpenVDB_INCLUDE_DIR})
     set(OptClass ${OptClass} field volume)
-endif(RPR_ENABLE_OPENVDB_SUPPORT)
-
-set(USD_LIBRARIES
-    ar
-    arch
-    sdf
-    trace
-    plug
-    tf
-    vt
-    gf
-    glf
-    work
-    hf
-    hd
-    hdSt
-    hdx
-    usdVol
-    usdLux
-    usdUtils
-    usdRender
-    usdGeom
-    usdImaging
-    pxOsd
-    cameraUtil)
-if(${USD_LIBRARY_MONOLITHIC})
-    set(USD_LIBRARIES usd_ms)
-endif()
-
-set(_libPrefix ${PXR_LIB_PREFIX})
-# UNIX compilers adding "lib" prefix implicitly
-if(NOT WIN32)
-    string(REGEX REPLACE "^lib" "" _libPrefix "${PXR_LIB_PREFIX}")
-endif()
-
-set(_prefixedUsdLibraries "")
-foreach(name ${USD_LIBRARIES})
-    list(APPEND _prefixedUsdLibraries "${_libPrefix}${name}")
-endforeach()
-set(USD_LIBRARIES "${_prefixedUsdLibraries}")
+endif(OpenVDB_FOUND)
 
 set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
-if(RPR_BUILD_AS_HOUDINI_PLUGIN)
+if(HoudiniUSD_FOUND)
     list(APPEND OptLibs Houdini)
-    add_definitions(-DENABLE_RAT)
+    add_definitions(-DENABLE_MULTITHREADED_RENDER_BUFFER)
     add_definitions(-DHDRPR_DEFAULT_MATERIAL_NETWORK_SELECTOR="karma")
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Houdini.png${_sep}images/restartRequired.png)
-else(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    add_definitions(-DENABLE_PREFERENCES_FILE)
+else(HoudiniUSD_FOUND)
     add_definitions(-DHDRPR_DEFAULT_MATERIAL_NETWORK_SELECTOR="rpr")
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Usdview.png${_sep}images/restartRequired.png)
-endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
+endif(HoudiniUSD_FOUND)
 
 set(GEN_SCRIPT_PYTHON ${PYTHON_EXECUTABLE})
 set(GENERATION_SCRIPTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/python)
@@ -79,8 +38,7 @@ set(GENERATION_DEPENDENT_FILES ${GEN_SCRIPT}
     ${GENERATION_SCRIPTS_DIR}/generateLightSettingFiles.py
     ${GENERATION_SCRIPTS_DIR}/generateRenderSettingFiles.py
     ${GENERATION_SCRIPTS_DIR}/generateGeometrySettingFiles.py)
-if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    set(GEN_SCRIPT_PYTHON ${HYTHON_EXECUTABLE})
+if(HoudiniUSD_FOUND)
     set(GEN_SCRIPT_ARGS --houdini_root \"${HOUDINI_ROOT}\" ${GEN_SCRIPT_ARGS})
     set(GENERATED_FILES ${GENERATED_FILES}
         ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Light.ds
@@ -88,7 +46,23 @@ if(RPR_BUILD_AS_HOUDINI_PLUGIN)
         ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds)
     set(GENERATION_DEPENDENT_FILES ${GENERATION_DEPENDENT_FILES}
         ${GENERATION_SCRIPTS_DIR}/houdiniDsGenerator.py)
+
+    install(
+        FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Light.ds
+            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
+            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds
+        DESTINATION "houdini/soho/parameters")
+
+    install(
+        CODE
+        "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/houdini/dso/usd_plugins/plugInfo.json\"
+        \"{
+        \\\"Includes\\\": [ \\\"../../../plugin/\\\" ]
+    }\")")
 endif()
+
+set(GEN_SCRIPT_ARGS --python_exe "\"${GEN_SCRIPT_PYTHON}\"" ${GEN_SCRIPT_ARGS})
 
 add_custom_command(
     COMMAND ${GEN_SCRIPT_PYTHON} ${GEN_SCRIPT} ${GEN_SCRIPT_ARGS}
@@ -105,32 +79,34 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
 list(APPEND RIF_MODEL_RESOURCE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
 
-if(NOT DEFINED RPR_CPP_WRAPPER_LOCATION)
-    set(RPR_CPP_WRAPPER_LOCATION ${RPR_TOOLS_LOCATION})
-endif()
-
 pxr_plugin(hdRpr
-   LIBRARIES
-        ${USD_LIBRARIES}
-        ${RPR_LIBRARY}
-        ${RPR_LOADSTORE_LIBRARY}
+    DISABLE_PRECOMPILED_HEADERS
+
+    LIBRARIES
+        ar
+        trace
+        plug
+        tf
+        gf
+        hf
+        ndr
+        usdVol
+        usdLux
+        usdUtils
+        usdRender
+        usdGeom
+        usdImaging
+        pxOsd
+        cameraUtil
+        rprUsd
+        json
         ${RIF_LIBRARY}
-        ${Boost_LIBRARIES}
-        ${TBB_tbb_LIBRARY}
-        ${GLEW_LIBRARY}
-        ${OPENGL_LIBRARIES}
-        ${PYTHON_LIBRARIES}
         ${OPENEXR_LIBRARIES}
 
         ${OptLibs}
 
     INCLUDE_DIRS
-        ${RPR_LOCATION_INCLUDE}
-        ${RPR_CPP_WRAPPER_LOCATION}
         ${RIF_LOCATION_INCLUDE}
-        ${Boost_INCLUDE_DIRS}
-        ${TBB_INCLUDE_DIRS}
-        ${GLEW_INCLUDE_DIR}
         ${CMAKE_CURRENT_BINARY_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
         ${OPENEXR_INCLUDE_DIRS}
@@ -138,6 +114,7 @@ pxr_plugin(hdRpr
         ${OptIncludeDir}
 
     PRIVATE_CLASSES
+        aovDescriptor
         rendererPlugin
         renderDelegate
         renderPass
@@ -149,14 +126,11 @@ pxr_plugin(hdRpr
         mesh
         instancer
         material
-        materialFactory
-        materialAdapter
         domeLight
         distantLight
         light
         renderBuffer
         basisCurves
-        imageCache
         camera
         debugCodes
         primvarUtil
@@ -165,7 +139,7 @@ pxr_plugin(hdRpr
         ${OptClass}
 
     PRIVATE_HEADERS
-        boostIncludePath.h
+        baseRprim.h
         api.h
 
     RESOURCE_FILES
@@ -175,6 +149,8 @@ pxr_plugin(hdRpr
 
     CPPFILES
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
+        ndrDiscoveryPlugin.cpp
+        ndrParserPlugin.cpp
 )
 
 target_sources(hdRpr PRIVATE
@@ -190,80 +166,32 @@ else()
         ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.cpp)
 endif()
 
-target_compile_definitions(hdRpr PRIVATE
-    RPR_CPPWRAPER_DISABLE_MUTEXLOCK
-    RPR_API_USE_HEADER_V2)
-
-target_sources(hdRpr PRIVATE
-    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRender.hpp
-    ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRenderCpp.cpp)
-
-add_subdirectory(rpr)
 add_subdirectory(rifcpp)
 add_subdirectory(houdini)
+if(NOT HoudiniUSD_FOUND)
+    add_subdirectory(usdviewMenu)
+endif()
 
-get_target_property(hdRpr_SOURCES hdRpr SOURCES)
-foreach(FILE ${hdRpr_SOURCES}) 
-    get_filename_component(ABS_FILE ${FILE} ABSOLUTE)
-    file(RELATIVE_PATH relPath ${CMAKE_CURRENT_SOURCE_DIR} ${ABS_FILE})
+GroupSources(hdRpr)
 
-    string(FIND "${relPath}" ".." out)
-    if("${out}" EQUAL 0)
-        source_group("external" FILES "${FILE}")
-    else()
-        get_filename_component(PARENT_DIR "${FILE}" DIRECTORY)
-        string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" GROUP "${PARENT_DIR}")
-        string(REPLACE "/" "\\" GROUP "${GROUP}")
-
-        source_group("${GROUP}" FILES "${FILE}")
-    endif()
-endforeach()
-
-if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    install(
-        FILES
-            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Light.ds
-            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
-            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds
-        DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/soho/parameters")
-    install(
-        FILES ${CMAKE_CURRENT_SOURCE_DIR}/houdini/rpr_exportRpr1.hda
-        DESTINATION "${HOUDINI_RESOURCE_DIR_RELPATH}/houdini/otls")
-else(RPR_BUILD_AS_HOUDINI_PLUGIN)
-    _get_install_dir(lib/python/rpr installPrefix)
-
-    install(
-        FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/rpr.py
-        DESTINATION ${installPrefix}
-        RENAME "__init__.py")
-
-    install(
-        FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/plugInfo.json
-        DESTINATION ${installPrefix})
-    install(
-        CODE
-        "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/plugin/usd/plugInfo.json\"
-        \"
-    {
-        \\\"Includes\\\": [ \\\"*/resources/\\\" ]
-    }
-        \")")
-endif(RPR_BUILD_AS_HOUDINI_PLUGIN)
+install(
+    CODE
+    "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/plugin/plugInfo.json\"
+    \"{
+    \\\"Includes\\\": [ \\\"usd/*/resources/\\\" ]
+}\")")
 
 if(WIN32)
+    set(RPR_BINARIES
+        ${RPR_BIN_LOCATION}/RadeonProRender64.dll
+        ${RPR_BIN_LOCATION}/RprLoadStore64.dll)
     install(
-        FILES ${RPR_BINARIES} ${RIF_BINARIES} ${OptBin}
-        DESTINATION bin)
+        FILES ${RPR_BINARIES} ${RPR_PLUGINS} ${RIF_BINARIES} ${OptBin}
+        DESTINATION lib)
 else(WIN32)
-    if(RPR_BUILD_AS_HOUDINI_PLUGIN)
-        _get_install_dir("${HOUDINI_PLUGIN_INSTALL_RELPATH}" installPrefix)
-    else()
-        _get_install_dir("lib" installPrefix)
-    endif()
-
     # install() does not follow symlinks, so we do it manually
     set(RESOLVED_LIBRARIES "")
-    foreach (file ${RPR_LIBRARY} ${RPR_LOADSTORE_LIBRARY} ${RPR_PLUGIN_LIBRARIES} ${RIF_LIBRARY} ${RIF_DEPENDENCY_LIBRARIES})
+    foreach (file ${RPR_LIBRARY} ${RPR_LOADSTORE_LIBRARY} ${RPR_PLUGINS} ${RIF_LIBRARY} ${RIF_DEPENDENCY_LIBRARIES})
         while(IS_SYMLINK ${file})
             file(READ_SYMLINK ${file} symfile)
             if(NOT IS_ABSOLUTE "${symfile}")
@@ -278,7 +206,7 @@ else(WIN32)
 
     install(
         FILES ${RESOLVED_LIBRARIES}
-        DESTINATION ${installPrefix})
+        DESTINATION lib)
 endif(WIN32)
 
 add_subdirectory(package)

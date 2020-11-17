@@ -18,10 +18,8 @@ elseif(WIN32)
     SET_RIF_VARIABLES(Windows)
 elseif(RPR_SDK_PLATFORM STREQUAL "ubuntu18.04")
     SET_RIF_VARIABLES(Ubuntu18)
-elseif(RPR_SDK_PLATFORM STREQUAL "centos7")
-    SET_RIF_VARIABLES(CentOS7)
 else()
-    message(FATAL_ERROR "Unknown platform: ${RPR_SDK_PLATFORM}")
+    SET_RIF_VARIABLES(CentOS7)
 endif()
 
 find_library(RIF_LIBRARY
@@ -38,16 +36,16 @@ if(WIN32)
     set(RIF_BINARIES
         ${RIF_LOCATION_LIB}/MIOpen.dll
         ${RIF_LOCATION_LIB}/RadeonImageFilters.dll
-        ${RIF_LOCATION_LIB}/RadeonML-MIOpen.dll
-        ${RIF_LOCATION_LIB}/RadeonML-DirectML.dll)
+        ${RIF_LOCATION_LIB}/RadeonML_MIOpen.dll
+        ${RIF_LOCATION_LIB}/RadeonML_DirectML.dll)
 else(WIN32)
     if(APPLE)
         set(RIF_DEPENDENCY_LIBRARIES
-            ${RIF_LOCATION_LIB}/libRadeonML-MPS.dylib)
+            ${RIF_LOCATION_LIB}/libRadeonML_MPS.dylib)
     else()
         set(RIF_DEPENDENCY_LIBRARIES
             ${RIF_LOCATION_LIB}/libMIOpen.so
-            ${RIF_LOCATION_LIB}/libRadeonML-MIOpen.so)
+            ${RIF_LOCATION_LIB}/libRadeonML_MIOpen.so)
     endif(APPLE)
 endif(WIN32)
 
@@ -55,7 +53,7 @@ if(NOT DEFINED RIF_MODELS_DIR)
     set(RIF_MODELS_DIR "${RIF_LOCATION}/models")
 endif()
 
-set(RIF_VERSION_FILE "${RIF_LOCATION_INCLUDE}/version.h")
+set(RIF_VERSION_FILE "${RIF_LOCATION_INCLUDE}/RadeonImageFilters_version.h")
 if(NOT EXISTS ${RIF_VERSION_FILE})
     message(FATAL_ERROR "Invalid RIF SDK: missing ${RIF_VERSION_FILE} file")
 endif()

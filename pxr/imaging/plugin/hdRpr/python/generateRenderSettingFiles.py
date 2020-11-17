@@ -15,41 +15,110 @@ import argparse
 import platform
 
 from houdiniDsGenerator import generate_houdini_ds
+from commonSettings import SettingValue
+
+def get_render_setting(render_setting_categories, category_name, name):
+    for category in render_setting_categories:
+        if category['name'] != category_name:
+            continue
+
+        for setting in category['settings']:
+            if setting['name'] == name:
+                return setting
+
+def hidewhen_render_quality(operator, quality, render_setting_categories=None):
+    if operator in ('==', '!='):
+        return 'renderQuality {} "{}"'.format(operator, quality)
+    elif operator == '<':
+        render_quality = get_render_setting(render_setting_categories, 'RenderQuality', 'renderQuality')
+        values = render_quality['values']
+
+        hidewhen = []
+        for value in values:
+            if value == quality:
+                break
+            hidewhen.append(hidewhen_render_quality('==', value.get_key()))
+
+        return hidewhen
+    else:
+        raise ValueError('Operator "{}" not implemented'.format(operator))
+
+def hidewhen_hybrid(render_setting_categories):
+    return hidewhen_render_quality('<', 'Full', render_setting_categories)
+
+def hidewhen_not_northstar(render_setting_categories):
+    return hidewhen_render_quality('!=', 'Northstar', render_setting_categories)
+
+HYBRID_DISABLED_PLATFORM = 'Darwin'
 
 render_setting_categories = [
     {
         'name': 'RenderQuality',
-        'disabled_platform': ['Darwin'],
         'settings': [
             {
                 'name': 'renderQuality',
                 'ui_name': 'Render Quality',
                 'help': 'Render restart might be required',
-                'defaultValue': 3,
+                'defaultValue': 'Northstar',
                 'values': [
-                    "Low",
-                    "Medium",
-                    "High",
-                    "Full"
+                    SettingValue('Low', disabled_platform=HYBRID_DISABLED_PLATFORM),
+                    SettingValue('Medium', disabled_platform=HYBRID_DISABLED_PLATFORM),
+                    SettingValue('High', disabled_platform=HYBRID_DISABLED_PLATFORM),
+                    SettingValue('Full', 'Full (Legacy)'),
+                    SettingValue('Northstar', 'Full')
                 ]
             }
         ]
     },
     {
+        'name': 'RenderMode',
+        'settings': [
+            {
+                'name': 'renderMode',
+                'ui_name': 'Render Mode',
+                'defaultValue': 'Global Illumination',
+                'values': [
+                    SettingValue('Global Illumination'),
+                    SettingValue('Direct Illumination'),
+                    SettingValue('Wireframe'),
+                    SettingValue('Material Index'),
+                    SettingValue('Position'),
+                    SettingValue('Normal'),
+                    SettingValue('Texcoord'),
+                    SettingValue('Ambient Occlusion'),
+                    SettingValue('Diffuse')
+                ]
+            },
+            {
+                'name': 'aoRadius',
+                'ui_name': 'Ambient Occlusion Radius',
+                'defaultValue': 1.0,
+                'minValue': 0.0,
+                'maxValue': 100.0,
+                'houdini': {
+                    'hidewhen': 'renderMode != "AmbientOcclusion"'
+                }
+            }
+        ],
+        'houdini': {
+            'hidewhen': hidewhen_hybrid
+        }
+    },
+    {
         'name': 'Device',
         'houdini': {
-            'hidewhen': 'renderQuality != 3'
+            'hidewhen': hidewhen_hybrid
         },
         'settings': [
             {
                 'name': 'renderDevice',
                 'ui_name': 'Render Device',
                 'help': 'Restart required.',
-                'defaultValue': 1,
+                'defaultValue': 'GPU',
                 'values': [
-                    "CPU",
-                    "GPU",
-                    # "CPU+GPU"
+                    SettingValue('CPU'),
+                    SettingValue('GPU'),
+                    # SettingValue('CPU+GPU')
                 ]
             }
         ]
@@ -57,7 +126,7 @@ render_setting_categories = [
     {
         'name': 'Denoise',
         'houdini': {
-            'hidewhen': 'renderQuality < 2'
+            'hidewhen': lambda settings: hidewhen_render_quality('<', 'High', settings)
         },
         'settings': [
             {
@@ -75,7 +144,7 @@ render_setting_categories = [
     {
         'name': 'Sampling',
         'houdini': {
-            'hidewhen': 'renderQuality == 0'
+            'hidewhen': lambda settings: hidewhen_render_quality('==', 'Low', settings)
         },
         'settings': [
             {
@@ -91,7 +160,7 @@ render_setting_categories = [
     {
         'name': 'AdaptiveSampling',
         'houdini': {
-            'hidewhen': 'renderQuality != 3'
+            'hidewhen': hidewhen_hybrid
         },
         'settings': [
             {
@@ -115,7 +184,7 @@ render_setting_categories = [
     {
         'name': 'Quality',
         'houdini': {
-            'hidewhen': 'renderQuality != 3'
+            'hidewhen': hidewhen_hybrid
         },
         'settings': [
             {
@@ -186,7 +255,12 @@ render_setting_categories = [
                 'defaultValue': 0.0,
                 'minValue': 0.0,
                 'maxValue': 1e6
-            },
+            }
+        ]
+    },
+    {
+        'name': 'InteractiveQuality',
+        'settings': [
             {
                 'name': 'interactiveMaxRayDepth',
                 'ui_name': 'Interactive Max Ray Depth',
@@ -194,6 +268,17 @@ render_setting_categories = [
                 'defaultValue': 2,
                 'minValue': 1,
                 'maxValue': 50
+            },
+            {
+                'name': 'interactiveResolutionDownscale',
+                'ui_name': 'Interactive Resolution Downscale',
+                'help': 'Controls how much rendering resolution is downscaled in interactive mode. Formula: resolution / (2 ^ downscale). E.g. downscale==2 will give you 4 times smaller rendering resolution.',
+                'defaultValue': 3,
+                'minValue': 0,
+                'maxValue': 10,
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
             }
         ]
     },
@@ -207,8 +292,8 @@ render_setting_categories = [
                 'defaultValue': False
             },
             {
-                'name': 'tonemapExposure',
-                'ui_name': 'Tone Mapping Exposure',
+                'name': 'tonemapExposureTime',
+                'ui_name': 'Tone Mapping Exposure Time',
                 'help': 'Film exposure time',
                 'defaultValue': 0.125,
                 'minValue': 0.0,
@@ -253,6 +338,71 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'Alpha',
+        'settings': [
+            {
+                'name': 'enableAlpha',
+                'ui_name': 'Enable Color Alpha',
+                'defaultValue': True,
+                'houdini': {
+                    'hidewhen': hidewhen_hybrid
+                }
+            }
+        ]
+    },
+    {
+        'name': 'MotionBlur',
+        'settings': [
+            {
+                'name': 'enableBeautyMotionBlur',
+                'ui_name': 'Enable Beaty Motion Blur',
+                'defaultValue': True,
+                'help': 'If disabled, only velocity AOV will store information about movement on the scene. Required for motion blur that is generated in post-processing.',
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
+            }
+        ]
+    },
+    {
+        'name': 'OCIO',
+        'settings': [
+            {
+                'name': 'ocioConfigPath',
+                'ui_name': 'OpenColorIO Config Path',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'help': 'The file path of the OpenColorIO config file to be used. Overrides any value specified in OCIO environment variable.',
+                'houdini': {
+                    'type': 'file',
+                    'hidewhen': hidewhen_not_northstar
+                }
+            },
+            {
+                'name': 'ocioRenderingColorSpace',
+                'ui_name': 'OpenColorIO Rendering Color Space',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
+            }
+        ]
+    },
+    {
+        'name': 'Seed',
+        'settings': [
+            {
+                'name': 'uniformSeed',
+                'ui_name': 'Use Uniform Seed',
+                'defaultValue': True,
+                'houdini': {
+                    'hidewhen': 'renderQuality < 3'
+                }
+            }
+        ]
+    },
+    {
         'name': 'UsdNativeCamera',
         'settings': [
             {
@@ -263,6 +413,16 @@ render_setting_categories = [
                 'name': 'instantaneousShutter',
                 'defaultValue': False,
             },
+        ]
+    },
+    {
+        'name': 'RprExport',
+        'settings': [
+            {
+                'name': 'rprExportPath',
+                'defaultValue': '',
+                'c_type': 'std::string'
+            }
         ]
     }
 ]
@@ -317,12 +477,8 @@ private:
 {rs_variables_declaration}
 
         PrefData();
-        ~PrefData();
 
         void SetDefault();
-
-        bool Load();
-        void Save();
 
         bool IsValid();
     }};
@@ -330,8 +486,6 @@ private:
 
     uint32_t m_dirtyFlags = DirtyAll;
     int m_lastRenderSettingsVersion = -1;
-
-    constexpr static const char* k_rprPreferenceFilename = "hdRprPreferences.dat";
 }};
 
 PXR_NAMESPACE_CLOSE_SCOPE
@@ -351,7 +505,10 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     ((houdiniInteractive, "houdini:interactive"))
+    ((rprInteractive, "rpr:interactive"))
 );
+
+{rs_public_token_definitions}
 
 namespace {{
 
@@ -387,8 +544,13 @@ void HdRprConfig::Sync(HdRenderDelegate* renderDelegate) {{
             return defaultValue;
         }};
 
-        auto interactiveMode = renderDelegate->GetRenderSetting<std::string>(_tokens->houdiniInteractive, "normal");
-        SetInteractiveMode(interactiveMode != "normal");
+        bool interactiveMode = getBoolSetting(_tokens->rprInteractive, false);
+
+        if (renderDelegate->GetRenderSetting<std::string>(_tokens->houdiniInteractive, "normal") != "normal") {{
+            interactiveMode = true;
+        }}
+
+        SetInteractiveMode(interactiveMode);
 
 {rs_sync}
     }}
@@ -397,7 +559,6 @@ void HdRprConfig::Sync(HdRenderDelegate* renderDelegate) {{
 void HdRprConfig::SetInteractiveMode(bool enable) {{
     if (m_prefData.enableInteractive != enable) {{
         m_prefData.enableInteractive = enable;
-        m_prefData.Save();
         m_dirtyFlags |= DirtyInteractiveMode;
     }}
 }}
@@ -420,45 +581,8 @@ void HdRprConfig::ResetDirty() {{
     m_dirtyFlags = Clean;
 }}
 
-bool HdRprConfig::PrefData::Load() {{
-#ifdef ENABLE_PREFERENCES_FILE
-    std::string appDataDir = HdRprApi::GetAppDataPath();
-    std::string rprPreferencePath = (appDataDir.empty()) ? k_rprPreferenceFilename : (appDataDir + ARCH_PATH_SEP) + k_rprPreferenceFilename;
-
-    if (FILE* f = fopen(rprPreferencePath.c_str(), "rb")) {{
-        if (!fread(this, sizeof(PrefData), 1, f)) {{
-            TF_CODING_ERROR("Fail to read rpr preferences dat file");
-        }}
-        fclose(f);
-        return IsValid();
-    }}
-#endif // ENABLE_PREFERENCES_FILE
-
-    return false;
-}}
-
-void HdRprConfig::PrefData::Save() {{
-#ifdef ENABLE_PREFERENCES_FILE
-    std::string appDataDir = HdRprApi::GetAppDataPath();
-    std::string rprPreferencePath = (appDataDir.empty()) ? k_rprPreferenceFilename : (appDataDir + ARCH_PATH_SEP) + k_rprPreferenceFilename;
-
-    if (FILE* f = fopen(rprPreferencePath.c_str(), "wb")) {{
-        if (!fwrite(this, sizeof(PrefData), 1, f)) {{
-            TF_CODING_ERROR("Fail to write rpr preferences dat file");
-        }}
-        fclose(f);
-    }}
-#endif // ENABLE_PREFERENCES_FILE
-}}
-
 HdRprConfig::PrefData::PrefData() {{
-    if (!Load()) {{
-        SetDefault();
-    }}
-}}
-
-HdRprConfig::PrefData::~PrefData() {{
-    Save();
+    SetDefault();
 }}
 
 void HdRprConfig::PrefData::SetDefault() {{
@@ -478,6 +602,7 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
     dirty_flags_offset = 1
 
+    rs_public_token_definitions = ''
     rs_tokens_declaration = '#define HDRPR_RENDER_SETTINGS_TOKENS \\\n'
     rs_category_dirty_flags = ''
     rs_get_set_method_declarations = ''
@@ -491,9 +616,6 @@ PXR_NAMESPACE_CLOSE_SCOPE
     rs_validate_values = ''
     for category in render_setting_categories:
         disabled_category = False
-        if 'disabled_platform' in category:
-            if platform.system() in category['disabled_platform']:
-                disabled_category = True
 
         category_name = category['name']
         dirty_flag = 'Dirty{}'.format(category_name)
@@ -508,33 +630,48 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
             default_value = setting['defaultValue']
 
-            c_type_str = type(default_value).__name__
-            if c_type_str == 'str':
-                c_type_str = 'TfToken'
+            if 'c_type' in setting:
+                c_type_str = setting['c_type']
+            else:
+                c_type_str = type(default_value).__name__
+                if c_type_str == 'str':
+                    c_type_str = 'TfToken'
             type_str = c_type_str
 
             if 'values' in setting:
-                setting['minValue'] = 0
-                setting['maxValue'] = len(setting['values']) - 1
-                rs_mapped_values_enum += 'enum {name_title}Type {{\n'.format(name_title=name_title)
+                value_tokens_list_name = '__{}Tokens'.format(name_title)
+                value_tokens_name = 'HdRpr{}Tokens'.format(name_title)
+
+                rs_mapped_values_enum += '#define ' + value_tokens_list_name
                 for value in setting['values']:
-                    rs_mapped_values_enum += '    k{name_title}{value},\n'.format(name_title=name_title, value=value)
-                rs_mapped_values_enum += '};\n'
-                type_str = '{name_title}Type'.format(name_title=name_title)
+                    rs_mapped_values_enum += ' ({})'.format(value.get_key())
+                rs_mapped_values_enum += '\n'
+
+                rs_mapped_values_enum += 'TF_DECLARE_PUBLIC_TOKENS({}, {});\n\n'.format(value_tokens_name, value_tokens_list_name)
+                rs_public_token_definitions += 'TF_DEFINE_PUBLIC_TOKENS({}, {});\n'.format(value_tokens_name, value_tokens_list_name)
+
+                type_str = 'TfToken'
+                c_type_str = type_str
+                default_value = next(value for value in setting['values'] if value == default_value)
 
             rs_get_set_method_declarations += '    void Set{}({} {});\n'.format(name_title, c_type_str, name)
-            rs_get_set_method_declarations += '    {} Get{}() const {{ return m_prefData.{}; }}\n\n'.format(type_str, name_title, name)
+            rs_get_set_method_declarations += '    {} const& Get{}() const {{ return m_prefData.{}; }}\n\n'.format(type_str, name_title, name)
 
             rs_variables_declaration += '        {} {};\n'.format(type_str, name)
 
-            value_str = str(default_value)
             if isinstance(default_value, bool):
-                value_str = value_str.lower()
                 rs_sync += '        Set{name_title}(getBoolSetting(HdRprRenderSettingsTokens->{name}, k{name_title}Default));\n'.format(name_title=name_title, name=name)
             else:
-                rs_sync += '        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{name}, {type}(k{name_title}Default)));\n'.format(name_title=name_title, name=name, type=c_type_str)
+                rs_sync += '        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{name}, k{name_title}Default));\n'.format(name_title=name_title, name=name)
 
-            rs_range_definitions += 'const {type} k{name_title}Default = {type}({value});\n'.format(type=type_str, name_title=name_title, value=value_str)
+            if 'values' in setting:
+                rs_range_definitions += '#define k{name_title}Default {value_tokens_name}->{value}'.format(name_title=name_title, value_tokens_name=value_tokens_name, value=default_value.get_key())
+            else:
+                value_str = str(default_value)
+                if isinstance(default_value, bool):
+                    value_str = value_str.lower()
+                rs_range_definitions += 'const {type} k{name_title}Default = {type}({value});\n'.format(type=type_str, name_title=name_title, value=value_str)
+
             set_validation = ''
             if 'minValue' in setting or 'maxValue' in setting:
                 rs_validate_values += '           '
@@ -550,6 +687,10 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 rs_validate_values += '\n'
             rs_range_definitions += '\n'
 
+            if 'values' in setting:
+                value_range = value_tokens_name + '->allTokens'
+                set_validation += '    if (std::find({range}.begin(), {range}.end(), {name}) == {range}.end()) return;\n'.format(range=value_range, name=name)
+
             if 'ui_name' in setting:
                 rs_list_initialization += '    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title)
 
@@ -561,16 +702,15 @@ PXR_NAMESPACE_CLOSE_SCOPE
 void HdRprConfig::Set{name_title}({c_type} {name}) {{
 {set_validation}
     if (m_prefData.{name} != {name}) {{
-        m_prefData.{name} = {type}({name});
-        m_prefData.Save();
+        m_prefData.{name} = {name};
         m_dirtyFlags |= {dirty_flag};
     }}
 }}
-''').format(name_title=name_title, c_type=c_type_str, type=type_str, name=name, dirty_flag=dirty_flag, set_validation=set_validation)
+''').format(name_title=name_title, c_type=c_type_str, name=name, dirty_flag=dirty_flag, set_validation=set_validation)
 
             rs_set_default_values += '    {name} = k{name_title}Default;\n'.format(name=name, name_title=name_title)
 
-    rs_tokens_declaration += '\nTF_DECLARE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);'
+    rs_tokens_declaration += '\nTF_DECLARE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);\n'
 
     header_dst_path = os.path.join(install_path, 'config.h')
     header_file = open(header_dst_path, 'w')
@@ -584,6 +724,7 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
     cpp_dst_path = os.path.join(install_path, 'config.cpp')
     cpp_file = open(cpp_dst_path, 'w')
     cpp_file.write(cpp_template.format(
+        rs_public_token_definitions=rs_public_token_definitions,
         rs_range_definitions=rs_range_definitions,
         rs_list_initialization=rs_list_initialization,
         rs_sync=rs_sync,

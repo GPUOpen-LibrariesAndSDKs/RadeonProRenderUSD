@@ -16,11 +16,15 @@ limitations under the License.
 
 #include "pxr/imaging/hd/renderBuffer.h"
 
+#include <condition_variable>
+
 PXR_NAMESPACE_OPEN_SCOPE
+
+class HdRprApi;
 
 class HdRprRenderBuffer final : public HdRenderBuffer {
 public:
-    HdRprRenderBuffer(SdfPath const& id);
+    HdRprRenderBuffer(SdfPath const& id, HdRprApi* api = nullptr);
     ~HdRprRenderBuffer() override = default;
 
     void Sync(HdSceneDelegate* sceneDelegate,
@@ -41,7 +45,7 @@ public:
 
     HdFormat GetFormat() const override { return m_format; }
 
-    bool IsMultiSampled() const override { return false; }
+    bool IsMultiSampled() const override { return m_multiSampled; }
 
     void* Map() override;
 
@@ -55,17 +59,32 @@ public:
 
     void SetConverged(bool converged);
 
+    void* GetPointerForWriting() { return m_mappedBuffer.data(); }
+
+    // HdRprRenderBuffer should hold actual framebuffer
+    // But for now just take it from HdRprApi in order to provide valid API
+    VtValue GetResource(bool multiSampled) const;
+
 protected:
     void _Deallocate() override;
 
 private:
+    std::vector<uint8_t> m_mappedBuffer;
     uint32_t m_width = 0u;
     uint32_t m_height = 0u;
     HdFormat m_format = HdFormat::HdFormatInvalid;
+    bool m_multiSampled = false;
 
-    std::vector<uint8_t> m_mappedBuffer;
-    std::atomic<int> m_numMappers;
     std::atomic<bool> m_isConverged;
+
+    HdRprApi* m_rprApi = nullptr;
+    
+#ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
+    std::mutex m_mapMutex;
+    std::condition_variable m_mapConditionVar;
+#endif // ENABLE_MULTITHREADED_RENDER_BUFFER
+
+    int m_numMappers;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

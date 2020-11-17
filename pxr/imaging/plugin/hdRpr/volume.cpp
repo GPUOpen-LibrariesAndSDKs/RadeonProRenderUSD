@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#include <json/json.hpp>
+#include <json.hpp>
 using json = nlohmann::json;
 
 #include "volume.h"
@@ -381,7 +381,7 @@ void HdRprVolume::Sync(
         decltype(m_fieldSubscriptions) activeFieldSubscriptions;
 
         auto volumeFieldDescriptorVector = sceneDelegate->GetVolumeFieldDescriptors(GetId());
-        for (auto const& desc : sceneDelegate->GetVolumeFieldDescriptors(GetId())) {
+        for (auto const& desc : volumeFieldDescriptorVector) {
             GridInfo* targetInfo;
             if (desc.fieldName == HdRprVolumeTokens->density) {
                 targetInfo = &densityGridInfo;

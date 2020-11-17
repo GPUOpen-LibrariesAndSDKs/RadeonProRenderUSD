@@ -14,20 +14,9 @@ limitations under the License.
 #include "renderParam.h"
 #include "volume.h"
 
-#include "pxr/base/tf/envSetting.h"
-
 #include "pxr/imaging/hd/sceneDelegate.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-
-TF_DEFINE_PUBLIC_TOKENS(HdRprMaterialNetworkSelectorTokens, HDRPR_MATERIAL_NETWORK_SELECTOR_TOKENS);
-
-TF_DEFINE_ENV_SETTING(HDRPR_MATERIAL_NETWORK_SELECTOR, HDRPR_DEFAULT_MATERIAL_NETWORK_SELECTOR,
-        "Material network selector to be used in hdRpr");
-
-void HdRprRenderParam::InitializeEnvParameters() {
-    m_materialNetworkSelector = TfToken(TfGetEnvSetting(HDRPR_MATERIAL_NETWORK_SELECTOR));
-}
 
 HdRprVolumeFieldSubscription HdRprRenderParam::SubscribeVolumeForFieldUpdates(
     HdRprVolume* volume, SdfPath const& fieldId) {
@@ -65,5 +54,33 @@ void HdRprRenderParam::NotifyVolumesAboutFieldChange(HdSceneDelegate* sceneDeleg
         }
     }
 }
+
+void HdRprRenderParam::SubscribeForMaterialUpdates(SdfPath const& materialId, SdfPath const& rPrimId) {
+    std::lock_guard<std::mutex> lock(m_materialSubscriptionsMutex);
+    m_materialSubscriptions[materialId].insert(rPrimId);
+}
+
+void HdRprRenderParam::UnsubscribeFromMaterialUpdates(SdfPath const& materialId, SdfPath const& rPrimId) {
+    std::lock_guard<std::mutex> lock(m_materialSubscriptionsMutex);
+    auto subscriptionsIt = m_materialSubscriptions.find(materialId);
+    if (TF_VERIFY(subscriptionsIt != m_materialSubscriptions.end())) {
+        subscriptionsIt->second.erase(rPrimId);
+        if (subscriptionsIt->second.empty()) {
+            m_materialSubscriptions.erase(subscriptionsIt);
+        }
+    }
+}
+
+void HdRprRenderParam::MaterialDidChange(HdSceneDelegate* sceneDelegate, SdfPath const materialId) {
+    std::lock_guard<std::mutex> lock(m_materialSubscriptionsMutex);
+    auto subscriptionsIt = m_materialSubscriptions.find(materialId);
+    if (subscriptionsIt != m_materialSubscriptions.end()) {
+        HdChangeTracker& changeTracker = sceneDelegate->GetRenderIndex().GetChangeTracker();
+        for (auto& rPrimId : subscriptionsIt->second) {
+            changeTracker.MarkRprimDirty(rPrimId, HdChangeTracker::DirtyMaterialId);
+        }
+    }
+}
+
 
 PXR_NAMESPACE_CLOSE_SCOPE
