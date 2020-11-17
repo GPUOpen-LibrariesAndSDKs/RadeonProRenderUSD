@@ -8,7 +8,7 @@ Hardware-accelerated ray tracing on AMD Radeon™ RX 6000 series GPUs.
     - Less noise for a given amount of render samples.  Using the same number of samples as with Radeon ProRender 1.0 may be slower in some scenes, but noise will be significantly lower.  
     - RPR 2.0 is the default render mode called “Full”.  Users who wish to use RPR 1.0 can set the render quality mode to “Legacy”.
     - A new setting for texture cache has been added to the RPR menu in Houdini.  The specified folder will cache textures for rendering, and can be cleaned up by the user if it becomes too large.
-    - MaterialX networks can now be attached to an object.  To use them, we have added an RPR MaterialX node which can point to a MaterialX file.
+    - MaterialX networks can now be attached to an object. To use them, we have added an RPR Material Library LOP node.  Add this node and select a MaterialX file and specify the surface shader to use.
     - User customizable LPE outputs have been added.
     - OpenColorIO support has been added, allowing to control textures colorspace and the rendering colorspace.
 -   Support of Houdini 18.5 and USD 20.11 has been added.
