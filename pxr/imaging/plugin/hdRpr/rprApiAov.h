@@ -85,15 +85,16 @@ public:
 
     void SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity);
 
-    void EnableAIDenoise(std::shared_ptr<HdRprApiAov> albedo,
+    void InitAIDenoise(std::shared_ptr<HdRprApiAov> albedo,
                          std::shared_ptr<HdRprApiAov> normal,
                          std::shared_ptr<HdRprApiAov> linearDepth);
-    void EnableEAWDenoise(std::shared_ptr<HdRprApiAov> albedo,
+    void InitEAWDenoise(std::shared_ptr<HdRprApiAov> albedo,
                           std::shared_ptr<HdRprApiAov> normal,
                           std::shared_ptr<HdRprApiAov> linearDepth,
                           std::shared_ptr<HdRprApiAov> objectId,
                           std::shared_ptr<HdRprApiAov> worldCoordinate);
-    void DisableDenoise(rif::Context* rifContext);
+    void DeinitDenoise(rif::Context* rifContext);
+    void SetDenoise(bool enable, HdRprApi const* rprApi, rif::Context* rifContext);
 
     struct TonemapParams {
         bool enable;
@@ -140,6 +141,7 @@ private:
     std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
     std::shared_ptr<HdRprApiAov> m_retainedDenoiseInputs[rif::MaxInput];
+    Filter m_denoiseFilterType = kFilterNone;
 
     Filter m_mainFilterType = kFilterNone;
     std::vector<std::pair<Filter, std::unique_ptr<rif::Filter>>> m_auxFilters;

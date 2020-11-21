@@ -220,7 +220,7 @@ void HdRprApiColorAov::SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity) {
     }
 }
 
-void HdRprApiColorAov::EnableAIDenoise(
+void HdRprApiColorAov::InitAIDenoise(
     std::shared_ptr<HdRprApiAov> albedo,
     std::shared_ptr<HdRprApiAov> normal,
     std::shared_ptr<HdRprApiAov> linearDepth) {
@@ -239,11 +239,10 @@ void HdRprApiColorAov::EnableAIDenoise(
     m_retainedDenoiseInputs[rif::LinearDepth] = linearDepth;
     m_retainedDenoiseInputs[rif::Albedo] = albedo;
 
-    SetFilter(kFilterAIDenoise, true);
-    SetFilter(kFilterEAWDenoise, false);
+    m_denoiseFilterType = kFilterAIDenoise;
 }
 
-void HdRprApiColorAov::EnableEAWDenoise(
+void HdRprApiColorAov::InitEAWDenoise(
     std::shared_ptr<HdRprApiAov> albedo,
     std::shared_ptr<HdRprApiAov> normal,
     std::shared_ptr<HdRprApiAov> linearDepth,
@@ -266,18 +265,29 @@ void HdRprApiColorAov::EnableEAWDenoise(
     m_retainedDenoiseInputs[rif::Albedo] = albedo;
     m_retainedDenoiseInputs[rif::WorldCoordinate] = worldCoordinate;
 
-    SetFilter(kFilterEAWDenoise, true);
-    SetFilter(kFilterAIDenoise, false);
+    m_denoiseFilterType = kFilterEAWDenoise;
 }
 
-void HdRprApiColorAov::DisableDenoise(rif::Context* rifContext) {
-    SetFilter(kFilterEAWDenoise, false);
-    SetFilter(kFilterAIDenoise, false);
-    SetFilter(kFilterResample, m_format != HdFormatFloat32Vec4);
-
+void HdRprApiColorAov::DeinitDenoise(rif::Context* rifContext) {
     for (auto& retainedInput : m_retainedDenoiseInputs) {
         retainedInput = nullptr;
     }
+
+    m_denoiseFilterType = kFilterNone;
+}
+
+void HdRprApiColorAov::SetDenoise(bool enable, HdRprApi const* rprApi, rif::Context* rifContext) {
+    if (m_denoiseFilterType != kFilterNone) {
+        SetFilter(m_denoiseFilterType, enable);
+        SetFilter(m_denoiseFilterType == kFilterAIDenoise ? kFilterEAWDenoise : kFilterAIDenoise, false);
+    } else {
+        SetFilter(kFilterAIDenoise, false);
+        SetFilter(kFilterEAWDenoise, false);
+    }
+
+    SetFilter(kFilterResample, m_format != HdFormatFloat32Vec4);
+
+    Update(rprApi, rifContext);
 }
 
 void HdRprApiColorAov::SetTonemap(TonemapParams const& params) {
@@ -338,15 +348,27 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
             m_enabledFilters = kFilterNone;
         }
 
-        m_filter = nullptr;
-        m_auxFilters.clear();
+        // Reuse the previously created filters
+        std::vector<std::pair<Filter, std::unique_ptr<rif::Filter>>> filterPool = std::move(m_auxFilters);
+        if (m_filter) {
+            filterPool.emplace_back(m_mainFilterType, std::move(m_filter));
+        }
 
         if ((m_enabledFilters & kFilterAIDenoise) ||
             (m_enabledFilters & kFilterEAWDenoise) ||
             (m_enabledFilters & kFilterComposeOpacity) ||
             (m_enabledFilters & kFilterTonemap)) {
 
-            auto addFilter = [this](Filter type, std::unique_ptr<rif::Filter> filter) {
+            auto addFilter = [this, &filterPool](Filter type, std::function<std::unique_ptr<rif::Filter>()> filterCreator) {
+                std::unique_ptr<rif::Filter> filter;
+
+                auto it = std::find_if(filterPool.begin(), filterPool.end(), [type](auto& entry) { return type == entry.first; });
+                if (it != filterPool.end()) {
+                    filter = std::move(it->second);
+                } else {
+                    filter = filterCreator();
+                }
+
                 if (m_filter) {
                     m_auxFilters.emplace_back(m_mainFilterType, std::move(m_filter));
                 }
@@ -356,30 +378,40 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
             };
 
             if (m_enabledFilters & kFilterTonemap) {
-                addFilter(kFilterTonemap, rif::Filter::CreateCustom(RIF_IMAGE_FILTER_PHOTO_LINEAR_TONEMAP, rifContext));
+                addFilter(kFilterTonemap,
+                    [rifContext]() {
+                        return rif::Filter::CreateCustom(RIF_IMAGE_FILTER_PHOTO_LINEAR_TONEMAP, rifContext);
+                    }
+                );
             }
 
             if ((m_enabledFilters & kFilterAIDenoise) ||
                 (m_enabledFilters & kFilterEAWDenoise)) {
-                auto denoiseFilterType = (m_enabledFilters & kFilterAIDenoise) ? rif::FilterType::AIDenoise : rif::FilterType::EawDenoise;
-                auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
-
                 auto type = (m_enabledFilters & kFilterAIDenoise) ? kFilterAIDenoise : kFilterEAWDenoise;
-                auto filter = rif::Filter::Create(denoiseFilterType, rifContext, fbDesc.fb_width, fbDesc.fb_height);
-                addFilter(type, std::move(filter));
+                addFilter(type,
+                    [this, rifContext]() {
+                        auto denoiseFilterType = (m_enabledFilters & kFilterAIDenoise) ? rif::FilterType::AIDenoise : rif::FilterType::EawDenoise;
+                        auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
+                        return rif::Filter::Create(denoiseFilterType, rifContext, fbDesc.fb_width, fbDesc.fb_height);
+                    }
+                );
             }
 
             if (m_enabledFilters & kFilterComposeOpacity) {
-                auto filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, rifContext);
-                auto opacityComposingKernelCode = std::string(R"(
-                    int2 coord;
-                    GET_COORD_OR_RETURN(coord, GET_BUFFER_SIZE(inputImage));
-                    vec4 alpha = ReadPixelTyped(alphaImage, coord.x, coord.y);
-                    vec4 color = ReadPixelTyped(inputImage, coord.x, coord.y) * alpha.x;
-                    WritePixelTyped(outputImage, coord.x, coord.y, make_vec4(color.x, color.y, color.z, alpha.x));
-                )");
-                filter->SetParam("code", opacityComposingKernelCode);
-                addFilter(kFilterComposeOpacity, std::move(filter));
+                addFilter(kFilterComposeOpacity,
+                    [rifContext]() {
+                        auto filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, rifContext);
+                        auto opacityComposingKernelCode = std::string(R"(
+                            int2 coord;
+                            GET_COORD_OR_RETURN(coord, GET_BUFFER_SIZE(inputImage));
+                            vec4 alpha = ReadPixelTyped(alphaImage, coord.x, coord.y);
+                            vec4 color = ReadPixelTyped(inputImage, coord.x, coord.y) * alpha.x;
+                            WritePixelTyped(outputImage, coord.x, coord.y, make_vec4(color.x, color.y, color.z, alpha.x));
+                        )");
+                        filter->SetParam("code", opacityComposingKernelCode);
+                        return filter;
+                    }
+                );
             }
         } else if (m_enabledFilters & kFilterResample) {
             m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);

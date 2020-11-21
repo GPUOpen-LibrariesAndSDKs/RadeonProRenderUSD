@@ -1390,6 +1390,9 @@ public:
             enableDenoise.isDirty = config->IsDirty(HdRprConfig::DirtyDenoise);
             if (enableDenoise.isDirty) {
                 enableDenoise.value = config->GetEnableDenoising();
+
+                m_denoiseMinIter = config->GetDenoiseMinIter();
+                m_denoiseIterStep = config->GetDenoiseIterStep();
             }
 
             tonemap.isDirty = config->IsDirty(HdRprConfig::DirtyTonemapping);
@@ -1909,14 +1912,6 @@ public:
             }
         }
 
-        if (m_dirtyFlags & ChangeTracker::DirtyScene ||
-            m_dirtyFlags & ChangeTracker::DirtyAOVRegistry ||
-            m_dirtyFlags & ChangeTracker::DirtyAOVBindings ||
-            m_dirtyFlags & ChangeTracker::DirtyViewport ||
-            IsCameraChanged()) {
-            clearAovs = true;
-        }
-
         auto colorAov = GetColorAov();
         if (colorAov) {
             UpdateDenoising(enableDenoise, colorAov);
@@ -1924,6 +1919,14 @@ public:
             if (tonemap.isDirty) {
                 colorAov->SetTonemap(tonemap.value);
             }
+        }
+
+        if (m_dirtyFlags & ChangeTracker::DirtyScene ||
+            m_dirtyFlags & ChangeTracker::DirtyAOVRegistry ||
+            m_dirtyFlags & ChangeTracker::DirtyAOVBindings ||
+            m_dirtyFlags & ChangeTracker::DirtyViewport ||
+            IsCameraChanged()) {
+            clearAovs = true;
         }
 
         auto rprApi = rprRenderParam->GetRprApi();
@@ -1953,12 +1956,14 @@ public:
             return;
         }
 
-        if (!enableDenoise.isDirty) {
+        if (!enableDenoise.isDirty ||
+            m_isDenoiseEnabled == enableDenoise.value) {
             return;
         }
 
-        if (!enableDenoise.value) {
-            colorAov->DisableDenoise(m_rifContext.get());
+        m_isDenoiseEnabled = enableDenoise.value;
+        if (!m_isDenoiseEnabled) {
+            colorAov->DeinitDenoise(m_rifContext.get());
             return;
         }
 
@@ -1968,15 +1973,15 @@ public:
         }
 
         if (filterType == rif::FilterType::EawDenoise) {
-            colorAov->EnableEAWDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
-                                       m_internalAovs.at(HdAovTokens->normal),
-                                       m_internalAovs.at(HdRprGetCameraDepthAovName()),
-                                       m_internalAovs.at(HdAovTokens->primId),
-                                       m_internalAovs.at(HdRprAovTokens->worldCoordinate));
+            colorAov->InitEAWDenoise(CreateAov(HdRprAovTokens->albedo),
+                                     CreateAov(HdAovTokens->normal),
+                                     CreateAov(HdRprGetCameraDepthAovName()),
+                                     CreateAov(HdAovTokens->primId),
+                                     CreateAov(HdRprAovTokens->worldCoordinate));
         } else {
-            colorAov->EnableAIDenoise(m_internalAovs.at(HdRprAovTokens->albedo),
-                                      m_internalAovs.at(HdAovTokens->normal),
-                                      m_internalAovs.at(HdRprGetCameraDepthAovName()));
+            colorAov->InitAIDenoise(CreateAov(HdRprAovTokens->albedo),
+                                    CreateAov(HdAovTokens->normal),
+                                    CreateAov(HdRprGetCameraDepthAovName()));
         }
     }
 
@@ -2126,6 +2131,13 @@ public:
         // active pixels as often as possible
         const bool isAdaptiveSamplingEnabled = IsAdaptiveSamplingEnabled();
 
+        // In a batch session, we do denoise once at the end
+        auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
+        auto colorAov = GetColorAov();
+        if (colorAov && m_isDenoiseEnabled) {
+            colorAov->SetDenoise(false, rprApi, m_rifContext.get());
+        }
+
         while (!IsConverged()) {
             if (renderThread->IsStopRequested()) {
                 break;
@@ -2207,6 +2219,10 @@ public:
             }
         }
 
+        if (m_isDenoiseEnabled) {
+            colorAov->SetDenoise(true, rprApi, m_rifContext.get());
+        }
+
         ResolveFramebuffers();
     }
 
@@ -2247,6 +2263,10 @@ public:
             // in contour rendering mode we must render only with RPR_CONTEXT_ITERATIONS=1
             !m_contourAovs;
 
+        auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
+        auto colorAov = GetColorAov();
+        int iteration = 0;
+
         while (!IsConverged()) {
             // In interactive mode, always render at least one frame, otherwise
             // disturbing full-screen-flickering will be visible or
@@ -2280,7 +2300,29 @@ public:
                 break;
             }
 
-            if (m_resolveMode == kResolveAfterRender) {
+            bool doDenoisedResolve = false;
+            if (colorAov) {
+                if (m_isDenoiseEnabled) {
+                    ++iteration;
+                    if (iteration >= m_denoiseMinIter) {
+                        int relativeIter = iteration - m_denoiseMinIter;
+                        if (relativeIter % m_denoiseIterStep == 0) {
+                            doDenoisedResolve = true;
+                        }
+                    }
+
+                    // Always force denoise on the last sample because it's quite hard to match
+                    // the max amount of samples and denoise controls (min iter and iter step)
+                    if (m_numSamples + m_numSamplesPerIter == m_maxSamples) {
+                        doDenoisedResolve = true;
+                    }
+                }
+
+                colorAov->SetDenoise(doDenoisedResolve, rprApi, m_rifContext.get());
+            }
+
+            if (m_resolveMode == kResolveAfterRender ||
+                doDenoisedResolve) {
                 ResolveFramebuffers();
             }
 
@@ -2916,30 +2958,6 @@ private:
     }
 
     void InitAovs() {
-        auto initInternalAov = [this](TfToken const& name) {
-            auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(name);
-            if (auto aov = CreateAov(name, 0, 0, aovDesc.format)) {
-                m_internalAovs.emplace(name, std::move(aov));
-            }
-        };
-
-        // We create separate AOVs needed for denoising ASAP
-        // In such a way, when user enables denoising it will not require to rerender
-        // but it requires more memory, obviously, it should be taken into an account
-        rif::FilterType filterType = rif::FilterType::EawDenoise;
-        if (m_rprContextMetadata.renderDeviceType == RprUsdRenderDeviceType::GPU) {
-            filterType = rif::FilterType::AIDenoise;
-        }
-
-        initInternalAov(HdRprGetCameraDepthAovName());
-        initInternalAov(HdRprAovTokens->albedo);
-        initInternalAov(HdAovTokens->color);
-        initInternalAov(HdAovTokens->normal);
-        if (filterType == rif::FilterType::EawDenoise) {
-            initInternalAov(HdAovTokens->primId);
-            initInternalAov(HdRprAovTokens->worldCoordinate);
-        }
-
         m_lpeAovPool.clear();
         m_lpeAovPool.insert(m_lpeAovPool.begin(), {
             HdRprAovTokens->lpe0, HdRprAovTokens->lpe1, HdRprAovTokens->lpe2,
@@ -3591,6 +3609,10 @@ private:
         kResolveInRenderUpdateCallback,
     } m_resolveMode = kResolveAfterRender;
     bool m_isFirstSample = true;
+
+    bool m_isDenoiseEnabled = false;
+    int m_denoiseMinIter;
+    int m_denoiseIterStep;
 
     GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
