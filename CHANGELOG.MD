@@ -1,5 +1,50 @@
 # Change Log
 
+## Version 2.0
+### New Features:
+-   The new plug-in version incorporates version 2.0 of our Radeon™ ProRender system and brings about the significant changes and enhancements:
+Hardware-accelerated ray tracing on AMD Radeon™ RX 6000 series GPUs.
+    - Better scaling across multiple devices: the use of two or more GPUs gives a better performance improvement with Radeon ProRender 2.0 than with Radeon ProRender 1.0 in most cases.
+    - Less noise for a given amount of render samples.  Using the same number of samples as with Radeon ProRender 1.0 may be slower in some scenes, but noise will be significantly lower.  
+    - RPR 2.0 is the default render mode called “Full”.  Users who wish to use RPR 1.0 can set the render quality mode to “Legacy”.
+    - A new setting for texture cache has been added to the RPR menu in Houdini.  The specified folder will cache textures for rendering, and can be cleaned up by the user if it becomes too large.
+    - MaterialX networks can now be attached to an object. To use them, we have added an RPR Material Library LOP node.  Add this node and select a MaterialX file and specify the surface shader to use.
+    - User customizable LPE outputs have been added.
+    - OpenColorIO support has been added, allowing to control textures colorspace and the rendering colorspace.
+-   Support of Houdini 18.5 and USD 20.11 has been added.
+-   The installer for Houdini is now an executable `activateHoudiniPlugin`.
+-   A rendering setting has been added to change noise “seed” to vary noise across frames.
+-   Support of Varying or Vertex primitive variables has been added.
+-   An “RPR Standard Render Vars” node in Houdini for AOVs has been added in the tab menu for nodes.
+
+
+### Issues Fixed:
+-   Using the Uber shader with “Metalness” reflection mode now matches the Disney shader PBR standard more closely.  Among other improvements, the USD Preview Surface node respects the “Specular” parameter better.
+-   Motion Blur, particularly for rotation, is now more correct.
+-   Depth of field was not respecting camera sensor size and focal length correctly — fixed.
+-   UVs with USD meshes using geomSubset — fixed.
+-   Some issues with textures embedded in USDZ files have been fixed.
+-   The visibility of mesh instances has been fixed.
+-   A mesh primitive was not always marked as dirty when the material changes or the geomSubset changes — fixed.
+-   .rpr export node to work with non-ASCII characters — fixed.
+-   An issue of locking with no lights in the scene has been fixed.
+-   Various issues with checking and preventing memory leaks have been fixed.
+-   Selection of instances in the viewport has been fixed: the objectID AOV is correct now.
+-   A crash when AOVs are resized in Houdini has been fixed.
+-   A crash when getting volume data directly from Houdini has been fixed.
+-   .rpr file export has been improved, and a HDA node to enable it in Houdini has been added.
+-   Rendered .rpr files exported from Houdini were flipped vertically — fixed.
+-   Issues have been fixed to compile on Ubuntu 20.04.
+-   Motion Blur was changed in USD 19.11 leading to incorrect (to little) motion blur effect.  This is fixed to match the USD behavior.
+
+### Known Issues:
+-   RPR 2.0 has some forthcoming features.  If these are needed, use the Legacy render mode:
+    - Heterogenous volumes;
+    - Adaptive sampling;
+    - Adaptive subdivision.
+-   The first render on macOS® with RPR 2.0 can take a few minutes to start, while the kernels are being compiled.
+
+
 ## 1.3 Release
 
 hdRpr installation scheme was changed - there is no more need to copy hdRpr package directly into Houdini. More info [here](https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD/pull/285).
