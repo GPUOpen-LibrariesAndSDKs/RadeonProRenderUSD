@@ -2098,6 +2098,17 @@ public:
             }
         }
 
+        if (m_contourAovs) {
+            // In contour rendering mode we must render with RPR_CONTEXT_ITERATIONS=1
+            if (isMaximizingContextIterations) {
+                isMaximizingContextIterations = false;
+                if (m_isRenderUpdateCallbackEnabled) {
+                    m_isRenderUpdateCallbackEnabled = false;
+                    RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_FUNC, (void*)nullptr), "Failed to disable RUC func");
+                }
+            }
+        }
+
         // Though if adaptive sampling is enabled in a batch session we first render m_minSamples samples
         // and after that render 1 sample at a time because we want to query the current amount of
         // active pixels as often as possible
@@ -2214,6 +2225,16 @@ public:
 
         EnableRenderUpdateCallback(RenderUpdateCallback);
 
+        const bool progressivelyIncreaseSamplesPerIter =
+            // Progressively increasing RPR_CONTEXT_ITERATIONS makes sense only for Northstar
+            // because, first, it highly improves its performance (internal optimization)
+            // and, second, it supports render update callback that allows us too resolve intermediate results
+            m_rprContextMetadata.pluginType == kPluginNorthstar &&
+            // in interactive mode we want to be able to abort ASAP
+            !m_isInteractive &&
+            // in contour rendering mode we must render only with RPR_CONTEXT_ITERATIONS=1
+            !m_contourAovs;
+
         while (!IsConverged()) {
             // In interactive mode, always render at least one frame, otherwise
             // disturbing full-screen-flickering will be visible or
@@ -2261,8 +2282,7 @@ public:
 
             m_numSamples += m_numSamplesPerIter;
 
-            if (!m_isInteractive && m_rprContextMetadata.pluginType == kPluginNorthstar && m_numSamples > 1) {
-                // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
+            if (progressivelyIncreaseSamplesPerIter && m_numSamples > 1) {
                 m_numSamplesPerIter *= 2;
 
                 // Make sure we will not oversample the image
@@ -2272,9 +2292,12 @@ public:
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
                 }
 
-                // Enable resolves in the render update callback after RPR_CONTEXT_ITERATIONS gets high enough
-                if (m_numSamplesPerIter >= 32) {
-                    m_resolveMode = kResolveInRenderUpdateCallback;
+                if (m_isRenderUpdateCallbackEnabled) {
+                    // Enable resolves in the render update callback after RPR_CONTEXT_ITERATIONS gets high enough
+                    // to get interactive updates even when RPR_CONTEXT_ITERATIONS huge
+                    if (m_numSamplesPerIter >= 32) {
+                        m_resolveMode = kResolveInRenderUpdateCallback;
+                    }
                 }
             }
         }
@@ -3109,7 +3132,8 @@ private:
 
         // Force disable alpha for some render modes when we render with Northstar
         if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
-            // XXX (RPRNEXT-479): contour integrator resets opacity after some amount of samples
+            // Contour rendering should not have an alpha,
+            // it might cause missed contours (just for the user, not in actual data)
             if (m_contourAovs) {
                 m_isAlphaEnabled = false;
             } else {
