@@ -214,12 +214,12 @@ int ActivateHoudiniPlugin() {
         return EXIT_FAILURE;
     }
 
-    std::map<std::string, fs::path> env = {
-        {"RPR", rprPath},
-        {"HOUDINI_PATH", "$RPR/houdini"},
-        {"PYTHONPATH", "$RPR/lib/python"},
+    std::vector<std::pair<const char*, const char*>> env = {
+        {"RPR", ""},
+        {"HOUDINI_PATH", "/houdini"},
+        {"PYTHONPATH", "/lib/python"},
 #if defined(_WIN32) || defined(_WIN64)
-        {"PATH", "$RPR/lib"}
+        {"PATH", "/lib"}
 #endif
     };
 
@@ -231,15 +231,9 @@ int ActivateHoudiniPlugin() {
         packageJson << '{';
         packageJson << '\"' << it->first << '\"';
         packageJson << ':';
-#if defined(_WIN32) || defined(_WIN64)
         packageJson << '\"';
-        auto path = it->second.string();
-        std::replace(path.begin(), path.end(), '\\', '/');
-        packageJson << path;
+        packageJson << rprPath << it->second;
         packageJson << '\"';
-#else
-        packageJson << it->second;
-#endif
         packageJson << '}';
         if (std::next(it) != env.end()) {
             packageJson << ',';
