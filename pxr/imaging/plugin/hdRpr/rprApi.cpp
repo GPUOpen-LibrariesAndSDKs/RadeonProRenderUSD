@@ -2572,6 +2572,24 @@ Don't show this message again?
             }
             config["aovs"] = configAovs;
 
+            if (m_contourAovs) {
+                HdRprConfig* rprConfig;
+                auto configInstanceLock = HdRprConfig::GetInstance(&rprConfig);
+
+                json contour;
+                contour["object.id"] = int(rprConfig->GetContourUsePrimId());
+                contour["material.id"] = int(rprConfig->GetContourUseMaterialId());
+                contour["normal"] = int(rprConfig->GetContourUseNormal());
+                contour["threshold.normal"] = rprConfig->GetContourNormalThreshold();
+                contour["linewidth.objid"] = rprConfig->GetContourLinewidthPrimId();
+                contour["linewidth.matid"] = rprConfig->GetContourLinewidthMaterialId();
+                contour["linewidth.normal"] = rprConfig->GetContourLinewidthNormal();
+                contour["antialiasing"] = rprConfig->GetContourAntialiasing();
+                contour["debug"] = rprConfig->GetContourDebug();
+
+                config["contour"] = contour;
+            }
+
             configFile << config;
         } catch (json::exception& e) {
             fprintf(stderr, "Failed to fill config file: %s\n", configFilename.c_str());
