@@ -131,7 +131,7 @@ bool HdRprApiAov::GetData(void* dstBuffer, size_t dstBufferSize) {
             // That's why we interpret the value as int and filling the alpha channel with zeros
             auto primIdData = reinterpret_cast<int*>(dstBuffer);
             for (size_t i = 0; i < dstBufferSize / sizeof(int); ++i) {
-                primIdData[i] &= 0xFFFFFF;
+                primIdData[i] = (primIdData[i] & 0xFFFFFF) - 1;
             }
         }
 
