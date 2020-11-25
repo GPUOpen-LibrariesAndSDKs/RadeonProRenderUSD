@@ -144,7 +144,7 @@ void RprUsdMaterialRegistry::CommitResources(
     std::string formatString;
     for (size_t i = 0; i < m_textureCommits.size(); ++i) {
         auto& commit = m_textureCommits[i];
-        if (auto rprImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType)) {
+        if (auto rprImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, {}, 0)) {
             commit.setTextureCallback(rprImage);
             continue;
         }
@@ -198,7 +198,7 @@ void RprUsdMaterialRegistry::CommitResources(
         }
 
         auto& commit = m_textureCommits[i];
-        auto coreImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, tiles);
+        auto coreImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, tiles, commit.numComponentsRequired);
         commit.setTextureCallback(coreImage);
     }
 
@@ -300,24 +300,6 @@ void DumpMaterialNetwork(HdMaterialNetworkMap const& networkMap) {
     }
 }
 
-// Structures are taken from hdSt/materialNetwork.cpp
-
-struct RprUsd_MaterialNetwork {
-    struct Connection {
-        SdfPath upstreamNode;
-        TfToken upstreamOutputName;
-    };
-
-    struct Node {
-        TfToken nodeTypeId;
-        std::map<TfToken, VtValue> parameters;
-        std::map<TfToken, Connection> inputConnections;
-    };
-
-    std::map<SdfPath, Node> nodes;
-    std::map<TfToken, Connection> terminals;
-};
-
 void ConvertLegacyHdMaterialNetwork(
     HdMaterialNetworkMap const& hdNetworkMap,
     RprUsd_MaterialNetwork *result) {
@@ -383,6 +365,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     ConvertLegacyHdMaterialNetwork(legacyNetworkMap, &network);
 
     RprUsd_MaterialBuilderContext context = {};
+    context.hdMaterialNetwork = &network;
     context.rprContext = rprContext;
     context.imageCache = imageCache;
     context.mtlxLoader = m_mtlxLoader.get();
@@ -435,6 +418,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     for (auto& entry : network.nodes) {
         auto& nodePath = entry.first;
         auto& node = entry.second;
+        context.currentNodePath = &nodePath;
 
         try {
             // Check if we have registered node that match nodeTypeId

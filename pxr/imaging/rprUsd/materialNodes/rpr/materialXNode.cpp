@@ -268,6 +268,18 @@ public:
                         }
                     }
 
+                    if (mtlxImageNode.type == "float") {
+                        textureCommit.numComponentsRequired = 1;
+                    } else if (mtlxImageNode.type == "vector2" || mtlxImageNode.type == "color2") {
+                        textureCommit.numComponentsRequired = 2;
+                    } else if (mtlxImageNode.type == "vector3" || mtlxImageNode.type == "color3") {
+                        textureCommit.numComponentsRequired = 3;
+                    } else if (mtlxImageNode.type == "vector4" || mtlxImageNode.type == "color4") {
+                        textureCommit.numComponentsRequired = 4;
+                    } else {
+                        TF_WARN("Invalid image materialX type: %s", mtlxImageNode.type.c_str());
+                    }
+
                     rpr_material_node rprImageNode = mtlxImageNode.rprNode;
                     textureCommit.setTextureCallback = [retainedImagesPtr, rprImageNode](std::shared_ptr<RprUsdCoreImage> const& image) {
                         if (!image) return;

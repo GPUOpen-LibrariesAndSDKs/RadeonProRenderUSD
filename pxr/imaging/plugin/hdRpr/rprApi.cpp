@@ -804,7 +804,7 @@ public:
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
-        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), path));
+        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), path, 0));
         if (!image) {
             return nullptr;
         }

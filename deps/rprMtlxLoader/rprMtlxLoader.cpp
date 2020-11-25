@@ -367,6 +367,7 @@ struct RprMappedNode : public RprNode {
 struct RprImageNode : public RprMappedNode {
     // TODO: support frame ranges
 
+    std::string type;
     std::string file;
     std::string layer;
     mx::ValuePtr defaultValue;
@@ -379,7 +380,7 @@ struct RprImageNode : public RprMappedNode {
     // TODO: can we support this in RPR?
     //std::string filtertype;
 
-    RprImageNode(LoaderContext* context);
+    RprImageNode(std::string const& type, LoaderContext* context);
     ~RprImageNode() override = default;
 
     rpr_status SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) override;
@@ -824,7 +825,7 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
         };
         rprNodeMapping = &s_sqrtMapping;
     } else if (mtlxNode->getCategory() == "image") {
-        return std::make_unique<RprImageNode>(context);
+        return std::make_unique<RprImageNode>(mtlxNode->getType(), context);
     } else if (mtlxNode->getCategory() == "swizzle") {
         // TODO: implement healthy man swizzle
 
@@ -1371,7 +1372,7 @@ rpr_status RprMappedNode::SetInput(mx::Element* inputElement, std::string const&
     return RprNode::SetInput(inputIt->second, valueString, valueType, context);
 }
 
-RprImageNode::RprImageNode(LoaderContext* context)
+RprImageNode::RprImageNode(std::string const& type, LoaderContext* context)
     : RprMappedNode(
         [context]() {
             rpr_material_node node = nullptr;
@@ -1386,7 +1387,8 @@ RprImageNode::RprImageNode(LoaderContext* context)
             };
             return &s_imageMapping;
         }()
-    ) {
+    )
+    , type(type) {
 
 }
 
@@ -1995,6 +1997,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
                     outImageNodes.emplace_back();
                     auto& outImageNode = outImageNodes.back();
 
+                    std::swap(outImageNode.type, imageNode->type);
                     std::swap(outImageNode.file, imageNode->file);
                     std::swap(outImageNode.layer, imageNode->layer);
                     std::swap(outImageNode.defaultValue, imageNode->defaultValue);
