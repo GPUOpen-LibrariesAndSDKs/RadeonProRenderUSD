@@ -58,11 +58,11 @@ std::unique_ptr<uint8_t[]> _ConvertTexture(GlfUVTextureData* textureData, rpr::I
 
 template <typename T>
 struct WhiteColor {
-    static constexpr T value = static_cast<T>(1);
+    const T value = static_cast<T>(1);
 };
 
 template <> struct WhiteColor<uint8_t> {
-    static constexpr uint8_t value = 255u;
+    const uint8_t value = 255u;
 };
 
 template <typename ComponentT>
@@ -85,7 +85,7 @@ std::unique_ptr<uint8_t[]> ConvertTexture(GlfUVTextureData* textureData, rpr::Im
             return _ConvertTexture<ComponentT>(textureData, format, dstNumComponents,
                 [](ComponentT* dst, ComponentT* src) {
                     dst[0] = dst[1] = dst[2] = src[0];
-                    dst[3] = WhiteColor<ComponentT>::value;
+                    dst[3] = WhiteColor<ComponentT>{}.value;
                 }
             );
         } else {
@@ -121,7 +121,7 @@ std::unique_ptr<uint8_t[]> ConvertTexture(GlfUVTextureData* textureData, rpr::Im
                 dst[0] = src[0];
                 dst[1] = src[1];
                 dst[2] = src[2];
-                dst[3] = WhiteColor<ComponentT>::value;
+                dst[3] = WhiteColor<ComponentT>{}.value;
             }
         );
     }

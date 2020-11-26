@@ -287,7 +287,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
     for (auto& entry : m_ctx->hdMaterialNetwork->nodes) {
         for (auto& connection : entry.second.inputConnections) {
             if (connection.second.upstreamNode == *m_ctx->currentNodePath) {
-                uint32_t numComponentsRequired;
+                uint32_t numComponentsRequired = 0;
                 if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgba) {
                     numComponentsRequired = 4;
                 } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgb) {

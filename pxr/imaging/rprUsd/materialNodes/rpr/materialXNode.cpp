@@ -212,7 +212,7 @@ public:
 
             } else {
                 // Find the only existing output
-                RPRMtlxLoader::OutputType outputType;
+                RPRMtlxLoader::OutputType outputType = RPRMtlxLoader::kOutputNone;
                 for (int i = 0; i < RPRMtlxLoader::kOutputsTotal; ++i) {
                     if (mtlx.rootNodeIndices[i] != RPRMtlxLoader::Result::kInvalidRootNodeIndex) {
                         outputType = RPRMtlxLoader::OutputType(i);
