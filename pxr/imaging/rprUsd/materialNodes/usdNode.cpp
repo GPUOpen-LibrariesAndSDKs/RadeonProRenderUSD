@@ -291,6 +291,38 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
         }
     };
 
+    // Analyze material graph and find out the minimum required amount of components required
+    textureCommit.numComponentsRequired = 0;
+    for (auto& entry : m_ctx->hdMaterialNetwork->nodes) {
+        for (auto& connection : entry.second.inputConnections) {
+            if (connection.second.upstreamNode == *m_ctx->currentNodePath) {
+                uint32_t numComponentsRequired = 0;
+                if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgba) {
+                    numComponentsRequired = 4;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgb) {
+                    numComponentsRequired = 3;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->r) {
+                    numComponentsRequired = 1;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->g) {
+                    numComponentsRequired = 2;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->b) {
+                    numComponentsRequired = 3;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->a) {
+                    numComponentsRequired = 4;
+                }
+                textureCommit.numComponentsRequired = std::max(textureCommit.numComponentsRequired, numComponentsRequired);
+
+                if (textureCommit.numComponentsRequired == 4) {
+                    break;
+                }
+            }
+        }
+
+        if (textureCommit.numComponentsRequired == 4) {
+            break;
+        }
+    }
+
     // Texture loading is postponed to allow multi-threading loading.
     //
     RprUsdMaterialRegistry::GetInstance().CommitTexture(std::move(textureCommit));

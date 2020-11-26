@@ -32,7 +32,8 @@ public:
         std::string const& path,
         std::string const& colorspace,
         rpr::ImageWrapType wrapType,
-        std::vector<RprUsdCoreImage::UDIMTile> const& data = {});
+        std::vector<RprUsdCoreImage::UDIMTile> const& data,
+        uint32_t numComponentsRequired);
 
 private:
     rpr::Context* m_context;
