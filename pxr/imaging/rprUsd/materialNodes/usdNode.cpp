@@ -402,11 +402,17 @@ RprUsd_UsdPrimvarReader::RprUsd_UsdPrimvarReader(
     // it outputs actual UVs so that the user can manipulate it in any way.
 
     auto varnameNameIt = hydraParameters.find(UsdPrimvarReaderTokens->varname);
-    if (varnameNameIt != hydraParameters.end() &&
-        varnameNameIt->second.IsHolding<TfToken>()) {
-        auto& varname = varnameNameIt->second.UncheckedGet<TfToken>();
-        if (!varname.IsEmpty()) {
-            ctx->uvPrimvarName = varname;
+    if (varnameNameIt != hydraParameters.end()) {
+        if (varnameNameIt->second.IsHolding<TfToken>()) {
+            auto& varname = varnameNameIt->second.UncheckedGet<TfToken>();
+            if (!varname.IsEmpty()) {
+                ctx->uvPrimvarName = varname.GetString();
+            }
+        } else if (varnameNameIt->second.IsHolding<std::string>()) {
+            auto& varname = varnameNameIt->second.UncheckedGet<std::string>();
+            if (!varname.empty()) {
+                ctx->uvPrimvarName = varname;
+            }
         }
     }
 

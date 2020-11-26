@@ -414,7 +414,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
 
             m_isShadowCatcher = context.isShadowCatcher;
             m_isReflectionCatcher = context.isReflectionCatcher;
-            m_uvPrimvarName = std::move(context.uvPrimvarName);
+            m_uvPrimvarName = TfToken(context.uvPrimvarName);
             m_displacementScale = std::move(context.displacementScale);
 
             return m_volumeNode || m_surfaceNode || m_displacementNode;

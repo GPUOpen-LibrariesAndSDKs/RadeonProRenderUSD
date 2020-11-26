@@ -28,7 +28,7 @@ struct RprUsd_MaterialBuilderContext {
     rpr::Context* rprContext;
     RprUsdImageCache* imageCache;
 
-    TfToken uvPrimvarName;
+    std::string uvPrimvarName;
     bool isShadowCatcher;
     bool isReflectionCatcher;
 
