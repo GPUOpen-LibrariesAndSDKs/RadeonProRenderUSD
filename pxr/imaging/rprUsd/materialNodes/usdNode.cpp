@@ -145,8 +145,17 @@ bool RprUsd_UsdPreviewSurface::SetInput(
         if (value.IsHolding<RprMaterialNodePtr>()) {
             if (!m_normalMapNode) {
                 m_normalMapNode.reset(new RprUsd_BaseRuntimeNode(RPR_MATERIAL_NODE_NORMAL_MAP, m_ctx));
+                m_normalMapScaleNode = RprUsd_RprArithmeticNode::Create(RPR_MATERIAL_NODE_OP_MUL, m_ctx);
+                m_normalMapBiasNode = RprUsd_RprArithmeticNode::Create(RPR_MATERIAL_NODE_OP_ADD, m_ctx);
             }
-            m_normalMapNode->SetInput(RPR_MATERIAL_INPUT_COLOR, value);
+
+            m_normalMapScaleNode->SetInput(0, value);
+            m_normalMapScaleNode->SetInput(1, VtValue(GfVec4f(0.5f)));
+
+            m_normalMapBiasNode->SetInput(0, m_normalMapScaleNode->GetOutput());
+            m_normalMapBiasNode->SetInput(1, VtValue(GfVec4f(0.5f)));
+
+            m_normalMapNode->SetInput(RPR_MATERIAL_INPUT_COLOR, m_normalMapBiasNode->GetOutput());
 
             auto normalMapOutput = m_normalMapNode->GetOutput(TfToken());
             return (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, normalMapOutput) == RPR_SUCCESS) &&
