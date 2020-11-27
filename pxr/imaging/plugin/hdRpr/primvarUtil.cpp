@@ -18,6 +18,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(HdRprGeometryPrimvarTokens,
     ((subdivisionLevel, "rpr:subdivisionLevel"))
+    ((ignoreContour, "rpr:ignoreContour"))
     ((visibilityPrimary, "rpr:visibilityPrimary"))
     ((visibilityShadow, "rpr:visibilityShadow"))
     ((visibilityReflection, "rpr:visibilityReflection"))
@@ -54,6 +55,8 @@ void HdRprParseGeometrySettings(
             if (HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->subdivisionLevel, sceneDelegate, id, &subdivisionLevel)) {
                 geomSettings->subdivisionLevel = std::max(0, std::min(subdivisionLevel, 7));
             }
+        } else if (desc.name == HdRprGeometryPrimvarTokens->ignoreContour) {
+            HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->ignoreContour, sceneDelegate, id, &geomSettings->ignoreContour);
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityPrimary) {
             setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityPrimary, kVisiblePrimary);
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityShadow) {

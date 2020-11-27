@@ -97,6 +97,7 @@ private:
     int m_refineLevel = 0;
 
     uint32_t m_visibilityMask;
+    bool m_ignoreContour;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

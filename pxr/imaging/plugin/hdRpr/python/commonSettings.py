@@ -75,10 +75,10 @@ visibility_flag_settings = [
 ]
 
 class SettingValue(object):
-    def __init__(self, key, ui_name=None, disabled_platform=None):
+    def __init__(self, key, ui_name=None, enable_py_condition=None):
         self._key = key
         self._ui_name = ui_name
-        self.disabled_platform = disabled_platform
+        self.enable_py_condition = enable_py_condition
 
     def __eq__(self, obj):
         return self._key == obj
