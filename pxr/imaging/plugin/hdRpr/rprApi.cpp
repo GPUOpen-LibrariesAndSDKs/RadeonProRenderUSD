@@ -821,7 +821,7 @@ public:
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
-        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), path));
+        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), path, 0));
         if (!image) {
             return nullptr;
         }
@@ -2878,8 +2878,8 @@ private:
                 //   * convert float4 texture to uchar4 using RIF
                 //   * reinterpret uchar4 data as int32_t (works on little-endian CPU only)
                 m_rprContext->SetAOVindexLookup(rpr_int(i),
-                    float((i >> 0) & 0xFF) / 255.0f,
-                    float((i >> 8) & 0xFF) / 255.0f,
+                    float(((i + 1) >> 0) & 0xFF) / 255.0f,
+                    float(((i + 1) >> 8) & 0xFF) / 255.0f,
                     0.0f, 0.0f);
             }
         }

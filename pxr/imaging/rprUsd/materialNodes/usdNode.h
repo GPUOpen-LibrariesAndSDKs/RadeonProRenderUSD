@@ -41,6 +41,9 @@ private:
 
     std::unique_ptr<RprUsd_RprArithmeticNode> m_emissiveWeightNode;
     std::unique_ptr<RprUsd_RprArithmeticNode> m_refractionWeightNode;
+
+    std::unique_ptr<RprUsd_RprArithmeticNode> m_normalMapScaleNode;
+    std::unique_ptr<RprUsd_RprArithmeticNode> m_normalMapBiasNode;
     std::unique_ptr<RprUsd_BaseRuntimeNode> m_normalMapNode;
 
     std::shared_ptr<RprUsd_BaseRuntimeNode> m_displaceNode;

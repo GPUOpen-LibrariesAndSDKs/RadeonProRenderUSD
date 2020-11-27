@@ -22,6 +22,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 #define RPRUSD_RPR_MATERIALX_NODE_TOKENS \
     (rpr_materialx_node) \
     (file) \
+    (string) \
+    (basePath) \
     (surfaceElement) \
     (displacementElement) \
     (stPrimvarName)

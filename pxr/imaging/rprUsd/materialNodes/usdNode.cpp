@@ -145,8 +145,17 @@ bool RprUsd_UsdPreviewSurface::SetInput(
         if (value.IsHolding<RprMaterialNodePtr>()) {
             if (!m_normalMapNode) {
                 m_normalMapNode.reset(new RprUsd_BaseRuntimeNode(RPR_MATERIAL_NODE_NORMAL_MAP, m_ctx));
+                m_normalMapScaleNode = RprUsd_RprArithmeticNode::Create(RPR_MATERIAL_NODE_OP_MUL, m_ctx);
+                m_normalMapBiasNode = RprUsd_RprArithmeticNode::Create(RPR_MATERIAL_NODE_OP_ADD, m_ctx);
             }
-            m_normalMapNode->SetInput(RPR_MATERIAL_INPUT_COLOR, value);
+
+            m_normalMapScaleNode->SetInput(0, value);
+            m_normalMapScaleNode->SetInput(1, VtValue(GfVec4f(0.5f)));
+
+            m_normalMapBiasNode->SetInput(0, m_normalMapScaleNode->GetOutput());
+            m_normalMapBiasNode->SetInput(1, VtValue(GfVec4f(0.5f)));
+
+            m_normalMapNode->SetInput(RPR_MATERIAL_INPUT_COLOR, m_normalMapBiasNode->GetOutput());
 
             auto normalMapOutput = m_normalMapNode->GetOutput(TfToken());
             return (SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL, normalMapOutput) == RPR_SUCCESS) &&
@@ -282,6 +291,38 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
         }
     };
 
+    // Analyze material graph and find out the minimum required amount of components required
+    textureCommit.numComponentsRequired = 0;
+    for (auto& entry : m_ctx->hdMaterialNetwork->nodes) {
+        for (auto& connection : entry.second.inputConnections) {
+            if (connection.second.upstreamNode == *m_ctx->currentNodePath) {
+                uint32_t numComponentsRequired = 0;
+                if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgba) {
+                    numComponentsRequired = 4;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgb) {
+                    numComponentsRequired = 3;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->r) {
+                    numComponentsRequired = 1;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->g) {
+                    numComponentsRequired = 2;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->b) {
+                    numComponentsRequired = 3;
+                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->a) {
+                    numComponentsRequired = 4;
+                }
+                textureCommit.numComponentsRequired = std::max(textureCommit.numComponentsRequired, numComponentsRequired);
+
+                if (textureCommit.numComponentsRequired == 4) {
+                    break;
+                }
+            }
+        }
+
+        if (textureCommit.numComponentsRequired == 4) {
+            break;
+        }
+    }
+
     // Texture loading is postponed to allow multi-threading loading.
     //
     RprUsdMaterialRegistry::GetInstance().CommitTexture(std::move(textureCommit));
@@ -402,11 +443,17 @@ RprUsd_UsdPrimvarReader::RprUsd_UsdPrimvarReader(
     // it outputs actual UVs so that the user can manipulate it in any way.
 
     auto varnameNameIt = hydraParameters.find(UsdPrimvarReaderTokens->varname);
-    if (varnameNameIt != hydraParameters.end() &&
-        varnameNameIt->second.IsHolding<TfToken>()) {
-        auto& varname = varnameNameIt->second.UncheckedGet<TfToken>();
-        if (!varname.IsEmpty()) {
-            ctx->uvPrimvarName = varname;
+    if (varnameNameIt != hydraParameters.end()) {
+        if (varnameNameIt->second.IsHolding<TfToken>()) {
+            auto& varname = varnameNameIt->second.UncheckedGet<TfToken>();
+            if (!varname.IsEmpty()) {
+                ctx->uvPrimvarName = varname.GetString();
+            }
+        } else if (varnameNameIt->second.IsHolding<std::string>()) {
+            auto& varname = varnameNameIt->second.UncheckedGet<std::string>();
+            if (!varname.empty()) {
+                ctx->uvPrimvarName = varname;
+            }
         }
     }
 

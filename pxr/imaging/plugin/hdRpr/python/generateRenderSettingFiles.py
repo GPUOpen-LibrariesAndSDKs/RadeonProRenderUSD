@@ -49,6 +49,9 @@ def hidewhen_hybrid(render_setting_categories):
 def hidewhen_not_northstar(render_setting_categories):
     return hidewhen_render_quality('!=', 'Northstar', render_setting_categories)
 
+def hidewhen_not_tahoe(render_setting_categories):
+    return hidewhen_render_quality('!=', 'Full', render_setting_categories)
+
 HYBRID_IS_AVAILABLE_PY_CONDITION = 'platform.system() != "Darwin"'
 NORTHSTAR_ENABLED_PY_CONDITION = 'hou.pwd().parm("renderQuality").evalAsString() == "Northstar"'
 
@@ -267,7 +270,7 @@ render_setting_categories = [
     {
         'name': 'AdaptiveSampling',
         'houdini': {
-            'hidewhen': hidewhen_hybrid
+            'hidewhen': hidewhen_not_tahoe
         },
         'settings': [
             {
@@ -374,7 +377,10 @@ render_setting_categories = [
                 'help': 'Controls value of \'Max Ray Depth\' in interactive mode.',
                 'defaultValue': 2,
                 'minValue': 1,
-                'maxValue': 50
+                'maxValue': 50,
+                'houdini': {
+                    'hidewhen': hidewhen_hybrid
+                }
             },
             {
                 'name': 'interactiveResolutionDownscale',
@@ -450,10 +456,7 @@ render_setting_categories = [
             {
                 'name': 'enableAlpha',
                 'ui_name': 'Enable Color Alpha',
-                'defaultValue': True,
-                'houdini': {
-                    'hidewhen': hidewhen_hybrid
-                }
+                'defaultValue': True
             }
         ]
     },
@@ -504,7 +507,7 @@ render_setting_categories = [
                 'ui_name': 'Use Uniform Seed',
                 'defaultValue': True,
                 'houdini': {
-                    'hidewhen': 'renderQuality < 3'
+                    'hidewhen': hidewhen_hybrid
                 }
             }
         ]

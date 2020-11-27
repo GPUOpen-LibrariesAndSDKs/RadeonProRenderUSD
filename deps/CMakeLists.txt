@@ -50,7 +50,7 @@ add_library(cpprpr STATIC
     ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRenderCpp.cpp
     ${RPR_CPP_WRAPPER_LOCATION}/tinyxml2.cpp)
 set_target_properties(cpprpr PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(cpprpr PUBLIC ${RPR_CPP_WRAPPER_LOCATION} ${RPRMTLXLOADER_LOCATION})
+target_include_directories(cpprpr PUBLIC ${RPRMTLXLOADER_LOCATION} ${RPR_CPP_WRAPPER_LOCATION})
 target_link_libraries(cpprpr PUBLIC rpr MaterialXCore MaterialXFormat)
 target_compile_definitions(cpprpr PUBLIC
     RPR_CPPWRAPER_DISABLE_MUTEXLOCK
