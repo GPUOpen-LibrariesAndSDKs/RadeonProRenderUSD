@@ -38,6 +38,7 @@ bool HdRprIsValidPrimvarSize(
 struct HdRprGeometrySettings {
     uint32_t visibilityMask = 0;
     int subdivisionLevel = 0;
+    int id = -1;
 };
 
 void HdRprParseGeometrySettings(

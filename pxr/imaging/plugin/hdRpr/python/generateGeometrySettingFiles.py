@@ -24,6 +24,13 @@ geometry_settings = [
                 'defaultValue': 0,
                 'minValue': 0,
                 'maxValue': 7
+            },
+            {
+                'name': 'primvars:rpr:id',
+                'ui_name': 'ID',
+                'defaultValue': 0,
+                'minValue': 0,
+                'maxValue': 1 ** 16
             }
         ] + visibility_flag_settings
     }

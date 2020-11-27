@@ -17,6 +17,7 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(HdRprGeometryPrimvarTokens,
+    ((id, "rpr:id"))
     ((subdivisionLevel, "rpr:subdivisionLevel"))
     ((visibilityPrimary, "rpr:visibilityPrimary"))
     ((visibilityShadow, "rpr:visibilityShadow"))
@@ -49,7 +50,9 @@ void HdRprParseGeometrySettings(
     };
 
     for (auto& desc : constantPrimvarDescs) {
-        if (desc.name == HdRprGeometryPrimvarTokens->subdivisionLevel) {
+        if (desc.name == HdRprGeometryPrimvarTokens->id) {
+            HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->id, sceneDelegate, id, &geomSettings->id);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->subdivisionLevel) {
             int subdivisionLevel;
             if (HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->subdivisionLevel, sceneDelegate, id, &subdivisionLevel)) {
                 geomSettings->subdivisionLevel = std::max(0, std::min(subdivisionLevel, 7));
