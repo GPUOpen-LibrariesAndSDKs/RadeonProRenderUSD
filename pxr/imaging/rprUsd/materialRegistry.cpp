@@ -18,6 +18,8 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/rprUsd/material.h"
+#include "pxr/imaging/rprUsd/tokens.h"
+#include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/util.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/staticTokens.h"
@@ -377,7 +379,8 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
         bool Finalize(RprUsd_MaterialBuilderContext& context,
             VtValue const& surfaceOutput,
             VtValue const& displacementOutput,
-            VtValue const& volumeOutput) {
+            VtValue const& volumeOutput,
+            int materialId) {
 
             auto getTerminalRprNode = [](VtValue const& terminalOutput) -> rpr::MaterialNode* {
                 if (!terminalOutput.IsEmpty()) {
@@ -399,6 +402,12 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             m_isReflectionCatcher = context.isReflectionCatcher;
             m_uvPrimvarName = TfToken(context.uvPrimvarName);
             m_displacementScale = std::move(context.displacementScale);
+
+            if (m_surfaceNode && materialId >= 0) {
+                // TODO: add C++ wrapper
+                auto apiHandle = rpr::GetRprObject(m_surfaceNode);
+                RPR_ERROR_CHECK(rprMaterialNodeSetID(apiHandle, rpr_uint(materialId)), "Failed to set material node id");
+            }
 
             return m_volumeNode || m_surfaceNode || m_displacementNode;
         }
@@ -509,7 +518,28 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     auto surfaceOutput = getTerminalOutput(HdMaterialTerminalTokens->surface);
     auto displacementOutput = getTerminalOutput(HdMaterialTerminalTokens->displacement);
 
-    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput) ? out.release() : nullptr;
+    int materialId = -1;
+
+    auto surfaceTerminalIt = network.terminals.find(HdMaterialTerminalTokens->surface);
+    if (surfaceTerminalIt != network.terminals.end()) {
+        auto& surfaceNodePath = surfaceTerminalIt->second.upstreamNode;
+
+        auto surfaceNodeIt = network.nodes.find(surfaceNodePath);
+        if (surfaceNodeIt != network.nodes.end()) {
+            auto& parameters = surfaceNodeIt->second.parameters;
+
+            auto idIt = parameters.find(RprUsdTokens->id);
+            if (idIt != parameters.end()) {
+                auto& value = idIt->second;
+
+                if (value.IsHolding<int>()) {
+                    materialId = value.UncheckedGet<int>();
+                }
+            }
+        }
+    }
+
+    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, materialId) ? out.release() : nullptr;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -19,6 +19,7 @@ pxr_library(rprUsd
     PUBLIC_CLASSES
         util
         config
+        tokens
         contextHelpers
         coreImage
         debugCodes
