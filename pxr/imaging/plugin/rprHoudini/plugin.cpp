@@ -13,6 +13,7 @@ limitations under the License.
 
 #include "VOP_RPRMaterial.h"
 #include "LOP_RPRExportHelper.h"
+#include "LOP_RPRMaterialProperties.h"
 #include "pxr/imaging/rprUsd/materialRegistry.h"
 
 #include <OP/OP_OperatorTable.h>
@@ -34,4 +35,5 @@ void newVopOperator(OP_OperatorTable* io_table) {
 void newLopOperator(OP_OperatorTable *table) {
     PXR_NAMESPACE_USING_DIRECTIVE
     LOP_RPRExportHelper::Register(table);
+    LOP_RPRMaterialProperties::Register(table);
 }
