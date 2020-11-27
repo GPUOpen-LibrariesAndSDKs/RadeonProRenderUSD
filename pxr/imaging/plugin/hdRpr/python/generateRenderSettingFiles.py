@@ -853,10 +853,5 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
         generate_houdini_ds(install_path, 'Global', render_setting_categories)
 
 
-if __name__ == "__main__":
-    p = argparse.ArgumentParser()
-    p.add_argument("install", help="The install root for generated files.")
-    p.add_argument("--generate_ds_files", default=False, action='store_true')
-    args = p.parse_args()
-
-    generate_render_setting_files(args.install, args.generate_ds_files)
+def generate(install, generate_ds_files):
+    generate_render_setting_files(install, generate_ds_files)

@@ -39,11 +39,6 @@ geometry_settings = [
     }
 ]
 
-if __name__ == "__main__":
-    p = argparse.ArgumentParser()
-    p.add_argument("install", help="The install root for generated files.")
-    p.add_argument("--generate_ds_files", default=False, action='store_true')
-    args = p.parse_args()
-
-    if args.generate_ds_files:
-        generate_houdini_ds(args.install, 'Geometry', geometry_settings)
+def generate(install, generate_ds_files):
+    if generate_ds_files:
+        generate_houdini_ds(install, 'Geometry', geometry_settings)

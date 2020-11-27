@@ -29,7 +29,7 @@ endif(HoudiniUSD_FOUND)
 set(GEN_SCRIPT_PYTHON ${PYTHON_EXECUTABLE})
 set(GENERATION_SCRIPTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/python)
 set(GEN_SCRIPT ${GENERATION_SCRIPTS_DIR}/generateFiles.py)
-set(GEN_SCRIPT_ARGS \"${GENERATION_SCRIPTS_DIR}\" \"${CMAKE_CURRENT_BINARY_DIR}\")
+set(GEN_SCRIPT_ARGS \"${CMAKE_CURRENT_BINARY_DIR}\")
 set(GENERATED_FILES
     ${CMAKE_CURRENT_BINARY_DIR}/config.h
     ${CMAKE_CURRENT_BINARY_DIR}/config.cpp)
@@ -39,7 +39,7 @@ set(GENERATION_DEPENDENT_FILES ${GEN_SCRIPT}
     ${GENERATION_SCRIPTS_DIR}/generateRenderSettingFiles.py
     ${GENERATION_SCRIPTS_DIR}/generateGeometrySettingFiles.py)
 if(HoudiniUSD_FOUND)
-    set(GEN_SCRIPT_ARGS --houdini_root \"${HOUDINI_ROOT}\" ${GEN_SCRIPT_ARGS})
+    set(GEN_SCRIPT_ARGS --for_houdini ${GEN_SCRIPT_ARGS})
     set(GENERATED_FILES ${GENERATED_FILES}
         ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Light.ds
         ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
@@ -61,8 +61,6 @@ if(HoudiniUSD_FOUND)
         \\\"Includes\\\": [ \\\"../../../plugin/\\\" ]
     }\")")
 endif()
-
-set(GEN_SCRIPT_ARGS --python_exe "\"${GEN_SCRIPT_PYTHON}\"" ${GEN_SCRIPT_ARGS})
 
 add_custom_command(
     COMMAND ${GEN_SCRIPT_PYTHON} ${GEN_SCRIPT} ${GEN_SCRIPT_ARGS}
