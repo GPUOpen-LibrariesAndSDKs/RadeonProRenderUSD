@@ -36,6 +36,20 @@ static rpr_material_node ReleaseOutputNodeOwnership(RPRMtlxLoader::Result* mtlx,
     return ret;
 }
 
+template <typename T>
+static bool ReadInput(TfToken const& inputId, VtValue const& inputValue, T* dst) {
+    if (inputValue.IsHolding<T>()) {
+        *dst = inputValue.UncheckedGet<T>();
+        return true;
+    } else {
+        TF_RUNTIME_ERROR("[%s] %s input should be of %s type: %s",
+            RprUsdRprMaterialXNodeTokens->rpr_materialx_node.GetText(),
+            inputId.GetText(), ArchGetDemangled<T>().c_str(),
+            inputValue.GetTypeName().c_str());
+        return false;
+    }
+}
+
 class RprUsd_RprMaterialXNode : public RprUsd_MaterialNode {
 public:
     RprUsd_RprMaterialXNode(RprUsd_MaterialBuilderContext* ctx)
@@ -81,19 +95,20 @@ public:
                     RprUsdRprMaterialXNodeTokens->rpr_materialx_node.GetText(), value.GetTypeName().c_str());
                 return false;
             }
+        } else if (inputId == RprUsdRprMaterialXNodeTokens->string) {
+            bool ret = ReadInput(inputId, value, &m_mtlxString);
+            if (ret) { ResetNodeOutput(); }
+            return ret;
+        } else if (inputId == RprUsdRprMaterialXNodeTokens->basePath) {
+            bool ret = ReadInput(inputId, value, &m_mtlxBasePath);
+            if (ret) { ResetNodeOutput(); }
+            return ret;
         } else if (inputId == RprUsdRprMaterialXNodeTokens->surfaceElement) {
             return SetRenderElement(RPRMtlxLoader::kOutputSurface, value);
         } else if (inputId == RprUsdRprMaterialXNodeTokens->displacementElement) {
             return SetRenderElement(RPRMtlxLoader::kOutputDisplacement, value);
         } else if (inputId == RprUsdRprMaterialXNodeTokens->stPrimvarName) {
-            if (value.IsHolding<std::string>()) {
-                m_ctx->uvPrimvarName = TfToken(value.UncheckedGet<std::string>());
-                return true;
-            } else {
-                TF_RUNTIME_ERROR("[%s] file input should be of string type: %s",
-                    RprUsdRprMaterialXNodeTokens->rpr_materialx_node.GetText(), value.GetTypeName().c_str());
-                return false;
-            }
+            return ReadInput(inputId, value, &m_ctx->uvPrimvarName);
         }
 
         TF_RUNTIME_ERROR("[%s] Unknown input %s",
@@ -125,13 +140,21 @@ public:
     }
 
     bool UpdateNodeOutput() {
-        auto basePath = TfGetPathName(m_mtlxFilepath);
+        auto basePath = !m_mtlxBasePath.empty() ? m_mtlxBasePath : TfGetPathName(m_mtlxFilepath);
+        if (basePath.empty()) {
+            TF_WARN("[rpr_materialx_node] no base path specified, image loading might be broken");
+        }
 
         if (m_ctx->mtlxLoader) {
             RPRMtlxLoader::Result mtlx;
             try {
                 auto mtlxDoc = MaterialX::createDocument();
-                MaterialX::readFromXmlFile(mtlxDoc, m_mtlxFilepath);
+                if (!m_mtlxFilepath.empty()) {
+                    MaterialX::readFromXmlFile(mtlxDoc, m_mtlxFilepath);
+                }
+                if (!m_mtlxString.empty()) {
+                    MaterialX::readFromXmlString(mtlxDoc, m_mtlxString);
+                }
                 mtlxDoc->importLibrary(m_ctx->mtlxLoader->GetStdlib());
 
                 rpr_material_system matSys;
@@ -212,7 +235,7 @@ public:
 
             } else {
                 // Find the only existing output
-                RPRMtlxLoader::OutputType outputType;
+                RPRMtlxLoader::OutputType outputType = RPRMtlxLoader::kOutputNone;
                 for (int i = 0; i < RPRMtlxLoader::kOutputsTotal; ++i) {
                     if (mtlx.rootNodeIndices[i] != RPRMtlxLoader::Result::kInvalidRootNodeIndex) {
                         outputType = RPRMtlxLoader::OutputType(i);
@@ -268,6 +291,18 @@ public:
                         }
                     }
 
+                    if (mtlxImageNode.type == "float") {
+                        textureCommit.numComponentsRequired = 1;
+                    } else if (mtlxImageNode.type == "vector2" || mtlxImageNode.type == "color2") {
+                        textureCommit.numComponentsRequired = 2;
+                    } else if (mtlxImageNode.type == "vector3" || mtlxImageNode.type == "color3") {
+                        textureCommit.numComponentsRequired = 3;
+                    } else if (mtlxImageNode.type == "vector4" || mtlxImageNode.type == "color4") {
+                        textureCommit.numComponentsRequired = 4;
+                    } else {
+                        TF_WARN("Invalid image materialX type: %s", mtlxImageNode.type.c_str());
+                    }
+
                     rpr_material_node rprImageNode = mtlxImageNode.rprNode;
                     textureCommit.setTextureCallback = [retainedImagesPtr, rprImageNode](std::shared_ptr<RprUsdCoreImage> const& image) {
                         if (!image) return;
@@ -289,25 +324,29 @@ public:
             return m_surfaceNode || m_displacementNode;
         }
 
-        std::ifstream mtlxFile(m_mtlxFilepath);
-        if (!mtlxFile.good()) {
-            TF_RUNTIME_ERROR("Failed to open \"%s\" file", m_mtlxFilepath.c_str());
-            return false;
-        }
-
-        mtlxFile.seekg(0, std::ios::end);
-        auto fileSize = mtlxFile.tellg();
-        if (fileSize == 0) {
-            TF_RUNTIME_ERROR("Empty file: \"%s\"", m_mtlxFilepath.c_str());
-            return false;
-        }
-
-        auto xmlData = std::make_unique<char[]>(fileSize);
-        mtlxFile.seekg(0);
-        mtlxFile.read(&xmlData[0], fileSize);
-
         rpr::Status status;
-        m_surfaceNode.reset(m_ctx->rprContext->CreateMaterialXNode(xmlData.get(), basePath.c_str(), 0, nullptr, nullptr, &status));
+        if (!m_mtlxString.empty()) {
+            m_surfaceNode.reset(m_ctx->rprContext->CreateMaterialXNode(m_mtlxString.c_str(), basePath.c_str(), 0, nullptr, nullptr, &status));
+        } else {
+            std::ifstream mtlxFile(m_mtlxFilepath);
+            if (!mtlxFile.good()) {
+                TF_RUNTIME_ERROR("Failed to open \"%s\" file", m_mtlxFilepath.c_str());
+                return false;
+            }
+
+            mtlxFile.seekg(0, std::ios::end);
+            auto fileSize = mtlxFile.tellg();
+            if (fileSize == 0) {
+                TF_RUNTIME_ERROR("Empty file: \"%s\"", m_mtlxFilepath.c_str());
+                return false;
+            }
+
+            auto xmlData = std::make_unique<char[]>(fileSize);
+            mtlxFile.seekg(0);
+            mtlxFile.read(&xmlData[0], fileSize);
+
+            m_surfaceNode.reset(m_ctx->rprContext->CreateMaterialXNode(xmlData.get(), basePath.c_str(), 0, nullptr, nullptr, &status));
+        }
 
         if (!m_surfaceNode) {
             RPR_ERROR_CHECK(status, "Failed to create materialX node", m_ctx->rprContext);
@@ -327,6 +366,16 @@ public:
         fileInput.name = RprUsdRprMaterialXNodeTokens->file.GetText();
         fileInput.uiName = "File";
         nodeInfo.inputs.push_back(fileInput);
+
+        RprUsd_RprNodeInput stringInput(RprUsdMaterialNodeElement::kString);
+        stringInput.name = RprUsdRprMaterialXNodeTokens->string.GetText();
+        stringInput.uiName = ""; // hide from UI
+        nodeInfo.inputs.push_back(stringInput);
+
+        RprUsd_RprNodeInput basePathInput(RprUsdMaterialNodeElement::kString);
+        basePathInput.name = RprUsdRprMaterialXNodeTokens->basePath.GetText();
+        basePathInput.uiName = ""; // hide from UI
+        nodeInfo.inputs.push_back(basePathInput);
 
         RprUsd_RprNodeInput stPrimvarNameInput(RprUsdMaterialNodeElement::kString);
         stPrimvarNameInput.name = RprUsdRprMaterialXNodeTokens->stPrimvarName.GetText();
@@ -358,6 +407,8 @@ public:
 private:
     RprUsd_MaterialBuilderContext* m_ctx;
     std::string m_mtlxFilepath;
+    std::string m_mtlxString;
+    std::string m_mtlxBasePath;
     std::string m_selectedRenderElements[RPRMtlxLoader::kOutputsTotal];
 
     bool m_isDirty = true;

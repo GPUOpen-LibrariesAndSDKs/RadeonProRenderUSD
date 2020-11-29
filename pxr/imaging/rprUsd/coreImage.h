@@ -26,7 +26,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 class RprUsdCoreImage {
 public:
     RPRUSD_API
-    static RprUsdCoreImage* Create(rpr::Context* context, std::string const& path);
+    static RprUsdCoreImage* Create(rpr::Context* context, std::string const& path, uint32_t numComponentsRequired);
 
     struct UDIMTile {
         uint32_t id;
@@ -35,7 +35,7 @@ public:
         UDIMTile(uint32_t id, GlfUVTextureData* textureData) : id(id), textureData(textureData) {}
     };
     RPRUSD_API
-    static RprUsdCoreImage* Create(rpr::Context* context, std::vector<UDIMTile> const& textureData);
+    static RprUsdCoreImage* Create(rpr::Context* context, std::vector<UDIMTile> const& textureData, uint32_t numComponentsRequired);
 
     RPRUSD_API
     static RprUsdCoreImage* Create(rpr::Context* context, uint32_t width, uint32_t height, rpr::ImageFormat format, void const* data, rpr::Status* status = nullptr);

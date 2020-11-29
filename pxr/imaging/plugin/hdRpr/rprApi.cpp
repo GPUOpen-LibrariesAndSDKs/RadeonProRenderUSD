@@ -276,6 +276,13 @@ public:
         try {
             InitRpr();
             InitRif();
+
+            {
+                HdRprConfig* config;
+                auto configInstanceLock = HdRprConfig::GetInstance(&config);
+                UpdateSettings(*config, true);
+            }
+
             InitScene();
             InitCamera();
             InitAovs();
@@ -560,6 +567,16 @@ public:
         RPR_ERROR_CHECK(mesh->SetObjectID(id), "Failed to set mesh id");
     }
 
+    void SetMeshIgnoreContour(rpr::Shape* mesh, bool ignoreContour) {
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            LockGuard rprLock(m_rprContext->GetMutex());
+            // TODO: update C++ wrapper
+            RPR_ERROR_CHECK(rprShapeSetContourIgnore(rpr::GetRprObject(mesh), ignoreContour), "Failed to set shape contour ignore");
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+    }
+
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
         if (!m_rprContext) {
             return nullptr;
@@ -804,7 +821,7 @@ public:
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
-        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), path));
+        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), path, 0));
         if (!image) {
             return nullptr;
         }
@@ -1469,6 +1486,68 @@ public:
         return it->second;
     }
 
+    void UpdateRenderMode(HdRprConfig const& preferences, bool force) {
+        if (!preferences.IsDirty(HdRprConfig::DirtyRenderMode) && !force) {
+            return;
+        }
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+
+        auto& renderMode = preferences.GetRenderMode();
+
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            if (renderMode == HdRprRenderModeTokens->Contour) {
+                if (!m_contourAovs) {
+                    m_contourAovs = std::make_unique<ContourRenderModeAovs>();
+                }
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_DEBUG_ENABLED, preferences.GetContourDebug()), "Failed to set contour debug");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_ANTIALIASING, preferences.GetContourAntialiasing()), "Failed to set contour antialiasing");
+
+                if (preferences.GetContourUseNormal()) {
+                    if (!m_contourAovs->normal) {
+                        m_contourAovs->normal = CreateAov(HdAovTokens->normal);
+                    }
+
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_LINEWIDTH_NORMAL, preferences.GetContourLinewidthNormal()), "Failed to set contour normal linewidth");
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_NORMAL_THRESHOLD, preferences.GetContourNormalThreshold()), "Failed to set contour normal threshold");
+                } else {
+                    m_contourAovs->normal = nullptr;
+                }
+
+                if (preferences.GetContourUsePrimId()) {
+                    if (!m_contourAovs->primId) {
+                        m_contourAovs->primId = CreateAov(HdAovTokens->primId);
+                    }
+
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_LINEWIDTH_OBJECTID, preferences.GetContourLinewidthPrimId()), "Failed to set contour primId linewidth");
+                } else {
+                    m_contourAovs->primId = nullptr;
+                }
+
+                if (preferences.GetContourUseMaterialId()) {
+                    if (!m_contourAovs->materialId) {
+                        m_contourAovs->materialId = CreateAov(HdRprAovTokens->materialId);
+                    }
+
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_LINEWIDTH_OBJECTID, preferences.GetContourLinewidthPrimId()), "Failed to set contour primId linewidth");
+                } else {
+                    m_contourAovs->materialId = nullptr;
+                }
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_GPUINTEGRATOR, "gpucontour"), "Failed to set gpuintegrator");
+                return;
+            } else {
+                m_contourAovs = nullptr;
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_GPUINTEGRATOR, "gpusimple"), "Failed to set gpuintegrator");
+            }
+        }
+
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, GetRprRenderMode(renderMode)), "Failed to set render mode");
+        if (renderMode == HdRprRenderModeTokens->AmbientOcclusion) {
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_AO_RAY_LENGTH, preferences.GetAoRadius()), "Failed to set ambient occlusion radius");
+        }
+    }
+
     void UpdateTahoeSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
             m_varianceThreshold = preferences.GetVarianceThreshold();
@@ -1478,7 +1557,7 @@ public:
 
             if (IsAdaptiveSamplingEnabled()) {
                 if (!m_internalAovs.count(HdRprAovTokens->variance)) {
-                    if (auto aov = CreateAov(HdRprAovTokens->variance, m_viewportSize[0], m_viewportSize[1])) {
+                    if (auto aov = CreateAov(HdRprAovTokens->variance)) {
                         m_internalAovs.emplace(HdRprAovTokens->variance, std::move(aov));
                     } else {
                         TF_RUNTIME_ERROR("Failed to create variance AOV, adaptive sampling will not work");
@@ -1527,14 +1606,7 @@ public:
             }
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtyRenderMode) || force) {
-            auto& renderMode = preferences.GetRenderMode();
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, GetRprRenderMode(renderMode)), "Failed to set render mode");
-            if (renderMode == HdRprRenderModeTokens->AmbientOcclusion) {
-                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_AO_RAY_LENGTH, preferences.GetAoRadius()), "Failed to set ambient occlusion radius");
-            }
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
-        }
+        UpdateRenderMode(preferences, force);
 
         if (preferences.IsDirty(HdRprConfig::DirtySeed) || force) {
             m_isUniformSeed = preferences.GetUniformSeed();
@@ -1594,17 +1666,18 @@ public:
             }
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force) {
-            m_isAlphaEnabled = preferences.GetEnableAlpha();
-
-            UpdateColorAlpha();
-        }
-
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
             m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
         } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             UpdateHybridSettings(preferences, force);
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force ||
+            (m_rprContextMetadata.pluginType == kPluginNorthstar && preferences.IsDirty(HdRprConfig::DirtyRenderMode))) {
+            m_isAlphaEnabled = preferences.GetEnableAlpha();
+
+            UpdateColorAlpha();
         }
     }
 
@@ -2037,6 +2110,17 @@ public:
             }
         }
 
+        if (m_contourAovs) {
+            // In contour rendering mode we must render with RPR_CONTEXT_ITERATIONS=1
+            if (isMaximizingContextIterations) {
+                isMaximizingContextIterations = false;
+                if (m_isRenderUpdateCallbackEnabled) {
+                    m_isRenderUpdateCallbackEnabled = false;
+                    RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_FUNC, (void*)nullptr), "Failed to disable RUC func");
+                }
+            }
+        }
+
         // Though if adaptive sampling is enabled in a batch session we first render m_minSamples samples
         // and after that render 1 sample at a time because we want to query the current amount of
         // active pixels as often as possible
@@ -2153,6 +2237,16 @@ public:
 
         EnableRenderUpdateCallback(RenderUpdateCallback);
 
+        const bool progressivelyIncreaseSamplesPerIter =
+            // Progressively increasing RPR_CONTEXT_ITERATIONS makes sense only for Northstar
+            // because, first, it highly improves its performance (internal optimization)
+            // and, second, it supports render update callback that allows us too resolve intermediate results
+            m_rprContextMetadata.pluginType == kPluginNorthstar &&
+            // in interactive mode we want to be able to abort ASAP
+            !m_isInteractive &&
+            // in contour rendering mode we must render only with RPR_CONTEXT_ITERATIONS=1
+            !m_contourAovs;
+
         while (!IsConverged()) {
             // In interactive mode, always render at least one frame, otherwise
             // disturbing full-screen-flickering will be visible or
@@ -2200,8 +2294,7 @@ public:
 
             m_numSamples += m_numSamplesPerIter;
 
-            if (!m_isInteractive && m_rprContextMetadata.pluginType == kPluginNorthstar && m_numSamples > 1) {
-                // Progressively increase RPR_CONTEXT_ITERATIONS because it highly improves Northstar's performance
+            if (progressivelyIncreaseSamplesPerIter && m_numSamples > 1) {
                 m_numSamplesPerIter *= 2;
 
                 // Make sure we will not oversample the image
@@ -2211,9 +2304,12 @@ public:
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
                 }
 
-                // Enable resolves in the render update callback after RPR_CONTEXT_ITERATIONS gets high enough
-                if (m_numSamplesPerIter >= 32) {
-                    m_resolveMode = kResolveInRenderUpdateCallback;
+                if (m_isRenderUpdateCallbackEnabled) {
+                    // Enable resolves in the render update callback after RPR_CONTEXT_ITERATIONS gets high enough
+                    // to get interactive updates even when RPR_CONTEXT_ITERATIONS huge
+                    if (m_numSamplesPerIter >= 32) {
+                        m_resolveMode = kResolveInRenderUpdateCallback;
+                    }
                 }
             }
         }
@@ -2246,8 +2342,7 @@ public:
     }
 
     void RenderFrame(HdRprRenderThread* renderThread) {
-        if (!m_rprContext ||
-            m_aovRegistry.empty()) {
+        if (!m_rprContext) {
             return;
         }
 
@@ -2264,6 +2359,10 @@ public:
 
         if (!m_rprSceneExportPath.empty()) {
             return ExportRpr();
+        }
+
+        if (m_aovRegistry.empty()) {
+            return;
         }
 
         if (m_state == kStateRender) {
@@ -2472,6 +2571,24 @@ Don't show this message again?
                 }
             }
             config["aovs"] = configAovs;
+
+            if (m_contourAovs) {
+                HdRprConfig* rprConfig;
+                auto configInstanceLock = HdRprConfig::GetInstance(&rprConfig);
+
+                json contour;
+                contour["object.id"] = int(rprConfig->GetContourUsePrimId());
+                contour["material.id"] = int(rprConfig->GetContourUseMaterialId());
+                contour["normal"] = int(rprConfig->GetContourUseNormal());
+                contour["threshold.normal"] = rprConfig->GetContourNormalThreshold();
+                contour["linewidth.objid"] = rprConfig->GetContourLinewidthPrimId();
+                contour["linewidth.matid"] = rprConfig->GetContourLinewidthMaterialId();
+                contour["linewidth.normal"] = rprConfig->GetContourLinewidthNormal();
+                contour["antialiasing"] = rprConfig->GetContourAntialiasing();
+                contour["debug"] = rprConfig->GetContourDebug();
+
+                config["contour"] = contour;
+            }
 
             configFile << config;
         } catch (json::exception& e) {
@@ -2767,12 +2884,6 @@ private:
             }
         }
 
-        {
-            HdRprConfig* config;
-            auto configInstanceLock = HdRprConfig::GetInstance(&config);
-            UpdateSettings(*config, true);
-        }
-
         m_imageCache.reset(new RprUsdImageCache(m_rprContext.get()));
 
         m_isAbortingEnabled.store(false);
@@ -3049,6 +3160,26 @@ private:
             if (!colorAov) return;
         }
 
+        // Force disable alpha for some render modes when we render with Northstar
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            // Contour rendering should not have an alpha,
+            // it might cause missed contours (just for the user, not in actual data)
+            if (m_contourAovs) {
+                m_isAlphaEnabled = false;
+            } else {
+                auto currentRenderMode = RprUsdGetInfo<rpr_render_mode>(m_rprContext.get(), RPR_CONTEXT_RENDER_MODE);
+
+                // XXX (RPRNEXT-343): opacity is always zero when such render modes are active:
+                if (currentRenderMode == RPR_RENDER_MODE_NORMAL ||
+                    currentRenderMode == RPR_RENDER_MODE_POSITION ||
+                    currentRenderMode == RPR_RENDER_MODE_TEXCOORD ||
+                    currentRenderMode == RPR_RENDER_MODE_WIREFRAME ||
+                    currentRenderMode == RPR_RENDER_MODE_MATERIAL_INDEX) {
+                    m_isAlphaEnabled = false;
+                }
+            }
+        }
+
         if (m_isAlphaEnabled) {
             auto opacityAov = GetAov(HdRprAovTokens->opacity, m_viewportSize[0], m_viewportSize[1], HdFormatFloat32Vec4);
             if (opacityAov) {
@@ -3072,7 +3203,7 @@ private:
         return aov;
     }
 
-    std::shared_ptr<HdRprApiAov> CreateAov(TfToken const& aovName, int width = 0, int height = 0, HdFormat format = HdFormatFloat32Vec4) {
+    std::shared_ptr<HdRprApiAov> CreateAov(TfToken const& aovName, int width, int height, HdFormat format) {
         if (!m_rprContext ||
             width < 0 || height < 0 ||
             format == HdFormatInvalid || HdDataSizeOfFormat(format) == 0) {
@@ -3095,6 +3226,9 @@ private:
 
         try {
             if (!aov) {
+                HdRprApiAov* newAov = nullptr;
+                std::function<void(HdRprApiAov*)> aovCustomDestructor;
+
                 if (aovName == HdAovTokens->color) {
                     auto rawColorAov = GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4);
                     if (!rawColorAov) {
@@ -3102,12 +3236,12 @@ private:
                         return nullptr;
                     }
 
-                    auto colorAov = std::make_shared<HdRprApiColorAov>(format, std::move(rawColorAov), m_rprContext.get(), m_rprContextMetadata);
-                    UpdateColorAlpha(colorAov.get());
+                    auto colorAov = new HdRprApiColorAov(format, std::move(rawColorAov), m_rprContext.get(), m_rprContextMetadata);
+                    UpdateColorAlpha(colorAov);
 
-                    aov = colorAov;
+                    newAov = colorAov;
                 } else if (aovName == HdAovTokens->normal) {
-                    aov = std::make_shared<HdRprApiNormalAov>(width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiNormalAov(width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else if (aovName == HdAovTokens->depth) {
                     auto worldCoordinateAov = GetAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4);
                     if (!worldCoordinateAov) {
@@ -3115,24 +3249,36 @@ private:
                         return nullptr;
                     }
 
-                    aov = std::make_shared<HdRprApiDepthAov>(format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiDepthAov(format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
-                    auto aovPtr = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
-                    aov = std::shared_ptr<HdRprApiAov>(aovPtr, [this](HdRprApiAov* aov) {
+                    newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    aovCustomDestructor = [this](HdRprApiAov* aov) {
                         // Each LPE AOV reserves RPR's LPE AOV id (RPR_AOV_LPE_0, ...)
                         // As soon as LPE AOV is released we want to return reserved id to the pool
                         m_lpeAovPool.push_back(GetRprLpeAovName(aov->GetAovFb()->GetAovId()));
+                        m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
                         delete aov;
-                    });
+                    };
                 } else {
                     if (!aovDesc.computed) {
-                        aov = std::make_shared<HdRprApiAov>(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                        newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                     } else {
                         TF_CODING_ERROR("Failed to create %s AOV: unprocessed computed AOV", aovName.GetText());
-                        return nullptr;
                     }
                 }
 
+                if (!newAov) {
+                    return nullptr;
+                }
+
+                if (!aovCustomDestructor) {
+                    aovCustomDestructor = [this](HdRprApiAov* aov) {
+                        m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
+                        delete aov;
+                    };
+                }
+
+                aov = std::shared_ptr<HdRprApiAov>(newAov, std::move(aovCustomDestructor));
                 m_aovRegistry[aovName] = aov;
                 m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
             } else {
@@ -3143,6 +3289,17 @@ private:
         }
 
         return aov;
+    }
+
+    std::shared_ptr<HdRprApiAov> CreateAov(TfToken const& aovName) {
+        auto iter = m_aovRegistry.find(aovName);
+        if (iter != m_aovRegistry.end()) {
+            if (auto aov = iter->second.lock()) {
+                return aov;
+            }
+        }
+
+        return CreateAov(aovName, m_viewportSize[0], m_viewportSize[1], HdFormatFloat32Vec4);
     }
 
     HdRprApiColorAov* GetColorAov() {
@@ -3346,6 +3503,13 @@ private:
     std::map<TfToken, std::shared_ptr<HdRprApiAov>> m_internalAovs;
     HdRenderPassAovBindingVector m_aovBindings;
     std::vector<TfToken> m_lpeAovPool;
+
+    struct ContourRenderModeAovs {
+        std::shared_ptr<HdRprApiAov> normal;
+        std::shared_ptr<HdRprApiAov> primId;
+        std::shared_ptr<HdRprApiAov> materialId;
+    };
+    std::unique_ptr<ContourRenderModeAovs> m_contourAovs;
 
     struct OutputRenderBuffer {
         HdRenderPassAovBinding const* aovBinding;
@@ -3632,6 +3796,10 @@ void HdRprApi::SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask) {
 
 void HdRprApi::SetMeshId(rpr::Shape* mesh, uint32_t id) {
     m_impl->SetMeshId(mesh, id);
+}
+
+void HdRprApi::SetMeshIgnoreContour(rpr::Shape* mesh, bool ignoreContour) {
+    m_impl->SetMeshIgnoreContour(mesh, ignoreContour);
 }
 
 void HdRprApi::SetCurveMaterial(rpr::Curve* curve, RprUsdMaterial const* material) {

@@ -41,6 +41,9 @@ public:
         static const size_t kInvalidRootNodeIndex = size_t(-1);
 
         struct ImageNode {
+            /// MaterialX type
+            std::string type;
+
             /// The URI of an image file.
             /// It's responsibility of the loader user to setup rpr_image and bind it to rprNode
             std::string file;

@@ -11,25 +11,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#ifndef RPRUSD_MATERIAL_NODES_RPR_MATERIALX_NODE_H
-#define RPRUSD_MATERIAL_NODES_RPR_MATERIALX_NODE_H
+#ifndef RPR_LOP_RPRMATERIALPROPERTIES_H
+#define RPR_LOP_RPRMATERIALPROPERTIES_H
 
-#include "pxr/base/tf/staticTokens.h"
-#include "pxr/imaging/rprUsd/api.h"
+#include "pxr/pxr.h"
+
+#include <LOP/LOP_Node.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-#define RPRUSD_RPR_MATERIALX_NODE_TOKENS \
-    (rpr_materialx_node) \
-    (file) \
-    (string) \
-    (basePath) \
-    (surfaceElement) \
-    (displacementElement) \
-    (stPrimvarName)
+/// This node allows to set RPR specific properties on materials
+class LOP_RPRMaterialProperties : public LOP_Node {
+public:
+    LOP_RPRMaterialProperties(OP_Network *net, const char *name, OP_Operator *op);
+    ~LOP_RPRMaterialProperties() override = default;
 
-TF_DECLARE_PUBLIC_TOKENS(RprUsdRprMaterialXNodeTokens, RPRUSD_API, RPRUSD_RPR_MATERIALX_NODE_TOKENS);
+    static void Register(OP_OperatorTable *table);
+
+protected:
+    OP_ERROR cookMyLop(OP_Context &context) override;
+};
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-#endif // RPRUSD_MATERIAL_NODES_RPR_MATERIALX_NODE_H
+#endif // RPR_LOP_RPRMATERIALPROPERTIES_H

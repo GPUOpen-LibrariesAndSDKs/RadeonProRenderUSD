@@ -42,7 +42,8 @@ RprUsdImageCache::GetImage(
     std::string const& path,
     std::string const& colorspace,
     rpr::ImageWrapType wrapType,
-    std::vector<RprUsdCoreImage::UDIMTile> const& tiles) {
+    std::vector<RprUsdCoreImage::UDIMTile> const& tiles,
+    uint32_t numComponentsRequired) {
     if (!wrapType) {
         wrapType = RPR_IMAGE_WRAP_TYPE_REPEAT;
     }
@@ -64,7 +65,7 @@ RprUsdImageCache::GetImage(
         }
     }
 
-    auto coreImage = RprUsdCoreImage::Create(m_context, tiles);
+    auto coreImage = RprUsdCoreImage::Create(m_context, tiles, numComponentsRequired);
     if (!coreImage) {
         return nullptr;
     }

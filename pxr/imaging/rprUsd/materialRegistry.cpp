@@ -18,6 +18,8 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/rprUsd/material.h"
+#include "pxr/imaging/rprUsd/tokens.h"
+#include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/util.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/staticTokens.h"
@@ -144,7 +146,7 @@ void RprUsdMaterialRegistry::CommitResources(
     std::string formatString;
     for (size_t i = 0; i < m_textureCommits.size(); ++i) {
         auto& commit = m_textureCommits[i];
-        if (auto rprImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType)) {
+        if (auto rprImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, {}, 0)) {
             commit.setTextureCallback(rprImage);
             continue;
         }
@@ -198,7 +200,7 @@ void RprUsdMaterialRegistry::CommitResources(
         }
 
         auto& commit = m_textureCommits[i];
-        auto coreImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, tiles);
+        auto coreImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, tiles, commit.numComponentsRequired);
         commit.setTextureCallback(coreImage);
     }
 
@@ -300,24 +302,6 @@ void DumpMaterialNetwork(HdMaterialNetworkMap const& networkMap) {
     }
 }
 
-// Structures are taken from hdSt/materialNetwork.cpp
-
-struct RprUsd_MaterialNetwork {
-    struct Connection {
-        SdfPath upstreamNode;
-        TfToken upstreamOutputName;
-    };
-
-    struct Node {
-        TfToken nodeTypeId;
-        std::map<TfToken, VtValue> parameters;
-        std::map<TfToken, Connection> inputConnections;
-    };
-
-    std::map<SdfPath, Node> nodes;
-    std::map<TfToken, Connection> terminals;
-};
-
 void ConvertLegacyHdMaterialNetwork(
     HdMaterialNetworkMap const& hdNetworkMap,
     RprUsd_MaterialNetwork *result) {
@@ -383,6 +367,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     ConvertLegacyHdMaterialNetwork(legacyNetworkMap, &network);
 
     RprUsd_MaterialBuilderContext context = {};
+    context.hdMaterialNetwork = &network;
     context.rprContext = rprContext;
     context.imageCache = imageCache;
     context.mtlxLoader = m_mtlxLoader.get();
@@ -394,7 +379,8 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
         bool Finalize(RprUsd_MaterialBuilderContext& context,
             VtValue const& surfaceOutput,
             VtValue const& displacementOutput,
-            VtValue const& volumeOutput) {
+            VtValue const& volumeOutput,
+            int materialId) {
 
             auto getTerminalRprNode = [](VtValue const& terminalOutput) -> rpr::MaterialNode* {
                 if (!terminalOutput.IsEmpty()) {
@@ -414,8 +400,14 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
 
             m_isShadowCatcher = context.isShadowCatcher;
             m_isReflectionCatcher = context.isReflectionCatcher;
-            m_uvPrimvarName = std::move(context.uvPrimvarName);
+            m_uvPrimvarName = TfToken(context.uvPrimvarName);
             m_displacementScale = std::move(context.displacementScale);
+
+            if (m_surfaceNode && materialId >= 0) {
+                // TODO: add C++ wrapper
+                auto apiHandle = rpr::GetRprObject(m_surfaceNode);
+                RPR_ERROR_CHECK(rprMaterialNodeSetID(apiHandle, rpr_uint(materialId)), "Failed to set material node id");
+            }
 
             return m_volumeNode || m_surfaceNode || m_displacementNode;
         }
@@ -435,6 +427,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     for (auto& entry : network.nodes) {
         auto& nodePath = entry.first;
         auto& node = entry.second;
+        context.currentNodePath = &nodePath;
 
         try {
             // Check if we have registered node that match nodeTypeId
@@ -525,7 +518,28 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     auto surfaceOutput = getTerminalOutput(HdMaterialTerminalTokens->surface);
     auto displacementOutput = getTerminalOutput(HdMaterialTerminalTokens->displacement);
 
-    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput) ? out.release() : nullptr;
+    int materialId = -1;
+
+    auto surfaceTerminalIt = network.terminals.find(HdMaterialTerminalTokens->surface);
+    if (surfaceTerminalIt != network.terminals.end()) {
+        auto& surfaceNodePath = surfaceTerminalIt->second.upstreamNode;
+
+        auto surfaceNodeIt = network.nodes.find(surfaceNodePath);
+        if (surfaceNodeIt != network.nodes.end()) {
+            auto& parameters = surfaceNodeIt->second.parameters;
+
+            auto idIt = parameters.find(RprUsdTokens->id);
+            if (idIt != parameters.end()) {
+                auto& value = idIt->second;
+
+                if (value.IsHolding<int>()) {
+                    materialId = value.UncheckedGet<int>();
+                }
+            }
+        }
+    }
+
+    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, materialId) ? out.release() : nullptr;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
