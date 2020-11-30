@@ -36,8 +36,9 @@ bool HdRprIsValidPrimvarSize(
     size_t vertexInterpolationSize);
 
 struct HdRprGeometrySettings {
-    uint32_t visibilityMask = 0;
+    int id = -1;
     int subdivisionLevel = 0;
+    uint32_t visibilityMask = 0;
     bool ignoreContour = false;
 };
 

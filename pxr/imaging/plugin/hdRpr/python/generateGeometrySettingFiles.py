@@ -19,6 +19,13 @@ geometry_settings = [
         'name': 'Mesh',
         'settings': [
             {
+                'name': 'primvars:rpr:id',
+                'ui_name': 'ID',
+                'defaultValue': 0,
+                'minValue': 0,
+                'maxValue': 1 ** 16
+            },
+            {
                 'name': 'primvars:rpr:subdivisionLevel',
                 'ui_name': 'Subidivision Level',
                 'defaultValue': 0,
