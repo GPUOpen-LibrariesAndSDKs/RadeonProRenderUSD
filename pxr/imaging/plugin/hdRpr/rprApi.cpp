@@ -2047,6 +2047,15 @@ public:
 
     bool CommonRenderImplPrologue() {
         if (m_numSamples == 0) {
+            // Default resolve mode
+            m_resolveMode = kResolveAfterRender;
+
+            // When we want to have a uniform seed across all frames,
+            // we need to make sure that RPR_CONTEXT_FRAMECOUNT sequence is the same for all of them
+            if (m_isUniformSeed) {
+                m_frameCount = 0;
+            }
+
             // Disable aborting on the very first sample
             //
             // Ideally, aborting the first sample should not be the problem.
@@ -2058,15 +2067,6 @@ public:
             m_isAbortingEnabled.store(false);
         }
         m_abortRender.store(false);
-
-        // Default resolve mode
-        m_resolveMode = kResolveAfterRender;
-
-        // When we want to have a uniform seed across all frames,
-        // we need to make sure that RPR_CONTEXT_FRAMECOUNT sequence is the same for all of them
-        if (m_isUniformSeed && m_numSamples == 0) {
-            m_frameCount = 0;
-        }
 
         // If the changes that were made by the user did not reset our AOVs,
         // we can just resolve them to the current render buffers and we are done with the rendering
@@ -2280,6 +2280,27 @@ public:
 
             IncrementFrameCount(IsAdaptiveSamplingEnabled());
 
+            if (progressivelyIncreaseSamplesPerIter) {
+                // 1, 1, 2, 4, 8, ...
+                int numSamplesPerIter = std::max(int(pow(2, int(log2(m_numSamples)))), 1);
+
+                // Make sure we will not oversample the image
+                int numSamplesLeft = std::min(numSamplesPerIter, m_maxSamples - m_numSamples);
+                numSamplesPerIter = numSamplesLeft > 0 ? numSamplesLeft : numSamplesPerIter;
+                if (m_numSamplesPerIter != numSamplesPerIter) {
+                    m_numSamplesPerIter = numSamplesPerIter;
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
+
+                    if (m_isRenderUpdateCallbackEnabled) {
+                        // Enable resolves in the render update callback after RPR_CONTEXT_ITERATIONS gets high enough
+                        // to get interactive updates even when RPR_CONTEXT_ITERATIONS huge
+                        if (m_numSamplesPerIter >= 32) {
+                            m_resolveMode = kResolveInRenderUpdateCallback;
+                        }
+                    }
+                }
+            }
+
             auto startTime = std::chrono::high_resolution_clock::now();
 
             m_rucData.previousProgress = -1.0f;
@@ -2335,25 +2356,6 @@ public:
             m_isAbortingEnabled.store(true);
 
             m_numSamples += m_numSamplesPerIter;
-
-            if (progressivelyIncreaseSamplesPerIter && m_numSamples > 1) {
-                m_numSamplesPerIter *= 2;
-
-                // Make sure we will not oversample the image
-                int numSamplesLeft = m_maxSamples - m_numSamples;
-                m_numSamplesPerIter = std::min(m_numSamplesPerIter, numSamplesLeft);
-                if (m_numSamplesPerIter > 0) {
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
-                }
-
-                if (m_isRenderUpdateCallbackEnabled) {
-                    // Enable resolves in the render update callback after RPR_CONTEXT_ITERATIONS gets high enough
-                    // to get interactive updates even when RPR_CONTEXT_ITERATIONS huge
-                    if (m_numSamplesPerIter >= 32) {
-                        m_resolveMode = kResolveInRenderUpdateCallback;
-                    }
-                }
-            }
         }
     }
 
