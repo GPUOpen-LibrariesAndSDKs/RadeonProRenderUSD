@@ -248,6 +248,30 @@ render_setting_categories = [
                         '"uiicon" VIEW_display_denoise'
                     ]
                 }
+            },
+            {
+                'folder': 'Denoise Settings',
+                'houdini': {
+                    'hidewhen': 'enableDenoising == 0'
+                },
+                'settings': [
+                    {
+                        'name': 'denoiseMinIter',
+                        'ui_name': 'Denoise Min Iteration',
+                        'defaultValue': 4,
+                        'minValue': 1,
+                        'maxValue': 2 ** 16,
+                        'help': 'The first iteration on which denoising should be applied.'
+                    },
+                    {
+                        'name': 'denoiseIterStep',
+                        'ui_name': 'Denoise Iteration Step',
+                        'defaultValue': 32,
+                        'minValue': 1,
+                        'maxValue': 2 ** 16,
+                        'help': 'Denoise use frequency. To denoise on each iteration, set to 1.'
+                    }
+                ]
             }
         ]
     },
