@@ -1411,6 +1411,7 @@ public:
 
             if (config->IsDirty(HdRprConfig::DirtyRprExport)) {
                 m_rprSceneExportPath = config->GetRprExportPath();
+                m_rprExportAsSingleFile = config->GetRprExportAsSingleFile();
             }
 
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
@@ -2469,9 +2470,14 @@ Don't show this message again?
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, currentYFlip), "Failed to set context Y FLIP parameter");
         }
 
+        unsigned int rprsFlags = 0;
+        if (!m_rprExportAsSingleFile) {
+            rprsFlags |= RPRLOADSTORE_EXPORTFLAG_EXTERNALFILES;
+        }
+
         auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
         auto rprSceneHandle = rpr::GetRprObject(m_scene.get());
-        if (RPR_ERROR_CHECK(rprsExport(m_rprSceneExportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, 0), "Failed to export .rpr file")) {
+        if (RPR_ERROR_CHECK(rprsExport(m_rprSceneExportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, rprsFlags), "Failed to export .rpr file")) {
             return;
         }
 
@@ -3659,6 +3665,7 @@ private:
     std::atomic<bool> m_abortRender;
 
     std::string m_rprSceneExportPath;
+    bool m_rprExportAsSingleFile;
 
     std::condition_variable* m_presentedConditionVariable = nullptr;
     bool* m_presentedCondition = nullptr;

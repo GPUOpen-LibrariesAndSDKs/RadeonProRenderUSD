@@ -556,6 +556,10 @@ render_setting_categories = [
                 'name': 'rprExportPath',
                 'defaultValue': '',
                 'c_type': 'std::string'
+            },
+            {
+                'name': 'rprExportAsSingleFile',
+                'defaultValue': False
             }
         ]
     }

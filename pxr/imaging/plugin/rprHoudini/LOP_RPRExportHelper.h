@@ -15,6 +15,7 @@ limitations under the License.
 #define RPR_LOP_RPREXPORTHELPER_H
 
 #include "pxr/pxr.h"
+#include "pxr/usd/usd/prim.h"
 
 #include <LOP/LOP_Node.h>
 
@@ -31,6 +32,10 @@ public:
 
 protected:
     OP_ERROR cookMyLop(OP_Context &context) override;
+
+private:
+    template <typename T>
+    bool SetRenderSetting(UsdPrim* prim, TfToken const& name, SdfValueTypeName const& sdfType, T const& value, double time, bool timeDependent);
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
