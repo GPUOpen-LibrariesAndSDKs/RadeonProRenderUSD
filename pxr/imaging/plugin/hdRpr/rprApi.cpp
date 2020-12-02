@@ -1874,6 +1874,15 @@ public:
     }
 
     void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, bool clearAovs) {
+        auto colorAov = GetColorAov();
+        if (colorAov) {
+            UpdateDenoising(enableDenoise, colorAov);
+
+            if (tonemap.isDirty) {
+                colorAov->SetTonemap(tonemap.value);
+            }
+        }
+
         if (m_dirtyFlags & (ChangeTracker::DirtyAOVBindings | ChangeTracker::DirtyAOVRegistry)) {
             m_resolveData.rawAovs.clear();
             m_resolveData.computedAovs.clear();
@@ -1910,15 +1919,6 @@ public:
                     outputRb.mappedData = rprRenderBuffer->GetPointerForWriting();
                     outputRb.mappedDataSize = HdDataSizeOfFormat(rprRenderBuffer->GetFormat()) * rprRenderBuffer->GetWidth() * rprRenderBuffer->GetHeight();
                 }
-            }
-        }
-
-        auto colorAov = GetColorAov();
-        if (colorAov) {
-            UpdateDenoising(enableDenoise, colorAov);
-
-            if (tonemap.isDirty) {
-                colorAov->SetTonemap(tonemap.value);
             }
         }
 
