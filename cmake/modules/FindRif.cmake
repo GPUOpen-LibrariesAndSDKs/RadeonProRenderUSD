@@ -53,32 +53,13 @@ if(NOT DEFINED RIF_MODELS_DIR)
     set(RIF_MODELS_DIR "${RIF_LOCATION}/models")
 endif()
 
-set(RIF_VERSION_FILE "${RIF_LOCATION_INCLUDE}/RadeonImageFilters_version.h")
-if(NOT EXISTS ${RIF_VERSION_FILE})
-    message(FATAL_ERROR "Invalid RIF SDK: missing ${RIF_VERSION_FILE} file")
-endif()
-
-file(STRINGS "${RIF_VERSION_FILE}" _rif_major_version_str
-     REGEX "^#define[\t ]+RIF_VERSION_MAJOR[\t ]+.*")
-file(STRINGS "${RIF_VERSION_FILE}" _rif_minor_version_str
-     REGEX "^#define[\t ]+RIF_VERSION_MINOR[\t ]+.*")
-file(STRINGS "${RIF_VERSION_FILE}" _rif_revision_version_str
-     REGEX "^#define[\t ]+RIF_VERSION_REVISION[\t ]+.*")
-
-string(REGEX REPLACE "^.*MAJOR[\t ]+([0-9]*).*$" "\\1"
-       RIF_MAJOR_VERSION "${_rif_major_version_str}")
-string(REGEX REPLACE "^.*MINOR[\t ]+([0-9]*).*$" "\\1"
-       RIF_MINOR_VERSION "${_rif_minor_version_str}")
-string(REGEX REPLACE "^.*REVISION[\t ]+([0-9]*).*$" "\\1"
-       RIF_REVISION_VERSION "${_rif_revision_version_str}")
-
-set(RIF_VERSION_STRING "${RIF_MAJOR_VERSION}.${RIF_MINOR_VERSION}.${RIF_REVISION_VERSION}")
+parseVersion("${RIF_LOCATION_INCLUDE}/RadeonImageFilters_version.h" RIF)
 
 include(FindPackageHandleStandardArgs)
 
 find_package_handle_standard_args(Rif
     REQUIRED_VARS
-        RIF_VERSION_STRING
         RIF_LOCATION_INCLUDE
+        RIF_VERSION_STRING
         RIF_LIBRARY
 )

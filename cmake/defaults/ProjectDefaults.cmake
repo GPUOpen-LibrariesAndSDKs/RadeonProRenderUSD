@@ -50,6 +50,8 @@ if (PXR_BUILD_TESTS)
     enable_testing()
 endif()
 
+include(parseVersion)
+
 if(NOT DEFINED RPR_SDK_PLATFORM)
     include(PlatformIntrospection)
     DETERMINE_PLATFORM(RPR_SDK_PLATFORM)
