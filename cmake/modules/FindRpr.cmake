@@ -81,11 +81,14 @@ if(NOT RPR_PLUGINS)
     message(FATAL_ERROR "At least one RPR plugin required")
 endif()
 
+parseVersion("${RPR_LOCATION_INCLUDE}/RadeonProRender.h" RPR)
+
 include(FindPackageHandleStandardArgs)
 
 find_package_handle_standard_args(Rpr
     REQUIRED_VARS
         RPR_LOCATION_INCLUDE
+        RPR_VERSION_STRING
         RPR_LOADSTORE_LIBRARY
         RPR_LIBRARY
 )
