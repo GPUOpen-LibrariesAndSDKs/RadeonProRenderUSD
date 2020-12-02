@@ -1603,7 +1603,8 @@ public:
                 }
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
             } else {
-                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(m_isInteractive)), "Failed to set preview mode");
+                bool enableDownscale = m_isInteractive && preferences.GetInteractiveEnableDownscale();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(enableDownscale)), "Failed to set preview mode");
             }
 
             if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
