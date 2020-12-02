@@ -560,6 +560,10 @@ render_setting_categories = [
             {
                 'name': 'rprExportAsSingleFile',
                 'defaultValue': False
+            },
+            {
+                'name': 'rprExportUseImageCache',
+                'defaultValue': True
             }
         ]
     }

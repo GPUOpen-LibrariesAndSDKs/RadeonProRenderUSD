@@ -35,15 +35,18 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (rprExportPath)
     (rprExportAsSingleFile)
+    (rprExportUseImageCache)
 );
 
 static PRM_Name g_exportPathName("exportPath", "Export Path");
-static PRM_Name g_exportPathAsSingleFileName("exportAsSingleFile", "Export As Single File");
+static PRM_Name g_exportAsSingleFileName("exportAsSingleFile", "Export As Single File");
+static PRM_Name g_exportUseImageCacheName("exportUseImageCache", "Use Image Cache");
 static PRM_Name g_renderSettingsName("renderSettings", "Render Settings");
 
 static PRM_Template g_templateList[] = {
     PRM_Template(PRM_FILE, 1, &g_exportPathName),
-    PRM_Template(PRM_TOGGLE_E, 1, &g_exportPathAsSingleFileName),
+    PRM_Template(PRM_TOGGLE_E, 1, &g_exportAsSingleFileName),
+    PRM_Template(PRM_TOGGLE_E, 1, &g_exportUseImageCacheName),
     PRM_Template(PRM_STRING_E, 1, &g_renderSettingsName),
     PRM_Template(),
 };
@@ -69,7 +72,7 @@ LOP_RPRExportHelper::LOP_RPRExportHelper(OP_Network *net, const char *name, OP_O
 }
 
 template <typename T>
-bool LOP_RPRExportHelper::SetRenderSetting(UsdPrim* prim, TfToken const& name, SdfValueTypeName const& sdfType, T const& value, double time, bool timeDependent) {
+bool LOP_RPRExportHelper::SetRenderSetting(UsdPrim* prim, TfToken const& name, SdfValueTypeName const& sdfType, T const& value, bool timeDependent) {
     if (auto exportPathAttr = prim->CreateAttribute(name, sdfType, true)) {
         auto timeCode = timeDependent ? HUSDgetCurrentUsdTimeCode() : UsdTimeCode::Default();
         if (exportPathAttr.Set(value, timeCode)) {
@@ -98,7 +101,6 @@ OP_ERROR LOP_RPRExportHelper::cookMyLop(OP_Context &context) {
     };
 
     auto exportPathParm = getParm(g_exportPathName.getToken());
-    auto exportAsSingleFileParm = getParm(g_exportPathAsSingleFileName.getToken());
 
     UT_String exportPath;
     exportPathParm->getValue(context.getTime(), exportPath, 0, true, context.getThread());
@@ -112,9 +114,8 @@ OP_ERROR LOP_RPRExportHelper::cookMyLop(OP_Context &context) {
         exportPath += ".rpr";
     }
 
-    int exportAsSingleFileInt;
-    exportAsSingleFileParm->getValue(context.getTime(), exportAsSingleFileInt, 0, context.getThread());
-    bool exportAsSingleFile = bool(exportAsSingleFileInt);
+    bool exportAsSingleFile = bool(evalInt(g_exportAsSingleFileName.getToken(), 0, context.getTime()));
+    bool exportUseImageCache = bool(evalInt(g_exportUseImageCacheName.getToken(), 0, context.getTime()));
 
     UT_String renderSettingsPath;
     evalString(renderSettingsPath, g_renderSettingsName.getToken(), 0, context.getTime());
@@ -129,8 +130,9 @@ OP_ERROR LOP_RPRExportHelper::cookMyLop(OP_Context &context) {
     auto modifyRenderSettings = [&](UsdRenderSettings& renderSettings) {
         auto prim = renderSettings.GetPrim();
 
-        return SetRenderSetting(&prim, _tokens->rprExportPath, SdfValueTypeNames->String, exportPath.toStdString(), context.getTime(), exportPathParm->isTimeDependent()) &&
-               SetRenderSetting(&prim, _tokens->rprExportAsSingleFile, SdfValueTypeNames->Bool, exportAsSingleFile, context.getTime(), exportAsSingleFileParm->isTimeDependent());
+        return SetRenderSetting(&prim, _tokens->rprExportPath, SdfValueTypeNames->String, exportPath.toStdString(), exportPathParm->isTimeDependent()) &&
+               SetRenderSetting(&prim, _tokens->rprExportAsSingleFile, SdfValueTypeNames->Bool, exportAsSingleFile, false) &&
+               SetRenderSetting(&prim, _tokens->rprExportUseImageCache, SdfValueTypeNames->Bool, exportUseImageCache, false);
     };
 
     // Use explicitly specified render settings primitive if any

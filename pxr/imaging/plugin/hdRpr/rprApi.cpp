@@ -1412,6 +1412,7 @@ public:
             if (config->IsDirty(HdRprConfig::DirtyRprExport)) {
                 m_rprSceneExportPath = config->GetRprExportPath();
                 m_rprExportAsSingleFile = config->GetRprExportAsSingleFile();
+                m_rprExportUseImageCache = config->GetRprExportUseImageCache();
             }
 
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
@@ -2473,6 +2474,9 @@ Don't show this message again?
         unsigned int rprsFlags = 0;
         if (!m_rprExportAsSingleFile) {
             rprsFlags |= RPRLOADSTORE_EXPORTFLAG_EXTERNALFILES;
+        }
+        if (m_rprExportUseImageCache) {
+            rprsFlags |= RPRLOADSTORE_EXPORTFLAG_USE_IMAGE_CACHE;
         }
 
         auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
@@ -3666,6 +3670,7 @@ private:
 
     std::string m_rprSceneExportPath;
     bool m_rprExportAsSingleFile;
+    bool m_rprExportUseImageCache;
 
     std::condition_variable* m_presentedConditionVariable = nullptr;
     bool* m_presentedCondition = nullptr;
