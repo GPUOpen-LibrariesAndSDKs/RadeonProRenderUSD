@@ -52,5 +52,6 @@ install(
 install(
     FILES
         ui/MainMenuCommon.xml
+        UsdRenderers.json
     DESTINATION
         houdini)
