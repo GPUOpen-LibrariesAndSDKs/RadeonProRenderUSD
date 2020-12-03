@@ -35,7 +35,7 @@ protected:
 
 private:
     template <typename T>
-    bool SetRenderSetting(UsdPrim* prim, TfToken const& name, SdfValueTypeName const& sdfType, T const& value, double time, bool timeDependent);
+    bool SetRenderSetting(UsdPrim* prim, TfToken const& name, SdfValueTypeName const& sdfType, T const& value, bool timeDependent);
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

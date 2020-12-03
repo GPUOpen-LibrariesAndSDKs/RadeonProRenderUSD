@@ -65,6 +65,13 @@ PXR_NAMESPACE_OPEN_SCOPE
     (lpe6) \
     (lpe7) \
     (lpe8) \
+    (cameraNormal) \
+    (cryptomatteMat0) \
+    (cryptomatteMat1) \
+    (cryptomatteMat2) \
+    (cryptomatteObj0) \
+    (cryptomatteObj1) \
+    (cryptomatteObj2) \
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_AOV_TOKENS);
 

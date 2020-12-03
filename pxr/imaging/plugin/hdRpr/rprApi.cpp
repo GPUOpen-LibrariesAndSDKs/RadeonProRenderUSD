@@ -1412,6 +1412,7 @@ public:
             if (config->IsDirty(HdRprConfig::DirtyRprExport)) {
                 m_rprSceneExportPath = config->GetRprExportPath();
                 m_rprExportAsSingleFile = config->GetRprExportAsSingleFile();
+                m_rprExportUseImageCache = config->GetRprExportUseImageCache();
             }
 
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
@@ -1590,7 +1591,8 @@ public:
                 }
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
             } else {
-                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(m_isInteractive)), "Failed to set preview mode");
+                bool enableDownscale = m_isInteractive && preferences.GetInteractiveEnableDownscale();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(enableDownscale)), "Failed to set preview mode");
             }
 
             if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
@@ -2461,6 +2463,9 @@ Don't show this message again?
         unsigned int rprsFlags = 0;
         if (!m_rprExportAsSingleFile) {
             rprsFlags |= RPRLOADSTORE_EXPORTFLAG_EXTERNALFILES;
+        }
+        if (m_rprExportUseImageCache) {
+            rprsFlags |= RPRLOADSTORE_EXPORTFLAG_USE_IMAGE_CACHE;
         }
 
         auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
@@ -3654,6 +3659,7 @@ private:
 
     std::string m_rprSceneExportPath;
     bool m_rprExportAsSingleFile;
+    bool m_rprExportUseImageCache;
 
     std::condition_variable* m_presentedConditionVariable = nullptr;
     bool* m_presentedCondition = nullptr;

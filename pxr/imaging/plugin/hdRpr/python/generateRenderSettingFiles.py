@@ -416,6 +416,15 @@ render_setting_categories = [
                 'houdini': {
                     'hidewhen': hidewhen_not_northstar
                 }
+            },
+            {
+                'name': 'interactiveEnableDownscale',
+                'ui_name': 'Downscale Resolution When Interactive',
+                'help': 'Controls whether in interactive mode resolution should be downscaled or no.',
+                'defaultValue': True,
+                'houdini': {
+                    'hidewhen': hidewhen_not_tahoe
+                }
             }
         ]
     },
@@ -559,6 +568,10 @@ render_setting_categories = [
             },
             {
                 'name': 'rprExportAsSingleFile',
+                'defaultValue': False
+            },
+            {
+                'name': 'rprExportUseImageCache',
                 'defaultValue': False
             }
         ]

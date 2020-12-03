@@ -25,7 +25,7 @@ TF_INSTANTIATE_SINGLETON(HdRprAovRegistry);
 TF_DEFINE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_AOV_TOKENS);
 
 HdRprAovRegistry::HdRprAovRegistry() {
-    const auto rprAovMax = RPR_AOV_LPE_8 + 1;
+    const auto rprAovMax = RPR_AOV_CRYPTOMATTE_OBJ2 + 1;
     const GfVec4f idClearValue(255.0f, 255.0f, 255.0f, 0.0f);
 
     m_aovDescriptors.resize(rprAovMax);
@@ -61,7 +61,13 @@ HdRprAovRegistry::HdRprAovRegistry() {
             RPR_AOV_LPE_5,
             RPR_AOV_LPE_6,
             RPR_AOV_LPE_7,
-            RPR_AOV_LPE_8
+            RPR_AOV_LPE_8,
+            RPR_AOV_CRYPTOMATTE_MAT0,
+            RPR_AOV_CRYPTOMATTE_MAT1,
+            RPR_AOV_CRYPTOMATTE_MAT2,
+            RPR_AOV_CRYPTOMATTE_OBJ0,
+            RPR_AOV_CRYPTOMATTE_OBJ1,
+            RPR_AOV_CRYPTOMATTE_OBJ2,
         }) {
         m_aovDescriptors[rprAovId] = HdRprAovDescriptor(rprAovId);
     }
@@ -78,6 +84,7 @@ HdRprAovRegistry::HdRprAovRegistry() {
     m_aovDescriptors[RPR_AOV_BACKGROUND] = HdRprAovDescriptor(RPR_AOV_BACKGROUND, false);
     m_aovDescriptors[RPR_AOV_VELOCITY] = HdRprAovDescriptor(RPR_AOV_VELOCITY, false);
     m_aovDescriptors[RPR_AOV_VIEW_SHADING_NORMAL] = HdRprAovDescriptor(RPR_AOV_VIEW_SHADING_NORMAL, false);
+    m_aovDescriptors[RPR_AOV_CAMERA_NORMAL] = HdRprAovDescriptor(RPR_AOV_CAMERA_NORMAL, false);
 
     m_computedAovDescriptors.resize(kComputedAovsCount);
     m_computedAovDescriptors[kNdcDepth] = HdRprAovDescriptor(kNdcDepth, false, HdFormatFloat32, GfVec4f(std::numeric_limits<float>::infinity()), true);
@@ -135,6 +142,13 @@ HdRprAovRegistry::HdRprAovRegistry() {
     addAovNameLookup(HdRprAovTokens->lpe6, m_aovDescriptors[RPR_AOV_LPE_6]);
     addAovNameLookup(HdRprAovTokens->lpe7, m_aovDescriptors[RPR_AOV_LPE_7]);
     addAovNameLookup(HdRprAovTokens->lpe8, m_aovDescriptors[RPR_AOV_LPE_8]);
+    addAovNameLookup(HdRprAovTokens->cameraNormal, m_aovDescriptors[RPR_AOV_CAMERA_NORMAL]);
+    addAovNameLookup(HdRprAovTokens->cryptomatteMat0, m_aovDescriptors[RPR_AOV_CRYPTOMATTE_MAT0]);
+    addAovNameLookup(HdRprAovTokens->cryptomatteMat1, m_aovDescriptors[RPR_AOV_CRYPTOMATTE_MAT1]);
+    addAovNameLookup(HdRprAovTokens->cryptomatteMat2, m_aovDescriptors[RPR_AOV_CRYPTOMATTE_MAT2]);
+    addAovNameLookup(HdRprAovTokens->cryptomatteObj0, m_aovDescriptors[RPR_AOV_CRYPTOMATTE_OBJ0]);
+    addAovNameLookup(HdRprAovTokens->cryptomatteObj1, m_aovDescriptors[RPR_AOV_CRYPTOMATTE_OBJ1]);
+    addAovNameLookup(HdRprAovTokens->cryptomatteObj2, m_aovDescriptors[RPR_AOV_CRYPTOMATTE_OBJ2]);
 }
 
 HdRprAovDescriptor const& HdRprAovRegistry::GetAovDesc(TfToken const& name) {
