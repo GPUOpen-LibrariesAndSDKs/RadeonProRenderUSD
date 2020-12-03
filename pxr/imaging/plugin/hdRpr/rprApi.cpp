@@ -1502,40 +1502,28 @@ public:
             if (renderMode == HdRprRenderModeTokens->Contour) {
                 if (!m_contourAovs) {
                     m_contourAovs = std::make_unique<ContourRenderModeAovs>();
+                    m_contourAovs->normal = CreateAov(HdAovTokens->normal);
+                    m_contourAovs->primId = CreateAov(HdAovTokens->primId);
+                    m_contourAovs->materialId = CreateAov(HdRprAovTokens->materialId);
                 }
 
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_DEBUG_ENABLED, preferences.GetContourDebug()), "Failed to set contour debug");
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_ANTIALIASING, preferences.GetContourAntialiasing()), "Failed to set contour antialiasing");
 
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_USE_NORMAL, int(preferences.GetContourUseNormal())), "Failed to set contour use normal");
                 if (preferences.GetContourUseNormal()) {
-                    if (!m_contourAovs->normal) {
-                        m_contourAovs->normal = CreateAov(HdAovTokens->normal);
-                    }
-
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_LINEWIDTH_NORMAL, preferences.GetContourLinewidthNormal()), "Failed to set contour normal linewidth");
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_NORMAL_THRESHOLD, preferences.GetContourNormalThreshold()), "Failed to set contour normal threshold");
-                } else {
-                    m_contourAovs->normal = nullptr;
                 }
 
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_USE_OBJECTID, int(preferences.GetContourUsePrimId())), "Failed to set contour use primId");
                 if (preferences.GetContourUsePrimId()) {
-                    if (!m_contourAovs->primId) {
-                        m_contourAovs->primId = CreateAov(HdAovTokens->primId);
-                    }
-
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_LINEWIDTH_OBJECTID, preferences.GetContourLinewidthPrimId()), "Failed to set contour primId linewidth");
-                } else {
-                    m_contourAovs->primId = nullptr;
                 }
 
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_USE_MATERIALID, int(preferences.GetContourUseMaterialId())), "Failed to set contour use materialId");
                 if (preferences.GetContourUseMaterialId()) {
-                    if (!m_contourAovs->materialId) {
-                        m_contourAovs->materialId = CreateAov(HdRprAovTokens->materialId);
-                    }
-
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_LINEWIDTH_OBJECTID, preferences.GetContourLinewidthPrimId()), "Failed to set contour primId linewidth");
-                } else {
-                    m_contourAovs->materialId = nullptr;
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_CONTOUR_LINEWIDTH_MATERIALID, preferences.GetContourLinewidthMaterialId()), "Failed to set contour materialId linewidth");
                 }
 
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_GPUINTEGRATOR, "gpucontour"), "Failed to set gpuintegrator");
