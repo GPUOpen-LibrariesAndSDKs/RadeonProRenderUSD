@@ -1,0 +1,8 @@
+{
+    "HdRprPlugin" : {
+        "valid" : true,
+        "menulabel" : "RPR",
+        "menupriority" : 0,
+        "restartrendersettings" : ["renderQuality", "renderDevice"]
+    }
+}
