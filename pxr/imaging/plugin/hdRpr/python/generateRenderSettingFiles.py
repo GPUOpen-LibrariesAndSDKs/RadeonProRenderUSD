@@ -572,7 +572,7 @@ render_setting_categories = [
             },
             {
                 'name': 'rprExportUseImageCache',
-                'defaultValue': True
+                'defaultValue': False
             }
         ]
     }
