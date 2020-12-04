@@ -2537,11 +2537,11 @@ Don't show this message again?
                 /* RPR_AOV_WORLD_COORDINATE = */ "world.coordinate",
                 /* RPR_AOV_UV = */ "uv",
                 /* RPR_AOV_MATERIAL_ID = */ "material.id",
-                /* RPR_AOV_GEOMETRIC_NORMAL = */ "geometric.normal",
-                /* RPR_AOV_SHADING_NORMAL = */ "shading.normal",
+                /* RPR_AOV_GEOMETRIC_NORMAL = */ "normal.geom",
+                /* RPR_AOV_SHADING_NORMAL = */ "normal",
                 /* RPR_AOV_DEPTH = */ "depth",
                 /* RPR_AOV_OBJECT_ID = */ "object.id",
-                /* RPR_AOV_OBJECT_GROUP_ID = */ "object.group.id",
+                /* RPR_AOV_OBJECT_GROUP_ID = */ "group.id",
                 /* RPR_AOV_SHADOW_CATCHER = */ "shadow.catcher",
                 /* RPR_AOV_BACKGROUND = */ "background",
                 /* RPR_AOV_EMISSION = */ "emission",
@@ -2559,7 +2559,7 @@ Don't show this message again?
                 /* RPR_AOV_LIGHT_GROUP1 = */ "light.group1",
                 /* RPR_AOV_LIGHT_GROUP2 = */ "light.group2",
                 /* RPR_AOV_LIGHT_GROUP3 = */ "light.group3",
-                /* RPR_AOV_DIFFUSE_ALBEDO = */ "diffuse.albedo",
+                /* RPR_AOV_DIFFUSE_ALBEDO = */ "albedo.diffuse",
                 /* RPR_AOV_VARIANCE = */ "variance",
                 /* RPR_AOV_VIEW_SHADING_NORMAL = */ "view.shading.normal",
                 /* RPR_AOV_REFLECTION_CATCHER = */ "reflection.catcher",
@@ -2573,6 +2573,13 @@ Don't show this message again?
                 /* RPR_AOV_LPE_6 = */ "lpe6",
                 /* RPR_AOV_LPE_7 = */ "lpe7",
                 /* RPR_AOV_LPE_8 = */ "lpe8",
+                /* RPR_AOV_CAMERA_NORMAL = */ "camera.normal",
+                /* RPR_AOV_CRYPTOMATTE_MAT0 = */ "CryptoMaterial00",
+                /* RPR_AOV_CRYPTOMATTE_MAT1 = */ "CryptoMaterial01",
+                /* RPR_AOV_CRYPTOMATTE_MAT2 = */ "CryptoMaterial02",
+                /* RPR_AOV_CRYPTOMATTE_OBJ0 = */ "CryptoObject00",
+                /* RPR_AOV_CRYPTOMATTE_OBJ1 = */ "CryptoObject01",
+                /* RPR_AOV_CRYPTOMATTE_OBJ2 = */ "CryptoObject02",
             };
             static const size_t kNumRprsAovNames = sizeof(kRprsAovNames) / sizeof(kRprsAovNames[0]);
 
@@ -2628,7 +2635,7 @@ Don't show this message again?
                 contour["linewidth.matid"] = rprConfig->GetContourLinewidthMaterialId();
                 contour["linewidth.normal"] = rprConfig->GetContourLinewidthNormal();
                 contour["antialiasing"] = rprConfig->GetContourAntialiasing();
-                contour["debug"] = rprConfig->GetContourDebug();
+                contour["debug"] = int(rprConfig->GetContourDebug());
 
                 config["contour"] = contour;
             }
