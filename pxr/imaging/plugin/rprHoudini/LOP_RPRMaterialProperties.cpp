@@ -90,7 +90,7 @@ OP_ERROR LOP_RPRMaterialProperties::cookMyLop(OP_Context &context) {
 
     UsdShadeMaterial material(materialPrim);
     if (!material) {
-        addError(LOP_MESSAGE, TfStringPrintf("Specified path does not point to a material: %s", materialPrim.GetPrimTypeInfo().GetTypeName().GetText()).c_str());
+        addError(LOP_MESSAGE, TfStringPrintf("Specified path does not point to a material: %s", materialPath.c_str()).c_str());
         return error();
     }
 
