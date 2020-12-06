@@ -25,7 +25,7 @@ Getting and Building the Code
 You can use ```git``` to clone the repository.
 
 ```
-> git clone --recurse-submodules -j2 https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD
+> git clone --recurse-submodules -j64 https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD
 Cloning into 'RadeonProRenderUSD'...
 ```
 
