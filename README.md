@@ -19,17 +19,21 @@ Getting and Building the Code
         - Microsoft Visual Studio
     - CMake
     - Python
+    
+- Optional:
+    - git
 
 #### 2. Download the hdRpr source code
 
 You can use ```git``` to clone the repository.
+For modern, SMT or multi-threaded systems use:
 
 ```
 > git clone --recurse-submodules -j64 https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD
 Cloning into 'RadeonProRenderUSD'...
 ```
 
-or
+For legacy or low-power devices use:
 
 ```
 > git clone https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD
