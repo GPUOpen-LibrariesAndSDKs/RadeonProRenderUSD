@@ -481,6 +481,14 @@ private:
 // Utilities
 //------------------------------------------------------------------------------
 
+mx::NodeGraphPtr GetNodeGraphImpl(mx::NodeDef* nodeDef) {
+    static std::string universal("universal");
+    if (auto impl = nodeDef->getImplementation(mx::EMPTY_STRING, universal)) {
+        return impl->asA<mx::NodeGraph>();
+    }
+    return nullptr;
+}
+
 template <typename T>
 std::shared_ptr<T> GetFirst(mx::Element const* element) {
     for (auto& child : element->getChildren()) {
@@ -882,13 +890,11 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
                 // this node might be of a custom definition
                 //
                 if (auto nodeDef = mtlxNode->getNodeDef()) {
-                    if (auto implementation = nodeDef->getImplementation()) {
-                        if (auto nodeGraph = implementation->asA<mx::NodeGraph>()) {
-                            try {
-                                return std::make_unique<MtlxNodeGraphNode>(std::move(nodeGraph), context);
-                            } catch (MtlxNodeGraphNode::NoOutputsError& e) {
-                                // no-op
-                            }
+                    if (auto nodeGraph = GetNodeGraphImpl(nodeDef.get())) {
+                        try {
+                            return std::make_unique<MtlxNodeGraphNode>(std::move(nodeGraph), context);
+                        } catch (MtlxNodeGraphNode::NoOutputsError& e) {
+                            // no-op
                         }
                     }
                 }
@@ -1462,13 +1468,11 @@ void ForEachOutput(mx::ElementPtr const& element, F&& func) {
         for (auto& shaderRef : material->getShaderRefs()) {
             if (auto nodeDef = shaderRef->getNodeDef()) {
                 if (IsSupportedTarget(nodeDef->getTarget())) {
-                    if (auto impl = nodeDef->getImplementation()) {
-                        if (auto nodeGraph = impl->asA<mx::NodeGraph>()) {
-                            for (auto& child : nodeGraph->getChildren()) {
-                                if (auto output = child->asA<mx::Output>()) {
-                                    if (!func(output, shaderRef)) {
-                                        return;
-                                    }
+                    if (auto nodeGraph = GetNodeGraphImpl(nodeDef.get())) {
+                        for (auto& child : nodeGraph->getChildren()) {
+                            if (auto output = child->asA<mx::Output>()) {
+                                if (!func(output, shaderRef)) {
+                                    return;
                                 }
                             }
                         }
@@ -1861,9 +1865,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
         mx::ConstGraphElementPtr nodeGraph;
         if (element.shaderRef) {
             if (auto nodeDef = element.shaderRef->getNodeDef()) {
-                if (auto impl = nodeDef->getImplementation()) {
-                    nodeGraph = impl->asA<mx::NodeGraph>();
-                }
+                nodeGraph = GetNodeGraphImpl(nodeDef.get());
             }
         } else {
             nodeGraph = element.output->getParent()->asA<mx::GraphElement>();
