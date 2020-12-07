@@ -109,7 +109,7 @@ public:
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform);
     void Release(HdRprApiVolume* volume);
 
-    RprUsdMaterial* CreateMaterial(HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork);
+    RprUsdMaterial* CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork);
     RprUsdMaterial* CreatePointsMaterial(VtVec3fArray const& colors);
     RprUsdMaterial* CreateDiffuseMaterial(GfVec3f const& color);
     void Release(RprUsdMaterial* material);

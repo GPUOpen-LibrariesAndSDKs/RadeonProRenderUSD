@@ -10,3 +10,6 @@
 [submodule "deps/ghc_filesystem"]
 	path = deps/ghc_filesystem
 	url = https://github.com/gulrak/filesystem
+[submodule "deps/murmurhash"]
+	path = deps/murmurhash
+	url = https://github.com/aappleby/smhasher

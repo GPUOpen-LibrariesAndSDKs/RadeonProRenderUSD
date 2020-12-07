@@ -99,20 +99,16 @@ else()
     find_package(OpenVDB QUIET)
 endif()
 
-if(OpenVDB_FOUND)
-    if(HoudiniUSD_FOUND)
-        find_package(OpenEXR QUIET COMPONENTS Half_sidefx)
-    endif()
+if(HoudiniUSD_FOUND)
+    find_package(OpenEXR QUIET COMPONENTS Half_sidefx IlmImf_sidefx Iex_sidefx)
+endif()
 
-    if(NOT OpenEXR_FOUND)
-        find_package(OpenEXR QUIET COMPONENTS Half)
-    endif()
+if(NOT OpenEXR_FOUND)
+    find_package(OpenEXR QUIET COMPONENTS Half IlmImf Iex)
+endif()
 
-    if(NOT OpenEXR_FOUND)
-        message(FATAL_ERROR "Failed to find Half library")
-    endif()
-else()
-    message(STATUS "Skipping OpenVDB support")
+if(NOT OpenEXR_FOUND)
+    message(FATAL_ERROR "Failed to find Half library")
 endif()
 
 # ----------------------------------------------

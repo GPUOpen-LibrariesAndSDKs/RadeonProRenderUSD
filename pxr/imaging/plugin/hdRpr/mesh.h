@@ -96,6 +96,7 @@ private:
 
     int m_id = -1;
     bool m_ignoreContour;
+    std::string m_cryptomatteName;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

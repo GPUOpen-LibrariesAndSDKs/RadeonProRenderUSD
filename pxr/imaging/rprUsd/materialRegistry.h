@@ -62,6 +62,7 @@ public:
 
     RPRUSD_API
     RprUsdMaterial* CreateMaterial(
+        SdfPath const& materialId,
         HdSceneDelegate* sceneDelegate,
         HdMaterialNetworkMap const& networkMap,
         rpr::Context* rprContext,

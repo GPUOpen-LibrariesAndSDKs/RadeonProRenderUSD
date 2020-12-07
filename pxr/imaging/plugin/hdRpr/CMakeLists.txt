@@ -98,6 +98,7 @@ pxr_plugin(hdRpr
         cameraUtil
         rprUsd
         json
+        murmurhash
         ${RIF_LIBRARY}
         ${OPENEXR_LIBRARIES}
 
