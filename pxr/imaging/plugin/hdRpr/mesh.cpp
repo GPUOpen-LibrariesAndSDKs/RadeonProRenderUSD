@@ -360,7 +360,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
     }
 
+    bool isIgnoreContourDirty = false;
     bool isVisibilityMaskDirty = false;
+    bool isIdDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
         HdRprGeometrySettings geomSettings = {};
         geomSettings.visibilityMask = kVisibleAll;
@@ -375,6 +377,16 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
             isVisibilityMaskDirty = true;
+        }
+
+        if (m_id != geomSettings.id) {
+            m_id = geomSettings.id;
+            isIdDirty = true;
+        }
+
+        if (m_ignoreContour != geomSettings.ignoreContour) {
+            m_ignoreContour = geomSettings.ignoreContour;
+            isIgnoreContourDirty = true;
         }
     }
 
@@ -420,7 +432,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (m_geomSubsets.empty()) {
             if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
-                rprApi->SetMeshId(rprMesh, GetPrimId());
                 m_rprMeshes.push_back(rprMesh);
             }
         } else {
@@ -524,7 +535,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 }
 
                 if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, subsetNormalIndices, subsetUv, subsetUvIndices, subsetVertexPerFace, m_topology.GetOrientation())) {
-                    rprApi->SetMeshId(rprMesh, GetPrimId());
                     m_rprMeshes.push_back(rprMesh);
                     ++it;
                 } else {
@@ -664,7 +674,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                                 int32_t meshId = GetPrimId();
                                 for (int j = meshInstances.size(); j < newNumInstances; ++j) {
                                     meshInstances.push_back(rprApi->CreateMeshInstance(m_rprMeshes[i]));
-                                    rprApi->SetMeshId(meshInstances.back(), meshId);
                                 }
                             }
                         }
@@ -693,6 +702,24 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         rprApi->SetMeshVisibility(rprMesh, visibilityMask);
                     }
                 }
+            }
+        }
+
+        if (newMesh || isIdDirty) {
+            uint32_t id = m_id >= 0 ? uint32_t(m_id) : GetPrimId();
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetMeshId(rprMesh, id);
+            }
+            for (auto& instances : m_rprMeshInstances) {
+                for (auto& rprMesh : instances) {
+                    rprApi->SetMeshId(rprMesh, id);
+                }
+            }
+        }
+
+        if (newMesh || isIgnoreContourDirty) {
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetMeshIgnoreContour(rprMesh, m_ignoreContour);
             }
         }
 

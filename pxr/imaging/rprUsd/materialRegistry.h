@@ -86,6 +86,7 @@ public:
         std::string filepath;
         std::string colorspace;
         rpr::ImageWrapType wrapType;
+        uint32_t numComponentsRequired = 0;
 
         std::function<void(std::shared_ptr<RprUsdCoreImage> const&)> setTextureCallback;
     };

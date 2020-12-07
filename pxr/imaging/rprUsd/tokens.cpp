@@ -11,25 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#ifndef RPRUSD_MATERIAL_NODES_RPR_MATERIALX_NODE_H
-#define RPRUSD_MATERIAL_NODES_RPR_MATERIALX_NODE_H
-
-#include "pxr/base/tf/staticTokens.h"
-#include "pxr/imaging/rprUsd/api.h"
+#include "pxr/imaging/rprUsd/tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-#define RPRUSD_RPR_MATERIALX_NODE_TOKENS \
-    (rpr_materialx_node) \
-    (file) \
-    (string) \
-    (basePath) \
-    (surfaceElement) \
-    (displacementElement) \
-    (stPrimvarName)
-
-TF_DECLARE_PUBLIC_TOKENS(RprUsdRprMaterialXNodeTokens, RPRUSD_API, RPRUSD_RPR_MATERIALX_NODE_TOKENS);
+TF_DEFINE_PUBLIC_TOKENS(RprUsdTokens, RPRUSD_TOKENS);
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-#endif // RPRUSD_MATERIAL_NODES_RPR_MATERIALX_NODE_H

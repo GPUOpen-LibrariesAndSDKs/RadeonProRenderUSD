@@ -96,7 +96,9 @@ private:
     HdDisplayStyle m_displayStyle;
     int m_refineLevel = 0;
 
-    uint32_t m_visibilityMask;
+    int m_id = -1;
+    uint32_t m_visibilityMask = 0;
+    bool m_ignoreContour;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

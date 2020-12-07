@@ -36,3 +36,10 @@ add_subdirectory(pxr/imaging)
 install(FILES README.md DESTINATION .)
 install(FILES INSTALL.md DESTINATION .)
 install(FILES LICENSE.md DESTINATION .)
+
+install(
+    CODE
+    "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/version\"
+\"core:${RPR_VERSION_STRING}
+plugin:${HD_RPR_MAJOR_VERSION}.${HD_RPR_MINOR_VERSION}.${HD_RPR_PATCH_VERSION}
+\")")

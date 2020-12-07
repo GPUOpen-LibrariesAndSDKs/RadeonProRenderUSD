@@ -19,21 +19,33 @@ geometry_settings = [
         'name': 'Mesh',
         'settings': [
             {
+                'name': 'primvars:rpr:id',
+                'ui_name': 'ID',
+                'defaultValue': 0,
+                'minValue': 0,
+                'maxValue': 1 ** 16
+            },
+            {
                 'name': 'primvars:rpr:subdivisionLevel',
                 'ui_name': 'Subidivision Level',
                 'defaultValue': 0,
                 'minValue': 0,
                 'maxValue': 7
+            },
+            {
+                'name': 'primvars:rpr:ignoreContour',
+                'ui_name': 'Ignore Contour',
+                'defaultValue': False,
+                'help': 'Whether to extract contour for a mesh or not'
+            },
+            {
+                'folder': 'Visibility Settings',
+                'settings': visibility_flag_settings
             }
-        ] + visibility_flag_settings
+        ]
     }
 ]
 
-if __name__ == "__main__":
-    p = argparse.ArgumentParser()
-    p.add_argument("install", help="The install root for generated files.")
-    p.add_argument("--generate_ds_files", default=False, action='store_true')
-    args = p.parse_args()
-
-    if args.generate_ds_files:
-        generate_houdini_ds(args.install, 'Geometry', geometry_settings)
+def generate(install, generate_ds_files):
+    if generate_ds_files:
+        generate_houdini_ds(install, 'Geometry', geometry_settings)

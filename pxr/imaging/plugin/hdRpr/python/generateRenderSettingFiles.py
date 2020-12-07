@@ -49,7 +49,11 @@ def hidewhen_hybrid(render_setting_categories):
 def hidewhen_not_northstar(render_setting_categories):
     return hidewhen_render_quality('!=', 'Northstar', render_setting_categories)
 
-HYBRID_DISABLED_PLATFORM = 'Darwin'
+def hidewhen_not_tahoe(render_setting_categories):
+    return hidewhen_render_quality('!=', 'Full', render_setting_categories)
+
+HYBRID_IS_AVAILABLE_PY_CONDITION = 'platform.system() != "Darwin"'
+NORTHSTAR_ENABLED_PY_CONDITION = 'hou.pwd().parm("renderQuality").evalAsString() == "Northstar"'
 
 render_setting_categories = [
     {
@@ -61,9 +65,9 @@ render_setting_categories = [
                 'help': 'Render restart might be required',
                 'defaultValue': 'Northstar',
                 'values': [
-                    SettingValue('Low', disabled_platform=HYBRID_DISABLED_PLATFORM),
-                    SettingValue('Medium', disabled_platform=HYBRID_DISABLED_PLATFORM),
-                    SettingValue('High', disabled_platform=HYBRID_DISABLED_PLATFORM),
+                    SettingValue('Low', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
+                    SettingValue('Medium', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
+                    SettingValue('High', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
                     SettingValue('Full', 'Full (Legacy)'),
                     SettingValue('Northstar', 'Full')
                 ]
@@ -86,7 +90,8 @@ render_setting_categories = [
                     SettingValue('Normal'),
                     SettingValue('Texcoord'),
                     SettingValue('Ambient Occlusion'),
-                    SettingValue('Diffuse')
+                    SettingValue('Diffuse'),
+                    SettingValue('Contour', enable_py_condition=NORTHSTAR_ENABLED_PY_CONDITION),
                 ]
             },
             {
@@ -98,6 +103,111 @@ render_setting_categories = [
                 'houdini': {
                     'hidewhen': 'renderMode != "AmbientOcclusion"'
                 }
+            },
+            {
+                'folder': 'Contour Settings',
+                'houdini': {
+                    'hidewhen': 'renderMode != "Contour"'
+                },
+                'settings': [
+                    {
+                        'name': 'contourAntialiasing',
+                        'ui_name': 'Antialiasing',
+                        'defaultValue': 1.0,
+                        'minValue': 0.0,
+                        'maxValue': 1.0,
+                        'houdini': {
+                            'hidewhen': 'renderMode != "Contour"'
+                        }
+                    },
+                    {
+                        'name': 'contourUseNormal',
+                        'ui_name': 'Use Normal',
+                        'defaultValue': True,
+                        'help': 'Whether to use geometry normals for edge detection or not',
+                        'houdini': {
+                            'hidewhen': 'renderMode != "Contour"'
+                        }
+                    },
+                    {
+                        'name': 'contourLinewidthNormal',
+                        'ui_name': 'Linewidth Normal',
+                        'defaultValue': 1.0,
+                        'minValue': 0.0,
+                        'maxValue': 100.0,
+                        'help': 'Linewidth of edges detected via normals',
+                        'houdini': {
+                            'hidewhen': ['renderMode != "Contour"', 'contourUseNormal == 0']
+                        }
+                    },
+                    {
+                        'name': 'contourNormalThreshold',
+                        'ui_name': 'Normal Threshold',
+                        'defaultValue': 45.0,
+                        'minValue': 0.0,
+                        'maxValue': 180.0,
+                        'houdini': {
+                            'hidewhen': ['renderMode != "Contour"', 'contourUseNormal == 0']
+                        }
+                    },
+                    {
+                        'name': 'contourUsePrimId',
+                        'ui_name': 'Use Primitive Id',
+                        'defaultValue': True,
+                        'help': 'Whether to use primitive Id for edge detection or not',
+                        'houdini': {
+                            'hidewhen': 'renderMode != "Contour"'
+                        }
+                    },
+                    {
+                        'name': 'contourLinewidthPrimId',
+                        'ui_name': 'Linewidth Primitive Id',
+                        'defaultValue': 1.0,
+                        'minValue': 0.0,
+                        'maxValue': 100.0,
+                        'help': 'Linewidth of edges detected via primitive Id',
+                        'houdini': {
+                            'hidewhen': ['renderMode != "Contour"', 'contourUsePrimId == 0']
+                        }
+                    },
+                    {
+                        'name': 'contourUseMaterialId',
+                        'ui_name': 'Use Material Id',
+                        'defaultValue': True,
+                        'help': 'Whether to use material Id for edge detection or not',
+                        'houdini': {
+                            'hidewhen': 'renderMode != "Contour"'
+                        }
+                    },
+                    {
+                        'name': 'contourLinewidthMaterialId',
+                        'ui_name': 'Linewidth Material Id',
+                        'defaultValue': 1.0,
+                        'minValue': 0.0,
+                        'maxValue': 100.0,
+                        'help': 'Linewidth of edges detected via material Id',
+                        'houdini': {
+                            'hidewhen': ['renderMode != "Contour"', 'contourUseMaterialId == 0']
+                        }
+                    },
+                    {
+                        'name': 'contourDebug',
+                        'ui_name': 'Debug',
+                        'defaultValue': False,
+                        'help': 'Whether to show colored outlines according to used features or not.\\n'
+                                'Colors legend:\\n'
+                                ' * red - primitive Id\\n'
+                                ' * green - material Id\\n'
+                                ' * blue - normal\\n'
+                                ' * yellow - primitive Id + material Id\\n'
+                                ' * magenta - primitive Id + normal\\n'
+                                ' * cyan - material Id + normal\\n'
+                                ' * black - all',
+                        'houdini': {
+                            'hidewhen': 'renderMode != "Contour"'
+                        }
+                    }
+                ]
             }
         ],
         'houdini': {
@@ -138,6 +248,30 @@ render_setting_categories = [
                         '"uiicon" VIEW_display_denoise'
                     ]
                 }
+            },
+            {
+                'folder': 'Denoise Settings',
+                'houdini': {
+                    'hidewhen': 'enableDenoising == 0'
+                },
+                'settings': [
+                    {
+                        'name': 'denoiseMinIter',
+                        'ui_name': 'Denoise Min Iteration',
+                        'defaultValue': 4,
+                        'minValue': 1,
+                        'maxValue': 2 ** 16,
+                        'help': 'The first iteration on which denoising should be applied.'
+                    },
+                    {
+                        'name': 'denoiseIterStep',
+                        'ui_name': 'Denoise Iteration Step',
+                        'defaultValue': 32,
+                        'minValue': 1,
+                        'maxValue': 2 ** 16,
+                        'help': 'Denoise use frequency. To denoise on each iteration, set to 1.'
+                    }
+                ]
             }
         ]
     },
@@ -160,7 +294,7 @@ render_setting_categories = [
     {
         'name': 'AdaptiveSampling',
         'houdini': {
-            'hidewhen': hidewhen_hybrid
+            'hidewhen': hidewhen_not_tahoe
         },
         'settings': [
             {
@@ -267,7 +401,10 @@ render_setting_categories = [
                 'help': 'Controls value of \'Max Ray Depth\' in interactive mode.',
                 'defaultValue': 2,
                 'minValue': 1,
-                'maxValue': 50
+                'maxValue': 50,
+                'houdini': {
+                    'hidewhen': hidewhen_hybrid
+                }
             },
             {
                 'name': 'interactiveResolutionDownscale',
@@ -278,6 +415,15 @@ render_setting_categories = [
                 'maxValue': 10,
                 'houdini': {
                     'hidewhen': hidewhen_not_northstar
+                }
+            },
+            {
+                'name': 'interactiveEnableDownscale',
+                'ui_name': 'Downscale Resolution When Interactive',
+                'help': 'Controls whether in interactive mode resolution should be downscaled or no.',
+                'defaultValue': True,
+                'houdini': {
+                    'hidewhen': hidewhen_not_tahoe
                 }
             }
         ]
@@ -343,10 +489,7 @@ render_setting_categories = [
             {
                 'name': 'enableAlpha',
                 'ui_name': 'Enable Color Alpha',
-                'defaultValue': True,
-                'houdini': {
-                    'hidewhen': hidewhen_hybrid
-                }
+                'defaultValue': True
             }
         ]
     },
@@ -397,7 +540,7 @@ render_setting_categories = [
                 'ui_name': 'Use Uniform Seed',
                 'defaultValue': True,
                 'houdini': {
-                    'hidewhen': 'renderQuality < 3'
+                    'hidewhen': hidewhen_hybrid
                 }
             }
         ]
@@ -422,6 +565,14 @@ render_setting_categories = [
                 'name': 'rprExportPath',
                 'defaultValue': '',
                 'c_type': 'std::string'
+            },
+            {
+                'name': 'rprExportAsSingleFile',
+                'defaultValue': False
+            },
+            {
+                'name': 'rprExportUseImageCache',
+                'defaultValue': False
             }
         ]
     }
@@ -602,29 +753,29 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
     dirty_flags_offset = 1
 
-    rs_public_token_definitions = ''
-    rs_tokens_declaration = '#define HDRPR_RENDER_SETTINGS_TOKENS \\\n'
-    rs_category_dirty_flags = ''
-    rs_get_set_method_declarations = ''
-    rs_variables_declaration = ''
-    rs_mapped_values_enum = ''
-    rs_range_definitions = ''
-    rs_list_initialization = ''
-    rs_sync = ''
-    rs_get_set_method_definitions = ''
-    rs_set_default_values = ''
-    rs_validate_values = ''
+    rs_public_token_definitions = []
+    rs_tokens_declaration = ['#define HDRPR_RENDER_SETTINGS_TOKENS \\\n']
+    rs_category_dirty_flags = []
+    rs_get_set_method_declarations = []
+    rs_variables_declaration = []
+    rs_mapped_values_enum = []
+    rs_range_definitions = []
+    rs_list_initialization = []
+    rs_sync = []
+    rs_get_set_method_definitions = []
+    rs_set_default_values = []
+    rs_validate_values = []
     for category in render_setting_categories:
         disabled_category = False
 
         category_name = category['name']
         dirty_flag = 'Dirty{}'.format(category_name)
-        rs_category_dirty_flags += '        {} = 1 << {},\n'.format(dirty_flag, dirty_flags_offset)
+        rs_category_dirty_flags.append('        {} = 1 << {},\n'.format(dirty_flag, dirty_flags_offset))
         dirty_flags_offset += 1
 
-        for setting in category['settings']:
+        def process_setting(setting):
             name = setting['name']
-            rs_tokens_declaration += '    ({}) \\\n'.format(name)
+            rs_tokens_declaration.append('    ({}) \\\n'.format(name))
 
             name_title = camel_case_capitalize(name)
 
@@ -642,62 +793,62 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 value_tokens_list_name = '__{}Tokens'.format(name_title)
                 value_tokens_name = 'HdRpr{}Tokens'.format(name_title)
 
-                rs_mapped_values_enum += '#define ' + value_tokens_list_name
+                rs_mapped_values_enum.append('#define ' + value_tokens_list_name)
                 for value in setting['values']:
-                    rs_mapped_values_enum += ' ({})'.format(value.get_key())
-                rs_mapped_values_enum += '\n'
+                    rs_mapped_values_enum.append(' ({})'.format(value.get_key()))
+                rs_mapped_values_enum.append('\n')
 
-                rs_mapped_values_enum += 'TF_DECLARE_PUBLIC_TOKENS({}, {});\n\n'.format(value_tokens_name, value_tokens_list_name)
-                rs_public_token_definitions += 'TF_DEFINE_PUBLIC_TOKENS({}, {});\n'.format(value_tokens_name, value_tokens_list_name)
+                rs_mapped_values_enum.append('TF_DECLARE_PUBLIC_TOKENS({}, {});\n\n'.format(value_tokens_name, value_tokens_list_name))
+                rs_public_token_definitions.append('TF_DEFINE_PUBLIC_TOKENS({}, {});\n'.format(value_tokens_name, value_tokens_list_name))
 
                 type_str = 'TfToken'
                 c_type_str = type_str
                 default_value = next(value for value in setting['values'] if value == default_value)
 
-            rs_get_set_method_declarations += '    void Set{}({} {});\n'.format(name_title, c_type_str, name)
-            rs_get_set_method_declarations += '    {} const& Get{}() const {{ return m_prefData.{}; }}\n\n'.format(type_str, name_title, name)
+            rs_get_set_method_declarations.append('    void Set{}({} {});\n'.format(name_title, c_type_str, name))
+            rs_get_set_method_declarations.append('    {} const& Get{}() const {{ return m_prefData.{}; }}\n\n'.format(type_str, name_title, name))
 
-            rs_variables_declaration += '        {} {};\n'.format(type_str, name)
+            rs_variables_declaration.append('        {} {};\n'.format(type_str, name))
 
             if isinstance(default_value, bool):
-                rs_sync += '        Set{name_title}(getBoolSetting(HdRprRenderSettingsTokens->{name}, k{name_title}Default));\n'.format(name_title=name_title, name=name)
+                rs_sync.append('        Set{name_title}(getBoolSetting(HdRprRenderSettingsTokens->{name}, k{name_title}Default));\n'.format(name_title=name_title, name=name))
             else:
-                rs_sync += '        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{name}, k{name_title}Default));\n'.format(name_title=name_title, name=name)
+                rs_sync.append('        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{name}, k{name_title}Default));\n'.format(name_title=name_title, name=name))
 
             if 'values' in setting:
-                rs_range_definitions += '#define k{name_title}Default {value_tokens_name}->{value}'.format(name_title=name_title, value_tokens_name=value_tokens_name, value=default_value.get_key())
+                rs_range_definitions.append('#define k{name_title}Default {value_tokens_name}->{value}'.format(name_title=name_title, value_tokens_name=value_tokens_name, value=default_value.get_key()))
             else:
                 value_str = str(default_value)
                 if isinstance(default_value, bool):
                     value_str = value_str.lower()
-                rs_range_definitions += 'const {type} k{name_title}Default = {type}({value});\n'.format(type=type_str, name_title=name_title, value=value_str)
+                rs_range_definitions.append('const {type} k{name_title}Default = {type}({value});\n'.format(type=type_str, name_title=name_title, value=value_str))
 
             set_validation = ''
             if 'minValue' in setting or 'maxValue' in setting:
-                rs_validate_values += '           '
+                rs_validate_values.append('           ')
             if 'minValue' in setting:
-                rs_range_definitions += 'const {type} k{name_title}Min = {type}({value});\n'.format(type=type_str, name_title=name_title, value=setting['minValue'])
+                rs_range_definitions.append('const {type} k{name_title}Min = {type}({value});\n'.format(type=type_str, name_title=name_title, value=setting['minValue']))
                 set_validation += '    if ({name} < k{name_title}Min) {{ return; }}\n'.format(name=name, name_title=name_title)
-                rs_validate_values += '&& {name} < k{name_title}Min'.format(name=name, name_title=name_title)
+                rs_validate_values.append('&& {name} < k{name_title}Min'.format(name=name, name_title=name_title))
             if 'maxValue' in setting:
-                rs_range_definitions += 'const {type} k{name_title}Max = {type}({value});\n'.format(type=type_str, name_title=name_title, value=setting['maxValue'])
+                rs_range_definitions.append('const {type} k{name_title}Max = {type}({value});\n'.format(type=type_str, name_title=name_title, value=setting['maxValue']))
                 set_validation += '    if ({name} > k{name_title}Max) {{ return; }}\n'.format(name=name, name_title=name_title)
-                rs_validate_values += '&& {name} > k{name_title}Max'.format(name=name, name_title=name_title)
+                rs_validate_values.append('&& {name} > k{name_title}Max'.format(name=name, name_title=name_title))
             if 'minValue' in setting or 'maxValue' in setting:
-                rs_validate_values += '\n'
-            rs_range_definitions += '\n'
+                rs_validate_values.append('\n')
+            rs_range_definitions.append('\n')
 
             if 'values' in setting:
                 value_range = value_tokens_name + '->allTokens'
                 set_validation += '    if (std::find({range}.begin(), {range}.end(), {name}) == {range}.end()) return;\n'.format(range=value_range, name=name)
 
             if 'ui_name' in setting:
-                rs_list_initialization += '    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title)
+                rs_list_initialization.append('    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title))
 
             if disabled_category:
-                rs_get_set_method_definitions += 'void HdRprConfig::Set{name_title}({c_type} {name}) {{ /* Platform no-op */ }}'.format(name_title=name_title, c_type=c_type_str, name=name)
+                rs_get_set_method_definitions.append('void HdRprConfig::Set{name_title}({c_type} {name}) {{ /* Platform no-op */ }}'.format(name_title=name_title, c_type=c_type_str, name=name))
             else:
-                rs_get_set_method_definitions += (
+                rs_get_set_method_definitions.append((
 '''
 void HdRprConfig::Set{name_title}({c_type} {name}) {{
 {set_validation}
@@ -706,40 +857,42 @@ void HdRprConfig::Set{name_title}({c_type} {name}) {{
         m_dirtyFlags |= {dirty_flag};
     }}
 }}
-''').format(name_title=name_title, c_type=c_type_str, name=name, dirty_flag=dirty_flag, set_validation=set_validation)
+''').format(name_title=name_title, c_type=c_type_str, name=name, dirty_flag=dirty_flag, set_validation=set_validation))
 
-            rs_set_default_values += '    {name} = k{name_title}Default;\n'.format(name=name, name_title=name_title)
+            rs_set_default_values.append('    {name} = k{name_title}Default;\n'.format(name=name, name_title=name_title))
 
-    rs_tokens_declaration += '\nTF_DECLARE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);\n'
+        for setting in category['settings']:
+            if 'folder' in setting:
+                for sub_setting in setting['settings']:
+                    process_setting(sub_setting)
+            else:
+                process_setting(setting)
+
+    rs_tokens_declaration.append('\nTF_DECLARE_PUBLIC_TOKENS(HdRprRenderSettingsTokens, HDRPR_RENDER_SETTINGS_TOKENS);\n')
 
     header_dst_path = os.path.join(install_path, 'config.h')
     header_file = open(header_dst_path, 'w')
     header_file.write(header_template.format(
-        rs_tokens_declaration=rs_tokens_declaration,
-        rs_category_dirty_flags=rs_category_dirty_flags,
-        rs_get_set_method_declarations=rs_get_set_method_declarations,
-        rs_variables_declaration=rs_variables_declaration,
-        rs_mapped_values_enum=rs_mapped_values_enum))
+        rs_tokens_declaration=''.join(rs_tokens_declaration),
+        rs_category_dirty_flags=''.join(rs_category_dirty_flags),
+        rs_get_set_method_declarations=''.join(rs_get_set_method_declarations),
+        rs_variables_declaration=''.join(rs_variables_declaration),
+        rs_mapped_values_enum=''.join(rs_mapped_values_enum)))
 
     cpp_dst_path = os.path.join(install_path, 'config.cpp')
     cpp_file = open(cpp_dst_path, 'w')
     cpp_file.write(cpp_template.format(
-        rs_public_token_definitions=rs_public_token_definitions,
-        rs_range_definitions=rs_range_definitions,
-        rs_list_initialization=rs_list_initialization,
-        rs_sync=rs_sync,
-        rs_get_set_method_definitions=rs_get_set_method_definitions,
-        rs_set_default_values=rs_set_default_values,
-        rs_validate_values=rs_validate_values))
+        rs_public_token_definitions=''.join(rs_public_token_definitions),
+        rs_range_definitions=''.join(rs_range_definitions),
+        rs_list_initialization=''.join(rs_list_initialization),
+        rs_sync=''.join(rs_sync),
+        rs_get_set_method_definitions=''.join(rs_get_set_method_definitions),
+        rs_set_default_values=''.join(rs_set_default_values),
+        rs_validate_values=''.join(rs_validate_values)))
 
     if generate_ds_files:
         generate_houdini_ds(install_path, 'Global', render_setting_categories)
 
 
-if __name__ == "__main__":
-    p = argparse.ArgumentParser()
-    p.add_argument("install", help="The install root for generated files.")
-    p.add_argument("--generate_ds_files", default=False, action='store_true')
-    args = p.parse_args()
-
-    generate_render_setting_files(args.install, args.generate_ds_files)
+def generate(install, generate_ds_files):
+    generate_render_setting_files(install, generate_ds_files)
