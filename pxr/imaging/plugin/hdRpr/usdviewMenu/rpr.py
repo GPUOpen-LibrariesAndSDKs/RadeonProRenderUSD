@@ -59,16 +59,25 @@ def getRprPath(_pathCache=[None]):
         _pathCache[0] = plugin.path
     return _pathCache[0]
 
-def reemitStage(usdviewApi):
-    usdviewApi._UsdviewApi__appController._reopenStage()
-    usdviewApi._UsdviewApi__appController._rendererPluginChanged('HdRprPlugin')
+def restartRenderer(usdviewApi):
+    envDefaultRenderer = os.environ.get('HD_DEFAULT_RENDERER')
+
+    # Make default renderer RPR to prevent HdStorm from rendering frames during recreation of engine
+    os.environ['HD_DEFAULT_RENDERER'] = 'RPR'
+    usdviewApi._UsdviewApi__appController._stageView.closeRenderer()
+    usdviewApi._UsdviewApi__appController._stageView._getRenderer()
+
+    if envDefaultRenderer:
+        os.environ['HD_DEFAULT_RENDERER'] = envDefaultRenderer
+    else:
+        del os.environ['HD_DEFAULT_RENDERER']
 
 def setRenderDevice(usdviewApi, renderDeviceId):
     rprPath = getRprPath()
     if rprPath is not None:
         lib = cdll.LoadLibrary(rprPath)
         lib.HdRprSetRenderDevice(renderDeviceId)
-        reemitStage(usdviewApi)
+        restartRenderer(usdviewApi)
 
 def setRenderQuality(usdviewApi, quality):
     rprPath = getRprPath()
@@ -80,7 +89,7 @@ def setRenderQuality(usdviewApi, quality):
         currentQualityPtr = lib.HdRprGetRenderQuality()
         if not currentQualityPtr:
             # Enable RPR plugin if it was not done yet
-            reemitStage(usdviewApi)
+            restartRenderer(usdviewApi)
 
         currentQuality = cast(currentQualityPtr, c_char_p).value
         lib.HdRprFree(currentQualityPtr)
@@ -98,7 +107,7 @@ def setRenderQuality(usdviewApi, quality):
                 return 'Hybrid'
 
         if getPluginName(quality) != getPluginName(currentQuality):
-            reemitStage(usdviewApi)
+            restartRenderer(usdviewApi)
 
 def SetRenderDeviceCPU(usdviewApi):
     setRenderDevice(usdviewApi, b'CPU')
@@ -169,7 +178,7 @@ class RprPluginContainer(PluginContainer):
         self.restartAction = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.restartAction",
             "Restart",
-            reemitStage)
+            restartRenderer)
 
 
     def configureView(self, plugRegistry, plugUIBuilder):
