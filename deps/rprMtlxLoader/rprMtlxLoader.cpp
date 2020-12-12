@@ -22,6 +22,8 @@ const mx::Vector3 kSrgbScale(0.9478672742843628, 0.9478672742843628, 0.947867274
 const mx::Vector3 kSrgbOffset(0.05213269963860512, 0.05213269963860512, 0.05213269963860512);
 const mx::Vector3 kSrgbGamma(2.4, 2.4, 2.4);
 
+const std::string SCALE_ATTRIBUTE = "scale";
+
 //------------------------------------------------------------------------------
 // Direct mappings of standard mtlx nodes to RPR nodes
 //------------------------------------------------------------------------------
@@ -266,7 +268,7 @@ Mtlx2Rpr const& GetMtlx2Rpr() {
 
 struct Node;
 struct MtlxNodeGraphNode;
-struct BaseColorSpaceConverterNode;
+struct BaseConverterNode;
 
 enum LogScope {
     LSGlobal = -1,
@@ -295,18 +297,37 @@ struct LoaderContext {
 
     mx::FileSearchPath searchPath;
 
-    class ColorSpaceConverter {
+    class ValueConverter {
     public:
-        virtual ~ColorSpaceConverter() = default;
+        virtual ~ValueConverter() = default;
 
-        /// Used to convert constant color values
-        virtual bool Convert(float color[3], LoaderContext* context) const = 0;
+        /// Used to convert constant values
+        virtual bool Convert(float color[4], LoaderContext* context) const { return false; }
 
         /// Used to convert color value computed in run-time
-        virtual std::unique_ptr<BaseColorSpaceConverterNode> GetConversionNode(LoaderContext* context) const = 0;
+        virtual std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const { return nullptr; }
     };
-    std::map<std::string, std::unique_ptr<ColorSpaceConverter>> colorspaceConvertersCache;
-    ColorSpaceConverter* GetColorSpaceConverter(std::string const& colorspace);
+    std::map<std::string, std::unique_ptr<ValueConverter>> valueConvertersCache;
+    ValueConverter* GetColorSpaceConverter(std::string const& colorspace);
+
+    struct CompiledUnitType {
+        std::map<std::string, float> scales;
+        float sceneScale;
+
+        float GetScale(std::string const& unit) {
+            auto it = scales.find(unit);
+            if (it != scales.end()) {
+                return it->second;
+            }
+            return sceneScale;
+        }
+
+        float GetScale(std::string const& srcUnit, std::string const& dstUnit) {
+            return GetScale(srcUnit) / GetScale(dstUnit);
+        }
+    };
+    std::map<std::string, CompiledUnitType> compiledUnitTypes;
+    std::unique_ptr<ValueConverter> GetUnitConverter(mx::Element* input);
 
     static const int kGlobalLogDepth = -1;
     int logDepth = kGlobalLogDepth;
@@ -374,7 +395,7 @@ struct RprNode : public Node {
 
     /// When input connected to this node requires conversion (colorspace, units, etc),
     /// we create appropriate conversion node and retain it within this node
-    std::map<std::string, std::unique_ptr<BaseColorSpaceConverterNode>> conversionNodes;
+    std::map<std::string, std::unique_ptr<BaseConverterNode>> conversionNodes;
 
     /// \p retainNode controls whether RprNode owns \p node
     RprNode(rpr_material_node node, bool retainNode);
@@ -403,12 +424,14 @@ struct RprMappedNode : public RprNode {
 };
 
 struct RprImageNode : public RprMappedNode {
+    mx::ValueElement* fileValueElement = nullptr;
+    bool isFileDirty = true;
+    std::string resolvedFilepath;
+
     // TODO: support frame ranges
 
     std::string type;
-    std::string file;
     std::string layer;
-    std::string colorspace;
     mx::ValuePtr defaultValue;
 
     /// Possible values: "constant", "clamp", "periodic", "mirror"
@@ -764,8 +787,8 @@ Node* LoaderContext::GetGeomNode(mx::GeomPropDef* geomPropDef) {
     return nullptr;
 }
 
-struct BaseColorSpaceConverterNode {
-    virtual ~BaseColorSpaceConverterNode() = default;
+struct BaseConverterNode {
+    virtual ~BaseConverterNode() = default;
 
     virtual rpr_status SetInput(rpr_material_node inputNode, LoaderContext* context) = 0;
     virtual rpr_material_node GetOutput() = 0;
@@ -773,24 +796,24 @@ struct BaseColorSpaceConverterNode {
     virtual size_t MoveRprApiHandles(rpr_material_node* dst) = 0;
 };
 
-LoaderContext::ColorSpaceConverter* LoaderContext::GetColorSpaceConverter(std::string const& colorspace) {
+LoaderContext::ValueConverter* LoaderContext::GetColorSpaceConverter(std::string const& colorspace) {
     if (colorspace.empty() ||
         colorspace == "none") {
         return nullptr;
     }
 
-    auto it = colorspaceConvertersCache.find(colorspace);
-    if (it != colorspaceConvertersCache.end()) {
+    auto it = valueConvertersCache.find(colorspace);
+    if (it != valueConvertersCache.end()) {
         return it->second.get();
     }
 
-    std::unique_ptr<ColorSpaceConverter> converter;
+    std::unique_ptr<ValueConverter> converter;
     if (StringStartsWith(colorspace, "gamma")) {
         std::string gammaStr = colorspace.substr(sizeof("gamma") - 1);
         float gamma = std::stof(gammaStr) * 0.1f;
 
         /// Applies gamma decoding - pow(color, gamma)
-        struct GammaConverter : public ColorSpaceConverter {
+        struct GammaConverter : public ValueConverter {
             float gamma;
 
             GammaConverter(float gamma) : gamma(gamma) {}
@@ -804,8 +827,8 @@ LoaderContext::ColorSpaceConverter* LoaderContext::GetColorSpaceConverter(std::s
                 return true;
             }
 
-            std::unique_ptr<BaseColorSpaceConverterNode> GetConversionNode(LoaderContext* context) const override {
-                struct GammaConversioNode : public BaseColorSpaceConverterNode {
+            std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const override {
+                struct GammaConversioNode : public BaseConverterNode {
                     rpr_material_node powNode;
 
                     GammaConversioNode(float gamma, LoaderContext* context) {
@@ -847,7 +870,7 @@ LoaderContext::ColorSpaceConverter* LoaderContext::GetColorSpaceConverter(std::s
         converter = std::make_unique<GammaConverter>(gamma);
     } else if (colorspace == "acescg") {
         /// Multiplies input color on kAcescgMatrix
-        struct AcescgConverter : public ColorSpaceConverter {
+        struct AcescgConverter : public ValueConverter {
             ~AcescgConverter() override = default;
 
             bool Convert(float color[3], LoaderContext* context) const override {
@@ -864,8 +887,8 @@ LoaderContext::ColorSpaceConverter* LoaderContext::GetColorSpaceConverter(std::s
                 return true;
             }
 
-            std::unique_ptr<BaseColorSpaceConverterNode> GetConversionNode(LoaderContext* context) const override {
-                struct AcescgConversioNode : public BaseColorSpaceConverterNode {
+            std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const override {
+                struct AcescgConversioNode : public BaseConverterNode {
                     rpr_material_node matMulNode;
 
                     AcescgConversioNode(LoaderContext* context) {
@@ -909,7 +932,7 @@ LoaderContext::ColorSpaceConverter* LoaderContext::GetColorSpaceConverter(std::s
         converter = std::make_unique<AcescgConverter>();
     } else if (colorspace == "srgb_texture") {
         /// Applies sRGB to Linear conversion
-        struct SrgbConverter : public ColorSpaceConverter {
+        struct SrgbConverter : public ValueConverter {
             ~SrgbConverter() override = default;
 
             bool Convert(float color[3], LoaderContext* context) const override {
@@ -923,8 +946,8 @@ LoaderContext::ColorSpaceConverter* LoaderContext::GetColorSpaceConverter(std::s
                 return true;
             }
 
-            std::unique_ptr<BaseColorSpaceConverterNode> GetConversionNode(LoaderContext* context) const override {
-                struct SrgbConversionNode : public BaseColorSpaceConverterNode {
+            std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const override {
+                struct SrgbConversionNode : public BaseConverterNode {
                     enum NodeTypes {
                         kIsAboveBreak,
                         kLinSeg,
@@ -1013,8 +1036,95 @@ LoaderContext::ColorSpaceConverter* LoaderContext::GetColorSpaceConverter(std::s
         return nullptr;
     }
 
-    it = colorspaceConvertersCache.emplace(colorspace, std::move(converter)).first;
+    it = valueConvertersCache.emplace(colorspace, std::move(converter)).first;
     return it->second.get();
+}
+
+std::unique_ptr<LoaderContext::ValueConverter> LoaderContext::GetUnitConverter(mx::Element* inputElement) {
+    if (!inputElement) {
+        return {};
+    }
+
+    auto input = inputElement->asA<mx::ValueElement>();
+    if (!input) {
+        return {};
+    }
+
+    auto& srcUnitSpace = input->getUnit();
+    if (srcUnitSpace.empty()) {
+        return {};
+    }
+
+    auto& unitType = input->getUnitType();
+
+    auto it = compiledUnitTypes.find(unitType);
+    if (it == compiledUnitTypes.end()) {
+        LOG_ERROR(this, "Unknown unitType: %s", unitType.c_str());
+        return {};
+    }
+
+    auto& dstUnitSpace = input->getActiveUnit();
+
+    float scale = it->second.GetScale(srcUnitSpace, dstUnitSpace);
+    if (std::abs(scale - 1.0f) < 1e-6f) {
+        // no-op
+        return {};
+    }
+
+    struct ScaleConverter : public ValueConverter {
+        float scale;
+
+        ScaleConverter(float scale) : scale(scale) {}
+        ~ScaleConverter() override = default;
+
+        bool Convert(float color[4], LoaderContext* context) const override {
+            for (int i = 0; i < 4; ++i) {
+                color[i] *= scale;
+            }
+            return true;
+        }
+
+        std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const override {
+            struct ScaleConversioNode : public BaseConverterNode {
+                rpr_material_node mulNode;
+
+                ScaleConversioNode(float scale, LoaderContext* context) {
+                    rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_ARITHMETIC, &mulNode);
+                    rprMaterialNodeSetInputUByKey(mulNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
+                    rprMaterialNodeSetInputFByKey(mulNode, RPR_MATERIAL_INPUT_COLOR0, scale, scale, scale, scale);
+                }
+
+                ~ScaleConversioNode() override {
+                    if (mulNode) {
+                        rprObjectDelete(mulNode);
+                    }
+                }
+
+                rpr_status SetInput(rpr_material_node inputNode, LoaderContext* context) override {
+                    return rprMaterialNodeSetInputNByKey(mulNode, RPR_MATERIAL_INPUT_COLOR1, inputNode);
+                }
+
+                rpr_material_node GetOutput() override {
+                    return mulNode;
+                }
+
+                size_t MoveRprApiHandles(rpr_material_node* dst) override {
+                    if (mulNode) {
+                        if (dst) {
+                            *dst = mulNode;
+                            mulNode = nullptr;
+                        }
+                        return 1;
+                    }
+
+                    return 0;
+                }
+            };
+
+            return std::make_unique<ScaleConversioNode>(scale, context);
+        }
+    };
+    return std::make_unique<ScaleConverter>(scale);
 }
 
 //------------------------------------------------------------------------------
@@ -1618,10 +1728,14 @@ bool GetInputF(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamEl
         auto& colorspace = upstreamElement ? upstreamElement->getActiveColorSpace() : downstreamElement->getActiveColorSpace();
         if (auto colorspaceConverter = context->GetColorSpaceConverter(colorspace)) {
             colorspaceConverter->Convert(dst, context);
+            return true;
+        }
+    } else if (StringStartsWith(valueType, "vector") || valueType == "float") {
+        if (auto unitConverter = context->GetUnitConverter(upstreamElement)) {
+            unitConverter->Convert(dst, context);
+            return true;
         }
     }
-
-    // TODO: add units
 
     return true;
 }
@@ -1683,16 +1797,25 @@ rpr_status RprMappedNode::SetInput(mx::TypedElement* downstreamElement, mx::Elem
         return RPR_ERROR_INVALID_PARAMETER;
     }
 
-    if (StringStartsWith(downstreamElement->getType(), "color")) {
+    std::unique_ptr<BaseConverterNode> inputConversionNode;
+
+    auto& type = downstreamElement->getType();
+    if (StringStartsWith(type, "color")) {
         auto& colorspace = upstreamElement ? upstreamElement->getActiveColorSpace() : downstreamElement->getActiveColorSpace();
         if (auto colorspaceConverter = context->GetColorSpaceConverter(colorspace)) {
-            if (auto conversionNode = colorspaceConverter->GetConversionNode(context)) {
-                conversionNode->SetInput(upstreamRprNode, context);
-                rprMaterialNodeSetInputNByKey(rprNode, inputIt->second, conversionNode->GetOutput());
-                conversionNodes[downstreamElement->getName()] = std::move(conversionNode);
-                return RPR_SUCCESS;
-            }
+            inputConversionNode = colorspaceConverter->GetConversionNode(context);
         }
+    } else if (StringStartsWith(type, "vector") || type == "float") {
+        if (auto unitConverter = context->GetUnitConverter(upstreamElement)) {
+            inputConversionNode = unitConverter->GetConversionNode(context);
+        }
+    }
+
+    if (inputConversionNode) {
+        inputConversionNode->SetInput(upstreamRprNode, context);
+        rprMaterialNodeSetInputNByKey(rprNode, inputIt->second, inputConversionNode->GetOutput());
+        conversionNodes[downstreamElement->getName()] = std::move(inputConversionNode);
+        return RPR_SUCCESS;
     }
 
     return rprMaterialNodeSetInputNByKey(rprNode, inputIt->second, upstreamRprNode);
@@ -1729,19 +1852,45 @@ RprImageNode::RprImageNode(std::string const& type, LoaderContext* context)
 }
 
 rpr_status RprImageNode::Connect(std::string const& upstreamOutput, Node* downstreamNode, mx::TypedElement* downstreamElement, LoaderContext* context) {
-    if (!colorspace.empty()) {
-        auto conversionNodeIt = conversionNodes.find(colorspace);
-        if (conversionNodeIt == conversionNodes.end()) {
-            if (auto converter = context->GetColorSpaceConverter(colorspace)) {
+    if (!fileValueElement) {
+        return RPR_ERROR_INVALID_OBJECT;
+    }
+
+    if (isFileDirty) {
+        isFileDirty = false;
+
+        resolvedFilepath = context->ResolveFile(fileValueElement->getActiveFilePrefix() + fileValueElement->getValueString());
+
+        std::unique_ptr<LoaderContext::ValueConverter> retainedUnitConverter;
+        LoaderContext::ValueConverter* converter = nullptr;
+        std::string conversionNodeId;
+
+        auto& colorspace = fileValueElement->getActiveColorSpace();
+        if (auto colorspaceConverter = context->GetColorSpaceConverter(colorspace)) {
+            conversionNodeId = colorspace;
+            converter = colorspaceConverter;
+        } else if (auto unitConverter = context->GetUnitConverter(fileValueElement)) {
+            conversionNodeId = fileValueElement->getUnit() + fileValueElement->getUnitType();
+            retainedUnitConverter = std::move(unitConverter);
+            converter = retainedUnitConverter.get();
+        }
+
+        if (converter) {
+            auto conversionNodeIt = conversionNodes.find(conversionNodeId);
+            if (conversionNodeIt == conversionNodes.end()) {
                 if (auto conversionNode = converter->GetConversionNode(context)) {
+                    // Release outdated conversion nodes
+                    //
+                    conversionNodes.clear();
+
                     conversionNode->SetInput(rprNode, context);
-                    conversionNodeIt = conversionNodes.emplace(colorspace, std::move(conversionNode)).first;
+                    conversionNodeIt = conversionNodes.emplace(conversionNodeId, std::move(conversionNode)).first;
                 }
             }
-        }
-        if (conversionNodeIt != conversionNodes.end()) {
-            if (auto convertedOutput = conversionNodeIt->second->GetOutput()) {
-                return downstreamNode->SetInput(downstreamElement, nullptr, convertedOutput, context);
+            if (conversionNodeIt != conversionNodes.end()) {
+                if (auto convertedOutput = conversionNodeIt->second->GetOutput()) {
+                    return downstreamNode->SetInput(downstreamElement, nullptr, convertedOutput, context);
+                }
             }
         }
     }
@@ -1771,8 +1920,10 @@ rpr_status RprImageNode::SetInput(mx::TypedElement* downstreamElement, mx::Value
         }
     } else if (valueType == "filename") {
         if (downstreamElement->getName() == "file") {
-            file = context->ResolveFile(upstreamValueElement->getActiveFilePrefix() + value);
-            colorspace = upstreamValueElement->getActiveColorSpace();
+            if (fileValueElement != upstreamValueElement) {
+                fileValueElement = upstreamValueElement;
+                isFileDirty = true;
+            }
         } else {
             status = RPR_ERROR_INVALID_PARAMETER;
         }
@@ -2097,6 +2248,39 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
     ctx.searchPath.append(_stdSearchPath);
     auto globalScope = ctx.EnterScope(LSGlobal, mtlxDocument);
 
+    ctx.mtlxDocument->getUnitDefs();
+    auto registerUnitType = [&ctx](const char* unitType, const char* sceneUnit) {
+        if (auto unitTypeDef = ctx.mtlxDocument->getUnitTypeDef(unitType)) {
+            for (auto& unitDef : unitTypeDef->getUnitDefs()) {
+                LoaderContext::CompiledUnitType compiledUnitType;
+                bool isValidUnits = true;
+                for (auto& unit : unitDef->getUnits()) {
+                    float scale = unit->getTypedAttribute<float>(SCALE_ATTRIBUTE);
+                    if (scale == float{}) {
+                        isValidUnits = false;
+                        break;
+                    }
+
+                    compiledUnitType.scales[unit->getName()] = scale;
+                }
+                if (isValidUnits) {
+                    auto it = compiledUnitType.scales.find(sceneUnit);
+                    if (it == compiledUnitType.scales.end()) {
+                        continue;
+                    }
+
+                    compiledUnitType.sceneScale = it->second;
+                    ctx.compiledUnitTypes[unitType] = std::move(compiledUnitType);
+                    return;
+                }
+            }
+            LOG_ERROR(&ctx, "Could not find a valid unitDef for %s unitTypeDef", unitType);
+        }
+        LOG_ERROR(&ctx, "Unknown unitType: %s", unitType);
+    };
+    registerUnitType("distance", _sceneDistanceUnit.c_str());
+    registerUnitType("angle", "radian");
+
     class MtlxRenderableElements {
     public:
         void Add(RPRMtlxLoader::OutputType outputType, mx::ElementPtr const& element, LoaderContext* ctx) {
@@ -2342,12 +2526,12 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
         // Export ImageNode
         //
         if (auto imageNode = node->AsA<RprImageNode>()) {
-            if (!imageNode->file.empty()) {
+            if (!imageNode->resolvedFilepath.empty()) {
                 outImageNodes.emplace_back();
                 auto& outImageNode = outImageNodes.back();
 
                 std::swap(outImageNode.type, imageNode->type);
-                std::swap(outImageNode.file, imageNode->file);
+                std::swap(outImageNode.file, imageNode->resolvedFilepath);
                 std::swap(outImageNode.layer, imageNode->layer);
                 std::swap(outImageNode.defaultValue, imageNode->defaultValue);
                 std::swap(outImageNode.uaddressmode, imageNode->uaddressmode);
