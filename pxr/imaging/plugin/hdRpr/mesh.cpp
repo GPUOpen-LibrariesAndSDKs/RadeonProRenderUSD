@@ -126,19 +126,15 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
 
         GfVec3f color(0.18f);
 
-        auto constantPrimvarsIt = primvarDescsPerInterpolation.find(HdInterpolationConstant);
-        if (constantPrimvarsIt != primvarDescsPerInterpolation.end()) {
-            for (auto& pv : constantPrimvarsIt->second) {
-                if (pv.name == HdTokens->displayColor) {
-                    VtValue val = sceneDelegate->Get(GetId(), HdTokens->displayColor);
-                    if (val.IsHolding<VtVec3fArray>()) {
-                        auto colors = val.UncheckedGet<VtVec3fArray>();
-                        if (!colors.empty()) {
-                            color = colors[0];
-                        }
-                        break;
-                    }
+        if (HdRprIsPrimvarExists(HdTokens->displayColor, primvarDescsPerInterpolation)) {
+            VtValue val = sceneDelegate->Get(GetId(), HdTokens->displayColor);
+            if (val.IsHolding<VtVec3fArray>()) {
+                auto colors = val.UncheckedGet<VtVec3fArray>();
+                if (!colors.empty()) {
+                    color = colors[0];
                 }
+            } else if (val.IsHolding<GfVec3f>()) {
+                color = val.UncheckedGet<GfVec3f>();
             }
         }
 
