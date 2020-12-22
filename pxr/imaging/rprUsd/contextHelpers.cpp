@@ -104,7 +104,7 @@ std::string GetRprSdkPath() {
 }
 
 void SetupRprTracing() {
-    if (TfGetEnvSetting(RPRUSD_ENABLE_TRACING)) {
+    if (RprUsdIsTracingEnabled()) {
         RPR_ERROR_CHECK(rprContextSetParameterByKey1u(nullptr, RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
 
         auto tracingDir = TfGetEnvSetting(RPRUSD_TRACING_DIR);
@@ -316,13 +316,13 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         RPR_ERROR_CHECK(status, "Failed to create RPR context");
     }
 
-    if (TfGetEnvSetting(RPRUSD_ENABLE_TRACING)) {
-        RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
-    }
-
     RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, config->GetTextureCacheDir().c_str()), "Failed to set texture cache path");
 
     return context;
+}
+
+bool RprUsdIsTracingEnabled() {
+    return TfGetEnvSetting(RPRUSD_ENABLE_TRACING);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

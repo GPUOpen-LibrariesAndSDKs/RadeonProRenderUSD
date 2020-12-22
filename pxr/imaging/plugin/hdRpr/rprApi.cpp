@@ -2915,8 +2915,7 @@ private:
 
         m_isRenderUpdateCallbackEnabled = false;
 
-        bool isTracingEnabled = RprUsdGetInfo<uint32_t>(m_rprContext.get(), RPR_CONTEXT_TRACING_ENABLED);
-        if (!isTracingEnabled) {
+        if (!RprUsdIsTracingEnabled()) {
             // We need it for correct rendering of ID AOVs (e.g. RPR_AOV_OBJECT_ID)
             // XXX: it takes approximately 32ms due to RPR API indirection,
             //      replace with rprContextSetAOVindexLookupRange when ready
