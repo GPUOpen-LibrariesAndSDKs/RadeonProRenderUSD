@@ -3,6 +3,7 @@
 #include <MaterialXFormat/Util.h> // mx::loadLibraries
 
 #include <map>
+#include <cstring>
 #include <cstdarg>
 #include <unordered_set>
 
