@@ -14,6 +14,7 @@ public:
     MaterialX::ConstDocumentPtr GetStdlib() const { return _stdlib; }
 
     void SetLogging(bool enable) { _loggingEnabled = enable; }
+    void SetSceneDistanceUnit(std::string const& unit) { _sceneDistanceUnit = unit; }
 
     enum OutputType {
         kOutputNone = -1,
@@ -110,6 +111,7 @@ private:
     MaterialX::DocumentPtr _stdlib;
     MaterialX::FileSearchPath _stdSearchPath;
     bool _loggingEnabled = false;
+    std::string _sceneDistanceUnit = "meter";
 };
 
 #endif // RPRTOOLS_MTLX_LOADER_H
