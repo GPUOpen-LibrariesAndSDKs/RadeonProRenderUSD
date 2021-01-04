@@ -508,6 +508,11 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
 
     if (reason == OP_PARM_CHANGED) {
         int parmIndex = int(reinterpret_cast<intptr_t>(data));
+        if (parmIndex == -1) {
+            // might happen on "File"->"Save As..." and Auto-Save
+            return;
+        }
+
         auto& changedParm = getParm(parmIndex);
         if (std::strcmp(changedParm.getToken(), "file") == 0) {
             bool keepSelections = false;
