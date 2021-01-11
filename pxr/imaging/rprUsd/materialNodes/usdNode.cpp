@@ -126,6 +126,7 @@ bool RprUsd_UsdPreviewSurface::SetInput(
         return SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFRACTION_IOR, value) == RPR_SUCCESS;
     } else if (UsdPreviewSurfaceTokens->displacement == inputId) {
         if (value.IsHolding<RprMaterialNodePtr>()) {
+            m_displaceNode = nullptr;
             m_displacementOutput = value;
         } else {
             auto vec = GetRprFloat(value);
@@ -135,7 +136,7 @@ bool RprUsd_UsdPreviewSurface::SetInput(
                 }
 
                 m_displaceNode->SetInput(RPR_MATERIAL_INPUT_VALUE, value);
-                m_displacementOutput = VtValue(m_displaceNode);
+                m_displacementOutput = m_displaceNode->GetOutput(TfToken());
             } else {
                 m_displaceNode = nullptr;
                 m_displacementOutput = VtValue();
