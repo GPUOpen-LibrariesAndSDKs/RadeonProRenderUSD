@@ -29,7 +29,7 @@ You can use ```git``` to clone the repository.
 For modern, SMT or multi-threaded systems use:
 
 ```
-> git clone --recurse-submodules -j64 https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD
+> git clone --recurse-submodules -j4 https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD
 Cloning into 'RadeonProRenderUSD'...
 ```
 
