@@ -1,5 +1,21 @@
 # Change Log
 
+## Version 2.0.13
+- Improved interactivity with Interactive Renders.
+- Some issues with texture compression present in version 3.0.1 are fixed.
+- Issues with normal maps (related to texture compression) are also fixed.
+- Fixed issues with .rpr file export:
+    - Fixed the AOV names in config.json file.
+    - Fixed the contour rendering option in config.json file
+    - Export of .rpr file is made faster and textures are reused between animation frames.
+- Users no longer need to manually restart the render when switching render mode in Houdini.
+- Time-to-first-pixel is made faster when not using denoisers.
+- Added an ID parameter to Render Geometry Settings Node in Houdini for setting an explicit Object ID.
+- Add a Houdini Node RPR Material Properties for explicitly setting the Material ID to be used in the corresponding AOV.
+- Single and two-channel textures are handled correctly now.
+- Fixed USDPreviewSurface Normal Maps.
+
+
 ## Version 2.0
 ### New Features:
 -   The new plug-in version incorporates version 2.0 of our Radeon™ ProRender system and brings about the significant changes and enhancements:

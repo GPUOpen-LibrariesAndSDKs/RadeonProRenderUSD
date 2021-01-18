@@ -25,6 +25,9 @@ struct RprUsdContextMetadata;
 RPRUSD_API
 rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata);
 
+RPRUSD_API
+bool RprUsdIsTracingEnabled();
+
 PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // PXR_IMAGING_RPR_USD_CONTEXT_HELPERS_H
