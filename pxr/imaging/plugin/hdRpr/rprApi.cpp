@@ -2740,7 +2740,8 @@ Don't show this message again?
     }
 
     bool IsAdaptiveSamplingEnabled() const {
-        return m_rprContext && m_rprContextMetadata.pluginType == kPluginTahoe && m_varianceThreshold > 0.0f;
+        return m_rprContext && m_varianceThreshold > 0.0f &&
+              (m_rprContextMetadata.pluginType == kPluginTahoe || m_rprContextMetadata.pluginType == kPluginNorthstar);
     }
 
     bool IsGlInteropEnabled() const {
