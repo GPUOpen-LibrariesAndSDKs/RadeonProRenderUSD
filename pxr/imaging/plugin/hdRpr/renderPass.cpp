@@ -35,6 +35,21 @@ HdRprRenderPass::~HdRprRenderPass() {
     m_renderParam->GetRenderThread()->StopRender();
 }
 
+static GfVec2i GetViewportSize(HdRenderPassStateSharedPtr const& renderPassState) {
+#if PXR_VERSION >= 2102
+    // XXX (RPR): there is no way to efficiently handle thew new camera framing API with RPR
+    const CameraUtilFraming &framing = renderPassState->GetFraming();
+    if (framing.IsValid()) {
+        return framing.dataWindow.GetSize();
+    }
+#endif
+
+    // For applications that use the old viewport API instead of
+    // the new camera framing API.
+    const GfVec4f vp = renderPassState->GetViewport();
+    return GfVec2i(int(vp[2]), int(vp[3]));
+}
+
 void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState, TfTokenVector const& renderTags) {
     // To avoid potential deadlock:
     //   main thread locks config instance and requests render stop and
@@ -58,8 +73,7 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
 
     auto rprApiConst = m_renderParam->GetRprApi();
 
-    auto& vp = renderPassState->GetViewport();
-    GfVec2i newViewportSize(static_cast<int>(vp[2]), static_cast<int>(vp[3]));
+    GfVec2i newViewportSize = GetViewportSize(renderPassState);
     auto oldViewportSize = rprApiConst->GetViewportSize();
     if (oldViewportSize != newViewportSize) {
         m_renderParam->AcquireRprApiForEdit()->SetViewportSize(newViewportSize);
