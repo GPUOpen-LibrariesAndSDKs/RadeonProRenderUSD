@@ -22,8 +22,8 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprPoints::HdRprPoints(SdfPath const& id, SdfPath const& instancerId)
-    : HdPoints(id, instancerId)
+HdRprPoints::HdRprPoints(SdfPath const& id HDRPR_INSTANCER_ID_ARG_DECL)
+    : HdPoints(id HDRPR_INSTANCER_ID_ARG)
     , m_visibilityMask(kVisibleAll)
     , m_subdivisionLevel(0) {
 

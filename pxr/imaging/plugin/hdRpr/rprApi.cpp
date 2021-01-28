@@ -29,7 +29,7 @@ using json = nlohmann::json;
 #include "renderBuffer.h"
 #include "renderParam.h"
 
-#include "pxr/imaging/glf/glew.h"
+#include "pxr/imaging/rprUsd/util.h"
 #include "pxr/imaging/glf/uvTextureData.h"
 
 #include "pxr/imaging/rprUsd/config.h"
@@ -3350,38 +3350,31 @@ private:
             imageDesc.image_row_pitch = 0;
             imageDesc.image_slice_pitch = 0;
 
-            #if PXR_VERSION >= 2011
-                auto hioFormat = textureData->GetHioFormat();
-                GLenum glType = GlfGetGLType(hioFormat);
-                GLenum glFormat = GlfGetGLFormat(hioFormat);
-            #else
-                GLenum glType = textureData->GLType();
-                GLenum glFormat = textureData->GLFormat();
-            #endif
+            auto textureMetadata = RprUsdGetGlfTextureMetadata(&(*textureData));
 
             uint8_t bytesPerComponent;
-            if (glType == GL_UNSIGNED_BYTE) {
+            if (textureMetadata.glType == GL_UNSIGNED_BYTE) {
                 imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
                 bytesPerComponent = 1;
-            } else if (glType == GL_HALF_FLOAT) {
+            } else if (textureMetadata.glType == GL_HALF_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
                 bytesPerComponent = 2;
-            } else if (glType == GL_FLOAT) {
+            } else if (textureMetadata.glType == GL_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
                 bytesPerComponent = 2;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), glType);
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureMetadata.glType);
                 return false;
             }
 
-            if (glFormat == GL_RGBA) {
+            if (textureMetadata.glFormat == GL_RGBA) {
                 imageDesc.num_components = 4;
-            } else if (glFormat == GL_RGB) {
+            } else if (textureMetadata.glFormat == GL_RGB) {
                 imageDesc.num_components = 3;
-            } else if (glFormat == GL_RED) {
+            } else if (textureMetadata.glFormat == GL_RED) {
                 imageDesc.num_components = 1;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), glFormat);
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), textureMetadata.glFormat);
                 return false;
             }
 

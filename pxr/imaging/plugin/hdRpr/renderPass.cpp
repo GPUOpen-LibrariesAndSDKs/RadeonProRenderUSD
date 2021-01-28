@@ -21,8 +21,6 @@ limitations under the License.
 #include "pxr/imaging/hd/renderPassState.h"
 #include "pxr/imaging/hd/renderIndex.h"
 
-#include <GL/glew.h>
-
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprRenderPass::HdRprRenderPass(HdRenderIndex* index,

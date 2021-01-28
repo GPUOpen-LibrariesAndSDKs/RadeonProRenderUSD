@@ -228,9 +228,9 @@ HdRenderPassSharedPtr HdRprDelegate::CreateRenderPass(HdRenderIndex* index,
 }
 
 HdInstancer* HdRprDelegate::CreateInstancer(HdSceneDelegate* delegate,
-                                            SdfPath const& id,
-                                            SdfPath const& instancerId) {
-    return new HdRprInstancer(delegate, id, instancerId);
+                                            SdfPath const& id
+                                            HDRPR_INSTANCER_ID_ARG_DECL) {
+    return new HdRprInstancer(delegate, id HDRPR_INSTANCER_ID_ARG);
 }
 
 void HdRprDelegate::DestroyInstancer(HdInstancer* instancer) {
@@ -238,14 +238,14 @@ void HdRprDelegate::DestroyInstancer(HdInstancer* instancer) {
 }
 
 HdRprim* HdRprDelegate::CreateRprim(TfToken const& typeId,
-                                    SdfPath const& rprimId,
-                                    SdfPath const& instancerId) {
+                                    SdfPath const& rprimId
+                                    HDRPR_INSTANCER_ID_ARG_DECL) {
     if (typeId == HdPrimTypeTokens->mesh) {
-        return new HdRprMesh(rprimId, instancerId);
+        return new HdRprMesh(rprimId HDRPR_INSTANCER_ID_ARG);
     } else if (typeId == HdPrimTypeTokens->basisCurves) {
-        return new HdRprBasisCurves(rprimId, instancerId);
+        return new HdRprBasisCurves(rprimId HDRPR_INSTANCER_ID_ARG);
     } else if (typeId == HdPrimTypeTokens->points) {
-        return new HdRprPoints(rprimId, instancerId);
+        return new HdRprPoints(rprimId HDRPR_INSTANCER_ID_ARG);
     }
 #ifdef USE_VOLUME
     else if (typeId == HdPrimTypeTokens->volume) {
