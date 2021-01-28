@@ -1746,17 +1746,17 @@ public:
         float focalLength;
 
         GfVec2f apertureSize;
-        TfToken projectionType;
+        HdRprCamera::Projection projection;
         if (m_hdCamera->GetFocalLength(&focalLength) &&
             m_hdCamera->GetApertureSize(&apertureSize) &&
-            m_hdCamera->GetProjectionType(&projectionType)) {
+            m_hdCamera->GetProjection(&projection)) {
             ApplyAspectRatioPolicy(m_viewportSize, aspectRatioPolicy.value, apertureSize);
             sensorWidth = apertureSize[0];
             sensorHeight = apertureSize[1];
         } else {
             bool isOrthographic = round(m_cameraProjectionMatrix[3][3]) == 1.0;
             if (isOrthographic) {
-                projectionType = UsdGeomTokens->orthographic;
+                projection = HdRprCamera::Orthographic;
 
                 GfVec3f ndcTopLeft(-1.0f, 1.0f, 0.0f);
                 GfVec3f nearPlaneTrace = m_cameraProjectionMatrix.GetInverse().Transform(ndcTopLeft);
@@ -1764,7 +1764,7 @@ public:
                 sensorWidth = std::abs(nearPlaneTrace[0]) * 2.0;
                 sensorHeight = std::abs(nearPlaneTrace[1]) * 2.0;
             } else {
-                projectionType = UsdGeomTokens->perspective;
+                projection = HdRprCamera::Perspective;
 
                 sensorWidth = 1.0f;
                 sensorHeight = 1.0f / aspectRatio;
@@ -1772,7 +1772,7 @@ public:
             }
         }
 
-        if (projectionType == UsdGeomTokens->orthographic) {
+        if (projection == HdRprCamera::Orthographic) {
             RPR_ERROR_CHECK(m_camera->SetMode(RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
             RPR_ERROR_CHECK(m_camera->SetOrthoWidth(sensorWidth), "Failed to set camera ortho width");
             RPR_ERROR_CHECK(m_camera->SetOrthoHeight(sensorHeight), "Failed to set camera ortho height");
