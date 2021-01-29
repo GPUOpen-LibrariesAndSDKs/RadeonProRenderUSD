@@ -22,8 +22,12 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprCamera : public HdCamera {
-
 public:
+    enum Projection {
+        Perspective = 0,
+        Orthographic
+    };
+
     HdRprCamera(SdfPath const& id);
     ~HdRprCamera() override = default;
 
@@ -43,7 +47,7 @@ public:
     bool GetShutterOpen(double* value) const;
     bool GetShutterClose(double* value) const;
     bool GetClippingRange(GfRange1f* value) const;
-    bool GetProjectionType(TfToken* value) const;
+    bool GetProjection(Projection* value) const;
     HdTimeSampleArray<GfMatrix4d, 2> const& GetTransformSamples() const { return m_transform; }
     int GetApertureBlades() const { return m_apertureBlades; }
 
@@ -62,7 +66,7 @@ private:
     double m_shutterOpen;
     double m_shutterClose;
     GfRange1f m_clippingRange;
-    TfToken m_projectionType;
+    Projection m_projection = Perspective;
     HdTimeSampleArray<GfMatrix4d, 2> m_transform;
 
     mutable HdDirtyBits m_rprDirtyBits = HdCamera::AllDirty;

@@ -14,6 +14,8 @@ limitations under the License.
 #ifndef HDRPR_POINTS_H
 #define HDRPR_POINTS_H
 
+#include "renderDelegate.h"
+
 #include "pxr/imaging/hd/points.h"
 
 #include "pxr/base/gf/matrix4f.h"
@@ -26,7 +28,7 @@ class RprUsdMaterial;
 
 class HdRprPoints : public HdPoints {
 public:
-    HdRprPoints(SdfPath const& id, SdfPath const& instancerId);
+    HdRprPoints(SdfPath const& id HDRPR_INSTANCER_ID_ARG_DECL);
 
     ~HdRprPoints() override = default;
 

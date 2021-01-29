@@ -15,6 +15,7 @@ limitations under the License.
 #define HDRPR_BASE_RPRIM_H
 
 #include "renderParam.h"
+#include "renderDelegate.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
 
@@ -24,9 +25,9 @@ template <typename Base>
 class HdRprBaseRprim : public Base {
 public:
     HdRprBaseRprim(
-        SdfPath const& id,
-        SdfPath const& instancerId)
-        : Base(id, instancerId) {
+        SdfPath const& id
+        HDRPR_INSTANCER_ID_ARG_DECL)
+        : Base(id HDRPR_INSTANCER_ID_ARG) {
 
     }
     ~HdRprBaseRprim() override = default;

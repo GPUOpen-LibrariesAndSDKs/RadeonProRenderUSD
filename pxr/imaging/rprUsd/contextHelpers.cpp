@@ -16,8 +16,8 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/rprUsd/config.h"
 #include "pxr/imaging/rprUsd/error.h"
+#include "pxr/imaging/rprUsd/util.h"
 
-#include "pxr/imaging/glf/glew.h"
 #include "pxr/base/arch/env.h"
 #include "pxr/base/tf/diagnostic.h"
 #include "pxr/base/tf/envSetting.h"
@@ -266,8 +266,8 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         if (metadata->renderDeviceType == RprUsdRenderDeviceType::CPU || metadata->pluginType == kPluginHybrid) {
             PRINT_CONTEXT_CREATION_DEBUG_INFO("GL interop could not be used with CPU rendering or Hybrid plugin");
             metadata->isGlInteropEnabled = false;
-        } else if (!GlfGlewInit()) {
-            PRINT_CONTEXT_CREATION_DEBUG_INFO("Failed to init GLEW. Disabling GL interop");
+        } else if (!RprUsdInitGLApi()) {
+            PRINT_CONTEXT_CREATION_DEBUG_INFO("Failed to init GL API. Disabling GL interop");
             metadata->isGlInteropEnabled = false;
         } else {
             metadata->isGlInteropEnabled = true;
