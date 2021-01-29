@@ -14,6 +14,7 @@ limitations under the License.
 #include "util.h"
 
 #include "pxr/base/tf/staticTokens.h"
+#include "pxr/imaging/glf/utils.h"
 
 #include <cstring>
 
@@ -36,6 +37,33 @@ bool RprUsdGetUDIMFormatString(std::string const& filepath, std::string* out_for
     }
 
     return false;
+}
+
+bool RprUsdInitGLApi() {
+#if PXR_VERSION >= 2102
+    return GarchGLApiLoad();
+#else
+    return GlfGlewInit();
+#endif
+}
+
+RprUsdGlfTextureMetadata RprUsdGetGlfTextureMetadata(GlfUVTextureData* uvTextureData) {
+    RprUsdGlfTextureMetadata ret = {};
+#if PXR_VERSION >= 2011
+#   if PXR_VERSION >= 2102
+    auto hioFormat = uvTextureData->GetFormat();
+#   else
+    auto hioFormat = uvTextureData->GetHioFormat();
+#   endif
+    ret.glType = GlfGetGLType(hioFormat);
+    ret.glFormat = GlfGetGLFormat(hioFormat);
+    ret.internalFormat = GlfGetGLInternalFormat(hioFormat);
+#else
+    ret.internalFormat = uvTextureData->GLInternalFormat();
+    ret.glType = uvTextureData->GLType();
+    ret.glFormat = uvTextureData->GLFormat();
+#endif
+    return ret;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

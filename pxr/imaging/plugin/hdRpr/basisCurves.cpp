@@ -22,9 +22,9 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id,
-                                   SdfPath const& instancerId)
-    : HdRprBaseRprim(id, instancerId)
+HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id
+                                   HDRPR_INSTANCER_ID_ARG_DECL)
+    : HdRprBaseRprim(id HDRPR_INSTANCER_ID_ARG)
     , m_visibilityMask(kVisibleAll) {
 
 }

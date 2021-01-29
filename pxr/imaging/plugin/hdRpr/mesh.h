@@ -33,7 +33,7 @@ class HdRprMesh final : public HdRprBaseRprim<HdMesh> {
 public:
     HF_MALLOC_TAG_NEW("new HdRprMesh");
 
-    HdRprMesh(SdfPath const& id, SdfPath const& instancerId = SdfPath());
+    HdRprMesh(SdfPath const& id HDRPR_INSTANCER_ID_ARG_DECL);
     ~HdRprMesh() override = default;
 
     void Sync(HdSceneDelegate* sceneDelegate,

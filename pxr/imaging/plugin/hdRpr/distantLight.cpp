@@ -19,10 +19,13 @@ limitations under the License.
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/usdLux/blackbody.h"
-#include "pxr/usd/usdLux/tokens.h"
 #include "pxr/base/gf/matrix4d.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    (angle)
+);
 
 static float computeLightIntensity(float intensity, float exposure) {
     return intensity * exp2(exposure);
@@ -69,7 +72,7 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
-        float angle = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->angle).Get<float>();
+        float angle = sceneDelegate->GetLightParamValue(id, _tokens->angle).Get<float>();
 
         rprApi->SetDirectionalLightAttributes(m_rprLight, color * computedIntensity, angle * (M_PI / 180.0));
 
