@@ -2145,10 +2145,7 @@ public:
                 break;
             }
 
-            // XXX(RPR): Northstar never returns RPR_ERROR_ABORTED,
-            //           so we query whether render was aborted via m_abortRender (RPRNEXT-401)
-            bool isAborted = status == RPR_ERROR_ABORTED || m_abortRender.load();
-            if (isAborted) {
+            if (status == RPR_ERROR_ABORTED) {
                 break;
             }
 
@@ -2300,10 +2297,7 @@ public:
                 break;
             }
 
-            // XXX(RPR): Northstar never returns RPR_ERROR_ABORTED,
-            //           so we query whether render was aborted via m_abortRender (RPRNEXT-401)
-            bool isAborted = status == RPR_ERROR_ABORTED || m_abortRender.load();
-            if (isAborted && !forceRender) {
+            if (status == RPR_ERROR_ABORTED && !forceRender) {
                 break;
             }
 
@@ -2681,11 +2675,10 @@ Don't show this message again?
 
         if (m_isAbortingEnabled) {
             RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
+        } else {
+            // In case aborting is disabled, we postpone abort until it's enabled
+            m_abortRender.store(true);
         }
-
-        // XXX(RPRNEXT-401)
-        // In case aborting is disabled, we postpone abort until it's enabled
-        m_abortRender.store(true);
     }
 
     HdRprApi::RenderStats GetRenderStats() const {
@@ -2747,7 +2740,8 @@ Don't show this message again?
     }
 
     bool IsAdaptiveSamplingEnabled() const {
-        return m_rprContext && m_rprContextMetadata.pluginType == kPluginTahoe && m_varianceThreshold > 0.0f;
+        return m_rprContext && m_varianceThreshold > 0.0f &&
+              (m_rprContextMetadata.pluginType == kPluginTahoe || m_rprContextMetadata.pluginType == kPluginNorthstar);
     }
 
     bool IsGlInteropEnabled() const {
