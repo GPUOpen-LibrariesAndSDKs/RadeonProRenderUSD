@@ -3260,7 +3260,7 @@ private:
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiDepthAov(format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
                     newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                     aovCustomDestructor = [this](HdRprApiAov* aov) {
@@ -3270,6 +3270,25 @@ private:
                         m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
                         delete aov;
                     };
+                } else if (aovName == HdRprAovTokens->materialIdMask ||
+                           aovName == HdRprAovTokens->objectIdMask ||
+                           aovName == HdRprAovTokens->objectGroupIdMask) {
+                    TfToken baseAovName;
+                    if (aovName == HdRprAovTokens->materialIdMask) {
+                        baseAovName = HdRprAovTokens->materialId;
+                    } else if (aovName == HdRprAovTokens->objectIdMask) {
+                        baseAovName = HdAovTokens->primId;
+                    } else if (aovName == HdRprAovTokens->objectGroupIdMask) {
+                        baseAovName = HdRprAovTokens->objectGroupId;
+                    }
+
+                    auto baseAov = GetAov(baseAovName, width, height, HdFormatInt32);
+                    if (!baseAov) {
+                        TF_RUNTIME_ERROR("Failed to create %s AOV: cant create %s AOV", aovName.GetText(), baseAovName.GetText());
+                        return nullptr;
+                    }
+
+                    newAov = new HdRprApiIdMaskAov(aovDesc, baseAov, width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else {
                     if (!aovDesc.computed) {
                         newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
