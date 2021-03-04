@@ -14,13 +14,34 @@ limitations under the License.
 #ifndef RPRUSD_UTIL_H
 #define RPRUSD_UTIL_H
 
-#include "pxr/pxr.h"
+#include "pxr/imaging/rprUsd/api.h"
+
+#if PXR_VERSION >= 2102
+#include "pxr/imaging/garch/glApi.h"
+#else
+#include "pxr/imaging/glf/glew.h"
+#endif
+
+#include "pxr/imaging/glf/uvTextureData.h"
 
 #include <string>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+RPRUSD_API
 bool RprUsdGetUDIMFormatString(std::string const& filepath, std::string* out_formatString);
+
+RPRUSD_API
+bool RprUsdInitGLApi();
+
+struct RprUsdGlfTextureMetadata {
+    GLenum glType;
+    GLenum glFormat;
+    GLenum internalFormat;
+};
+
+RPRUSD_API
+RprUsdGlfTextureMetadata RprUsdGetGlfTextureMetadata(GlfUVTextureData* uvTextureData);
 
 PXR_NAMESPACE_CLOSE_SCOPE
 

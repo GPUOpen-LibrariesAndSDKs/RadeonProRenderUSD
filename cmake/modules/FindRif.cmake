@@ -4,7 +4,7 @@ endif()
 
 macro(SET_RIF_VARIABLES dirName)
     if(NOT RIF_LOCATION_LIB)
-        set(RIF_LOCATION_LIB ${RIF_LOCATION}/${dirName})
+        set(RIF_LOCATION_LIB ${RIF_LOCATION}/${dirName}/Dynamic)
     endif()
 
     if(NOT RIF_LOCATION_INCLUDE)

@@ -34,8 +34,8 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprMesh::HdRprMesh(SdfPath const& id, SdfPath const& instancerId)
-    : HdRprBaseRprim(id, instancerId)
+HdRprMesh::HdRprMesh(SdfPath const& id HDRPR_INSTANCER_ID_ARG_DECL)
+    : HdRprBaseRprim(id HDRPR_INSTANCER_ID_ARG)
     , m_visibilityMask(kVisibleAll) {
 
 }
@@ -386,9 +386,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
     }
 
-    m_smoothNormals = m_displayStyle.flatShadingEnabled;
+    m_smoothNormals = !m_displayStyle.flatShadingEnabled;
     // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
-    m_smoothNormals = m_smoothNormals && !(m_enableSubdiv && m_refineLevel > 0);
+    if (m_enableSubdiv && m_refineLevel != 0) {
+        m_smoothNormals = false;
+    }
 
     if (!m_authoredNormals && m_smoothNormals) {
         if (!m_adjacencyValid) {

@@ -21,6 +21,14 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+#if PXR_VERSION >= 2102
+#define HDRPR_INSTANCER_ID_ARG_DECL
+#define HDRPR_INSTANCER_ID_ARG
+#else
+#define HDRPR_INSTANCER_ID_ARG_DECL , SdfPath const& instancerId
+#define HDRPR_INSTANCER_ID_ARG , instancerId
+#endif
+
 class HdRprDiagnosticMgrDelegate;
 class HdRprRenderParam;
 class HdRprApi;
@@ -45,13 +53,13 @@ public:
                                            HdRprimCollection const& collection) override;
 
     HdInstancer* CreateInstancer(HdSceneDelegate* delegate,
-                                 SdfPath const& id,
-                                 SdfPath const& instancerId) override;
+                                 SdfPath const& id
+                                 HDRPR_INSTANCER_ID_ARG_DECL) override;
     void DestroyInstancer(HdInstancer* instancer) override;
 
     HdRprim* CreateRprim(TfToken const& typeId,
-                         SdfPath const& rprimId,
-                         SdfPath const& instancerId) override;
+                         SdfPath const& rprimId
+                         HDRPR_INSTANCER_ID_ARG_DECL) override;
     void DestroyRprim(HdRprim* rPrim) override;
 
     HdSprim* CreateSprim(TfToken const& typeId,

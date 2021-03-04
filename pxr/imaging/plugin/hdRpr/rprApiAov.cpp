@@ -84,7 +84,7 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
             RPR_THROW_ERROR_MSG("Failed to create resample filter");
         }
 
-        filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
+        filter->SetParam("interpOperator", (int) RIF_IMAGE_INTERPOLATION_NEAREST);
         return filter;
     }()) {
 
@@ -178,7 +178,7 @@ void HdRprApiAov::OnFormatChange(rif::Context* rifContext) {
     m_filter = nullptr;
     if (rifContext && m_format != HdFormatFloat32Vec4) {
         m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
-        m_filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
+        m_filter->SetParam("interpOperator", (int) RIF_IMAGE_INTERPOLATION_NEAREST);
 
         // Reset inputs
         m_dirtyBits |= ChangeTracker::DirtySize;
@@ -415,7 +415,7 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
             }
         } else if (m_enabledFilters & kFilterResample) {
             m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
-            m_filter->SetParam("interpOperator", RIF_IMAGE_INTERPOLATION_NEAREST);
+            m_filter->SetParam("interpOperator", (int) RIF_IMAGE_INTERPOLATION_NEAREST);
             m_mainFilterType = kFilterResample;
         }
 

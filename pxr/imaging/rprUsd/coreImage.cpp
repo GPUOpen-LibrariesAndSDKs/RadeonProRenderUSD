@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#include "pxr/imaging/glf/glew.h"
+#include "pxr/imaging/rprUsd/util.h"
 
 #include "pxr/imaging/rprUsd/coreImage.h"
 #include "pxr/imaging/rprUsd/helpers.h"
@@ -132,16 +132,9 @@ std::unique_ptr<uint8_t[]> ConvertTexture(GlfUVTextureData* textureData, rpr::Im
 rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData, uint32_t numComponentsRequired) {
     rpr::ImageFormat format = {};
 
-#if PXR_VERSION >= 2011
-    auto hioFormat = textureData->GetHioFormat();
-    GLenum glType = GlfGetGLType(hioFormat);
-    GLenum glFormat = GlfGetGLFormat(hioFormat);
-#else
-    GLenum glType = textureData->GLType();
-    GLenum glFormat = textureData->GLFormat();
-#endif
+    auto imageMetadata = RprUsdGetGlfTextureMetadata(textureData);
 
-    switch (glType) {
+    switch (imageMetadata.glType) {
         case GL_UNSIGNED_BYTE:
             format.type = RPR_COMPONENT_TYPE_UINT8;
             break;
@@ -152,11 +145,11 @@ rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData,
             format.type = RPR_COMPONENT_TYPE_FLOAT32;
             break;
         default:
-            TF_RUNTIME_ERROR("Unsupported pixel data GLtype: %#x", glType);
+            TF_RUNTIME_ERROR("Unsupported pixel data GLtype: %#x", imageMetadata.glType);
             return nullptr;
     }
 
-    switch (glFormat) {
+    switch (imageMetadata.glFormat) {
         case GL_RED:
             format.num_components = 1;
             break;
@@ -167,7 +160,7 @@ rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData,
             format.num_components = 4;
             break;
         default:
-            TF_RUNTIME_ERROR("Unsupported pixel data GLformat: %#x", glFormat);
+            TF_RUNTIME_ERROR("Unsupported pixel data GLformat: %#x", imageMetadata.glFormat);
             return nullptr;
     }
     rpr::ImageDesc desc = GetRprImageDesc(format, textureData->ResizedWidth(), textureData->ResizedHeight());

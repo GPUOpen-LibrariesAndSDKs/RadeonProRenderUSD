@@ -11,11 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#include "pxr/imaging/glf/glew.h"
+#include "pxr/imaging/rprUsd/util.h"
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/coreImage.h"
 #include "pxr/imaging/rprUsd/helpers.h"
-#include "pxr/imaging/rprUsd/util.h"
 #include "pxr/base/arch/fileSystem.h"
 #include "pxr/base/tf/diagnostic.h"
 
@@ -82,11 +81,7 @@ RprUsdImageCache::GetImage(
         // Assume that all tiles have the same colorspace
         //
         auto data = tiles[0].textureData;
-#if PXR_VERSION >= 2011
-        GLenum internalFormat = GlfGetGLInternalFormat(data->GetHioFormat());
-#else
-        GLenum internalFormat = data->GLInternalFormat();
-#endif
+        GLenum internalFormat = RprUsdGetGlfTextureMetadata(data).internalFormat;
         if (internalFormat == GL_SRGB ||
             internalFormat == GL_SRGB8 ||
             internalFormat == GL_SRGB_ALPHA ||

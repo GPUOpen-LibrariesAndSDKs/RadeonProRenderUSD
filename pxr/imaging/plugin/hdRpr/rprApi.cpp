@@ -29,7 +29,7 @@ using json = nlohmann::json;
 #include "renderBuffer.h"
 #include "renderParam.h"
 
-#include "pxr/imaging/glf/glew.h"
+#include "pxr/imaging/rprUsd/util.h"
 #include "pxr/imaging/glf/uvTextureData.h"
 
 #include "pxr/imaging/rprUsd/config.h"
@@ -1746,17 +1746,17 @@ public:
         float focalLength;
 
         GfVec2f apertureSize;
-        TfToken projectionType;
+        HdRprCamera::Projection projection;
         if (m_hdCamera->GetFocalLength(&focalLength) &&
             m_hdCamera->GetApertureSize(&apertureSize) &&
-            m_hdCamera->GetProjectionType(&projectionType)) {
+            m_hdCamera->GetProjection(&projection)) {
             ApplyAspectRatioPolicy(m_viewportSize, aspectRatioPolicy.value, apertureSize);
             sensorWidth = apertureSize[0];
             sensorHeight = apertureSize[1];
         } else {
             bool isOrthographic = round(m_cameraProjectionMatrix[3][3]) == 1.0;
             if (isOrthographic) {
-                projectionType = UsdGeomTokens->orthographic;
+                projection = HdRprCamera::Orthographic;
 
                 GfVec3f ndcTopLeft(-1.0f, 1.0f, 0.0f);
                 GfVec3f nearPlaneTrace = m_cameraProjectionMatrix.GetInverse().Transform(ndcTopLeft);
@@ -1764,7 +1764,7 @@ public:
                 sensorWidth = std::abs(nearPlaneTrace[0]) * 2.0;
                 sensorHeight = std::abs(nearPlaneTrace[1]) * 2.0;
             } else {
-                projectionType = UsdGeomTokens->perspective;
+                projection = HdRprCamera::Perspective;
 
                 sensorWidth = 1.0f;
                 sensorHeight = 1.0f / aspectRatio;
@@ -1772,7 +1772,7 @@ public:
             }
         }
 
-        if (projectionType == UsdGeomTokens->orthographic) {
+        if (projection == HdRprCamera::Orthographic) {
             RPR_ERROR_CHECK(m_camera->SetMode(RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
             RPR_ERROR_CHECK(m_camera->SetOrthoWidth(sensorWidth), "Failed to set camera ortho width");
             RPR_ERROR_CHECK(m_camera->SetOrthoHeight(sensorHeight), "Failed to set camera ortho height");
@@ -2145,10 +2145,7 @@ public:
                 break;
             }
 
-            // XXX(RPR): Northstar never returns RPR_ERROR_ABORTED,
-            //           so we query whether render was aborted via m_abortRender (RPRNEXT-401)
-            bool isAborted = status == RPR_ERROR_ABORTED || m_abortRender.load();
-            if (isAborted) {
+            if (status == RPR_ERROR_ABORTED) {
                 break;
             }
 
@@ -2300,10 +2297,7 @@ public:
                 break;
             }
 
-            // XXX(RPR): Northstar never returns RPR_ERROR_ABORTED,
-            //           so we query whether render was aborted via m_abortRender (RPRNEXT-401)
-            bool isAborted = status == RPR_ERROR_ABORTED || m_abortRender.load();
-            if (isAborted && !forceRender) {
+            if (status == RPR_ERROR_ABORTED && !forceRender) {
                 break;
             }
 
@@ -2681,11 +2675,10 @@ Don't show this message again?
 
         if (m_isAbortingEnabled) {
             RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
+        } else {
+            // In case aborting is disabled, we postpone abort until it's enabled
+            m_abortRender.store(true);
         }
-
-        // XXX(RPRNEXT-401)
-        // In case aborting is disabled, we postpone abort until it's enabled
-        m_abortRender.store(true);
     }
 
     HdRprApi::RenderStats GetRenderStats() const {
@@ -2747,7 +2740,8 @@ Don't show this message again?
     }
 
     bool IsAdaptiveSamplingEnabled() const {
-        return m_rprContext && m_rprContextMetadata.pluginType == kPluginTahoe && m_varianceThreshold > 0.0f;
+        return m_rprContext && m_varianceThreshold > 0.0f &&
+              (m_rprContextMetadata.pluginType == kPluginTahoe || m_rprContextMetadata.pluginType == kPluginNorthstar);
     }
 
     bool IsGlInteropEnabled() const {
@@ -3350,38 +3344,31 @@ private:
             imageDesc.image_row_pitch = 0;
             imageDesc.image_slice_pitch = 0;
 
-            #if PXR_VERSION >= 2011
-                auto hioFormat = textureData->GetHioFormat();
-                GLenum glType = GlfGetGLType(hioFormat);
-                GLenum glFormat = GlfGetGLFormat(hioFormat);
-            #else
-                GLenum glType = textureData->GLType();
-                GLenum glFormat = textureData->GLFormat();
-            #endif
+            auto textureMetadata = RprUsdGetGlfTextureMetadata(&(*textureData));
 
             uint8_t bytesPerComponent;
-            if (glType == GL_UNSIGNED_BYTE) {
+            if (textureMetadata.glType == GL_UNSIGNED_BYTE) {
                 imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
                 bytesPerComponent = 1;
-            } else if (glType == GL_HALF_FLOAT) {
+            } else if (textureMetadata.glType == GL_HALF_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
                 bytesPerComponent = 2;
-            } else if (glType == GL_FLOAT) {
+            } else if (textureMetadata.glType == GL_FLOAT) {
                 imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
                 bytesPerComponent = 2;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), glType);
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureMetadata.glType);
                 return false;
             }
 
-            if (glFormat == GL_RGBA) {
+            if (textureMetadata.glFormat == GL_RGBA) {
                 imageDesc.num_components = 4;
-            } else if (glFormat == GL_RGB) {
+            } else if (textureMetadata.glFormat == GL_RGB) {
                 imageDesc.num_components = 3;
-            } else if (glFormat == GL_RED) {
+            } else if (textureMetadata.glFormat == GL_RED) {
                 imageDesc.num_components = 1;
             } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), glFormat);
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), textureMetadata.glFormat);
                 return false;
             }
 
