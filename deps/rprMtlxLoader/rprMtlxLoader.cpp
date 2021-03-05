@@ -195,6 +195,12 @@ struct Mtlx2Rpr {
                 {"scale", RPR_MATERIAL_INPUT_SCALE},
             }
         };
+        nodes["heighttonormal"] = {
+            RPR_MATERIAL_NODE_BUMP_MAP, {
+                {"in", RPR_MATERIAL_INPUT_COLOR},
+                {"scale", RPR_MATERIAL_INPUT_SCALE},
+            }
+        };
         nodes["normalize"] = {
             RPR_MATERIAL_NODE_MATX_NORMALIZE, {
                 {"in", RPR_MATERIAL_INPUT_COLOR},
@@ -434,6 +440,7 @@ struct RprImageNode : public RprMappedNode {
     std::string type;
     std::string layer;
     mx::ValuePtr defaultValue;
+    bool disableRprImageColorspace;
 
     /// Possible values: "constant", "clamp", "periodic", "mirror"
     std::string uaddressmode;
@@ -447,6 +454,13 @@ struct RprImageNode : public RprMappedNode {
     ~RprImageNode() override = default;
 
     rpr_status Connect(std::string const& upstreamOutput, Node* downstreamNode, mx::TypedElement* downstreamElement, LoaderContext* context) override;
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override;
+};
+
+struct RprUberNode : public RprMappedNode {
+    RprUberNode(LoaderContext* context);
+    ~RprUberNode() override = default;
+
     rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override;
 };
 
@@ -1221,6 +1235,8 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
         rprNodeMapping = &s_sqrtMapping;
     } else if (mtlxNode->getCategory() == "image") {
         return std::make_unique<RprImageNode>(mtlxNode->getType(), context);
+    } else if (mtlxNode->getCategory() == "rpr_uberv2") {
+        return std::make_unique<RprUberNode>(context);
     } else if (mtlxNode->getCategory() == "swizzle") {
         // TODO: implement healthy man swizzle
 
@@ -1876,6 +1892,8 @@ rpr_status RprImageNode::Connect(std::string const& upstreamOutput, Node* downst
             converter = retainedUnitConverter.get();
         }
 
+        disableRprImageColorspace = !colorspace.empty();
+
         if (converter) {
             auto conversionNodeIt = conversionNodes.find(conversionNodeId);
             if (conversionNodeIt == conversionNodes.end()) {
@@ -1942,6 +1960,115 @@ rpr_status RprImageNode::SetInput(mx::TypedElement* downstreamElement, mx::Value
     }
     return status;
 }
+
+RprUberNode::RprUberNode(LoaderContext* context)
+    : RprMappedNode(
+        [context]() {
+            rpr_material_node node = nullptr;
+            rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_UBERV2, &node);
+            return node;
+        }(),
+            []() {
+            static Mtlx2Rpr::Node s_imageMapping = {
+                RPR_MATERIAL_NODE_UBERV2, {
+                    {"uber_diffuse_color", RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR},
+                    {"uber_diffuse_weight", RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT},
+                    {"uber_diffuse_roughness", RPR_MATERIAL_INPUT_UBER_DIFFUSE_ROUGHNESS},
+                    {"uber_diffuse_normal", RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL},
+                    {"uber_reflection_color", RPR_MATERIAL_INPUT_UBER_REFLECTION_COLOR},
+                    {"uber_reflection_weight", RPR_MATERIAL_INPUT_UBER_REFLECTION_WEIGHT},
+                    {"uber_reflection_roughness", RPR_MATERIAL_INPUT_UBER_REFLECTION_ROUGHNESS},
+                    {"uber_reflection_anisotropy", RPR_MATERIAL_INPUT_UBER_REFLECTION_ANISOTROPY},
+                    {"uber_reflection_anisotropy_rotation", RPR_MATERIAL_INPUT_UBER_REFLECTION_ANISOTROPY_ROTATION},
+                    {"uber_reflection_ior", RPR_MATERIAL_INPUT_UBER_REFLECTION_IOR},
+                    {"uber_reflection_metalness", RPR_MATERIAL_INPUT_UBER_REFLECTION_METALNESS},
+                    {"uber_reflection_normal", RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL},
+                    {"uber_refraction_color", RPR_MATERIAL_INPUT_UBER_REFRACTION_COLOR},
+                    {"uber_refraction_weight", RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT},
+                    {"uber_refraction_roughness", RPR_MATERIAL_INPUT_UBER_REFRACTION_ROUGHNESS},
+                    {"uber_refraction_ior", RPR_MATERIAL_INPUT_UBER_REFRACTION_IOR},
+                    {"uber_refraction_normal", RPR_MATERIAL_INPUT_UBER_REFRACTION_NORMAL},
+                    {"uber_refraction_thin_surface", RPR_MATERIAL_INPUT_UBER_REFRACTION_THIN_SURFACE},
+                    {"uber_refraction_absorption_color", RPR_MATERIAL_INPUT_UBER_REFRACTION_ABSORPTION_COLOR},
+                    {"uber_refraction_absorption_distance", RPR_MATERIAL_INPUT_UBER_REFRACTION_ABSORPTION_DISTANCE},
+                    {"uber_refraction_caustics", RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS},
+                    {"uber_coating_color", RPR_MATERIAL_INPUT_UBER_COATING_COLOR},
+                    {"uber_coating_weight", RPR_MATERIAL_INPUT_UBER_COATING_WEIGHT},
+                    {"uber_coating_roughness", RPR_MATERIAL_INPUT_UBER_COATING_ROUGHNESS},
+                    {"uber_coating_ior", RPR_MATERIAL_INPUT_UBER_COATING_IOR},
+                    {"uber_coating_metalness", RPR_MATERIAL_INPUT_UBER_COATING_METALNESS},
+                    {"uber_coating_normal", RPR_MATERIAL_INPUT_UBER_COATING_NORMAL},
+                    {"uber_coating_transmission_color", RPR_MATERIAL_INPUT_UBER_COATING_TRANSMISSION_COLOR},
+                    {"uber_coating_thickness", RPR_MATERIAL_INPUT_UBER_COATING_THICKNESS},
+                    {"uber_sheen", RPR_MATERIAL_INPUT_UBER_SHEEN},
+                    {"uber_sheen_tint", RPR_MATERIAL_INPUT_UBER_SHEEN_TINT},
+                    {"uber_sheen_weight", RPR_MATERIAL_INPUT_UBER_SHEEN_WEIGHT},
+                    {"uber_emission_color", RPR_MATERIAL_INPUT_UBER_EMISSION_COLOR},
+                    {"uber_emission_weight", RPR_MATERIAL_INPUT_UBER_EMISSION_WEIGHT},
+                    {"uber_transparency", RPR_MATERIAL_INPUT_UBER_TRANSPARENCY},
+                    {"uber_sss_scatter_color", RPR_MATERIAL_INPUT_UBER_SSS_SCATTER_COLOR},
+                    {"uber_sss_scatter_distance", RPR_MATERIAL_INPUT_UBER_SSS_SCATTER_DISTANCE},
+                    {"uber_sss_scatter_direction", RPR_MATERIAL_INPUT_UBER_SSS_SCATTER_DIRECTION},
+                    {"uber_sss_weight", RPR_MATERIAL_INPUT_UBER_SSS_WEIGHT},
+                    {"uber_sss_multiscatter", RPR_MATERIAL_INPUT_UBER_SSS_MULTISCATTER},
+                    {"uber_backscatter_weight", RPR_MATERIAL_INPUT_UBER_BACKSCATTER_WEIGHT},
+                    {"uber_backscatter_color", RPR_MATERIAL_INPUT_UBER_BACKSCATTER_COLOR},
+                    {"uber_fresnel_schlick_approximation", RPR_MATERIAL_INPUT_UBER_FRESNEL_SCHLICK_APPROXIMATION},
+                    // handled in SetInput
+                    //{"uber_reflection_mode", RPR_MATERIAL_INPUT_UBER_REFLECTION_MODE},
+                    //{"uber_coating_mode", RPR_MATERIAL_INPUT_UBER_COATING_MODE},
+                    //{"uber_emission_mode", RPR_MATERIAL_INPUT_UBER_EMISSION_MODE},
+                }
+            };
+            return &s_imageMapping;
+        }()
+    ) {
+
+}
+
+rpr_status RprUberNode::SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) {
+    auto& value = upstreamValueElement->getValueString();
+    auto& valueType = upstreamValueElement->getType();
+
+    rpr_status status = RPR_SUCCESS;
+    if (valueType == "string") {
+        if (downstreamElement->getName() == "uber_reflection_mode" ||
+            downstreamElement->getName() == "uber_coating_mode") {
+            rpr_ubermaterial_ior_mode mode;
+            if (value == "Metalness") {
+                mode = RPR_UBER_MATERIAL_IOR_MODE_METALNESS;
+            } else {
+                mode = RPR_UBER_MATERIAL_IOR_MODE_PBR;
+            }
+            rpr_material_node_input inputKey;
+            if (downstreamElement->getName() == "uber_reflection_mode") {
+                inputKey = RPR_MATERIAL_INPUT_UBER_REFLECTION_MODE;
+            } else {
+                inputKey = RPR_MATERIAL_INPUT_UBER_COATING_MODE;
+            }
+            status = rprMaterialNodeSetInputUByKey(rprNode, inputKey, mode);
+        } else if (downstreamElement->getName() == "uber_emission_mode") {
+            rpr_ubermaterial_emission_mode mode;
+            if (value == "Doublesided") {
+                mode = RPR_UBER_MATERIAL_EMISSION_MODE_DOUBLESIDED;
+            } else {
+                mode = RPR_UBER_MATERIAL_EMISSION_MODE_SINGLESIDED;
+            }
+            status = rprMaterialNodeSetInputUByKey(rprNode, RPR_MATERIAL_INPUT_UBER_EMISSION_MODE, mode);
+        } else {
+            status = RPR_ERROR_INVALID_PARAMETER;
+        }
+    } else {
+        status = RprMappedNode::SetInput(downstreamElement, upstreamValueElement, context);
+    }
+
+    if (status != RPR_SUCCESS) {
+        LOG_ERROR(context, "Invalid input for uber node %s (%s %s): unknown input or invalid type\n",
+            downstreamElement->getName().c_str(), value.c_str(), valueType.c_str());
+    }
+    return status;
+}
+
 
 //------------------------------------------------------------------------------
 //
@@ -2537,6 +2664,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
                 std::swap(outImageNode.defaultValue, imageNode->defaultValue);
                 std::swap(outImageNode.uaddressmode, imageNode->uaddressmode);
                 std::swap(outImageNode.vaddressmode, imageNode->vaddressmode);
+                outImageNode.disableRprImageColorspace = imageNode->disableRprImageColorspace;
                 outImageNode.rprNode = imageNode->rprNode;
             }
         }

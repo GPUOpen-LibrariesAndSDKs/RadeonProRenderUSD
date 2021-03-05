@@ -303,6 +303,10 @@ public:
                         TF_WARN("Invalid image materialX type: %s", mtlxImageNode.type.c_str());
                     }
 
+                    if (mtlxImageNode.disableRprImageColorspace) {
+                        textureCommit.colorspace = "linear";
+                    }
+
                     rpr_material_node rprImageNode = mtlxImageNode.rprNode;
                     textureCommit.setTextureCallback = [retainedImagesPtr, rprImageNode](std::shared_ptr<RprUsdCoreImage> const& image) {
                         if (!image) return;

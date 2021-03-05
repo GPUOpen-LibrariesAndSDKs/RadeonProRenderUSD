@@ -63,7 +63,7 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
         }
 
         if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
-            MaterialX::FilePathVec libraryNames = {"libraries"};
+            MaterialX::FilePathVec libraryNames = {"libraries", "materials"};
             MaterialX::FileSearchPath searchPath = RPR;
             m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
             m_mtlxLoader->SetupStdlib(libraryNames, searchPath);
