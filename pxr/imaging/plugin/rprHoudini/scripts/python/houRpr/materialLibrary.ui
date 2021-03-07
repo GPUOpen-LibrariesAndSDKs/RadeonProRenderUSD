@@ -88,6 +88,17 @@
          </attribute>
         </widget>
        </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <widget class="QPushButton" name="helpButton">
+           <property name="text">
+            <string>Help</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
       </layout>
      </widget>
      <widget class="QWidget" name="centralWidget" native="true">
@@ -113,6 +124,9 @@
        <property name="bottomMargin">
         <number>0</number>
        </property>
+       <item>
+        <widget class="QLineEdit" name="filter"/>
+       </item>
       </layout>
      </widget>
     </widget>

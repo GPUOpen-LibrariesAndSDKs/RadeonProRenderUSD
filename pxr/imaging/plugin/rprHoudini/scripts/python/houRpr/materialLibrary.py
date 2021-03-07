@@ -41,6 +41,14 @@ HOWTO_INSTALL_HTML = '''
 </ol>
 '''
 
+HELP_TEXT = '''
+To import a material click on a corresponding swatch. The material is always imported as a separate "Material Library" LOP node.
+
+The importer always auto-assigns an imported material to the last modified prims of the selected LOP nodes. In this mode, the importer replaces the previously imported material with the new one, thus allowing to rapidly change materials. 
+
+Use the text input widget at the bottom of the window to filter displayed materials.
+'''
+
 class MaterialLibrary:
     class InitError(Exception):
         def __init__(self, brief_msg, full_msg):
@@ -503,9 +511,11 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.addWidget(self._ui)
 
+        self._ui.filter.textChanged.connect(self._filterChanged)
+
         self._listWidget = LibraryListWidget(self)
         self._fullPreviewWindow._requiredWidget = self._listWidget
-        self._ui.verticalLayout_3.addWidget(self._listWidget)
+        self._ui.verticalLayout_3.insertWidget(0, self._listWidget)
 
         self._ui.treeView.clicked.connect(self._treeItemClicked)
         self._listWidget.clicked.connect(self._listItemClicked)
@@ -528,6 +538,8 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._treeItemClicked(rootIndex)
         self._ui.treeView.expand(rootIndex)
 
+        self._ui.helpButton.clicked.connect(self._helpButtonClicked)
+
         self._dataModel = None
         self._stateLoaded = False
 
@@ -540,6 +552,7 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         for item in items:
             listItem = QtWidgets.QListWidgetItem(item.preview, item.name.replace('_', ' '), self._listWidget)
             listItem.setSizeHint(QtCore.QSize(PREVIEW_SIZE + 10, PREVIEW_SIZE + 40))
+            self._setItemHidden(listItem)
             self._listWidget.addItem(listItem)
 
     def _listItemClicked(self, index):
@@ -551,6 +564,23 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
 
     def _listViewportEntered(self):
         self._fullPreviewWindow.hide()
+
+    def _helpButtonClicked(self):
+        QtWidgets.QMessageBox.question(self, 'Help', HELP_TEXT, QtWidgets.QMessageBox.Ok)
+
+    def _filterChanged(self):
+        self._filterItems()
+
+    def _filterItems(self):
+        for i in range(self._listWidget.count()):
+            self._setItemHidden(self._listWidget.item(i))
+
+    def _setItemHidden(self, item):
+        pattern = self._ui.filter.text().lower()
+        if pattern == '':
+            item.setHidden(False)
+        else:
+            item.setHidden(not pattern in item.text().lower())
 
 class MaterialLibraryWindow(QtWidgets.QMainWindow):
     def __init__(self):
