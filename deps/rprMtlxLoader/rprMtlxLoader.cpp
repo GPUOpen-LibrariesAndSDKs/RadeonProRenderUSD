@@ -2062,7 +2062,8 @@ rpr_status RprUberNode::SetInput(mx::TypedElement* downstreamElement, mx::ValueE
         status = RprMappedNode::SetInput(downstreamElement, upstreamValueElement, context);
     }
 
-    if (status != RPR_SUCCESS) {
+    if (status != RPR_SUCCESS &&
+        status != RPR_ERROR_UNSUPPORTED) {
         LOG_ERROR(context, "Invalid input for uber node %s (%s %s): unknown input or invalid type\n",
             downstreamElement->getName().c_str(), value.c_str(), valueType.c_str());
     }
