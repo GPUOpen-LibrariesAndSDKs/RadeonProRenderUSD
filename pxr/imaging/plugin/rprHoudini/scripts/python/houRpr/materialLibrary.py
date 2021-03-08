@@ -370,7 +370,7 @@ class LibraryTreeModel(QtCore.QAbstractItemModel):
     def data(self, index: QtCore.QModelIndex, role=QtCore.Qt.DisplayRole):
         if index.isValid():
             node = index.internalPointer()
-            if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole):
+            if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole, QtCore.Qt.ToolTipRole):
                 return node.displayName()
             elif role in (QtCore.Qt.DecorationRole, ):
                 pass
@@ -550,7 +550,9 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         items = self._libraryTreeModel.getSubItems(index)
         self._listWidget.clear()
         for item in items:
-            listItem = QtWidgets.QListWidgetItem(item.preview, item.name.replace('_', ' '), self._listWidget)
+            item_text = item.name.replace('_', ' ')
+            listItem = QtWidgets.QListWidgetItem(item.preview, item_text, self._listWidget)
+            listItem.setToolTip(item_text)
             listItem.setSizeHint(QtCore.QSize(PREVIEW_SIZE + 10, PREVIEW_SIZE + 40))
             self._setItemHidden(listItem)
             self._listWidget.addItem(listItem)
