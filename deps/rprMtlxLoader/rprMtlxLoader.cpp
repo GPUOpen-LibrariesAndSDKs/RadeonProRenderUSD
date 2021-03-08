@@ -1906,11 +1906,12 @@ rpr_status RprImageNode::Connect(std::string const& upstreamOutput, Node* downst
                     conversionNodeIt = conversionNodes.emplace(conversionNodeId, std::move(conversionNode)).first;
                 }
             }
-            if (conversionNodeIt != conversionNodes.end()) {
-                if (auto convertedOutput = conversionNodeIt->second->GetOutput()) {
-                    return downstreamNode->SetInput(downstreamElement, nullptr, convertedOutput, context);
-                }
-            }
+        }
+    }
+
+    if (!conversionNodes.empty()) {
+        if (auto convertedOutput = conversionNodes.begin()->second->GetOutput()) {
+            return downstreamNode->SetInput(downstreamElement, nullptr, convertedOutput, context);
         }
     }
 
