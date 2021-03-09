@@ -2,13 +2,9 @@ import os
 import re
 import hou
 import json
+import errno
 import shutil
 from hutil.Qt import QtCore, QtGui, QtWidgets, QtUiTools
-
-try:
-  from pathlib import Path
-except ImportError:
-  from pathlib2 import Path
 
 material_library=None
 
@@ -49,6 +45,13 @@ The importer always auto-assigns an imported material to the last modified prims
 Use the text input widget at the bottom of the window to filter displayed materials.
 '''
 
+def recursive_mkdir(path):
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if errno.EEXIST != e.errno:
+            raise
+
 class MaterialLibrary:
     class InitError(Exception):
         def __init__(self, brief_msg, full_msg):
@@ -65,7 +68,7 @@ class MaterialLibrary:
 
     def __init__(self):
         self._nopreview_icon = None
-        self.material_groups = dict()
+        self.material_groups = list()
         self.material_datas = dict()
 
         self.path = os.environ.get('RPR_MTLX_MATERIAL_LIBRARY_PATH')
@@ -101,7 +104,9 @@ class MaterialLibrary:
                         self.material_datas[material_name] = self.MaterialData(desc['dependencies'], preview)
                         material_names_per_group.append(material_name)
 
-                    self.material_groups[group] = material_names_per_group
+                    self.material_groups.append((group, material_names_per_group))
+
+            self.material_groups.sort(key=lambda entry: entry[0])
 
         except IOError as e:
             raise MaterialLibrary.InitError(
@@ -130,7 +135,7 @@ class MaterialLibrary:
         if True:
             hip_dir = os.path.dirname(hou.hipFile.path())
             dst_mtlx_dir = os.path.join(hip_dir, 'RPRMaterialLibrary', 'Materials')
-            Path(dst_mtlx_dir).mkdir(parents=True, exist_ok=True)
+            recursive_mkdir(dst_mtlx_dir)
 
             dst_mtlx_file = os.path.join(dst_mtlx_dir, material_name + '.mtlx')
 
@@ -139,7 +144,7 @@ class MaterialLibrary:
             material_data = self.material_datas[material_name]
             for dependency in material_data.dependencies:
                 dst_dep_file = os.path.join(dst_mtlx_dir, dependency)
-                Path(dst_dep_file).parent.mkdir(parents=True, exist_ok=True)
+                recursive_mkdir(os.path.dirname(dst_dep_file))
 
                 src_dep_file = os.path.join(src_mtlx_dir, dependency)
                 shutil.copyfile(src_dep_file, dst_dep_file)
@@ -257,13 +262,13 @@ class StageMaterialNode:
         return self._material.name.replace('_', ' ')
 
 
-    def getMaterials(self) -> [StageMaterial]:
+    def getMaterials(self):
         return [self._material]
 
 ###############################################################################
 
 class StageMaterialGroupNode:
-    def __init__(self, parent, name:str):
+    def __init__(self, parent, name):
         self._parent = parent
         self._name = name
         self._children = []
@@ -280,7 +285,7 @@ class StageMaterialGroupNode:
         self._children = []
 
 
-    def addMaterial(self, pathParts:[str], preview):
+    def addMaterial(self, pathParts, preview):
         if len(pathParts) == 0:
             return
         elif len(pathParts) == 1:
@@ -329,7 +334,7 @@ class StageMaterialGroupNode:
         return self._name.replace('_', ' ')
 
 
-    def getMaterials(self) -> [StageMaterial]:
+    def getMaterials(self):
         materials = []
         for c in self._children:
             materials = materials + c.getMaterials()
@@ -358,7 +363,7 @@ class LibraryTreeModel(QtCore.QAbstractItemModel):
         self.endResetModel()
 
 
-    def addItem(self, pathParts:[str], preview):
+    def addItem(self, pathParts, preview):
         self._root.addMaterial(pathParts, preview)
 
 
@@ -367,7 +372,7 @@ class LibraryTreeModel(QtCore.QAbstractItemModel):
         self.endResetModel()
 
 
-    def data(self, index: QtCore.QModelIndex, role=QtCore.Qt.DisplayRole):
+    def data(self, index, role=QtCore.Qt.DisplayRole):
         if index.isValid():
             node = index.internalPointer()
             if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole, QtCore.Qt.ToolTipRole):
@@ -378,7 +383,7 @@ class LibraryTreeModel(QtCore.QAbstractItemModel):
                 return QtCore.QSize(100, max(MIN_TREE_ITEM_HEIGHT, self._minRowHeight))
 
 
-    def flags(self, index: QtCore.QModelIndex):
+    def flags(self, index):
         return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable
             
 
@@ -413,7 +418,7 @@ class LibraryTreeModel(QtCore.QAbstractItemModel):
         return 1
 
 
-    def getSubItems(self, index) -> [StageMaterial]:
+    def getSubItems(self, index):
         node = index.internalPointer()
         if node:
             return node.getMaterials()
@@ -528,7 +533,7 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._libraryTreeModel = LibraryTreeModel(self)      # tree item height must not be less than line edit height
         self._ui.treeView.setModel(self._libraryTreeModel)
 
-        for group, materials in material_library.material_groups.items():
+        for group, materials in material_library.material_groups:
             for name in materials:
                 self._libraryTreeModel.addItem(['All', group, name], material_library.material_datas[name].preview)
 
