@@ -120,7 +120,14 @@ class MaterialLibrary:
     MATERIAL_LIBRARY_TAG='hdrpr_material_library_generated'
 
     def create_houdini_material_graph(self, material_name):
-        matlib_node = hou.node('/stage').createNode('materiallibrary')
+        selected_nodes = hou.selectedNodes()
+
+        if selected_nodes:
+            matlib_parent = selected_nodes[0].parent()
+        else:
+            matlib_parent = hou.node('/stage')
+
+        matlib_node = matlib_parent.createNode('materiallibrary')
         matlib_node.setName(material_name, unique_name=True)
         matlib_node.setComment(self.MATERIAL_LIBRARY_TAG)
 
@@ -154,7 +161,6 @@ class MaterialLibrary:
         else:
             mtlx_node.parm('file').set(src_mtlx_file)
 
-        selected_nodes = hou.selectedNodes()
         if len(selected_nodes) == 0:
             matlib_node.setSelected(True, clear_all_selected=True)
 
