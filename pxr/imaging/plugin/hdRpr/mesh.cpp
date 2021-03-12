@@ -148,15 +148,6 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
     return m_fallbackMaterial;
 }
 
-uint32_t HdRprMesh::GetVisibilityMask() const {
-    if (!_sharedData.visible) {
-        // If mesh is explicitly made invisible, ignore custom visibility mask
-        return kInvisible;
-    }
-
-    return m_visibilityMask;
-}
-
 void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                      HdRenderParam* renderParam,
                      HdDirtyBits* dirtyBits,
@@ -341,7 +332,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
-        _sharedData.visible = sceneDelegate->GetVisible(id);
+        UpdateVisibility(sceneDelegate);
     }
 
     ////////////////////////////////////////////////////////////////////////
