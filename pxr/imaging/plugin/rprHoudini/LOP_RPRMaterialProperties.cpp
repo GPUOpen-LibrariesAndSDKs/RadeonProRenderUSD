@@ -80,6 +80,12 @@ OP_ERROR LOP_RPRMaterialProperties::cookMyLop(OP_Context &context) {
     HUSD_AutoWriteLock writelock(editableDataHandle());
     HUSD_AutoLayerLock layerlock(writelock);
 
+    auto data = writelock.data();
+    if (!data) {
+        // This might be the case when there are errors in the current graph
+        return error();
+    }
+
     UsdStageRefPtr stage = writelock.data()->stage();
 
     UsdPrim materialPrim = stage->GetPrimAtPath(materialSdfPath);

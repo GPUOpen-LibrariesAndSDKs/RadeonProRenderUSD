@@ -97,7 +97,6 @@ private:
     int m_refineLevel = 0;
 
     int m_id = -1;
-    uint32_t m_visibilityMask = 0;
     bool m_ignoreContour;
 };
 
