@@ -42,6 +42,9 @@ install(
     FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/__init__.py
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/cache.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/materialLibrary.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/materialLibrary.ui
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/na.png
     DESTINATION
         houdini/scripts/python/houRpr)
 install(

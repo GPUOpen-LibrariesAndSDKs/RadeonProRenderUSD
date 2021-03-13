@@ -60,6 +60,11 @@ public:
             std::string uaddressmode;
             std::string vaddressmode;
 
+            /// Controls whether rpr_image creator should apply any colorspace conversions.
+            /// The most common example is applying gamma to rpr_image, where gamma value is taken from the file's metadata.
+            /// disableRprImageColorspace is true when mtlx loader generates its own conversion nodes.
+            bool disableRprImageColorspace;
+
             /// The target image texture node
             rpr_material_node rprNode;
         };
