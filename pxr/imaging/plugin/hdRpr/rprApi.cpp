@@ -2888,6 +2888,10 @@ private:
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
+        if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid) {
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_ENABLE_RELAXED_MATERIAL_CHECKS), 1u), "Failed to enable relaxed material checks");
+        }
+
         uint32_t requiredYFlip = 0;
         if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid && m_rprContextMetadata.interopInfo) {
             RPR_ERROR_CHECK_THROW(m_rprContext->GetFunctionPtr(
