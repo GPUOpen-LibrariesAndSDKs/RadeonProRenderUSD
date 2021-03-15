@@ -14,6 +14,8 @@ limitations under the License.
 #ifndef HDRPR_BASE_RPRIM_H
 #define HDRPR_BASE_RPRIM_H
 
+#include "rprApi.h"
+
 #include "renderParam.h"
 #include "renderDelegate.h"
 
@@ -61,7 +63,7 @@ protected:
         // and the referenced material was changed we must resync the Rprim. As there is no way to change the behavior of
         // HdRprim::CanSkipDirtyBitPropagationAndSync (it's not virtual) to not skip when material was changed,
         // we make our Rprim to be always visible for this function - it uses HdRprim::IsVisible to check the visibility.
-        _sharedData.visible = true;
+        this->_sharedData.visible = true;
 
         m_isVisible = sceneDelegate->GetVisible(Base::GetId());
     }
