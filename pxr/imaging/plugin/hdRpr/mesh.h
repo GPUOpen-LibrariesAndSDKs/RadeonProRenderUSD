@@ -64,8 +64,6 @@ private:
         HdDirtyBits dirtyBits,
         std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation);
 
-    uint32_t GetVisibilityMask() const;
-
 private:
     std::vector<rpr::Shape*> m_rprMeshes;
     std::vector<std::vector<rpr::Shape*>> m_rprMeshInstances;
