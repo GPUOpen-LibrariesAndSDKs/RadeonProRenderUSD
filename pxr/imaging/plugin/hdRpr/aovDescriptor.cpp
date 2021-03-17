@@ -89,6 +89,9 @@ HdRprAovRegistry::HdRprAovRegistry() {
     m_computedAovDescriptors.resize(kComputedAovsCount);
     m_computedAovDescriptors[kNdcDepth] = HdRprAovDescriptor(kNdcDepth, false, HdFormatFloat32, GfVec4f(std::numeric_limits<float>::infinity()), true);
     m_computedAovDescriptors[kColorAlpha] = HdRprAovDescriptor(kColorAlpha, true, HdFormatFloat32Vec4, GfVec4f(0.0f), true);
+    m_computedAovDescriptors[kMaterialIdMask] = HdRprAovDescriptor(kMaterialIdMask, false, HdFormatFloat32Vec4, GfVec4f(0.0f), true);
+    m_computedAovDescriptors[kObjectIdMask] = HdRprAovDescriptor(kObjectIdMask, false, HdFormatFloat32Vec4, GfVec4f(0.0f), true);
+    m_computedAovDescriptors[kObjectGroupIdMask] = HdRprAovDescriptor(kObjectGroupIdMask, false, HdFormatFloat32Vec4, GfVec4f(0.0f), true);
 
     auto addAovNameLookup = [this](TfToken const& name, HdRprAovDescriptor const& descriptor) {
         auto status = m_aovNameLookup.emplace(name, AovNameLookupValue(descriptor.id, descriptor.computed));
@@ -149,6 +152,9 @@ HdRprAovRegistry::HdRprAovRegistry() {
     addAovNameLookup(HdRprAovTokens->cryptomatteObj0, m_aovDescriptors[RPR_AOV_CRYPTOMATTE_OBJ0]);
     addAovNameLookup(HdRprAovTokens->cryptomatteObj1, m_aovDescriptors[RPR_AOV_CRYPTOMATTE_OBJ1]);
     addAovNameLookup(HdRprAovTokens->cryptomatteObj2, m_aovDescriptors[RPR_AOV_CRYPTOMATTE_OBJ2]);
+    addAovNameLookup(HdRprAovTokens->materialIdMask, m_computedAovDescriptors[kMaterialIdMask]);
+    addAovNameLookup(HdRprAovTokens->objectIdMask, m_computedAovDescriptors[kObjectIdMask]);
+    addAovNameLookup(HdRprAovTokens->objectGroupIdMask, m_computedAovDescriptors[kObjectGroupIdMask]);
 }
 
 HdRprAovDescriptor const& HdRprAovRegistry::GetAovDesc(TfToken const& name) {
