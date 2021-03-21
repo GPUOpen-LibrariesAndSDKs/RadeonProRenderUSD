@@ -93,6 +93,8 @@ bool HdRprMesh::GetPrimvarData(TfToken const& name,
                         for (int i = 0; i < m_faceVertexIndices.size(); ++i) {
                             out_indices.push_back(i);
                         }
+                    } else if (primvarDescsEntry.first == HdInterpolationConstant) {
+                        out_indices = VtIntArray(m_faceVertexIndices.size(), 0);
                     }
                     return true;
                 }
