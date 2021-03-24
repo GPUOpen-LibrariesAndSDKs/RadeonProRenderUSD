@@ -168,7 +168,7 @@ protected:
 class HdRprApiComputedAov : public HdRprApiAov {
 public:
     HdRprApiComputedAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format)
-        : HdRprApiAov(aovDescriptor, format) {}
+        : HdRprApiAov(aovDescriptor, format), m_width(width), m_height(height) {}
     ~HdRprApiComputedAov() override = default;
 
     void Resize(int width, int height, HdFormat format) override final;
