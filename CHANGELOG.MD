@@ -1,5 +1,35 @@
 # Change Log
 
+## Version 2.0.27
+### New Features:
+-   Support for AMD Radeon™ RX 6700 XT graphics cards has been added.
+-   Colorized Object ID and Material ID AOVs have been added for human viewing.
+-   Support for the RPR Material Library in Houdini has been added.  Users should install the Material Library and then look for the Import Material button in the RPR Menu.
+
+### Issues Fixed:
+-   The displayColor value is now used for objects.
+-   UsdPreviewSurface displacement when a constant value is used — fixed.
+-   Smooth normals for a non-refined mesh can now be generated.
+-   Crashing when updating a material to an invisible mesh has been fixed.
+-   Crashing when Houdini’s graph is in an erroneous state while using the RPR Material Properties node has been fixed.
+-   Crashing which could occur when saving .hip files in Houdini has been fixed.
+-   Environment Lights and various overrides can now be rotated independently. 
+-   Area lights were shadowing too aggressively — fixed.
+-   Switching to contour rendering could fail on an NVidia GPU — fixed.
+-   Possible crashing when rendering AOVs in the IPR has been fixed.
+-   Textures could be too blurry due to incorrect MIP mapping, particularly textures in a plane perpendicular to the camera direction.
+-   Adaptive sampling now works with RPR 2.
+-   Spiral artifacts when rendering with both CPU and GPU have been fixed.
+-   The Opacity AOV was not taking the maximum ray depth into account — fixed.
+-   Artifacts in the Depth AOV have been fixed.
+-   Compiling the BVH geometry BVH has been improved in large scenes.
+
+### Known Issues:
+-   RPR 2.0 has some forthcoming features.  If these are needed, use the Legacy render mode:
+    - Heterogenous volumes;
+-   The first render on macOS® with RPR 2.0 can take a few minutes to start, while the kernels are being compiled.
+
+
 ## Version 2.0.13
 - Improved interactivity with Interactive Renders.
 - Some issues with texture compression present in version 3.0.1 are fixed.
