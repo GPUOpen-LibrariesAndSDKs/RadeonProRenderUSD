@@ -32,8 +32,7 @@ class HdRprMaterial;
 class HdRprBasisCurves : public HdRprBaseRprim<HdBasisCurves> {
 
 public:
-    HdRprBasisCurves(SdfPath const& id,
-                     SdfPath const& instancerId);
+    HdRprBasisCurves(SdfPath const& id HDRPR_INSTANCER_ID_ARG_DECL);
 
     ~HdRprBasisCurves() override = default;
 

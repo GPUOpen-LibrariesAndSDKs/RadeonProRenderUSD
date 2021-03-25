@@ -3,12 +3,27 @@
 #include <MaterialXFormat/Util.h> // mx::loadLibraries
 
 #include <map>
+#include <cstring>
 #include <cstdarg>
 #include <unordered_set>
 
 namespace mx = MaterialX;
 
 namespace {
+
+const float kAcescgMatrix[] = {
+    1.705079555511475, -0.6242334842681885, -0.0808461606502533,
+    -0.1297005265951157, 1.138468623161316, -0.008768022060394287,
+    -0.02416634373366833, -0.1246141716837883, 1.148780584335327
+};
+
+const mx::Vector3 kSrgbBreakPnt(0.03928571566939354, 0.03928571566939354, 0.03928571566939354);
+const mx::Vector3 kSrgbSlope(0.07738015800714493, 0.07738015800714493, 0.07738015800714493);
+const mx::Vector3 kSrgbScale(0.9478672742843628, 0.9478672742843628, 0.9478672742843628);
+const mx::Vector3 kSrgbOffset(0.05213269963860512, 0.05213269963860512, 0.05213269963860512);
+const mx::Vector3 kSrgbGamma(2.4, 2.4, 2.4);
+
+const std::string SCALE_ATTRIBUTE = "scale";
 
 //------------------------------------------------------------------------------
 // Direct mappings of standard mtlx nodes to RPR nodes
@@ -180,6 +195,12 @@ struct Mtlx2Rpr {
                 {"scale", RPR_MATERIAL_INPUT_SCALE},
             }
         };
+        nodes["heighttonormal"] = {
+            RPR_MATERIAL_NODE_BUMP_MAP, {
+                {"in", RPR_MATERIAL_INPUT_COLOR},
+                {"scale", RPR_MATERIAL_INPUT_SCALE},
+            }
+        };
         nodes["normalize"] = {
             RPR_MATERIAL_NODE_MATX_NORMALIZE, {
                 {"in", RPR_MATERIAL_INPUT_COLOR},
@@ -254,6 +275,7 @@ Mtlx2Rpr const& GetMtlx2Rpr() {
 
 struct Node;
 struct MtlxNodeGraphNode;
+struct BaseConverterNode;
 
 enum LogScope {
     LSGlobal = -1,
@@ -281,7 +303,38 @@ struct LoaderContext {
     bool ConnectToGlobalOutput(T* input, Node* node);
 
     mx::FileSearchPath searchPath;
-    std::string fileprefix;
+
+    class ValueConverter {
+    public:
+        virtual ~ValueConverter() = default;
+
+        /// Used to convert constant values
+        virtual bool Convert(float color[4], LoaderContext* context) const { return false; }
+
+        /// Used to convert color value computed in run-time
+        virtual std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const { return nullptr; }
+    };
+    std::map<std::string, std::unique_ptr<ValueConverter>> valueConvertersCache;
+    ValueConverter* GetColorSpaceConverter(std::string const& colorspace);
+
+    struct CompiledUnitType {
+        std::map<std::string, float> scales;
+        float sceneScale;
+
+        float GetScale(std::string const& unit) {
+            auto it = scales.find(unit);
+            if (it != scales.end()) {
+                return it->second;
+            }
+            return sceneScale;
+        }
+
+        float GetScale(std::string const& srcUnit, std::string const& dstUnit) {
+            return GetScale(srcUnit) / GetScale(dstUnit);
+        }
+    };
+    std::map<std::string, CompiledUnitType> compiledUnitTypes;
+    std::unique_ptr<ValueConverter> GetUnitConverter(mx::Element* input);
 
     static const int kGlobalLogDepth = -1;
     int logDepth = kGlobalLogDepth;
@@ -296,9 +349,6 @@ struct LoaderContext {
         LoaderContext* ctx;
         int previousLogDepth;
         LogScope previousLogScope;
-
-        bool isFileprefixOverridden;
-        std::string previousFileprefix;
 
         ScopeGuard(LoaderContext* ctx, LogScope logScope, mx::Element const* scopeElement);
         ~ScopeGuard();
@@ -322,9 +372,19 @@ struct Node {
     virtual ~Node() = default;
 
     /// Connect the current (upstream) node to the \p downstreamNode
-    virtual rpr_status Connect(mx::Element* outputElement, Node* downstreamNode, mx::Element* inputElement, LoaderContext* context) = 0;
-    virtual rpr_status SetInput(mx::Element* inputElement, rpr_material_node inputNode, LoaderContext* context) = 0;
-    virtual rpr_status SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) = 0;
+    virtual rpr_status Connect(std::string const& upstreamOutput, Node* downstreamNode, mx::TypedElement* downstreamElement, LoaderContext* context) = 0;
+
+    /// Set input of the current (downstream) node to the output of upstream node
+    virtual rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) = 0;
+    virtual rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) = 0;
+
+    /// Some nodes might contain rpr_material_node handles on which the whole material is built,
+    /// at the end of MaterialX processing we collect them into one linear array that is returned to the user.
+    ///
+    /// Returns number of nodes stored in the current node.
+    /// Pass nullptr to \p dst to get only the number of nodes
+    /// stored in the current node without actually moving them
+    virtual size_t MoveRprApiHandles(rpr_material_node* dst) = 0;
 
     template <typename T>
     T* AsA() {
@@ -340,15 +400,21 @@ struct RprNode : public Node {
     bool isOwningRprNode;
     rpr_material_node rprNode;
 
+    /// When input connected to this node requires conversion (colorspace, units, etc),
+    /// we create appropriate conversion node and retain it within this node
+    std::map<std::string, std::unique_ptr<BaseConverterNode>> conversionNodes;
+
     /// \p retainNode controls whether RprNode owns \p node
     RprNode(rpr_material_node node, bool retainNode);
     ~RprNode() override;
 
-    rpr_status Connect(mx::Element* outputElement, Node* downstreamNode, mx::Element* inputElement, LoaderContext* context) override;
-    rpr_status SetInput(mx::Element* inputElement, rpr_material_node inputNode, LoaderContext* context) override;
-    rpr_status SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) override;
+    rpr_status Connect(std::string const& upstreamOutput, Node* downstreamNode, mx::TypedElement* downstreamElement, LoaderContext* context) override;
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override;
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override;
 
-    rpr_status SetInput(rpr_material_node_input inputId, std::string const& valueString, std::string const& valueType, LoaderContext* context);
+    rpr_status SetInput(mx::TypedElement* downstreamElement, rpr_material_node_input downstreamRprId, mx::ValueElement* upstreamValueElement, LoaderContext* context);
+
+    size_t MoveRprApiHandles(rpr_material_node* dst) override;
 };
 
 /// The node that can be mapped (fully or partially) to MaterialX standard node
@@ -360,17 +426,21 @@ struct RprMappedNode : public RprNode {
     RprMappedNode(rpr_material_node node, Mtlx2Rpr::Node const* nodeMapping);
     ~RprMappedNode() override = default;
 
-    rpr_status SetInput(mx::Element* inputElement, rpr_material_node inputNode, LoaderContext* context) override;
-    rpr_status SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) override;
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override;
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override;
 };
 
 struct RprImageNode : public RprMappedNode {
+    mx::ValueElement* fileValueElement = nullptr;
+    bool isFileDirty = true;
+    std::string resolvedFilepath;
+
     // TODO: support frame ranges
 
     std::string type;
-    std::string file;
     std::string layer;
     mx::ValuePtr defaultValue;
+    bool disableRprImageColorspace;
 
     /// Possible values: "constant", "clamp", "periodic", "mirror"
     std::string uaddressmode;
@@ -383,25 +453,28 @@ struct RprImageNode : public RprMappedNode {
     RprImageNode(std::string const& type, LoaderContext* context);
     ~RprImageNode() override = default;
 
-    rpr_status SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) override;
+    rpr_status Connect(std::string const& upstreamOutput, Node* downstreamNode, mx::TypedElement* downstreamElement, LoaderContext* context) override;
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override;
+};
+
+struct RprUberNode : public RprMappedNode {
+    RprUberNode(LoaderContext* context);
+    ~RprUberNode() override = default;
+
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override;
 };
 
 /// The node that wraps RprNode so that the latter one can be used as a surface material.
 ///
 struct RprWrapNode : public RprNode {
     using Ptr = std::unique_ptr<RprWrapNode>;
+   
+    static bool IsOutputTypeSupported(std::string const& outputType);
 
-    struct Error : public std::exception {};
-    struct RprApiError : public Error {};
-    struct UnknownType : public Error {};
-
-    /// Wraps \p node of \p outputType type.
-    /// Throws UnknownType if \p outputType cannot be wrapped.
-    /// Throws RprApiError on critical RPR API error.
-    RprWrapNode(rpr_material_node node, std::string const& outputType, LoaderContext* ctx);
+    RprWrapNode(LoaderContext* ctx);
     ~RprWrapNode() override = default;
 
-    static bool IsOutputTypeSupported(std::string const& outputType);
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override;
 };
 
 /// The node that wraps mx::GraphElement.
@@ -432,9 +505,11 @@ struct MtlxNodeGraphNode : public Node {
 
     Node* GetSubNode(std::string const& nodename, LoaderContext* context);
 
-    rpr_status Connect(mx::Element* outputElement, Node* downstreamNode, mx::Element* inputElement, LoaderContext* context) override;
-    rpr_status SetInput(mx::Element* inputElement, rpr_material_node inputNode, LoaderContext* context) override;
-    rpr_status SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) override;
+    rpr_status Connect(std::string const& upstreamOutput, Node* downstreamNode, mx::TypedElement* downstreamElement, LoaderContext* context) override;
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override;
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override;
+
+    size_t MoveRprApiHandles(rpr_material_node* dst) override { return 0; }
 
 private:
     struct PendingConnection {
@@ -442,13 +517,13 @@ private:
         mx::OutputPtr upstreamNodeOutput;
 
         mx::NodePtr downstreamNode;
-        mx::ElementPtr downstreamInput;
+        mx::TypedElementPtr downstreamInput;
     };
     Node* _CreateSubNode(mx::NodePtr const& mtlxNode, std::vector<PendingConnection>* pendingConnections, LoaderContext* context);
 
     struct InterfaceSocket {
         mx::NodePtr subNode;
-        mx::ElementPtr input;
+        mx::TypedElementPtr input;
     };
     std::map<std::string, std::vector<InterfaceSocket>> _interfaceSockets;
 
@@ -473,13 +548,26 @@ private:
         std::vector<InterfaceSocket>* _sockets;
     };
 
-    InterfaceSocketsQuery _GetInterfaceSockets(mx::Element* inputElement);
+    InterfaceSocketsQuery _GetInterfaceSockets(mx::TypedElement* downstreamElement);
     InterfaceSocketsQuery _GetInterfaceSockets(std::string const& interfaceName);
 };
 
 //------------------------------------------------------------------------------
 // Utilities
 //------------------------------------------------------------------------------
+
+template<std::size_t N>
+bool StringStartsWith(std::string const& string, const char(&prefix)[N]) {
+    return std::strncmp(string.c_str(), prefix, N - 1) == 0;
+}
+
+mx::NodeGraphPtr GetNodeGraphImpl(mx::NodeDef* nodeDef) {
+    static std::string universal("universal");
+    if (auto impl = nodeDef->getImplementation(mx::EMPTY_STRING, universal)) {
+        return impl->asA<mx::NodeGraph>();
+    }
+    return nullptr;
+}
 
 template <typename T>
 std::shared_ptr<T> GetFirst(mx::Element const* element) {
@@ -557,8 +645,7 @@ void LoaderContext::LogError(size_t line, const char* fmt, ...) {
 LoaderContext::ScopeGuard::ScopeGuard(LoaderContext* ctx, LogScope logScope, mx::Element const* scopeElement)
     : ctx(ctx)
     , previousLogDepth(ctx->logDepth)
-    , previousLogScope(ctx->logScope)
-    , previousFileprefix(ctx->fileprefix) {
+    , previousLogScope(ctx->logScope) {
 
     ctx->logScope = logScope;
     if (logScope == LSGlobal) {
@@ -566,21 +653,11 @@ LoaderContext::ScopeGuard::ScopeGuard(LoaderContext* ctx, LogScope logScope, mx:
     } else if (logScope == LSNested) {
         ctx->logDepth++;
     }
-
-    isFileprefixOverridden = false;
-    if (scopeElement->hasFilePrefix()) {
-        isFileprefixOverridden = true;
-        previousFileprefix = std::move(ctx->fileprefix);
-        ctx->fileprefix = scopeElement->getFilePrefix();
-    }
 }
 
 LoaderContext::ScopeGuard::~ScopeGuard() {
     ctx->logScope = previousLogScope;
     ctx->logDepth = previousLogDepth;
-    if (isFileprefixOverridden) {
-        ctx->fileprefix = previousFileprefix;
-    }
 }
 
 LoaderContext::ScopeGuard LoaderContext::EnterScope(LogScope logScope, mx::Element const* scopeElement) {
@@ -588,14 +665,6 @@ LoaderContext::ScopeGuard LoaderContext::EnterScope(LogScope logScope, mx::Eleme
 }
 
 std::string LoaderContext::ResolveFile(std::string const& filename) {
-    if (fileprefix.empty()) {
-        return FindFile(filename);
-    } else {
-        return FindFile(fileprefix + filename);
-    }
-}
-
-std::string LoaderContext::FindFile(std::string const& filename) {
     mx::FilePath filepath = searchPath.find(filename);
     if (filepath.isEmpty()) {
         return std::string();
@@ -644,7 +713,7 @@ bool LoaderContext::ConnectToGlobalOutput(T* input, Node* node) {
                 if (auto freeStandingNodeGraphNode = GetFreeStandingNodeGraph(nodeGraph)) {
                     Log("Bindinput %s: %s:%s (nodegraph)\n", input->getName().c_str(), nodeGraphName.c_str(), outputName.c_str());
 
-                    return freeStandingNodeGraphNode->Connect(nodeGraphOutput.get(), node, input, this) == RPR_SUCCESS;
+                    return freeStandingNodeGraphNode->Connect(nodeGraphOutput->getName(), node, input, this) == RPR_SUCCESS;
                 }
             }
         }
@@ -660,7 +729,7 @@ bool LoaderContext::ConnectToGlobalOutput(T* input, Node* node) {
                         if (auto globalNode = GetGlobalNode(mtlxGlobalNode.get())) {
                             Log("Bindinput %s: %s (output)\n", input->getName().c_str(), outputName.c_str());
 
-                            return globalNode->Connect(mtlxGlobalNodeOutput.get(), node, input, this) == RPR_SUCCESS;
+                            return globalNode->Connect(mtlxGlobalNodeOutput->getName(), node, input, this) == RPR_SUCCESS;
                         }
                     }
                 }
@@ -733,6 +802,346 @@ Node* LoaderContext::GetGeomNode(mx::GeomPropDef* geomPropDef) {
     return nullptr;
 }
 
+struct BaseConverterNode {
+    virtual ~BaseConverterNode() = default;
+
+    virtual rpr_status SetInput(rpr_material_node inputNode, LoaderContext* context) = 0;
+    virtual rpr_material_node GetOutput() = 0;
+
+    virtual size_t MoveRprApiHandles(rpr_material_node* dst) = 0;
+};
+
+LoaderContext::ValueConverter* LoaderContext::GetColorSpaceConverter(std::string const& colorspace) {
+    if (colorspace.empty() ||
+        colorspace == "none") {
+        return nullptr;
+    }
+
+    auto it = valueConvertersCache.find(colorspace);
+    if (it != valueConvertersCache.end()) {
+        return it->second.get();
+    }
+
+    std::unique_ptr<ValueConverter> converter;
+    if (StringStartsWith(colorspace, "gamma")) {
+        std::string gammaStr = colorspace.substr(sizeof("gamma") - 1);
+        float gamma = std::stof(gammaStr) * 0.1f;
+
+        /// Applies gamma decoding - pow(color, gamma)
+        struct GammaConverter : public ValueConverter {
+            float gamma;
+
+            GammaConverter(float gamma) : gamma(gamma) {}
+            ~GammaConverter() override = default;
+
+            bool Convert(float color[3], LoaderContext* context) const override {
+                for (int i = 0; i < 3; ++i) {
+                    float value = std::max(color[i], 0.0f);
+                    color[i] = std::pow(value, gamma);
+                }
+                return true;
+            }
+
+            std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const override {
+                struct GammaConversioNode : public BaseConverterNode {
+                    rpr_material_node powNode;
+
+                    GammaConversioNode(float gamma, LoaderContext* context) {
+                        rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_ARITHMETIC, &powNode);
+                        rprMaterialNodeSetInputUByKey(powNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_POW);
+                        rprMaterialNodeSetInputFByKey(powNode, RPR_MATERIAL_INPUT_COLOR1, gamma, gamma, gamma, 1.0f);
+                    }
+
+                    ~GammaConversioNode() override {
+                        if (powNode) {
+                            rprObjectDelete(powNode);
+                        }
+                    }
+
+                    rpr_status SetInput(rpr_material_node inputNode, LoaderContext* context) override {
+                        return rprMaterialNodeSetInputNByKey(powNode, RPR_MATERIAL_INPUT_COLOR0, inputNode);
+                    }
+
+                    rpr_material_node GetOutput() override {
+                        return powNode;
+                    }
+
+                    size_t MoveRprApiHandles(rpr_material_node* dst) override {
+                        if (powNode) {
+                            if (dst) {
+                                *dst = powNode;
+                                powNode = nullptr;
+                            }
+                            return 1;
+                        }
+
+                        return 0;
+                    }
+                };
+
+                return std::make_unique<GammaConversioNode>(gamma, context);
+            }
+        };
+        converter = std::make_unique<GammaConverter>(gamma);
+    } else if (colorspace == "acescg") {
+        /// Multiplies input color on kAcescgMatrix
+        struct AcescgConverter : public ValueConverter {
+            ~AcescgConverter() override = default;
+
+            bool Convert(float color[3], LoaderContext* context) const override {
+                float out[3];
+                for (int col = 0; col < 3; ++col) {
+                    out[col] = 0.0f;
+                    for (int i = 0; i < 3; ++i) {
+                        out[col] += color[i] * kAcescgMatrix[col * 3 + i];
+                    }
+                }
+                for (int i = 0; i < 3; ++i) {
+                    color[i] = out[i];
+                }
+                return true;
+            }
+
+            std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const override {
+                struct AcescgConversioNode : public BaseConverterNode {
+                    rpr_material_node matMulNode;
+
+                    AcescgConversioNode(LoaderContext* context) {
+                        rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_ARITHMETIC, &matMulNode);
+                        rprMaterialNodeSetInputUByKey(matMulNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MAT_MUL);
+                        rprMaterialNodeSetInputFByKey(matMulNode, RPR_MATERIAL_INPUT_COLOR0, kAcescgMatrix[0], kAcescgMatrix[1], kAcescgMatrix[2], 0.0f);
+                        rprMaterialNodeSetInputFByKey(matMulNode, RPR_MATERIAL_INPUT_COLOR1, kAcescgMatrix[3], kAcescgMatrix[4], kAcescgMatrix[5], 0.0f);
+                        rprMaterialNodeSetInputFByKey(matMulNode, RPR_MATERIAL_INPUT_COLOR2, kAcescgMatrix[6], kAcescgMatrix[7], kAcescgMatrix[8], 0.0f);
+                    }
+
+                    ~AcescgConversioNode() override {
+                        if (matMulNode) {
+                            rprObjectDelete(matMulNode);
+                        }
+                    }
+
+                    rpr_status SetInput(rpr_material_node inputNode, LoaderContext* context) override {
+                        return rprMaterialNodeSetInputNByKey(matMulNode, RPR_MATERIAL_INPUT_COLOR3, inputNode);
+                    }
+
+                    rpr_material_node GetOutput() override {
+                        return matMulNode;
+                    }
+
+                    size_t MoveRprApiHandles(rpr_material_node* dst) override {
+                        if (matMulNode) {
+                            if (dst) {
+                                *dst = matMulNode;
+                                matMulNode = nullptr;
+                            }
+                            return 1;
+                        }
+
+                        return 0;
+                    }
+                };
+
+                return std::make_unique<AcescgConversioNode>(context);
+            }
+        };
+        converter = std::make_unique<AcescgConverter>();
+    } else if (colorspace == "srgb_texture") {
+        /// Applies sRGB to Linear conversion
+        struct SrgbConverter : public ValueConverter {
+            ~SrgbConverter() override = default;
+
+            bool Convert(float color[3], LoaderContext* context) const override {
+                for (int i = 0; i < 3; i++) {
+                    if (color[i] > kSrgbBreakPnt[i]) {
+                        color[i] = std::pow(std::max(0.0f, kSrgbScale[i] * color[i] + kSrgbOffset[i]), kSrgbGamma[i]);
+                    } else {
+                        color[i] = color[i] * kSrgbSlope[i];
+                    }
+                }
+                return true;
+            }
+
+            std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const override {
+                struct SrgbConversionNode : public BaseConverterNode {
+                    enum NodeTypes {
+                        kIsAboveBreak,
+                        kLinSeg,
+                        kMax,
+                        kScale,
+                        kOffset,
+                        kPowSeg,
+                        kOut,
+                        kTotalNodes
+                    };
+                    rpr_material_node nodes[kTotalNodes];
+
+                    SrgbConversionNode(LoaderContext* context) {
+                        auto createArithmeticNode = [context](rpr_material_node_arithmetic_operation op) {
+                            rpr_material_node node;
+                            rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_ARITHMETIC, &node);
+                            rprMaterialNodeSetInputUByKey(node, RPR_MATERIAL_INPUT_OP, op);
+                            return node;
+                        };
+
+                        nodes[kLinSeg] = createArithmeticNode(RPR_MATERIAL_NODE_OP_MUL);
+                        // set RPR_MATERIAL_INPUT_COLOR0 to the input color
+                        rprMaterialNodeSetInputFByKey(nodes[kLinSeg], RPR_MATERIAL_INPUT_COLOR1, kSrgbSlope[0], kSrgbSlope[1], kSrgbSlope[2], 0.0f);
+
+                        nodes[kScale] = createArithmeticNode(RPR_MATERIAL_NODE_OP_MUL);
+                        // set RPR_MATERIAL_INPUT_COLOR0 to the input color
+                        rprMaterialNodeSetInputFByKey(nodes[kScale], RPR_MATERIAL_INPUT_COLOR1, kSrgbScale[0], kSrgbScale[1], kSrgbScale[2], 0.0f);
+
+                        nodes[kOffset] = createArithmeticNode(RPR_MATERIAL_NODE_OP_ADD);
+                        rprMaterialNodeSetInputNByKey(nodes[kOffset], RPR_MATERIAL_INPUT_COLOR0, nodes[kScale]);
+                        rprMaterialNodeSetInputFByKey(nodes[kOffset], RPR_MATERIAL_INPUT_COLOR1, kSrgbOffset[0], kSrgbOffset[1], kSrgbOffset[2], 0.0f);
+
+                        nodes[kMax] = createArithmeticNode(RPR_MATERIAL_NODE_OP_MAX);
+                        rprMaterialNodeSetInputNByKey(nodes[kMax], RPR_MATERIAL_INPUT_COLOR0, nodes[kOffset]);
+                        rprMaterialNodeSetInputFByKey(nodes[kMax], RPR_MATERIAL_INPUT_COLOR1, 0.0f, 0.0f, 0.0f, 0.0f);
+
+                        nodes[kPowSeg] = createArithmeticNode(RPR_MATERIAL_NODE_OP_POW);
+                        rprMaterialNodeSetInputNByKey(nodes[kPowSeg], RPR_MATERIAL_INPUT_COLOR0, nodes[kMax]);
+                        rprMaterialNodeSetInputFByKey(nodes[kPowSeg], RPR_MATERIAL_INPUT_COLOR1, kSrgbGamma[0], kSrgbGamma[1], kSrgbGamma[2], 1.0f);
+
+                        nodes[kIsAboveBreak] = createArithmeticNode(RPR_MATERIAL_NODE_OP_GREATER);
+                        // set RPR_MATERIAL_INPUT_COLOR0 to the input color
+                        rprMaterialNodeSetInputFByKey(nodes[kIsAboveBreak], RPR_MATERIAL_INPUT_COLOR1, kSrgbBreakPnt[0], kSrgbBreakPnt[1], kSrgbBreakPnt[2], 1.0f);
+
+                        rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_BLEND_VALUE, &nodes[kOut]);
+                        rprMaterialNodeSetInputNByKey(nodes[kOut], RPR_MATERIAL_INPUT_COLOR0, nodes[kPowSeg]);
+                        rprMaterialNodeSetInputNByKey(nodes[kOut], RPR_MATERIAL_INPUT_COLOR1, nodes[kLinSeg]);
+                        rprMaterialNodeSetInputNByKey(nodes[kOut], RPR_MATERIAL_INPUT_WEIGHT, nodes[kIsAboveBreak]);
+                    }
+
+                    rpr_status SetInput(rpr_material_node inputNode, LoaderContext* context) override {
+                        rpr_status status;
+                        if ((status = rprMaterialNodeSetInputNByKey(nodes[kLinSeg], RPR_MATERIAL_INPUT_COLOR0, inputNode)) != RPR_SUCCESS ||
+                            (status = rprMaterialNodeSetInputNByKey(nodes[kScale], RPR_MATERIAL_INPUT_COLOR0, inputNode)) != RPR_SUCCESS ||
+                            (status = rprMaterialNodeSetInputNByKey(nodes[kIsAboveBreak], RPR_MATERIAL_INPUT_COLOR0, inputNode)) != RPR_SUCCESS) {
+                            return status;
+                        }
+
+                        return RPR_SUCCESS;
+                    }
+
+                    rpr_material_node GetOutput() override {
+                        return nodes[kOut];
+                    }
+
+                    size_t MoveRprApiHandles(rpr_material_node* dst) override {
+                        if (dst) {
+                            std::memcpy(dst, nodes, sizeof(nodes));
+                            std::memset(nodes, 0, sizeof(nodes));
+                        }
+                        return kTotalNodes;
+                    }
+                };
+
+                return std::make_unique<SrgbConversionNode>(context);
+            }
+        };
+        converter = std::make_unique<SrgbConverter>();
+    } else if (colorspace == "lin_rec709") {
+        // no-op?
+    } else {
+        LOG_ERROR(this, "Unknown colorspace");
+    }
+
+    if (!converter) {
+        return nullptr;
+    }
+
+    it = valueConvertersCache.emplace(colorspace, std::move(converter)).first;
+    return it->second.get();
+}
+
+std::unique_ptr<LoaderContext::ValueConverter> LoaderContext::GetUnitConverter(mx::Element* inputElement) {
+    if (!inputElement) {
+        return {};
+    }
+
+    auto input = inputElement->asA<mx::ValueElement>();
+    if (!input) {
+        return {};
+    }
+
+    auto& srcUnitSpace = input->getUnit();
+    if (srcUnitSpace.empty()) {
+        return {};
+    }
+
+    auto& unitType = input->getUnitType();
+
+    auto it = compiledUnitTypes.find(unitType);
+    if (it == compiledUnitTypes.end()) {
+        LOG_ERROR(this, "Unknown unitType: %s", unitType.c_str());
+        return {};
+    }
+
+    auto& dstUnitSpace = input->getActiveUnit();
+
+    float scale = it->second.GetScale(srcUnitSpace, dstUnitSpace);
+    if (std::abs(scale - 1.0f) < 1e-6f) {
+        // no-op
+        return {};
+    }
+
+    struct ScaleConverter : public ValueConverter {
+        float scale;
+
+        ScaleConverter(float scale) : scale(scale) {}
+        ~ScaleConverter() override = default;
+
+        bool Convert(float color[4], LoaderContext* context) const override {
+            for (int i = 0; i < 4; ++i) {
+                color[i] *= scale;
+            }
+            return true;
+        }
+
+        std::unique_ptr<BaseConverterNode> GetConversionNode(LoaderContext* context) const override {
+            struct ScaleConversioNode : public BaseConverterNode {
+                rpr_material_node mulNode;
+
+                ScaleConversioNode(float scale, LoaderContext* context) {
+                    rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_ARITHMETIC, &mulNode);
+                    rprMaterialNodeSetInputUByKey(mulNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
+                    rprMaterialNodeSetInputFByKey(mulNode, RPR_MATERIAL_INPUT_COLOR0, scale, scale, scale, scale);
+                }
+
+                ~ScaleConversioNode() override {
+                    if (mulNode) {
+                        rprObjectDelete(mulNode);
+                    }
+                }
+
+                rpr_status SetInput(rpr_material_node inputNode, LoaderContext* context) override {
+                    return rprMaterialNodeSetInputNByKey(mulNode, RPR_MATERIAL_INPUT_COLOR1, inputNode);
+                }
+
+                rpr_material_node GetOutput() override {
+                    return mulNode;
+                }
+
+                size_t MoveRprApiHandles(rpr_material_node* dst) override {
+                    if (mulNode) {
+                        if (dst) {
+                            *dst = mulNode;
+                            mulNode = nullptr;
+                        }
+                        return 1;
+                    }
+
+                    return 0;
+                }
+            };
+
+            return std::make_unique<ScaleConversioNode>(scale, context);
+        }
+    };
+    return std::make_unique<ScaleConverter>(scale);
+}
+
 //------------------------------------------------------------------------------
 // Node implementation
 //------------------------------------------------------------------------------
@@ -753,12 +1162,12 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
         struct SurfaceNode : public RprNode {
             SurfaceNode() : RprNode(nullptr, false) {}
 
-            rpr_status SetInput(mx::Element* inputElement, rpr_material_node inputNode, LoaderContext* context) override {
-                if (inputElement->getName() == "bsdf") {
-                    rprNode = inputNode;
+            rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override {
+                if (downstreamElement->getName() == "bsdf") {
+                    rprNode = upstreamRprNode;
                     return RPR_SUCCESS;
                 } else {
-                    context->Log("Unsupported surface input: %s\n", inputElement->getName().c_str());
+                    context->Log("Unsupported surface input: %s\n", downstreamElement->getName().c_str());
                     return RPR_ERROR_UNSUPPORTED;
                 }
             }
@@ -771,19 +1180,19 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
         struct DisplacementNode : public RprNode {
             DisplacementNode() : RprNode(nullptr, false) {}
 
-            rpr_status SetInput(mx::Element* inputElement, rpr_material_node inputNode, LoaderContext* context) override {
-                if (inputElement->getName() == "displacement") {
-                    rprNode = inputNode;
+            rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override {
+                if (downstreamElement->getName() == "displacement") {
+                    rprNode = upstreamRprNode;
                     isOwningRprNode = false;
                     return RPR_SUCCESS;
                 } else {
-                    context->Log("Unsupported displacement input: %s\n", inputElement->getName().c_str());
+                    context->Log("Unsupported displacement input: %s\n", downstreamElement->getName().c_str());
                     return RPR_ERROR_UNSUPPORTED;
                 }
             }
 
-            rpr_status SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) override {
-                if (inputElement->getName() == "displacement") {
+            rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override {
+                if (downstreamElement->getName() == "displacement") {
                     if (rprNode && isOwningRprNode) {
                         rprObjectDelete(rprNode);
                     }
@@ -791,7 +1200,7 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
                     rprNode = nullptr;
                     auto status = rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_CONSTANT_TEXTURE, &rprNode);
                     if (status == RPR_SUCCESS) {
-                        status = RprNode::SetInput(RPR_MATERIAL_INPUT_VALUE, value, valueType, context);
+                        status = RprNode::SetInput(downstreamElement, RPR_MATERIAL_INPUT_VALUE, upstreamValueElement, context);
                         if (status == RPR_SUCCESS) {
                             isOwningRprNode = true;
                         } else {
@@ -801,7 +1210,7 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
                     }
                     return status;
                 } else {
-                    context->Log("Unsupported displacement input: %s\n", inputElement->getName().c_str());
+                    context->Log("Unsupported displacement input: %s\n", downstreamElement->getName().c_str());
                     return RPR_ERROR_UNSUPPORTED;
                 }
             }
@@ -826,6 +1235,8 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
         rprNodeMapping = &s_sqrtMapping;
     } else if (mtlxNode->getCategory() == "image") {
         return std::make_unique<RprImageNode>(mtlxNode->getType(), context);
+    } else if (mtlxNode->getCategory() == "rpr_uberv2") {
+        return std::make_unique<RprUberNode>(context);
     } else if (mtlxNode->getCategory() == "swizzle") {
         // TODO: implement healthy man swizzle
 
@@ -882,13 +1293,11 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
                 // this node might be of a custom definition
                 //
                 if (auto nodeDef = mtlxNode->getNodeDef()) {
-                    if (auto implementation = nodeDef->getImplementation()) {
-                        if (auto nodeGraph = implementation->asA<mx::NodeGraph>()) {
-                            try {
-                                return std::make_unique<MtlxNodeGraphNode>(std::move(nodeGraph), context);
-                            } catch (MtlxNodeGraphNode::NoOutputsError& e) {
-                                // no-op
-                            }
+                    if (auto nodeGraph = GetNodeGraphImpl(nodeDef.get())) {
+                        try {
+                            return std::make_unique<MtlxNodeGraphNode>(std::move(nodeGraph), context);
+                        } catch (MtlxNodeGraphNode::NoOutputsError& e) {
+                            // no-op
                         }
                     }
                 }
@@ -941,28 +1350,13 @@ bool RprWrapNode::IsOutputTypeSupported(std::string const& outputType) {
            outputType == "boolean" || outputType == "float";
 }
 
-RprWrapNode::RprWrapNode(rpr_material_node nodeToWrap, std::string const& outputType, LoaderContext* ctx)
+RprWrapNode::RprWrapNode(LoaderContext* ctx)
     : RprNode(nullptr, true) {
-    auto& wrapRprNode = rprNode;
+    rprMaterialSystemCreateNode(ctx->rprMatSys, RPR_MATERIAL_NODE_PASSTHROUGH, &rprNode);
+}
 
-    auto status = rprMaterialSystemCreateNode(ctx->rprMatSys, RPR_MATERIAL_NODE_PASSTHROUGH, &wrapRprNode);
-    if (!wrapRprNode) {
-        LOG_ERROR(ctx, "Failed to create RPR_MATERIAL_NODE_PASSTHROUGH node: %d\n", status);
-        throw RprApiError();
-    }
-
-    if (outputType == "color3" || outputType == "color2" ||
-        outputType == "vector3" || outputType == "vector2" || outputType == "boolean" || // Should we apply here any conversions?
-        outputType == "float") { // XXX: how to create rrr float3 from 1 float? Right now, it works okay because of how RprNode::SetInput implemented
-        status = rprMaterialNodeSetInputNByKey(wrapRprNode, RPR_MATERIAL_INPUT_COLOR, nodeToWrap);
-        if (status != RPR_SUCCESS) {
-            LOG_ERROR(ctx, "Failed to create set RPR_MATERIAL_NODE_PASSTHROUGH node color input: %d\n", status);
-            throw RprApiError();
-        }
-    } else {
-        LOG_ERROR(ctx, "Failed to wrap node: unknown type - %s\n", outputType.c_str());
-        throw UnknownType();
-    }
+rpr_status RprWrapNode::SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) {
+    return rprMaterialNodeSetInputNByKey(rprNode, RPR_MATERIAL_INPUT_COLOR, upstreamRprNode);
 }
 
 //------------------------------------------------------------------------------
@@ -1035,7 +1429,8 @@ Node* MtlxNodeGraphNode::GetSubNode(std::string const& nodename, LoaderContext* 
         Node* upstreamNode = _CreateSubNode(connection.upstreamNode, &pendingConnections, context);
 
         if (downstreamNode && upstreamNode) {
-            auto status = upstreamNode->Connect(connection.upstreamNodeOutput.get(), downstreamNode, connection.downstreamInput.get(), context);
+            auto& outputName = connection.upstreamNodeOutput ? connection.upstreamNodeOutput->getName() : mx::EMPTY_STRING;
+            auto status = upstreamNode->Connect(outputName, downstreamNode, connection.downstreamInput.get(), context);
 
             if (status == RPR_SUCCESS) {
                 context->Log("Connected %s to %s\n", connection.upstreamNode->getName().c_str(), connection.downstreamNode->getName().c_str());
@@ -1155,14 +1550,14 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
                 //
                 auto upstreamNodeIt = subNodes.find(mtlxUpstreamNode->getName());
                 if (upstreamNodeIt != subNodes.end()) {
-                    status = upstreamNodeIt->second->Connect(mtlxUpstreamNodeOutput.get(), node, inputElement.get(), context);
+                    status = upstreamNodeIt->second->Connect(mtlxUpstreamNodeOutput->getName(), node, inputElement.get(), context);
                 } else {
                     // Otherwise, postpone the connection process until the upstream node is created
                     //
                     pendingConnections->emplace_back();
                     auto& pendingConnection = pendingConnections->back();
                     pendingConnection.downstreamNode = mtlxNode;
-                    pendingConnection.downstreamInput = std::move(inputElement);
+                    pendingConnection.downstreamInput = std::move(input);
                     pendingConnection.upstreamNode = std::move(mtlxUpstreamNode);
                     pendingConnection.upstreamNodeOutput = std::move(mtlxUpstreamNodeOutput);
                 }
@@ -1184,7 +1579,7 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
             if (!defaultGeomProp.empty()) {
                 if (auto geomPropDef = context->mtlxDocument->getGeomPropDef(defaultGeomProp)) {
                     if (auto geomNode = context->GetGeomNode(geomPropDef.get())) {
-                        status = geomNode->Connect(nullptr, node, inputElement.get(), context);
+                        status = geomNode->Connect(mx::EMPTY_STRING, node, inputElement.get(), context);
                     }
                 } else {
                     LOG_ERROR(context, "Unkown defaultgeomprop: %s\n", defaultGeomProp.c_str());
@@ -1200,7 +1595,7 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
         if (!valueStr.empty()) {
             context->Log("%s\n", valueStr.c_str());
 
-            status = node->SetInput(inputElement.get(), valueStr, valueElement->getType(), context);
+            status = node->SetInput(inputElement.get(), valueElement.get(), context);
             if (status == RPR_SUCCESS) {
                 continue;
             }
@@ -1210,10 +1605,10 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
     return node;
 }
 
-rpr_status MtlxNodeGraphNode::Connect(mx::Element* outputElement, Node* downstreamNode, mx::Element* inputElement, LoaderContext* context) {
+rpr_status MtlxNodeGraphNode::Connect(std::string const& upstreamOutput, Node* downstreamNode, mx::TypedElement* downstreamElement, LoaderContext* context) {
     mx::OutputPtr output;
-    if (outputElement) {
-        output = mtlxGraph->getOutput(outputElement->getName());
+    if (!upstreamOutput.empty()) {
+        output = mtlxGraph->getOutput(upstreamOutput);
     } else {
         output = GetFirst<mx::Output>(mtlxGraph.get());
     }
@@ -1221,14 +1616,14 @@ rpr_status MtlxNodeGraphNode::Connect(mx::Element* outputElement, Node* downstre
     if (output && !output->getNodeName().empty()) {
         auto nodeIt = subNodes.find(output->getNodeName());
         if (nodeIt != subNodes.end()) {
-            return nodeIt->second->Connect(nullptr, downstreamNode, inputElement, context);
+            return nodeIt->second->Connect(output->getOutputString(), downstreamNode, downstreamElement, context);
         }
     }
 
     return RPR_ERROR_INVALID_PARAMETER;
 }
 
-MtlxNodeGraphNode::InterfaceSocketsQuery MtlxNodeGraphNode::_GetInterfaceSockets(mx::Element* inputElement) {
+MtlxNodeGraphNode::InterfaceSocketsQuery MtlxNodeGraphNode::_GetInterfaceSockets(mx::TypedElement* inputElement) {
     if (auto valueElement = inputElement->asA<mx::ValueElement>()) {
         auto& interfaceName = valueElement->getInterfaceName();
         if (!interfaceName.empty()) {
@@ -1249,12 +1644,12 @@ MtlxNodeGraphNode::InterfaceSocketsQuery MtlxNodeGraphNode::_GetInterfaceSockets
     return {this, &it->second};
 }
 
-rpr_status MtlxNodeGraphNode::SetInput(mx::Element* inputElement, rpr_material_node inputNode, LoaderContext* context) {
-    if (auto sockets = _GetInterfaceSockets(inputElement)) {
+rpr_status MtlxNodeGraphNode::SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) {
+    if (auto sockets = _GetInterfaceSockets(downstreamElement)) {
         rpr_status status = RPR_SUCCESS;
         sockets.ForEach(context,
-            [&](Node* socketNode, mx::Element* socketInputElement) {
-                auto setInputStatus = socketNode->SetInput(socketInputElement, inputNode, context);
+            [&](Node* socketNode, mx::TypedElement* socketDownstreamElement) {
+                auto setInputStatus = socketNode->SetInput(socketDownstreamElement, upstreamElement, upstreamRprNode, context);
                 if (setInputStatus != RPR_SUCCESS) {
                     status = setInputStatus;
                 }
@@ -1263,16 +1658,16 @@ rpr_status MtlxNodeGraphNode::SetInput(mx::Element* inputElement, rpr_material_n
         return status;
     }
 
-    LOG_ERROR(context, "failed to set %s input for %s: no such interface socket\n", inputElement->getName().c_str(), mtlxGraph->getName().c_str());
+    LOG_ERROR(context, "failed to set %s input for %s: no such interface socket\n", downstreamElement->getName().c_str(), mtlxGraph->getName().c_str());
     return RPR_ERROR_INVALID_PARAMETER;
 }
 
-rpr_status MtlxNodeGraphNode::SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) {
-    if (auto sockets = _GetInterfaceSockets(inputElement)) {
+rpr_status MtlxNodeGraphNode::SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) {
+    if (auto sockets = _GetInterfaceSockets(downstreamElement)) {
         rpr_status status = RPR_SUCCESS;
         sockets.ForEach(context,
-            [&](Node* socketNode, mx::Element* socketInputElement) {
-                auto setInputStatus = socketNode->SetInput(socketInputElement, value, valueType, context);
+            [&](Node* socketNode, mx::TypedElement* socketDownstreamElement) {
+                auto setInputStatus = socketNode->SetInput(socketDownstreamElement, upstreamValueElement, context);
                 if (setInputStatus != RPR_SUCCESS) {
                     status = setInputStatus;
                 }
@@ -1281,7 +1676,7 @@ rpr_status MtlxNodeGraphNode::SetInput(mx::Element* inputElement, std::string co
         return status;
     }
 
-    LOG_ERROR(context, "failed to set %s input for %s: no such interface socket\n", inputElement->getName().c_str(), mtlxGraph->getName().c_str());
+    LOG_ERROR(context, "failed to set %s input for %s: no such interface socket\n", downstreamElement->getName().c_str(), mtlxGraph->getName().c_str());
     return RPR_ERROR_INVALID_PARAMETER;
 }
 
@@ -1300,43 +1695,84 @@ RprNode::~RprNode() {
     }
 }
 
-rpr_status RprNode::Connect(mx::Element* outputElement, Node* downstreamNode, mx::Element* inputElement, LoaderContext* context) {
-    // Ignoring outputElement because rprNode is the only possible output
+rpr_status RprNode::Connect(std::string const& upstreamOutput, Node* downstreamNode, mx::TypedElement* downstreamElement, LoaderContext* context) {
+    // Ignoring upstreamOutput because rprNode is the only possible output
     //
-    return downstreamNode->SetInput(inputElement, rprNode, context);
+    return downstreamNode->SetInput(downstreamElement, nullptr, rprNode, context);
 }
 
-rpr_status RprNode::SetInput(mx::Element* inputElement, rpr_material_node inputNode, LoaderContext* context) {
+rpr_status RprNode::SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) {
     return RPR_ERROR_UNSUPPORTED;
 }
 
-rpr_status RprNode::SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) {
+rpr_status RprNode::SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) {
     return RPR_ERROR_UNSUPPORTED;
 }
 
-rpr_status RprNode::SetInput(rpr_material_node_input inputId, std::string const& valueString, std::string const& valueType, LoaderContext* context) {
+bool GetInputF(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamElement, std::string const& valueString, std::string const& valueType, LoaderContext* context, float dst[4]) {
+    if (valueType == "float") {
+        auto value = mx::fromValueString<float>(valueString);
+        dst[0] = dst[1] = dst[2] = value;
+        dst[3] = 0.0f;
+    } else if (
+        valueType == "vector2" ||
+        valueType == "color2") {
+        auto value = mx::fromValueString<mx::Color2>(valueString);
+        dst[0] = value[0];
+        dst[1] = value[1];
+        dst[2] = dst[3] = 0.0f;
+    } else if (
+        valueType == "vector3" ||
+        valueType == "color3") {
+        auto value = mx::fromValueString<mx::Color3>(valueString);
+        dst[0] = value[0];
+        dst[1] = value[1];
+        dst[2] = value[2];
+        dst[3] = 0.0f;
+    } else if (
+        valueType == "vector4" ||
+        valueType == "color4") {
+        auto value = mx::fromValueString<mx::Color4>(valueString);
+        dst[0] = value[0];
+        dst[1] = value[1];
+        dst[2] = value[2];
+        dst[3] = value[3];
+    } else {
+        return false;
+    }
+
+    if (StringStartsWith(valueType, "color")) {
+        auto& colorspace = upstreamElement ? upstreamElement->getActiveColorSpace() : downstreamElement->getActiveColorSpace();
+        if (auto colorspaceConverter = context->GetColorSpaceConverter(colorspace)) {
+            colorspaceConverter->Convert(dst, context);
+            return true;
+        }
+    } else if (StringStartsWith(valueType, "vector") || valueType == "float") {
+        if (auto unitConverter = context->GetUnitConverter(upstreamElement)) {
+            unitConverter->Convert(dst, context);
+            return true;
+        }
+    }
+
+    return true;
+}
+
+rpr_status RprNode::SetInput(mx::TypedElement* downstreamElement, rpr_material_node_input downstreamRprId, mx::ValueElement* upstreamValueElement, LoaderContext* context) {
+    auto& valueString = upstreamValueElement->getValueString();
+    auto& valueType = upstreamValueElement->getType();
+
     try {
-        if (valueType == "float") {
-            auto value = mx::fromValueString<float>(valueString);
-            return rprMaterialNodeSetInputFByKey(rprNode, inputId, value, value, value, 0.0f);
-        } else if (
-            valueType == "color2" ||
-            valueType == "vector2") {
-            auto value = mx::fromValueString<mx::Color2>(valueString);
-            return rprMaterialNodeSetInputFByKey(rprNode, inputId, value[0], value[1], 0.0f, 0.0f);
-        } else if (
-            valueType == "color3" ||
-            valueType == "vector3") {
-            auto value = mx::fromValueString<mx::Color3>(valueString);
-            return rprMaterialNodeSetInputFByKey(rprNode, inputId, value[0], value[1], value[2], 0.0f);
+        float color[4];
+        if (GetInputF(downstreamElement, upstreamValueElement, valueString, valueType, context, color)) {
+            return rprMaterialNodeSetInputFByKey(rprNode, downstreamRprId, color[0], color[1], color[2], color[3]);
         } else if (
             valueType == "boolean") {
             auto value = static_cast<float>(mx::fromValueString<bool>(valueString));
-            return rprMaterialNodeSetInputFByKey(rprNode, inputId, value, value, value, 0.0f);
+            return rprMaterialNodeSetInputFByKey(rprNode, downstreamRprId, value, value, value, 0.0f);
         } else if (
             valueType == "integer") {
             auto value = static_cast<float>(mx::fromValueString<int>(valueString));
-            return rprMaterialNodeSetInputFByKey(rprNode, inputId, value, value, value, 0.0f);
+            return rprMaterialNodeSetInputFByKey(rprNode, downstreamRprId, value, value, value, 0.0f);
         } else {
             LOG_ERROR(context, "failed to parse %s value: unsupported type - %s\n", valueString.c_str(), valueType.c_str());
         }
@@ -1347,29 +1783,69 @@ rpr_status RprNode::SetInput(rpr_material_node_input inputId, std::string const&
     return RPR_ERROR_INVALID_PARAMETER;
 }
 
+size_t RprNode::MoveRprApiHandles(rpr_material_node* dst) {
+    size_t i = 0;
+
+    // Move only unique nodes
+    //
+    if (rprNode && isOwningRprNode) {
+        if (dst) {
+            dst[i] = rprNode;
+            rprNode = nullptr;
+        }
+        i++;
+    }
+
+    for (auto& entry : conversionNodes) {
+        i += entry.second->MoveRprApiHandles(dst ? &dst[i] : nullptr);
+    }
+    return i;
+}
+
 RprMappedNode::RprMappedNode(rpr_material_node node, Mtlx2Rpr::Node const* nodeMapping)
     : RprNode(node, true), rprNodeMapping(nodeMapping) {
 
 }
 
-rpr_status RprMappedNode::SetInput(mx::Element* inputElement, rpr_material_node inputNode, LoaderContext* context) {
-    auto inputIt = rprNodeMapping->inputs.find(inputElement->getName());
+rpr_status RprMappedNode::SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) {
+    auto inputIt = rprNodeMapping->inputs.find(downstreamElement->getName());
     if (inputIt == rprNodeMapping->inputs.end()) {
-        LOG_ERROR(context, "unknown input: %s\n", inputElement->getName().c_str());
+        LOG_ERROR(context, "unknown input: %s\n", downstreamElement->getName().c_str());
         return RPR_ERROR_INVALID_PARAMETER;
     }
 
-    return rprMaterialNodeSetInputNByKey(rprNode, inputIt->second, inputNode);
+    std::unique_ptr<BaseConverterNode> inputConversionNode;
+
+    auto& type = downstreamElement->getType();
+    if (StringStartsWith(type, "color")) {
+        auto& colorspace = upstreamElement ? upstreamElement->getActiveColorSpace() : downstreamElement->getActiveColorSpace();
+        if (auto colorspaceConverter = context->GetColorSpaceConverter(colorspace)) {
+            inputConversionNode = colorspaceConverter->GetConversionNode(context);
+        }
+    } else if (StringStartsWith(type, "vector") || type == "float") {
+        if (auto unitConverter = context->GetUnitConverter(upstreamElement)) {
+            inputConversionNode = unitConverter->GetConversionNode(context);
+        }
+    }
+
+    if (inputConversionNode) {
+        inputConversionNode->SetInput(upstreamRprNode, context);
+        rprMaterialNodeSetInputNByKey(rprNode, inputIt->second, inputConversionNode->GetOutput());
+        conversionNodes[downstreamElement->getName()] = std::move(inputConversionNode);
+        return RPR_SUCCESS;
+    }
+
+    return rprMaterialNodeSetInputNByKey(rprNode, inputIt->second, upstreamRprNode);
 }
 
-rpr_status RprMappedNode::SetInput(mx::Element* inputElement, std::string const& valueString, std::string const& valueType, LoaderContext* context) {
-    auto inputIt = rprNodeMapping->inputs.find(inputElement->getName());
+rpr_status RprMappedNode::SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* valueElement, LoaderContext* context) {
+    auto inputIt = rprNodeMapping->inputs.find(downstreamElement->getName());
     if (inputIt == rprNodeMapping->inputs.end()) {
-        LOG_ERROR(context, "unknown input: %s\n", inputElement->getName().c_str());
+        LOG_ERROR(context, "unknown input: %s\n", downstreamElement->getName().c_str());
         return RPR_ERROR_INVALID_PARAMETER;
     }
 
-    return RprNode::SetInput(inputIt->second, valueString, valueType, context);
+    return RprNode::SetInput(downstreamElement, inputIt->second, valueElement, context);
 }
 
 RprImageNode::RprImageNode(std::string const& type, LoaderContext* context)
@@ -1392,42 +1868,209 @@ RprImageNode::RprImageNode(std::string const& type, LoaderContext* context)
 
 }
 
-rpr_status RprImageNode::SetInput(mx::Element* inputElement, std::string const& value, std::string const& valueType, LoaderContext* context) {
+rpr_status RprImageNode::Connect(std::string const& upstreamOutput, Node* downstreamNode, mx::TypedElement* downstreamElement, LoaderContext* context) {
+    if (!fileValueElement) {
+        return RPR_ERROR_INVALID_OBJECT;
+    }
+
+    if (isFileDirty) {
+        isFileDirty = false;
+
+        resolvedFilepath = context->ResolveFile(fileValueElement->getActiveFilePrefix() + fileValueElement->getValueString());
+
+        std::unique_ptr<LoaderContext::ValueConverter> retainedUnitConverter;
+        LoaderContext::ValueConverter* converter = nullptr;
+        std::string conversionNodeId;
+
+        auto& colorspace = fileValueElement->getActiveColorSpace();
+        if (auto colorspaceConverter = context->GetColorSpaceConverter(colorspace)) {
+            conversionNodeId = colorspace;
+            converter = colorspaceConverter;
+        } else if (auto unitConverter = context->GetUnitConverter(fileValueElement)) {
+            conversionNodeId = fileValueElement->getUnit() + fileValueElement->getUnitType();
+            retainedUnitConverter = std::move(unitConverter);
+            converter = retainedUnitConverter.get();
+        }
+
+        disableRprImageColorspace = !colorspace.empty();
+
+        if (converter) {
+            auto conversionNodeIt = conversionNodes.find(conversionNodeId);
+            if (conversionNodeIt == conversionNodes.end()) {
+                if (auto conversionNode = converter->GetConversionNode(context)) {
+                    // Release outdated conversion nodes
+                    //
+                    conversionNodes.clear();
+
+                    conversionNode->SetInput(rprNode, context);
+                    conversionNodeIt = conversionNodes.emplace(conversionNodeId, std::move(conversionNode)).first;
+                }
+            }
+        }
+    }
+
+    if (!conversionNodes.empty()) {
+        if (auto convertedOutput = conversionNodes.begin()->second->GetOutput()) {
+            return downstreamNode->SetInput(downstreamElement, nullptr, convertedOutput, context);
+        }
+    }
+
+    return downstreamNode->SetInput(downstreamElement, nullptr, rprNode, context);
+}
+
+
+rpr_status RprImageNode::SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) {
+    auto& value = upstreamValueElement->getValueString();
+    auto& valueType = upstreamValueElement->getType();
+
     rpr_status status = RPR_SUCCESS;
     if (valueType == "string") {
-        if (inputElement->getName() == "layer") {
+        if (downstreamElement->getName() == "layer") {
             layer = value;
-        } else if (inputElement->getName() == "uaddressmode") {
+        } else if (downstreamElement->getName() == "uaddressmode") {
             uaddressmode = value;
-        } else if (inputElement->getName() == "vaddressmode") {
+        } else if (downstreamElement->getName() == "vaddressmode") {
             vaddressmode = value;
-        } else if (inputElement->getName() == "filtertype" ||
-                   inputElement->getName() == "framerange" ||
-                   inputElement->getName() == "frameendaction") {
+        } else if (downstreamElement->getName() == "filtertype" ||
+                   downstreamElement->getName() == "framerange" ||
+                   downstreamElement->getName() == "frameendaction") {
             // unprocessed for now
         } else {
             status = RPR_ERROR_INVALID_PARAMETER;
         }
     } else if (valueType == "filename") {
-        if (inputElement->getName() == "file") {
-            file = context->ResolveFile(value);
+        if (downstreamElement->getName() == "file") {
+            if (fileValueElement != upstreamValueElement) {
+                fileValueElement = upstreamValueElement;
+                isFileDirty = true;
+            }
         } else {
             status = RPR_ERROR_INVALID_PARAMETER;
         }
-    } else if (inputElement->getName() == "frameoffset" && valueType == "integer") {
+    } else if (downstreamElement->getName() == "frameoffset" && valueType == "integer") {
         // unprocessed for now
-    } else if (inputElement->getName() == "default") {
+    } else if (downstreamElement->getName() == "default") {
         defaultValue = mx::Value::createValueFromStrings(value, valueType);
     } else {
-        status = RprMappedNode::SetInput(inputElement, value, valueType, context);
+        status = RprMappedNode::SetInput(downstreamElement, upstreamValueElement, context);
     }
 
     if (status != RPR_SUCCESS) {
         LOG_ERROR(context, "Invalid input for image node %s (%s %s): unknown input or invalid type\n",
-            inputElement->getName().c_str(), value.c_str(), valueType.c_str());
+            downstreamElement->getName().c_str(), value.c_str(), valueType.c_str());
     }
     return status;
 }
+
+RprUberNode::RprUberNode(LoaderContext* context)
+    : RprMappedNode(
+        [context]() {
+            rpr_material_node node = nullptr;
+            rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_UBERV2, &node);
+            return node;
+        }(),
+            []() {
+            static Mtlx2Rpr::Node s_imageMapping = {
+                RPR_MATERIAL_NODE_UBERV2, {
+                    {"uber_diffuse_color", RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR},
+                    {"uber_diffuse_weight", RPR_MATERIAL_INPUT_UBER_DIFFUSE_WEIGHT},
+                    {"uber_diffuse_roughness", RPR_MATERIAL_INPUT_UBER_DIFFUSE_ROUGHNESS},
+                    {"uber_diffuse_normal", RPR_MATERIAL_INPUT_UBER_DIFFUSE_NORMAL},
+                    {"uber_reflection_color", RPR_MATERIAL_INPUT_UBER_REFLECTION_COLOR},
+                    {"uber_reflection_weight", RPR_MATERIAL_INPUT_UBER_REFLECTION_WEIGHT},
+                    {"uber_reflection_roughness", RPR_MATERIAL_INPUT_UBER_REFLECTION_ROUGHNESS},
+                    {"uber_reflection_anisotropy", RPR_MATERIAL_INPUT_UBER_REFLECTION_ANISOTROPY},
+                    {"uber_reflection_anisotropy_rotation", RPR_MATERIAL_INPUT_UBER_REFLECTION_ANISOTROPY_ROTATION},
+                    {"uber_reflection_ior", RPR_MATERIAL_INPUT_UBER_REFLECTION_IOR},
+                    {"uber_reflection_metalness", RPR_MATERIAL_INPUT_UBER_REFLECTION_METALNESS},
+                    {"uber_reflection_normal", RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL},
+                    {"uber_refraction_color", RPR_MATERIAL_INPUT_UBER_REFRACTION_COLOR},
+                    {"uber_refraction_weight", RPR_MATERIAL_INPUT_UBER_REFRACTION_WEIGHT},
+                    {"uber_refraction_roughness", RPR_MATERIAL_INPUT_UBER_REFRACTION_ROUGHNESS},
+                    {"uber_refraction_ior", RPR_MATERIAL_INPUT_UBER_REFRACTION_IOR},
+                    {"uber_refraction_normal", RPR_MATERIAL_INPUT_UBER_REFRACTION_NORMAL},
+                    {"uber_refraction_thin_surface", RPR_MATERIAL_INPUT_UBER_REFRACTION_THIN_SURFACE},
+                    {"uber_refraction_absorption_color", RPR_MATERIAL_INPUT_UBER_REFRACTION_ABSORPTION_COLOR},
+                    {"uber_refraction_absorption_distance", RPR_MATERIAL_INPUT_UBER_REFRACTION_ABSORPTION_DISTANCE},
+                    {"uber_refraction_caustics", RPR_MATERIAL_INPUT_UBER_REFRACTION_CAUSTICS},
+                    {"uber_coating_color", RPR_MATERIAL_INPUT_UBER_COATING_COLOR},
+                    {"uber_coating_weight", RPR_MATERIAL_INPUT_UBER_COATING_WEIGHT},
+                    {"uber_coating_roughness", RPR_MATERIAL_INPUT_UBER_COATING_ROUGHNESS},
+                    {"uber_coating_ior", RPR_MATERIAL_INPUT_UBER_COATING_IOR},
+                    {"uber_coating_metalness", RPR_MATERIAL_INPUT_UBER_COATING_METALNESS},
+                    {"uber_coating_normal", RPR_MATERIAL_INPUT_UBER_COATING_NORMAL},
+                    {"uber_coating_transmission_color", RPR_MATERIAL_INPUT_UBER_COATING_TRANSMISSION_COLOR},
+                    {"uber_coating_thickness", RPR_MATERIAL_INPUT_UBER_COATING_THICKNESS},
+                    {"uber_sheen", RPR_MATERIAL_INPUT_UBER_SHEEN},
+                    {"uber_sheen_tint", RPR_MATERIAL_INPUT_UBER_SHEEN_TINT},
+                    {"uber_sheen_weight", RPR_MATERIAL_INPUT_UBER_SHEEN_WEIGHT},
+                    {"uber_emission_color", RPR_MATERIAL_INPUT_UBER_EMISSION_COLOR},
+                    {"uber_emission_weight", RPR_MATERIAL_INPUT_UBER_EMISSION_WEIGHT},
+                    {"uber_transparency", RPR_MATERIAL_INPUT_UBER_TRANSPARENCY},
+                    {"uber_sss_scatter_color", RPR_MATERIAL_INPUT_UBER_SSS_SCATTER_COLOR},
+                    {"uber_sss_scatter_distance", RPR_MATERIAL_INPUT_UBER_SSS_SCATTER_DISTANCE},
+                    {"uber_sss_scatter_direction", RPR_MATERIAL_INPUT_UBER_SSS_SCATTER_DIRECTION},
+                    {"uber_sss_weight", RPR_MATERIAL_INPUT_UBER_SSS_WEIGHT},
+                    {"uber_sss_multiscatter", RPR_MATERIAL_INPUT_UBER_SSS_MULTISCATTER},
+                    {"uber_backscatter_weight", RPR_MATERIAL_INPUT_UBER_BACKSCATTER_WEIGHT},
+                    {"uber_backscatter_color", RPR_MATERIAL_INPUT_UBER_BACKSCATTER_COLOR},
+                    {"uber_fresnel_schlick_approximation", RPR_MATERIAL_INPUT_UBER_FRESNEL_SCHLICK_APPROXIMATION},
+                    // handled in SetInput
+                    //{"uber_reflection_mode", RPR_MATERIAL_INPUT_UBER_REFLECTION_MODE},
+                    //{"uber_coating_mode", RPR_MATERIAL_INPUT_UBER_COATING_MODE},
+                    //{"uber_emission_mode", RPR_MATERIAL_INPUT_UBER_EMISSION_MODE},
+                }
+            };
+            return &s_imageMapping;
+        }()
+    ) {
+
+}
+
+rpr_status RprUberNode::SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) {
+    auto& value = upstreamValueElement->getValueString();
+    auto& valueType = upstreamValueElement->getType();
+
+    rpr_status status = RPR_SUCCESS;
+    if (valueType == "string") {
+        if (downstreamElement->getName() == "uber_reflection_mode" ||
+            downstreamElement->getName() == "uber_coating_mode") {
+            rpr_ubermaterial_ior_mode mode;
+            if (value == "Metalness") {
+                mode = RPR_UBER_MATERIAL_IOR_MODE_METALNESS;
+            } else {
+                mode = RPR_UBER_MATERIAL_IOR_MODE_PBR;
+            }
+            rpr_material_node_input inputKey;
+            if (downstreamElement->getName() == "uber_reflection_mode") {
+                inputKey = RPR_MATERIAL_INPUT_UBER_REFLECTION_MODE;
+            } else {
+                inputKey = RPR_MATERIAL_INPUT_UBER_COATING_MODE;
+            }
+            status = rprMaterialNodeSetInputUByKey(rprNode, inputKey, mode);
+        } else if (downstreamElement->getName() == "uber_emission_mode") {
+            rpr_ubermaterial_emission_mode mode;
+            if (value == "Doublesided") {
+                mode = RPR_UBER_MATERIAL_EMISSION_MODE_DOUBLESIDED;
+            } else {
+                mode = RPR_UBER_MATERIAL_EMISSION_MODE_SINGLESIDED;
+            }
+            status = rprMaterialNodeSetInputUByKey(rprNode, RPR_MATERIAL_INPUT_UBER_EMISSION_MODE, mode);
+        } else {
+            status = RPR_ERROR_INVALID_PARAMETER;
+        }
+    } else {
+        status = RprMappedNode::SetInput(downstreamElement, upstreamValueElement, context);
+    }
+
+    if (status != RPR_SUCCESS &&
+        status != RPR_ERROR_UNSUPPORTED) {
+        LOG_ERROR(context, "Invalid input for uber node %s (%s %s): unknown input or invalid type\n",
+            downstreamElement->getName().c_str(), value.c_str(), valueType.c_str());
+    }
+    return status;
+}
+
 
 //------------------------------------------------------------------------------
 //
@@ -1462,13 +2105,11 @@ void ForEachOutput(mx::ElementPtr const& element, F&& func) {
         for (auto& shaderRef : material->getShaderRefs()) {
             if (auto nodeDef = shaderRef->getNodeDef()) {
                 if (IsSupportedTarget(nodeDef->getTarget())) {
-                    if (auto impl = nodeDef->getImplementation()) {
-                        if (auto nodeGraph = impl->asA<mx::NodeGraph>()) {
-                            for (auto& child : nodeGraph->getChildren()) {
-                                if (auto output = child->asA<mx::Output>()) {
-                                    if (!func(output, shaderRef)) {
-                                        return;
-                                    }
+                    if (auto nodeGraph = GetNodeGraphImpl(nodeDef.get())) {
+                        for (auto& child : nodeGraph->getChildren()) {
+                            if (auto output = child->asA<mx::Output>()) {
+                                if (!func(output, shaderRef)) {
+                                    return;
                                 }
                             }
                         }
@@ -1737,6 +2378,39 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
     ctx.searchPath.append(_stdSearchPath);
     auto globalScope = ctx.EnterScope(LSGlobal, mtlxDocument);
 
+    ctx.mtlxDocument->getUnitDefs();
+    auto registerUnitType = [&ctx](const char* unitType, const char* sceneUnit) {
+        if (auto unitTypeDef = ctx.mtlxDocument->getUnitTypeDef(unitType)) {
+            for (auto& unitDef : unitTypeDef->getUnitDefs()) {
+                LoaderContext::CompiledUnitType compiledUnitType;
+                bool isValidUnits = true;
+                for (auto& unit : unitDef->getUnits()) {
+                    float scale = unit->getTypedAttribute<float>(SCALE_ATTRIBUTE);
+                    if (scale == float{}) {
+                        isValidUnits = false;
+                        break;
+                    }
+
+                    compiledUnitType.scales[unit->getName()] = scale;
+                }
+                if (isValidUnits) {
+                    auto it = compiledUnitType.scales.find(sceneUnit);
+                    if (it == compiledUnitType.scales.end()) {
+                        continue;
+                    }
+
+                    compiledUnitType.sceneScale = it->second;
+                    ctx.compiledUnitTypes[unitType] = std::move(compiledUnitType);
+                    return;
+                }
+            }
+            LOG_ERROR(&ctx, "Could not find a valid unitDef for %s unitTypeDef", unitType);
+        }
+        LOG_ERROR(&ctx, "Unknown unitType: %s", unitType);
+    };
+    registerUnitType("distance", _sceneDistanceUnit.c_str());
+    registerUnitType("angle", "radian");
+
     class MtlxRenderableElements {
     public:
         void Add(RPRMtlxLoader::OutputType outputType, mx::ElementPtr const& element, LoaderContext* ctx) {
@@ -1861,9 +2535,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
         mx::ConstGraphElementPtr nodeGraph;
         if (element.shaderRef) {
             if (auto nodeDef = element.shaderRef->getNodeDef()) {
-                if (auto impl = nodeDef->getImplementation()) {
-                    nodeGraph = impl->asA<mx::NodeGraph>();
-                }
+                nodeGraph = GetNodeGraphImpl(nodeDef.get());
             }
         } else {
             nodeGraph = element.output->getParent()->asA<mx::GraphElement>();
@@ -1905,7 +2577,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
 
                             ctx.Log("Bindinput %s: %s (%s)\n", bindInput->getName().c_str(), valueStr.c_str(), type.c_str());
 
-                            node->SetInput(bindInput.get(), valueStr, type, &ctx);
+                            node->SetInput(bindInput.get(), bindInput.get(), &ctx);
                         }
                     }
                 );
@@ -1937,12 +2609,9 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
 
                     auto& outputType = output->getType();
                     if (outputType != "surfaceshader") {
-                        try {
-                            entry.second.wrapNode = std::make_unique<RprWrapNode>(rprOutput->rprNode, outputType, &ctx);
-                            rprOutput = entry.second.wrapNode.get();
-                        } catch (RprWrapNode::Error& e) {
-                            continue;
-                        }
+                        entry.second.wrapNode = std::make_unique<RprWrapNode>(&ctx);
+                        rprOutput->Connect(mx::EMPTY_STRING, entry.second.wrapNode.get(), nullptr, &ctx);
+                        rprOutput = entry.second.wrapNode.get();
                     }
                 }
 
@@ -1965,11 +2634,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
     // Calculate the total number of rpr nodes
     //
     TraverseGraphNodes(graphNodes, &ctx, [&ret](Node* node) {
-        if (auto rprNode = node->AsA<RprNode>()) {
-            if (rprNode->isOwningRprNode) {
-                ret.numNodes++;
-            }
-        }
+        ret.numNodes += node->MoveRprApiHandles(nullptr);
     });
 
     ret.nodes = new rpr_material_node[ret.numNodes];
@@ -1986,34 +2651,27 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
     // Move all rpr nodes from subnodes into the return array
     //
     std::vector<RPRMtlxLoader::Result::ImageNode> outImageNodes;
-    size_t nodeIdx = 0;
-    TraverseGraphNodes(graphNodes, &ctx, [&ret, &nodeIdx, &outImageNodes](Node* node) {
-        if (auto rprNode = node->AsA<RprNode>()) {
+    size_t nodeOffset = 0;
+    TraverseGraphNodes(graphNodes, &ctx, [&ret, &nodeOffset, &outImageNodes](Node* node) {
+        // Export ImageNode
+        //
+        if (auto imageNode = node->AsA<RprImageNode>()) {
+            if (!imageNode->resolvedFilepath.empty()) {
+                outImageNodes.emplace_back();
+                auto& outImageNode = outImageNodes.back();
 
-            // Export ImageNode
-            //
-            if (auto imageNode = node->AsA<RprImageNode>()) {
-                if (!imageNode->file.empty()) {
-                    outImageNodes.emplace_back();
-                    auto& outImageNode = outImageNodes.back();
-
-                    std::swap(outImageNode.type, imageNode->type);
-                    std::swap(outImageNode.file, imageNode->file);
-                    std::swap(outImageNode.layer, imageNode->layer);
-                    std::swap(outImageNode.defaultValue, imageNode->defaultValue);
-                    std::swap(outImageNode.uaddressmode, imageNode->uaddressmode);
-                    std::swap(outImageNode.vaddressmode, imageNode->vaddressmode);
-                    outImageNode.rprNode = rprNode->rprNode;
-                }
-            }
-
-            // Move only unique nodes
-            //
-            if (rprNode->isOwningRprNode) {
-                ret.nodes[nodeIdx++] = rprNode->rprNode;
-                rprNode->rprNode = nullptr;
+                std::swap(outImageNode.type, imageNode->type);
+                std::swap(outImageNode.file, imageNode->resolvedFilepath);
+                std::swap(outImageNode.layer, imageNode->layer);
+                std::swap(outImageNode.defaultValue, imageNode->defaultValue);
+                std::swap(outImageNode.uaddressmode, imageNode->uaddressmode);
+                std::swap(outImageNode.vaddressmode, imageNode->vaddressmode);
+                outImageNode.disableRprImageColorspace = imageNode->disableRprImageColorspace;
+                outImageNode.rprNode = imageNode->rprNode;
             }
         }
+
+        nodeOffset += node->MoveRprApiHandles(ret.nodes + nodeOffset);
     });
 
     // Fill root node indices

@@ -16,8 +16,8 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/rprUsd/config.h"
 #include "pxr/imaging/rprUsd/error.h"
+#include "pxr/imaging/rprUsd/util.h"
 
-#include "pxr/imaging/glf/glew.h"
 #include "pxr/base/arch/env.h"
 #include "pxr/base/tf/diagnostic.h"
 #include "pxr/base/tf/envSetting.h"
@@ -104,7 +104,7 @@ std::string GetRprSdkPath() {
 }
 
 void SetupRprTracing() {
-    if (TfGetEnvSetting(RPRUSD_ENABLE_TRACING)) {
+    if (RprUsdIsTracingEnabled()) {
         RPR_ERROR_CHECK(rprContextSetParameterByKey1u(nullptr, RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
 
         auto tracingDir = TfGetEnvSetting(RPRUSD_TRACING_DIR);
@@ -266,8 +266,8 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         if (metadata->renderDeviceType == RprUsdRenderDeviceType::CPU || metadata->pluginType == kPluginHybrid) {
             PRINT_CONTEXT_CREATION_DEBUG_INFO("GL interop could not be used with CPU rendering or Hybrid plugin");
             metadata->isGlInteropEnabled = false;
-        } else if (!GlfGlewInit()) {
-            PRINT_CONTEXT_CREATION_DEBUG_INFO("Failed to init GLEW. Disabling GL interop");
+        } else if (!RprUsdInitGLApi()) {
+            PRINT_CONTEXT_CREATION_DEBUG_INFO("Failed to init GL API. Disabling GL interop");
             metadata->isGlInteropEnabled = false;
         } else {
             metadata->isGlInteropEnabled = true;
@@ -316,13 +316,13 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         RPR_ERROR_CHECK(status, "Failed to create RPR context");
     }
 
-    if (TfGetEnvSetting(RPRUSD_ENABLE_TRACING)) {
-        RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
-    }
-
     RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, config->GetTextureCacheDir().c_str()), "Failed to set texture cache path");
 
     return context;
+}
+
+bool RprUsdIsTracingEnabled() {
+    return TfGetEnvSetting(RPRUSD_ENABLE_TRACING);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

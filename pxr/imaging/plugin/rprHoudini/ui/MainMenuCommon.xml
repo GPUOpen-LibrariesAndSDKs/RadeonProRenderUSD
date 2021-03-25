@@ -38,6 +38,13 @@
 
             </subMenu>
 
+            <separatorItem />
+
+            <scriptItem id="rpr_import_material">
+                <label>Import Material</label>
+                <scriptCode><![CDATA[__import__('houRpr.materialLibrary').materialLibrary.import_material()]]></scriptCode>
+            </scriptItem>
+
         </subMenu>
     </menuBar>
 </mainMenu>

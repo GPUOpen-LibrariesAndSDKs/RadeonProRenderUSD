@@ -14,7 +14,10 @@ limitations under the License.
 #ifndef HDRPR_BASE_RPRIM_H
 #define HDRPR_BASE_RPRIM_H
 
+#include "rprApi.h"
+
 #include "renderParam.h"
+#include "renderDelegate.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
 
@@ -24,9 +27,9 @@ template <typename Base>
 class HdRprBaseRprim : public Base {
 public:
     HdRprBaseRprim(
-        SdfPath const& id,
-        SdfPath const& instancerId)
-        : Base(id, instancerId) {
+        SdfPath const& id
+        HDRPR_INSTANCER_ID_ARG_DECL)
+        : Base(id HDRPR_INSTANCER_ID_ARG) {
 
     }
     ~HdRprBaseRprim() override = default;
@@ -53,8 +56,31 @@ protected:
         }
     }
 
+    void UpdateVisibility(HdSceneDelegate* sceneDelegate) {
+        // XXX (Hydra): HdRprim::CanSkipDirtyBitPropagationAndSync decides whether Rprim can be skipped from syncing.
+        // In short, when Rprim is invisible this function tells HdRenderIndex::SyncAll to skip the primitive.
+        // Ideally, that's what we want but not in the case of RPR. If the invisible Rprim has active material reference
+        // and the referenced material was changed we must resync the Rprim. As there is no way to change the behavior of
+        // HdRprim::CanSkipDirtyBitPropagationAndSync (it's not virtual) to not skip when material was changed,
+        // we make our Rprim to be always visible for this function - it uses HdRprim::IsVisible to check the visibility.
+        this->_sharedData.visible = true;
+
+        m_isVisible = sceneDelegate->GetVisible(Base::GetId());
+    }
+
+    uint32_t GetVisibilityMask() const {
+        if (!m_isVisible) {
+            // If Rprim is explicitly made invisible, ignore custom visibility mask
+            return kInvisible;
+        }
+
+        return m_visibilityMask;
+    }
+
 protected:
     SdfPath m_materialId;
+    bool m_isVisible = false;
+    uint32_t m_visibilityMask = 0;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

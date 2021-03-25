@@ -46,7 +46,7 @@ private:
     std::unique_ptr<RprUsd_RprArithmeticNode> m_normalMapBiasNode;
     std::unique_ptr<RprUsd_BaseRuntimeNode> m_normalMapNode;
 
-    std::shared_ptr<RprUsd_BaseRuntimeNode> m_displaceNode;
+    std::unique_ptr<RprUsd_BaseRuntimeNode> m_displaceNode;
     VtValue m_displacementOutput;
 };
 

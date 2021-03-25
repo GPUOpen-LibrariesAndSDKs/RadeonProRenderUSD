@@ -33,7 +33,7 @@ class HdRprMesh final : public HdRprBaseRprim<HdMesh> {
 public:
     HF_MALLOC_TAG_NEW("new HdRprMesh");
 
-    HdRprMesh(SdfPath const& id, SdfPath const& instancerId = SdfPath());
+    HdRprMesh(SdfPath const& id HDRPR_INSTANCER_ID_ARG_DECL);
     ~HdRprMesh() override = default;
 
     void Sync(HdSceneDelegate* sceneDelegate,
@@ -63,8 +63,6 @@ private:
         HdRprApi* rprApi,
         HdDirtyBits dirtyBits,
         std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation);
-
-    uint32_t GetVisibilityMask() const;
 
 private:
     std::vector<rpr::Shape*> m_rprMeshes;
@@ -97,7 +95,6 @@ private:
     int m_refineLevel = 0;
 
     int m_id = -1;
-    uint32_t m_visibilityMask = 0;
     bool m_ignoreContour;
 };
 

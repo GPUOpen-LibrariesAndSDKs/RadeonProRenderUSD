@@ -14,6 +14,8 @@ limitations under the License.
 #ifndef HDRPR_INSTANCER_H
 #define HDRPR_INSTANCER_H
 
+#include "renderDelegate.h"
+
 #include "pxr/imaging/hd/instancer.h"
 #include "pxr/imaging/hd/timeSampleArray.h"
 
@@ -32,9 +34,9 @@ class HdRprInstancer : public HdInstancer {
 public:
     HdRprInstancer(
         HdSceneDelegate* delegate,
-        SdfPath const& id,
-        SdfPath const& parentInstancerId) :
-        HdInstancer(delegate, id, parentInstancerId) {
+        SdfPath const& id
+        HDRPR_INSTANCER_ID_ARG_DECL) :
+        HdInstancer(delegate, id HDRPR_INSTANCER_ID_ARG) {
     }
 
     VtMatrix4dArray ComputeTransforms(SdfPath const& prototypeId);

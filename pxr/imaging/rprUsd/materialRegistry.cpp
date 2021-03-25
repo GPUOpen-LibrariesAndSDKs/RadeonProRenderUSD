@@ -11,16 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#include "pxr/imaging/glf/glew.h"
+#include "pxr/imaging/rprUsd/util.h"
 #include "pxr/imaging/glf/uvTextureData.h"
-#include "pxr/imaging/glf/image.h"
 #include "pxr/imaging/rprUsd/materialRegistry.h"
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/rprUsd/material.h"
 #include "pxr/imaging/rprUsd/tokens.h"
 #include "pxr/imaging/rprUsd/error.h"
-#include "pxr/imaging/rprUsd/util.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/staticTokens.h"
 #include "pxr/base/tf/envSetting.h"
@@ -65,7 +63,7 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
         }
 
         if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
-            MaterialX::FilePathVec libraryNames = {"libraries"};
+            MaterialX::FilePathVec libraryNames = {"libraries", "materials"};
             MaterialX::FileSearchPath searchPath = RPR;
             m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
             m_mtlxLoader->SetupStdlib(libraryNames, searchPath);

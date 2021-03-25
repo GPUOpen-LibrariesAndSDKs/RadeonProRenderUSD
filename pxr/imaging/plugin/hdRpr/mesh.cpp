@@ -34,9 +34,8 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprMesh::HdRprMesh(SdfPath const& id, SdfPath const& instancerId)
-    : HdRprBaseRprim(id, instancerId)
-    , m_visibilityMask(kVisibleAll) {
+HdRprMesh::HdRprMesh(SdfPath const& id HDRPR_INSTANCER_ID_ARG_DECL)
+    : HdRprBaseRprim(id HDRPR_INSTANCER_ID_ARG) {
 
 }
 
@@ -94,6 +93,8 @@ bool HdRprMesh::GetPrimvarData(TfToken const& name,
                         for (int i = 0; i < m_faceVertexIndices.size(); ++i) {
                             out_indices.push_back(i);
                         }
+                    } else if (primvarDescsEntry.first == HdInterpolationConstant) {
+                        out_indices = VtIntArray(m_faceVertexIndices.size(), 0);
                     }
                     return true;
                 }
@@ -126,19 +127,15 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
 
         GfVec3f color(0.18f);
 
-        auto constantPrimvarsIt = primvarDescsPerInterpolation.find(HdInterpolationConstant);
-        if (constantPrimvarsIt != primvarDescsPerInterpolation.end()) {
-            for (auto& pv : constantPrimvarsIt->second) {
-                if (pv.name == HdTokens->displayColor) {
-                    VtValue val = sceneDelegate->Get(GetId(), HdTokens->displayColor);
-                    if (val.IsHolding<VtVec3fArray>()) {
-                        auto colors = val.UncheckedGet<VtVec3fArray>();
-                        if (!colors.empty()) {
-                            color = colors[0];
-                        }
-                        break;
-                    }
+        if (HdRprIsPrimvarExists(HdTokens->displayColor, primvarDescsPerInterpolation)) {
+            VtValue val = sceneDelegate->Get(GetId(), HdTokens->displayColor);
+            if (val.IsHolding<VtVec3fArray>()) {
+                auto colors = val.UncheckedGet<VtVec3fArray>();
+                if (!colors.empty()) {
+                    color = colors[0];
                 }
+            } else if (val.IsHolding<GfVec3f>()) {
+                color = val.UncheckedGet<GfVec3f>();
             }
         }
 
@@ -150,15 +147,6 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
     }
 
     return m_fallbackMaterial;
-}
-
-uint32_t HdRprMesh::GetVisibilityMask() const {
-    if (!_sharedData.visible) {
-        // If mesh is explicitly made invisible, ignore custom visibility mask
-        return kInvisible;
-    }
-
-    return m_visibilityMask;
 }
 
 void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
@@ -345,7 +333,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
-        _sharedData.visible = sceneDelegate->GetVisible(id);
+        UpdateVisibility(sceneDelegate);
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -390,9 +378,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
     }
 
-    m_smoothNormals = m_displayStyle.flatShadingEnabled;
+    m_smoothNormals = !m_displayStyle.flatShadingEnabled;
     // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
-    m_smoothNormals = m_smoothNormals && !(m_enableSubdiv && m_refineLevel > 0);
+    if (m_enableSubdiv && m_refineLevel != 0) {
+        m_smoothNormals = false;
+    }
 
     if (!m_authoredNormals && m_smoothNormals) {
         if (!m_adjacencyValid) {

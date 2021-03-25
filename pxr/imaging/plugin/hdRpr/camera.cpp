@@ -99,7 +99,19 @@ void HdRprCamera::Sync(HdSceneDelegate* sceneDelegate,
         EvalCameraParam(&m_shutterClose, HdCameraTokens->shutterClose, sceneDelegate, id);
         EvalCameraParam(&m_clippingRange, HdCameraTokens->clippingRange, sceneDelegate, id, GfRange1f(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN()));
 
-        EvalCameraParam(&m_projectionType, UsdGeomTokens->projection, sceneDelegate, id, TfToken());
+#if PXR_VERSION >= 2102
+        HdCamera::Projection hdCamProjection;
+        EvalCameraParam(&hdCamProjection, UsdGeomTokens->projection, sceneDelegate, id, HdCamera::Perspective);
+        m_projection = static_cast<Projection>(hdCamProjection);
+#else
+        TfToken hdCamProjection;
+        EvalCameraParam(&hdCamProjection, UsdGeomTokens->projection, sceneDelegate, id, TfToken());
+        if (hdCamProjection == UsdGeomTokens->orthographic) {
+            m_projection = Orthographic;
+        } else {
+            m_projection = Perspective;
+        }
+#endif
 
         EvalCameraParam(&m_apertureBlades, HdRprCameraTokens->apertureBlades, sceneDelegate, id, 16);
     }
@@ -183,12 +195,9 @@ bool HdRprCamera::GetClippingRange(GfRange1f* v) const {
     return false;
 }
 
-bool HdRprCamera::GetProjectionType(TfToken* v) const {
-    if (!m_projectionType.IsEmpty()) {
-        *v = m_projectionType;
-        return true;
-    }
-    return false;
+bool HdRprCamera::GetProjection(Projection* v) const {
+    *v = m_projection;
+    return true;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
