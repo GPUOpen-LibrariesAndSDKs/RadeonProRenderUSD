@@ -619,6 +619,8 @@ public:
     void CleanDirtyFlag(ChangeTracker dirtyFlag);
     void ResetDirty();
 
+    void ResetRenderSettingsVersion();
+
 private:
     HdRprConfig() = default;
 
@@ -730,6 +732,10 @@ void HdRprConfig::CleanDirtyFlag(ChangeTracker dirtyFlag) {{
 
 void HdRprConfig::ResetDirty() {{
     m_dirtyFlags = Clean;
+}}
+
+void HdRprConfig::ResetRenderSettingsVersion() {{
+    m_lastRenderSettingsVersion = -1;
 }}
 
 HdRprConfig::PrefData::PrefData() {{

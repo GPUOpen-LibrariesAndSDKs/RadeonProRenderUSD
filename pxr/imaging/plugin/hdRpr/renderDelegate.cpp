@@ -189,6 +189,12 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
 }
 
 HdRprDelegate::~HdRprDelegate() {
+    // Render settings version reset is required for valid recreation of HdRprDelgate
+    // Config singleton persists in memory after delegate destruction, therefore version must be invalidated
+    HdRprConfig* config;
+    auto configInstanceLock = HdRprConfig::GetInstance(&config);
+    config->ResetRenderSettingsVersion();
+
     g_rprApi = nullptr;
 }
 
