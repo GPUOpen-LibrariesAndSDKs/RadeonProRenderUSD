@@ -241,7 +241,7 @@ render_setting_categories = [
         'settings': [
             {
                 'name': 'enableDenoising',
-                'ui_name': 'Enable Denoising',
+                'ui_name': 'Enable AI Denoising',
                 'defaultValue': False,
                 'houdini': {
                     'custom_tags': [
@@ -283,7 +283,7 @@ render_setting_categories = [
         'settings': [
             {
                 'name': 'maxSamples',
-                'ui_name': 'Max Pixel Samples',
+                'ui_name': 'Max Samples',
                 'help': 'Maximum number of samples to render for each pixel.',
                 'defaultValue': 256,
                 'minValue': 1,
@@ -299,7 +299,7 @@ render_setting_categories = [
         'settings': [
             {
                 'name': 'minAdaptiveSamples',
-                'ui_name': 'Min Pixel Samples',
+                'ui_name': 'Min Samples',
                 'help': 'Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than \'Variance Threshold\'.',
                 'defaultValue': 64,
                 'minValue': 1,
@@ -307,7 +307,7 @@ render_setting_categories = [
             },
             {
                 'name': 'varianceThreshold',
-                'ui_name': 'Variance Threshold',
+                'ui_name': 'Noise Threshold',
                 'help': 'Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff.',
                 'defaultValue': 0.0,
                 'minValue': 0.0,
@@ -373,18 +373,18 @@ render_setting_categories = [
                 'name': 'raycastEpsilon',
                 'ui_name': 'Ray Cast Epsilon',
                 'help': 'Determines an offset used to move light rays away from the geometry for ray-surface intersection calculations.',
-                'defaultValue': 2e-5,
+                'defaultValue': 2e-3,
                 'minValue': 1e-6,
                 'maxValue': 1.0
             },
             {
                 'name': 'enableRadianceClamping',
-                'ui_name': 'Enable Clamp Radiance',
+                'ui_name': 'Clamp Fireflies',
                 'defaultValue': False,
             },
             {
                 'name': 'radianceClamping',
-                'ui_name': 'Clamp Radiance',
+                'ui_name': 'Max Radiance',
                 'help': 'Limits the intensity, or the maximum brightness, of samples in the scene. Greater clamp radiance values produce more brightness.',
                 'defaultValue': 0.0,
                 'minValue': 0.0,
@@ -439,7 +439,7 @@ render_setting_categories = [
             },
             {
                 'name': 'tonemapExposureTime',
-                'ui_name': 'Tone Mapping Exposure Time',
+                'ui_name': 'Film Exposure Time (sec)',
                 'help': 'Film exposure time',
                 'defaultValue': 0.125,
                 'minValue': 0.0,
@@ -450,7 +450,7 @@ render_setting_categories = [
             },
             {
                 'name': 'tonemapSensitivity',
-                'ui_name': 'Tone Mapping Sensitivity',
+                'ui_name': 'Film Sensitivity',
                 'help': 'Luminance of the scene (in candela per m^2)',
                 'defaultValue': 1.0,
                 'minValue': 0.0,
@@ -461,7 +461,7 @@ render_setting_categories = [
             },
             {
                 'name': 'tonemapFstop',
-                'ui_name': 'Tone Mapping Fstop',
+                'ui_name': 'Fstop',
                 'help': 'Aperture f-number',
                 'defaultValue': 1.0,
                 'minValue': 0.0,
@@ -498,7 +498,7 @@ render_setting_categories = [
         'settings': [
             {
                 'name': 'enableBeautyMotionBlur',
-                'ui_name': 'Enable Beaty Motion Blur',
+                'ui_name': 'Enable Beauty Motion Blur',
                 'defaultValue': True,
                 'help': 'If disabled, only velocity AOV will store information about movement on the scene. Required for motion blur that is generated in post-processing.',
                 'houdini': {
