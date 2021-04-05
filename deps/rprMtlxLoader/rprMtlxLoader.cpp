@@ -749,56 +749,70 @@ Node* LoaderContext::GetGeomNode(mx::GeomPropDef* geomPropDef) {
     auto& geomProp = geomPropDef->getGeomProp();
     auto& type = geomPropDef->getAttribute("type");
     if (geomProp.empty() || type.empty()) {
-        LOG_ERROR(this, "Invalid geomPropDef: %s\n", geomPropDef->asString().c_str());
+        LOG_ERROR(this, "Invalid geomPropDef: %s", geomPropDef->asString().c_str());
         return nullptr;
     }
 
-    const auto kInvalidLookupValue = static_cast<rpr_material_node_lookup_value>(-1);
-    rpr_material_node_lookup_value lookupValue = kInvalidLookupValue;
+    rpr_material_node apiHandle = nullptr;
 
-    if (geomProp == "texcoord") {
-        if (type != "vector2") {
-            LOG_ERROR(this, "Unexpected type for texcoord geomProp: %s\n", type.c_str());
-        }
-
-        auto& index = geomPropDef->getIndex();
-        if (index.empty() || index == "0") {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_UV;
-        } else if (index == "1") {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_UV1;
-        }
-    } else if (geomProp == "normal") {
+    if (geomProp == "tangent") {
         auto& space = geomPropDef->getSpace();
         if (space == "world") {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_N;
+            auto status = rprMaterialSystemCreateNode(rprMatSys, RPR_MATERIAL_NODE_MATX_TANGENT, &apiHandle);
+            if (!apiHandle) {
+                LOG_ERROR(this, "Failed to create matx tangent node: %d", status);
+            }
         } else {
-            LOG_ERROR(this, "Unsupported normal space: \"%s\"\n", space.c_str());
+            LOG_ERROR(this, "Unsupported tangent space: \"%s\"", space.c_str());
         }
-    } else if (geomProp == "position") {
-        auto& space = geomPropDef->getSpace();
-        if (space == "world") {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_P;
-        } else {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_P_LOCAL;
+    } else {
+        const auto kInvalidLookupValue = static_cast<rpr_material_node_lookup_value>(-1);
+        rpr_material_node_lookup_value lookupValue = kInvalidLookupValue;
+
+        if (geomProp == "texcoord") {
+            if (type != "vector2") {
+                LOG_ERROR(this, "Unexpected type for texcoord geomProp: %s", type.c_str());
+            }
+
+            auto& index = geomPropDef->getIndex();
+            if (index.empty() || index == "0") {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_UV;
+            } else if (index == "1") {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_UV1;
+            }
+        } else if (geomProp == "normal") {
+            auto& space = geomPropDef->getSpace();
+            if (space == "world") {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_N;
+            } else {
+                LOG_ERROR(this, "Unsupported normal space: \"%s\"", space.c_str());
+            }
+        } else if (geomProp == "position") {
+            auto& space = geomPropDef->getSpace();
+            if (space == "world") {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_P;
+            } else {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_P_LOCAL;
+            }
+        }
+        // TODO: handle bitangent, geomcolor, geompropvalue (primvar)
+
+        if (lookupValue != kInvalidLookupValue) {
+            auto status = rprMaterialSystemCreateNode(rprMatSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &apiHandle);
+            if (apiHandle) {
+                rprMaterialNodeSetInputUByKey(apiHandle, RPR_MATERIAL_INPUT_VALUE, lookupValue);
+            } else {
+                LOG_ERROR(this, "Failed to create RPR_MATERIAL_NODE_INPUT_LOOKUP node: %d", status);
+            }
         }
     }
-    // TODO: handle tangent, bitangent, geomcolor, geompropvalue (primvar)
 
-    if (lookupValue != kInvalidLookupValue) {
-        rpr_material_node apiHandle;
-        auto status = rprMaterialSystemCreateNode(rprMatSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &apiHandle);
-        if (apiHandle) {
-            rprMaterialNodeSetInputUByKey(apiHandle, RPR_MATERIAL_INPUT_VALUE, lookupValue);
-
-            auto geomNodeIt = geomNodes.emplace(geomPropDef->getName(), std::make_unique<RprNode>(apiHandle, true)).first;
-            return geomNodeIt->second.get();
-        } else {
-            LOG_ERROR(this, "Failed to create RPR_MATERIAL_NODE_INPUT_LOOKUP node: %d\n", status);
-            return nullptr;
-        }
+    if (apiHandle) {
+        auto geomNodeIt = geomNodes.emplace(geomPropDef->getName(), std::make_unique<RprNode>(apiHandle, true)).first;
+        return geomNodeIt->second.get();
     }
 
-    LOG_ERROR(this, "Unsupported geom node: %s\n", geomPropDef->asString().c_str());
+    LOG_ERROR(this, "Unsupported geom node: %s", geomPropDef->asString().c_str());
     return nullptr;
 }
 
