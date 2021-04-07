@@ -339,11 +339,10 @@ struct LoaderContext {
     static const int kGlobalLogDepth = -1;
     int logDepth = kGlobalLogDepth;
     LogScope logScope = LSGlobal;
-    bool logEnabled = true;
 
-    void Log(const char* fmt, ...);
+    RPRMtlxLoader::LogLevel logLevel;
 
-    void LogError(size_t line, const char* fmt, ...);
+    void Log(RPRMtlxLoader::LogLevel level, size_t line, const char* fmt, ...);
 
     struct ScopeGuard {
         LoaderContext* ctx;
@@ -356,11 +355,16 @@ struct LoaderContext {
     ScopeGuard EnterScope(LogScope logScope, mx::Element const* scopeElement);
 
     std::string ResolveFile(std::string const& filename);
-    std::string FindFile(std::string const& filename);
 };
 
 #define LOG_ERROR(ctx, fmt, ...) \
-    (ctx)->LogError(__LINE__, fmt, ##__VA_ARGS__)
+    (ctx)->Log(RPRMtlxLoader::LogLevel::Error, __LINE__, fmt, ##__VA_ARGS__)
+
+#define LOG_WARNING(ctx, fmt, ...) \
+    (ctx)->Log(RPRMtlxLoader::LogLevel::Warning, __LINE__, fmt, ##__VA_ARGS__)
+
+#define LOG(ctx, fmt, ...) \
+    (ctx)->Log(RPRMtlxLoader::LogLevel::Info, __LINE__, fmt, ##__VA_ARGS__)
 
 //------------------------------------------------------------------------------
 // Node declarations
@@ -534,7 +538,7 @@ private:
                 for (auto& socket : *_sockets) {
                     auto nodeIt = _nodeGraphNode->subNodes.find(socket.subNode->getName());
                     if (nodeIt != _nodeGraphNode->subNodes.end()) {
-                        context->Log(" %s:%s\n", nodeIt->first.c_str(), socket.input->getName().c_str());
+                        LOG(context, " %s:%s", nodeIt->first.c_str(), socket.input->getName().c_str());
 
                         f(nodeIt->second.get(), socket.input.get());
                     }
@@ -585,13 +589,13 @@ mx::OutputPtr GetOutput(mx::InterfaceElement const* interfaceElement, mx::PortEl
     if (interfaceElement->getType() == mx::MULTI_OUTPUT_TYPE_STRING) {
         auto& targetOutputName = portElement->getOutputString();
         if (targetOutputName.empty()) {
-            LOG_ERROR(context, "invalid port element structure: output should be specified when connecting to multioutput element - port: %s, interface: %s\n", portElement->asString().c_str(), interfaceElement->asString().c_str());
+            LOG_ERROR(context, "invalid port element structure: output should be specified when connecting to multioutput element - port: %s, interface: %s", portElement->asString().c_str(), interfaceElement->asString().c_str());
             return nullptr;
         }
 
         auto output = interfaceElement->getOutput(targetOutputName);
         if (!output) {
-            LOG_ERROR(context, "invalid connection: cannot determine output - %s\n", portElement->asString().c_str());
+            LOG_ERROR(context, "invalid connection: cannot determine output - %s", portElement->asString().c_str());
         }
 
         return output;
@@ -609,10 +613,19 @@ size_t GetHash(T const& value) {
 // Loader context implementation
 //------------------------------------------------------------------------------
 
-void LoaderContext::Log(const char* fmt, ...) {
-    if (!logEnabled) {
+const char* const kLogLevelStr[int(RPRMtlxLoader::LogLevel::Info) + 1] = {
+    "",
+    "ERROR",
+    "WARNING",
+    "INFO",
+};
+
+void LoaderContext::Log(RPRMtlxLoader::LogLevel level, size_t line, const char* fmt, ...) {
+    if (level > logLevel) {
         return;
     }
+
+    printf("[MTLXLOADER %s] ", kLogLevelStr[int(level)]);
 
     if (logScope != LSGlobal) {
         int padding = 0;
@@ -631,15 +644,10 @@ void LoaderContext::Log(const char* fmt, ...) {
     va_start(ap, fmt);
     vprintf(fmt, ap);
     va_end(ap);
-}
 
-void LoaderContext::LogError(size_t line, const char* fmt, ...) {
-    printf("RPRMtlxLoader error (%zu): ", line);
-
-    va_list ap;
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
+    if (line) {
+        printf(" (%zu)\n", line);
+    }
 }
 
 LoaderContext::ScopeGuard::ScopeGuard(LoaderContext* ctx, LogScope logScope, mx::Element const* scopeElement)
@@ -711,7 +719,7 @@ bool LoaderContext::ConnectToGlobalOutput(T* input, Node* node) {
         if (auto nodeGraph = mtlxDocument->getNodeGraph(nodeGraphName)) {
             if (auto nodeGraphOutput = nodeGraph->getOutput(outputName)) {
                 if (auto freeStandingNodeGraphNode = GetFreeStandingNodeGraph(nodeGraph)) {
-                    Log("Bindinput %s: %s:%s (nodegraph)\n", input->getName().c_str(), nodeGraphName.c_str(), outputName.c_str());
+                    LOG(this, "Bindinput %s: %s:%s (nodegraph)", input->getName().c_str(), nodeGraphName.c_str(), outputName.c_str());
 
                     return freeStandingNodeGraphNode->Connect(nodeGraphOutput->getName(), node, input, this) == RPR_SUCCESS;
                 }
@@ -727,7 +735,7 @@ bool LoaderContext::ConnectToGlobalOutput(T* input, Node* node) {
                 if (auto mxtlGlobalNodeDef = mtlxGlobalNode->getNodeDef()) {
                     if (auto mtlxGlobalNodeOutput = GetOutput(mxtlGlobalNodeDef.get(), globalOutput.get(), this)) {
                         if (auto globalNode = GetGlobalNode(mtlxGlobalNode.get())) {
-                            Log("Bindinput %s: %s (output)\n", input->getName().c_str(), outputName.c_str());
+                            LOG(this, "Bindinput %s: %s (output)", input->getName().c_str(), outputName.c_str());
 
                             return globalNode->Connect(mtlxGlobalNodeOutput->getName(), node, input, this) == RPR_SUCCESS;
                         }
@@ -749,56 +757,70 @@ Node* LoaderContext::GetGeomNode(mx::GeomPropDef* geomPropDef) {
     auto& geomProp = geomPropDef->getGeomProp();
     auto& type = geomPropDef->getAttribute("type");
     if (geomProp.empty() || type.empty()) {
-        LOG_ERROR(this, "Invalid geomPropDef: %s\n", geomPropDef->asString().c_str());
+        LOG_ERROR(this, "Invalid geomPropDef: %s", geomPropDef->asString().c_str());
         return nullptr;
     }
 
-    const auto kInvalidLookupValue = static_cast<rpr_material_node_lookup_value>(-1);
-    rpr_material_node_lookup_value lookupValue = kInvalidLookupValue;
+    rpr_material_node apiHandle = nullptr;
 
-    if (geomProp == "texcoord") {
-        if (type != "vector2") {
-            LOG_ERROR(this, "Unexpected type for texcoord geomProp: %s\n", type.c_str());
-        }
-
-        auto& index = geomPropDef->getIndex();
-        if (index.empty() || index == "0") {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_UV;
-        } else if (index == "1") {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_UV1;
-        }
-    } else if (geomProp == "normal") {
+    if (geomProp == "tangent") {
         auto& space = geomPropDef->getSpace();
         if (space == "world") {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_N;
+            auto status = rprMaterialSystemCreateNode(rprMatSys, RPR_MATERIAL_NODE_MATX_TANGENT, &apiHandle);
+            if (!apiHandle) {
+                LOG_ERROR(this, "Failed to create matx tangent node: %d", status);
+            }
         } else {
-            LOG_ERROR(this, "Unsupported normal space: \"%s\"\n", space.c_str());
+            LOG_ERROR(this, "Unsupported tangent space: \"%s\"", space.c_str());
         }
-    } else if (geomProp == "position") {
-        auto& space = geomPropDef->getSpace();
-        if (space == "world") {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_P;
-        } else {
-            lookupValue = RPR_MATERIAL_NODE_LOOKUP_P_LOCAL;
+    } else {
+        const auto kInvalidLookupValue = static_cast<rpr_material_node_lookup_value>(-1);
+        rpr_material_node_lookup_value lookupValue = kInvalidLookupValue;
+
+        if (geomProp == "texcoord") {
+            if (type != "vector2") {
+                LOG_ERROR(this, "Unexpected type for texcoord geomProp: %s", type.c_str());
+            }
+
+            auto& index = geomPropDef->getIndex();
+            if (index.empty() || index == "0") {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_UV;
+            } else if (index == "1") {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_UV1;
+            }
+        } else if (geomProp == "normal") {
+            auto& space = geomPropDef->getSpace();
+            if (space == "world") {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_N;
+            } else {
+                LOG_ERROR(this, "Unsupported normal space: \"%s\"", space.c_str());
+            }
+        } else if (geomProp == "position") {
+            auto& space = geomPropDef->getSpace();
+            if (space == "world") {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_P;
+            } else {
+                lookupValue = RPR_MATERIAL_NODE_LOOKUP_P_LOCAL;
+            }
+        }
+        // TODO: handle bitangent, geomcolor, geompropvalue (primvar)
+
+        if (lookupValue != kInvalidLookupValue) {
+            auto status = rprMaterialSystemCreateNode(rprMatSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &apiHandle);
+            if (apiHandle) {
+                rprMaterialNodeSetInputUByKey(apiHandle, RPR_MATERIAL_INPUT_VALUE, lookupValue);
+            } else {
+                LOG_ERROR(this, "Failed to create RPR_MATERIAL_NODE_INPUT_LOOKUP node: %d", status);
+            }
         }
     }
-    // TODO: handle tangent, bitangent, geomcolor, geompropvalue (primvar)
 
-    if (lookupValue != kInvalidLookupValue) {
-        rpr_material_node apiHandle;
-        auto status = rprMaterialSystemCreateNode(rprMatSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &apiHandle);
-        if (apiHandle) {
-            rprMaterialNodeSetInputUByKey(apiHandle, RPR_MATERIAL_INPUT_VALUE, lookupValue);
-
-            auto geomNodeIt = geomNodes.emplace(geomPropDef->getName(), std::make_unique<RprNode>(apiHandle, true)).first;
-            return geomNodeIt->second.get();
-        } else {
-            LOG_ERROR(this, "Failed to create RPR_MATERIAL_NODE_INPUT_LOOKUP node: %d\n", status);
-            return nullptr;
-        }
+    if (apiHandle) {
+        auto geomNodeIt = geomNodes.emplace(geomPropDef->getName(), std::make_unique<RprNode>(apiHandle, true)).first;
+        return geomNodeIt->second.get();
     }
 
-    LOG_ERROR(this, "Unsupported geom node: %s\n", geomPropDef->asString().c_str());
+    LOG_ERROR(this, "Unsupported geom node: %s", geomPropDef->asString().c_str());
     return nullptr;
 }
 
@@ -1167,7 +1189,7 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
                     rprNode = upstreamRprNode;
                     return RPR_SUCCESS;
                 } else {
-                    context->Log("Unsupported surface input: %s\n", downstreamElement->getName().c_str());
+                    LOG(context, "Unsupported surface input: %s", downstreamElement->getName().c_str());
                     return RPR_ERROR_UNSUPPORTED;
                 }
             }
@@ -1186,7 +1208,7 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
                     isOwningRprNode = false;
                     return RPR_SUCCESS;
                 } else {
-                    context->Log("Unsupported displacement input: %s\n", downstreamElement->getName().c_str());
+                    LOG(context, "Unsupported displacement input: %s", downstreamElement->getName().c_str());
                     return RPR_ERROR_UNSUPPORTED;
                 }
             }
@@ -1210,7 +1232,7 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
                     }
                     return status;
                 } else {
-                    context->Log("Unsupported displacement input: %s\n", downstreamElement->getName().c_str());
+                    LOG(context, "Unsupported displacement input: %s", downstreamElement->getName().c_str());
                     return RPR_ERROR_UNSUPPORTED;
                 }
             }
@@ -1304,7 +1326,7 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
 
                 // TODO: code generation required
 
-                context->Log("Unsupported node: %s (%s)\n", mtlxNode->getName().c_str(), mtlxNode->getCategory().c_str());
+                LOG(context, "Unsupported node: %s (%s)", mtlxNode->getName().c_str(), mtlxNode->getCategory().c_str());
             }
         }
     }
@@ -1312,7 +1334,7 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
     if (!rprNode && rprNodeMapping) {
         auto status = rprMaterialSystemCreateNode(context->rprMatSys, rprNodeMapping->id, &rprNode);
         if (status != RPR_SUCCESS) {
-            LOG_ERROR(context, "failed to create %s (%s) node: %d\n", mtlxNode->getName().c_str(), mtlxNode->getCategory().c_str(), status);
+            LOG_ERROR(context, "failed to create %s (%s) node: %d", mtlxNode->getName().c_str(), mtlxNode->getCategory().c_str(), status);
             return nullptr;
         }
 
@@ -1379,12 +1401,12 @@ MtlxNodeGraphNode::MtlxNodeGraphNode(
     LoaderContext* context)
     : mtlxGraph(graph) {
 
-    context->Log("NodeGraph: %s\n", mtlxGraph->getName().c_str());
+    LOG(context, "NodeGraph: %s", mtlxGraph->getName().c_str());
     auto graphScope = context->EnterScope(LSGraph, mtlxGraph.get());
 
     bool hasAnyOutputNode = false;
     for (auto& output : requiredOutputs) {
-        context->Log("Output: %s -> %s \n", output->getName().c_str(), output->getNodeName().c_str());
+        LOG(context, "Output: %s -> %s ", output->getName().c_str(), output->getNodeName().c_str());
 
         // An output of a node graph must have a `nodename` attribute
         //
@@ -1392,7 +1414,7 @@ MtlxNodeGraphNode::MtlxNodeGraphNode(
         if (subNode) {
             hasAnyOutputNode = true;
         } else {
-            LOG_ERROR(context, "Failed to create node %s in %s\n", output->getNodeName().c_str(), mtlxGraph->getName().c_str());
+            LOG_ERROR(context, "Failed to create node %s in %s", output->getNodeName().c_str(), mtlxGraph->getName().c_str());
         }
     }
 
@@ -1409,7 +1431,7 @@ Node* MtlxNodeGraphNode::GetSubNode(std::string const& nodename, LoaderContext* 
 
     auto mtlxNode = mtlxGraph->getNode(nodename);
     if (!mtlxNode) {
-        LOG_ERROR(context, "No node with such name: %s\n", nodename.c_str());
+        LOG_ERROR(context, "No node with such name: %s", nodename.c_str());
         return nullptr;
     }
 
@@ -1433,7 +1455,7 @@ Node* MtlxNodeGraphNode::GetSubNode(std::string const& nodename, LoaderContext* 
             auto status = upstreamNode->Connect(outputName, downstreamNode, connection.downstreamInput.get(), context);
 
             if (status == RPR_SUCCESS) {
-                context->Log("Connected %s to %s\n", connection.upstreamNode->getName().c_str(), connection.downstreamNode->getName().c_str());
+                LOG(context, "Connected %s to %s", connection.upstreamNode->getName().c_str(), connection.downstreamNode->getName().c_str());
             }
         }
 
@@ -1458,7 +1480,7 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
         return subNodeIt->second.get();
     }
 
-    context->Log("Node: %s (%s)\n", mtlxNode->getName().c_str(), mtlxNode->getCategory().c_str());
+    LOG(context, "Node: %s (%s)", mtlxNode->getName().c_str(), mtlxNode->getCategory().c_str());
     auto nodeScope = context->EnterScope(LSNode, mtlxNode.get());
 
     auto nodeHandle = Node::Create(mtlxNode.get(), context);
@@ -1471,7 +1493,7 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
 
     auto nodeDef = mtlxNode->getNodeDef();
     if (!nodeDef) {
-        LOG_ERROR(context, "Failed to get mtlxNode definition: %s\n", mtlxNode->asString().c_str());
+        LOG_ERROR(context, "Failed to get mtlxNode definition: %s", mtlxNode->asString().c_str());
         return node;
     }
 
@@ -1489,7 +1511,7 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
             continue;
         }
 
-        context->Log("%s %s\n", inputElement->getCategory().c_str(), inputElement->getName().c_str());
+        LOG(context, "%s %s", inputElement->getCategory().c_str(), inputElement->getName().c_str());
         auto inputScope = context->EnterScope(LSInput, inputElement.get());
 
         // An element that provides a value for the current input
@@ -1533,11 +1555,11 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
             //
             auto& nodeName = input->getNodeName();
             if (!nodeName.empty()) {
-                context->Log("nodename: %s\n", nodeName.c_str());
+                LOG(context, "nodename: %s", nodeName.c_str());
 
                 auto mtlxUpstreamNode = mtlxGraph->getNode(nodeName);
                 if (!mtlxUpstreamNode) {
-                    LOG_ERROR(context, "Node \"%s\" cannot be found in \"%s\"\n", nodeName.c_str(), mtlxGraph->getName().c_str());
+                    LOG_ERROR(context, "Node \"%s\" cannot be found in \"%s\"", nodeName.c_str(), mtlxGraph->getName().c_str());
                     continue;
                 }
 
@@ -1582,7 +1604,7 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
                         status = geomNode->Connect(mx::EMPTY_STRING, node, inputElement.get(), context);
                     }
                 } else {
-                    LOG_ERROR(context, "Unkown defaultgeomprop: %s\n", defaultGeomProp.c_str());
+                    LOG_ERROR(context, "Unkown defaultgeomprop: %s", defaultGeomProp.c_str());
                 }
 
                 continue;
@@ -1593,7 +1615,7 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
         //
         auto& valueStr = valueElement->getValueString();
         if (!valueStr.empty()) {
-            context->Log("%s\n", valueStr.c_str());
+            LOG(context, "%s", valueStr.c_str());
 
             status = node->SetInput(inputElement.get(), valueElement.get(), context);
             if (status == RPR_SUCCESS) {
@@ -1658,7 +1680,7 @@ rpr_status MtlxNodeGraphNode::SetInput(mx::TypedElement* downstreamElement, mx::
         return status;
     }
 
-    LOG_ERROR(context, "failed to set %s input for %s: no such interface socket\n", downstreamElement->getName().c_str(), mtlxGraph->getName().c_str());
+    LOG_ERROR(context, "failed to set %s input for %s: no such interface socket", downstreamElement->getName().c_str(), mtlxGraph->getName().c_str());
     return RPR_ERROR_INVALID_PARAMETER;
 }
 
@@ -1676,7 +1698,7 @@ rpr_status MtlxNodeGraphNode::SetInput(mx::TypedElement* downstreamElement, mx::
         return status;
     }
 
-    LOG_ERROR(context, "failed to set %s input for %s: no such interface socket\n", downstreamElement->getName().c_str(), mtlxGraph->getName().c_str());
+    LOG_ERROR(context, "failed to set %s input for %s: no such interface socket", downstreamElement->getName().c_str(), mtlxGraph->getName().c_str());
     return RPR_ERROR_INVALID_PARAMETER;
 }
 
@@ -1774,10 +1796,10 @@ rpr_status RprNode::SetInput(mx::TypedElement* downstreamElement, rpr_material_n
             auto value = static_cast<float>(mx::fromValueString<int>(valueString));
             return rprMaterialNodeSetInputFByKey(rprNode, downstreamRprId, value, value, value, 0.0f);
         } else {
-            LOG_ERROR(context, "failed to parse %s value: unsupported type - %s\n", valueString.c_str(), valueType.c_str());
+            LOG_WARNING(context, "failed to parse %s value: unsupported type - %s", valueString.c_str(), valueType.c_str());
         }
     } catch (mx::ExceptionTypeError& e) {
-        LOG_ERROR(context, "failed to parse %s value: %s\n", valueString.c_str(), e.what());
+        LOG_ERROR(context, "failed to parse %s value: %s", valueString.c_str(), e.what());
     }
 
     return RPR_ERROR_INVALID_PARAMETER;
@@ -1810,7 +1832,7 @@ RprMappedNode::RprMappedNode(rpr_material_node node, Mtlx2Rpr::Node const* nodeM
 rpr_status RprMappedNode::SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) {
     auto inputIt = rprNodeMapping->inputs.find(downstreamElement->getName());
     if (inputIt == rprNodeMapping->inputs.end()) {
-        LOG_ERROR(context, "unknown input: %s\n", downstreamElement->getName().c_str());
+        LOG_ERROR(context, "unknown input: %s", downstreamElement->getName().c_str());
         return RPR_ERROR_INVALID_PARAMETER;
     }
 
@@ -1841,7 +1863,7 @@ rpr_status RprMappedNode::SetInput(mx::TypedElement* downstreamElement, mx::Elem
 rpr_status RprMappedNode::SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* valueElement, LoaderContext* context) {
     auto inputIt = rprNodeMapping->inputs.find(downstreamElement->getName());
     if (inputIt == rprNodeMapping->inputs.end()) {
-        LOG_ERROR(context, "unknown input: %s\n", downstreamElement->getName().c_str());
+        LOG_ERROR(context, "unknown input: %s", downstreamElement->getName().c_str());
         return RPR_ERROR_INVALID_PARAMETER;
     }
 
@@ -1956,7 +1978,7 @@ rpr_status RprImageNode::SetInput(mx::TypedElement* downstreamElement, mx::Value
     }
 
     if (status != RPR_SUCCESS) {
-        LOG_ERROR(context, "Invalid input for image node %s (%s %s): unknown input or invalid type\n",
+        LOG_ERROR(context, "Invalid input for image node %s (%s %s): unknown input or invalid type",
             downstreamElement->getName().c_str(), value.c_str(), valueType.c_str());
     }
     return status;
@@ -2065,7 +2087,7 @@ rpr_status RprUberNode::SetInput(mx::TypedElement* downstreamElement, mx::ValueE
 
     if (status != RPR_SUCCESS &&
         status != RPR_ERROR_UNSUPPORTED) {
-        LOG_ERROR(context, "Invalid input for uber node %s (%s %s): unknown input or invalid type\n",
+        LOG_ERROR(context, "Invalid input for uber node %s (%s %s): unknown input or invalid type",
             downstreamElement->getName().c_str(), value.c_str(), valueType.c_str());
     }
     return status;
@@ -2371,7 +2393,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
     rpr_material_system rprMatSys) {
 
     LoaderContext ctx = {};
-    ctx.logEnabled = _loggingEnabled;
+    ctx.logLevel = _logLevel;
     ctx.mtlxDocument = mtlxDocument;
     ctx.rprMatSys = rprMatSys;
     ctx.searchPath = searchPath;
@@ -2515,7 +2537,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
     }
 
     if (renderableElements.IsEmpty()) {
-        LOG_ERROR(&ctx, "No renderable elements in %s\n", mtlxDocument->getSourceUri().c_str());
+        LOG_ERROR(&ctx, "No renderable elements in %s", mtlxDocument->getSourceUri().c_str());
         return {};
     }
 
@@ -2575,7 +2597,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
                         if (!valueStr.empty()) {
                             auto& type = bindInput->getType();
 
-                            ctx.Log("Bindinput %s: %s (%s)\n", bindInput->getName().c_str(), valueStr.c_str(), type.c_str());
+                            LOG(&ctx, "Bindinput %s: %s (%s)", bindInput->getName().c_str(), valueStr.c_str(), type.c_str());
 
                             node->SetInput(bindInput.get(), bindInput.get(), &ctx);
                         }

@@ -165,15 +165,27 @@ protected:
     void OnSizeChange(rif::Context* rifContext) override;
 };
 
-class HdRprApiDepthAov : public HdRprApiAov {
+class HdRprApiComputedAov : public HdRprApiAov {
 public:
-    HdRprApiDepthAov(HdFormat format,
+    HdRprApiComputedAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format)
+        : HdRprApiAov(aovDescriptor, format), m_width(width), m_height(height) {}
+    ~HdRprApiComputedAov() override = default;
+
+    void Resize(int width, int height, HdFormat format) override final;
+
+protected:
+    int m_width = -1;
+    int m_height = -1;
+};
+
+class HdRprApiDepthAov : public HdRprApiComputedAov {
+public:
+    HdRprApiDepthAov(int width, int height, HdFormat format,
                      std::shared_ptr<HdRprApiAov> worldCoordinateAov,
                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     ~HdRprApiDepthAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
-    void Resize(int width, int height, HdFormat format) override;
     void Resolve() override;
 
 private:
@@ -183,8 +195,19 @@ private:
     rif::Filter* m_remapFilter;
 
     std::shared_ptr<HdRprApiAov> m_retainedWorldCoordinateAov;
-    int m_width;
-    int m_height;
+};
+
+class HdRprApiIdMaskAov : public HdRprApiComputedAov {
+public:
+    HdRprApiIdMaskAov(HdRprAovDescriptor const& aovDescriptor, std::shared_ptr<HdRprApiAov> const& baseIdAov,
+                      int width, int height, HdFormat format,
+                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+    ~HdRprApiIdMaskAov() override = default;
+
+    void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+
+private:
+    std::shared_ptr<HdRprApiAov> m_baseIdAov;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
