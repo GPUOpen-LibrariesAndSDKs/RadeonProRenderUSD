@@ -164,11 +164,6 @@ struct Mtlx2Rpr {
                 {"lumacoeffs", RPR_MATERIAL_INPUT_LUMACOEFF},
             }
         };
-        nodes["convert"] = {
-            RPR_MATERIAL_NODE_MATX_CONVERT, {
-                {"in", RPR_MATERIAL_INPUT_0},
-            }
-        };
         nodes["rotate3d"] = {
             RPR_MATERIAL_NODE_MATX_ROTATE3D, {
                 {"in", RPR_MATERIAL_INPUT_0},
@@ -207,6 +202,12 @@ struct Mtlx2Rpr {
             }
         };
         nodes["position"] = {RPR_MATERIAL_NODE_MATX_POSITION, {}};
+
+        nodes["rpr_emissive"] = {
+            RPR_MATERIAL_NODE_EMISSIVE, {
+                {"color", RPR_MATERIAL_INPUT_COLOR}
+            }
+        };
 
         auto addArithmeticNode = [this](const char* name, rpr_material_node_arithmetic_operation op, int numArgs) {
             auto& mapping = nodes[name];
@@ -421,6 +422,88 @@ struct RprNode : public Node {
     size_t MoveRprApiHandles(rpr_material_node* dst) override;
 };
 
+// The passthrough node transfers input unaltered
+//
+struct PassthroughNode : public RprNode {
+    std::string inputName;
+    PassthroughNode(std::string inputName) : RprNode(nullptr, false), inputName(std::move(inputName)) {}
+    ~PassthroughNode() override = default;
+
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override {
+        if (downstreamElement->getName() == inputName) {
+            rprNode = upstreamRprNode;
+            isOwningRprNode = false;
+            return RPR_SUCCESS;
+        } else {
+            LOG(context, "Unsupported input: %s", downstreamElement->getName().c_str());
+            return RPR_ERROR_UNSUPPORTED;
+        }
+    }
+
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override {
+        if (downstreamElement->getName() == inputName) {
+            if (rprNode && isOwningRprNode) {
+                rprObjectDelete(rprNode);
+            }
+
+            rprNode = nullptr;
+            auto status = rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_CONSTANT_TEXTURE, &rprNode);
+            if (status == RPR_SUCCESS) {
+                status = RprNode::SetInput(downstreamElement, RPR_MATERIAL_INPUT_VALUE, upstreamValueElement, context);
+                if (status == RPR_SUCCESS) {
+                    isOwningRprNode = true;
+                } else {
+                    rprObjectDelete(rprNode);
+                    rprNode = nullptr;
+                }
+            }
+            return status;
+        } else {
+            LOG(context, "Unsupported input: %s", downstreamElement->getName().c_str());
+            return RPR_ERROR_UNSUPPORTED;
+        }
+    }
+};
+
+struct DisplacementNode : public RprNode {
+    DisplacementNode(LoaderContext* context) : RprNode(nullptr, true) {
+        rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_ARITHMETIC, &rprNode);
+        rprMaterialNodeSetInputUByKey(rprNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
+    }
+    ~DisplacementNode() override = default;
+
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override {
+        if (downstreamElement->getName() == "displacement") {
+            if (downstreamElement->getType() != "float") {
+                LOG_ERROR(context, "Only scalar displacement is supported");
+                return RPR_ERROR_UNSUPPORTED;
+            }
+
+            return rprMaterialNodeSetInputNByKey(rprNode, RPR_MATERIAL_INPUT_COLOR0, upstreamRprNode);
+        } else if (downstreamElement->getName() == "scale") {
+            return rprMaterialNodeSetInputNByKey(rprNode, RPR_MATERIAL_INPUT_COLOR1, upstreamRprNode);
+        } else {
+            LOG(context, "Unsupported input: %s", downstreamElement->getName().c_str());
+            return RPR_ERROR_UNSUPPORTED;
+        }
+    }
+    rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override {
+        if (downstreamElement->getName() == "displacement") {
+            if (downstreamElement->getType() != "float") {
+                LOG_ERROR(context, "Only scalar displacement is supported");
+                return RPR_ERROR_UNSUPPORTED;
+            }
+
+            return RprNode::SetInput(downstreamElement, RPR_MATERIAL_INPUT_COLOR0, upstreamValueElement, context);
+        } else if (downstreamElement->getName() == "scale") {
+            return RprNode::SetInput(downstreamElement, RPR_MATERIAL_INPUT_COLOR1, upstreamValueElement, context);
+        } else {
+            LOG(context, "Unsupported input: %s", downstreamElement->getName().c_str());
+            return RPR_ERROR_UNSUPPORTED;
+        }
+    }
+};
+
 /// The node that can be mapped (fully or partially) to MaterialX standard node
 ///
 struct RprMappedNode : public RprNode {
@@ -523,7 +606,7 @@ private:
         mx::NodePtr downstreamNode;
         mx::TypedElementPtr downstreamInput;
     };
-    Node* _CreateSubNode(mx::NodePtr const& mtlxNode, std::vector<PendingConnection>* pendingConnections, LoaderContext* context);
+    Node* _CreateSubNode(mx::NodePtr const& mtlxNode, LoaderContext* context);
 
     struct InterfaceSocket {
         mx::NodePtr subNode;
@@ -658,7 +741,7 @@ LoaderContext::ScopeGuard::ScopeGuard(LoaderContext* ctx, LogScope logScope, mx:
     ctx->logScope = logScope;
     if (logScope == LSGlobal) {
         ctx->logDepth = kGlobalLogDepth;
-    } else if (logScope == LSNested) {
+    } else if (logScope == LSNested || logScope == LSNode) {
         ctx->logDepth++;
     }
 }
@@ -1197,54 +1280,18 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
 
         return std::make_unique<SurfaceNode>();
     } else if (mtlxNode->getCategory() == "displacement") {
-        // The displacement node is passthrough node - it transfers input unaltered
-        //
-        struct DisplacementNode : public RprNode {
-            DisplacementNode() : RprNode(nullptr, false) {}
-
-            rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override {
-                if (downstreamElement->getName() == "displacement") {
-                    rprNode = upstreamRprNode;
-                    isOwningRprNode = false;
-                    return RPR_SUCCESS;
-                } else {
-                    LOG(context, "Unsupported displacement input: %s", downstreamElement->getName().c_str());
-                    return RPR_ERROR_UNSUPPORTED;
-                }
-            }
-
-            rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override {
-                if (downstreamElement->getName() == "displacement") {
-                    if (rprNode && isOwningRprNode) {
-                        rprObjectDelete(rprNode);
-                    }
-
-                    rprNode = nullptr;
-                    auto status = rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_CONSTANT_TEXTURE, &rprNode);
-                    if (status == RPR_SUCCESS) {
-                        status = RprNode::SetInput(downstreamElement, RPR_MATERIAL_INPUT_VALUE, upstreamValueElement, context);
-                        if (status == RPR_SUCCESS) {
-                            isOwningRprNode = true;
-                        } else {
-                            rprObjectDelete(rprNode);
-                            rprNode = nullptr;
-                        }
-                    }
-                    return status;
-                } else {
-                    LOG(context, "Unsupported displacement input: %s", downstreamElement->getName().c_str());
-                    return RPR_ERROR_UNSUPPORTED;
-                }
-            }
-        };
-
-        return std::make_unique<DisplacementNode>();
+        return std::make_unique<DisplacementNode>(context);
+    } else if (mtlxNode->getCategory() == "convert") {
+        return std::make_unique<PassthroughNode>("in");
     } else if (mtlxNode->getCategory() == "texcoord") {
         rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &rprNode);
         rprMaterialNodeSetInputUByKey(rprNode, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_UV);
     } else if (mtlxNode->getCategory() == "normal") {
         rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &rprNode);
         rprMaterialNodeSetInputUByKey(rprNode, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_N);
+    } else if (mtlxNode->getCategory() == "viewdirection") {
+        rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_INPUT_LOOKUP, &rprNode);
+        rprMaterialNodeSetInputUByKey(rprNode, RPR_MATERIAL_INPUT_VALUE, RPR_MATERIAL_NODE_LOOKUP_INVEC);
     } else if (mtlxNode->getCategory() == "sqrt") {
         rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_ARITHMETIC, &rprNode);
         rprMaterialNodeSetInputUByKey(rprNode, RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_POW);
@@ -1295,7 +1342,7 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
     } else {
         // Some of the materialX standard nodes map to RPR differently depending on the node return type
         //
-        if (mtlxNode->getCategory() == "mix" && mtlxNode->getType() == "BSDF") {
+        if (mtlxNode->getCategory() == "mix" && (mtlxNode->getType() == "BSDF" || mtlxNode->getType() == "surfaceshader")) {
             // In RPR, mixing of two BSDFs can be done with RPR_MATERIAL_NODE_BLEND
             //
             static Mtlx2Rpr::Node bsdfMix = {
@@ -1435,41 +1482,11 @@ Node* MtlxNodeGraphNode::GetSubNode(std::string const& nodename, LoaderContext* 
         return nullptr;
     }
 
-    // To avoid recursion, we postpone the connection of nodes until the whole subgraph is built
-    //
-    std::vector<PendingConnection> pendingConnections;
-    pendingConnections.emplace_back();
-    pendingConnections.back().downstreamNode = mtlxNode;
-
-    Node* retNode = nullptr;
-
-    while (!pendingConnections.empty()) {
-        auto connection = std::move(pendingConnections.back());
-        pendingConnections.pop_back();
-
-        Node* downstreamNode = _CreateSubNode(connection.downstreamNode, &pendingConnections, context);
-        Node* upstreamNode = _CreateSubNode(connection.upstreamNode, &pendingConnections, context);
-
-        if (downstreamNode && upstreamNode) {
-            auto& outputName = connection.upstreamNodeOutput ? connection.upstreamNodeOutput->getName() : mx::EMPTY_STRING;
-            auto status = upstreamNode->Connect(outputName, downstreamNode, connection.downstreamInput.get(), context);
-
-            if (status == RPR_SUCCESS) {
-                LOG(context, "Connected %s to %s", connection.upstreamNode->getName().c_str(), connection.downstreamNode->getName().c_str());
-            }
-        }
-
-        if (connection.downstreamNode == mtlxNode) {
-            retNode = downstreamNode;
-        }
-    }
-
-    return retNode;
+    return _CreateSubNode(mtlxNode, context);
 }
 
 Node* MtlxNodeGraphNode::_CreateSubNode(
     mx::NodePtr const& mtlxNode,
-    std::vector<PendingConnection>* pendingConnections,
     LoaderContext* context) {
     if (!mtlxNode) {
         return nullptr;
@@ -1568,20 +1585,17 @@ Node* MtlxNodeGraphNode::_CreateSubNode(
                     continue;
                 }
 
-                // If upstream node is already created, connect output of upstream node to input of downstream node
-                //
-                auto upstreamNodeIt = subNodes.find(mtlxUpstreamNode->getName());
-                if (upstreamNodeIt != subNodes.end()) {
-                    status = upstreamNodeIt->second->Connect(mtlxUpstreamNodeOutput->getName(), node, inputElement.get(), context);
+                Node* upstreamNode = _CreateSubNode(mtlxUpstreamNode, context);
+                if (upstreamNode) {
+                    auto& outputName = mtlxUpstreamNodeOutput ? mtlxUpstreamNodeOutput->getName() : mx::EMPTY_STRING;
+                    auto status = upstreamNode->Connect(outputName, node, inputElement.get(), context);
+
+                    if (status == RPR_SUCCESS) {
+                        LOG(context, "Connected %s to %s", mtlxUpstreamNode->getName().c_str(), mtlxNode->getName().c_str());
+                    }
                 } else {
-                    // Otherwise, postpone the connection process until the upstream node is created
-                    //
-                    pendingConnections->emplace_back();
-                    auto& pendingConnection = pendingConnections->back();
-                    pendingConnection.downstreamNode = mtlxNode;
-                    pendingConnection.downstreamInput = std::move(input);
-                    pendingConnection.upstreamNode = std::move(mtlxUpstreamNode);
-                    pendingConnection.upstreamNodeOutput = std::move(mtlxUpstreamNodeOutput);
+                    LOG(context, "Failed to connect %s to %s", mtlxUpstreamNode->getName().c_str(), mtlxNode->getName().c_str());
+                    status = RPR_ERROR_INVALID_OBJECT;
                 }
 
                 if (status == RPR_SUCCESS) {
