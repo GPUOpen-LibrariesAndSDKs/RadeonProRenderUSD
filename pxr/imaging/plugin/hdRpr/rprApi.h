@@ -71,8 +71,8 @@ public:
     HdRprApi(HdRprDelegate* delegate);
     ~HdRprApi();
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity);
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& pathTotexture, float intensity, VtValue const& backgroundOverride);
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity, VtValue const& backgroundOverride);
     void SetTransform(HdRprApiEnvironmentLight* envLight, GfMatrix4f const& transform);
     void Release(HdRprApiEnvironmentLight* envLight);
 

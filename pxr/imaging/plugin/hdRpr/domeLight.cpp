@@ -26,6 +26,10 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    ((backgroundOverride, "rpr:backgroundOverride"))
+);
+
 static void removeFirstSlash(std::string& string) {
     // Don't need this for *nix/Mac
 #ifdef _WIN32
@@ -71,6 +75,8 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
             return;
         }
 
+        VtValue const& backgroundOverride = sceneDelegate->GetLightParamValue(id, _tokens->backgroundOverride);
+
         float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
         float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
         float computedIntensity = computeLightIntensity(intensity, exposure);
@@ -100,9 +106,9 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
                 color[2] *= temperatureColor[2];
             }
 
-            m_rprLight = rprApi->CreateEnvironmentLight(color, computedIntensity);
+            m_rprLight = rprApi->CreateEnvironmentLight(color, computedIntensity, backgroundOverride);
         } else {
-            m_rprLight = rprApi->CreateEnvironmentLight(texturePath, computedIntensity);
+            m_rprLight = rprApi->CreateEnvironmentLight(texturePath, computedIntensity, backgroundOverride);
         }
 
         if (m_rprLight) {

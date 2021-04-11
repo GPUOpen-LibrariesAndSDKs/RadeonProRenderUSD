@@ -242,6 +242,9 @@ struct HdRprApiEnvironmentLight {
     std::unique_ptr<rpr::EnvironmentLight> light;
     std::unique_ptr<RprUsdCoreImage> image;
 
+    std::unique_ptr<rpr::EnvironmentLight> backgroundOverrideLight;
+    std::unique_ptr<RprUsdCoreImage> backgroundOverrideImage;
+
     enum {
         kDetached,
         kAttachedAsLight,
@@ -752,7 +755,7 @@ public:
         }
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<RprUsdCoreImage>&& image, float intensity) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<RprUsdCoreImage>&& image, float intensity, VtValue const& backgroundOverride) {
         // XXX (RPR): default environment light should be removed before creating a new one - RPR limitation
         RemoveDefaultLight();
 
@@ -785,6 +788,20 @@ public:
             return nullptr;
         }
 
+        if (backgroundOverride.IsHolding<GfVec3f>()) {
+            GfVec3f const& backgroundOverrideColor = backgroundOverride.UncheckedGet<GfVec3f>();
+            envLight->backgroundOverrideLight.reset(m_rprContext->CreateEnvironmentLight(&status));
+            envLight->backgroundOverrideImage = CreateConstantColorImage(backgroundOverrideColor.data());
+
+            if (!envLight->backgroundOverrideLight ||
+                !envLight->backgroundOverrideImage ||
+                RPR_ERROR_CHECK(envLight->backgroundOverrideLight->SetImage(envLight->backgroundOverrideImage->GetRootImage()), "Failed to set background override env light image", m_rprContext.get()) ||
+                RPR_ERROR_CHECK(envLight->light->SetEnvironmentLightOverride(RPR_ENVIRONMENT_LIGHT_OVERRIDE_BACKGROUND, envLight->backgroundOverrideLight.get()), "Failed to set env light background override")) {
+                envLight->backgroundOverrideLight = nullptr;
+                envLight->backgroundOverrideImage = nullptr;
+            }
+        }
+
         m_dirtyFlags |= ChangeTracker::DirtyScene;
         m_numLights++;
         return envLight;
@@ -814,7 +831,7 @@ public:
         }
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& path, float intensity) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& path, float intensity, VtValue const& backgroundOverride) {
         if (!m_rprContext || path.empty()) {
             return nullptr;
         }
@@ -826,29 +843,22 @@ public:
             return nullptr;
         }
 
-        return CreateEnvironmentLight(std::move(image), intensity);
+        return CreateEnvironmentLight(std::move(image), intensity, backgroundOverride);
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity, VtValue const& backgroundOverride) {
         if (!m_rprContext) {
             return nullptr;
         }
 
-        std::array<float, 3> backgroundColor = {color[0], color[1], color[2]};
-        rpr_image_format format = {3, RPR_COMPONENT_TYPE_FLOAT32};
-        rpr_uint imageSize = m_rprContextMetadata.pluginType == kPluginHybrid ? 64 : 1;
-        std::vector<std::array<float, 3>> imageData(imageSize * imageSize, backgroundColor);
-
         LockGuard rprLock(m_rprContext->GetMutex());
 
-        rpr::Status status;
-        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), imageSize, imageSize, format, imageData.data(), &status));
-        if (!image) {
-            RPR_ERROR_CHECK(status, "Failed to create image", m_rprContext.get());
+        auto backgroundImage = CreateConstantColorImage(color.data());
+        if (!backgroundImage) {
             return nullptr;
         }
 
-        return CreateEnvironmentLight(std::move(image), intensity);
+        return CreateEnvironmentLight(std::move(backgroundImage), intensity, backgroundOverride);
     }
 
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
@@ -2990,7 +3000,7 @@ private:
     void AddDefaultLight() {
         if (!m_defaultLightObject) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
-            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
+            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f, VtValue());
 
             if (RprUsdIsLeakCheckEnabled()) {
                 m_defaultLightObject->light->SetName("defaultLight");
@@ -3010,6 +3020,22 @@ private:
             // Do not count default light object
             m_numLights++;
         }
+    }
+
+    std::unique_ptr<RprUsdCoreImage> CreateConstantColorImage(float const* color) {
+        std::array<float, 3> colorArray = {color[0], color[1], color[2]};
+        rpr_image_format format = {3, RPR_COMPONENT_TYPE_FLOAT32};
+        rpr_uint imageSize = m_rprContextMetadata.pluginType == kPluginHybrid ? 64 : 1;
+        std::vector<std::array<float, 3>> imageData(imageSize * imageSize, colorArray);
+
+        rpr::Status status;
+        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), imageSize, imageSize, format, imageData.data(), &status));
+        if (!image) {
+            RPR_ERROR_CHECK(status, "Failed to create const color image", m_rprContext.get());
+            return nullptr;
+        }
+
+        return image;
     }
 
     void SplitPolygons(const VtIntArray& indexes, const VtIntArray& vpf, VtIntArray& out_newIndexes, VtIntArray& out_newVpf) {
@@ -3684,14 +3710,14 @@ rpr::Shape* HdRprApi::CreateMeshInstance(rpr::Shape* prototypeMesh) {
     return m_impl->CreateMeshInstance(prototypeMesh);
 }
 
-HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(GfVec3f color, float intensity) {
+HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(GfVec3f color, float intensity, VtValue const& backgroundOverride) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateEnvironmentLight(color, intensity);
+    return m_impl->CreateEnvironmentLight(color, intensity, backgroundOverride);
 }
 
-HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(const std::string& prthTotexture, float intensity) {
+HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(const std::string& prthTotexture, float intensity, VtValue const& backgroundOverride) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateEnvironmentLight(prthTotexture, intensity);
+    return m_impl->CreateEnvironmentLight(prthTotexture, intensity, backgroundOverride);
 }
 
 void HdRprApi::SetTransform(HdRprApiEnvironmentLight* envLight, GfMatrix4f const& transform) {
