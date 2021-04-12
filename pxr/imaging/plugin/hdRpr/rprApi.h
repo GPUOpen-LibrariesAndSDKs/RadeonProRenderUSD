@@ -158,7 +158,7 @@ public:
     RenderStats GetRenderStats() const;
 
     void CommitResources();
-    void Resolve();
+    void Resolve(SdfPath const& aovId);
     void Render(HdRprRenderThread* renderThread);
     void AbortRender();
 
