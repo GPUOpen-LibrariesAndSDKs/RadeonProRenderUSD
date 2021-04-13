@@ -75,6 +75,12 @@ TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
 
 namespace {
 
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    (batch)
+    (renderMode)
+    (progressive)
+);
+
 TfToken GetRenderQuality(HdRprConfig const& config) {
     std::string renderQualityOverride = TfGetEnvSetting(HDRPR_RENDER_QUALITY_OVERRIDE);
 
@@ -1485,15 +1491,15 @@ public:
 
     rpr_uint GetRprRenderMode(TfToken const& mode) {
         static std::map<TfToken, rpr_render_mode> s_mapping = {
-            {HdRprRenderModeTokens->GlobalIllumination, RPR_RENDER_MODE_GLOBAL_ILLUMINATION},
-            {HdRprRenderModeTokens->DirectIllumination, RPR_RENDER_MODE_DIRECT_ILLUMINATION},
-            {HdRprRenderModeTokens->Wireframe, RPR_RENDER_MODE_WIREFRAME},
-            {HdRprRenderModeTokens->MaterialIndex, RPR_RENDER_MODE_MATERIAL_INDEX},
-            {HdRprRenderModeTokens->Position, RPR_RENDER_MODE_POSITION},
-            {HdRprRenderModeTokens->Normal, RPR_RENDER_MODE_NORMAL},
-            {HdRprRenderModeTokens->Texcoord, RPR_RENDER_MODE_TEXCOORD},
-            {HdRprRenderModeTokens->AmbientOcclusion, RPR_RENDER_MODE_AMBIENT_OCCLUSION},
-            {HdRprRenderModeTokens->Diffuse, RPR_RENDER_MODE_DIFFUSE},
+            {HdRprCoreRenderModeTokens->GlobalIllumination, RPR_RENDER_MODE_GLOBAL_ILLUMINATION},
+            {HdRprCoreRenderModeTokens->DirectIllumination, RPR_RENDER_MODE_DIRECT_ILLUMINATION},
+            {HdRprCoreRenderModeTokens->Wireframe, RPR_RENDER_MODE_WIREFRAME},
+            {HdRprCoreRenderModeTokens->MaterialIndex, RPR_RENDER_MODE_MATERIAL_INDEX},
+            {HdRprCoreRenderModeTokens->Position, RPR_RENDER_MODE_POSITION},
+            {HdRprCoreRenderModeTokens->Normal, RPR_RENDER_MODE_NORMAL},
+            {HdRprCoreRenderModeTokens->Texcoord, RPR_RENDER_MODE_TEXCOORD},
+            {HdRprCoreRenderModeTokens->AmbientOcclusion, RPR_RENDER_MODE_AMBIENT_OCCLUSION},
+            {HdRprCoreRenderModeTokens->Diffuse, RPR_RENDER_MODE_DIFFUSE},
         };
 
         auto it = s_mapping.find(mode);
@@ -1507,10 +1513,10 @@ public:
         }
         m_dirtyFlags |= ChangeTracker::DirtyScene;
 
-        auto& renderMode = preferences.GetRenderMode();
+        auto& renderMode = preferences.GetCoreRenderMode();
 
         if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
-            if (renderMode == HdRprRenderModeTokens->Contour) {
+            if (renderMode == HdRprCoreRenderModeTokens->Contour) {
                 if (!m_contourAovs) {
                     m_contourAovs = std::make_unique<ContourRenderModeAovs>();
                     m_contourAovs->normal = CreateAov(HdAovTokens->normal);
@@ -1546,7 +1552,7 @@ public:
         }
 
         RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, GetRprRenderMode(renderMode)), "Failed to set render mode");
-        if (renderMode == HdRprRenderModeTokens->AmbientOcclusion) {
+        if (renderMode == HdRprCoreRenderModeTokens->AmbientOcclusion) {
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_AO_RAY_LENGTH, preferences.GetAoRadius()), "Failed to set ambient occlusion radius");
         }
     }
@@ -1682,6 +1688,16 @@ public:
             m_isAlphaEnabled = preferences.GetEnableAlpha();
 
             UpdateColorAlpha(m_colorAov.get());
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtySession) || force) {
+            m_isProgressive = preferences.GetProgressive();
+            bool isBatch = preferences.GetRenderMode() == HdRprRenderModeTokens->batch;
+            if (m_isBatch != isBatch) {
+                m_isBatch = isBatch;
+                m_batchREM = isBatch ? std::make_unique<BatchRenderEventManager>() : nullptr;
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
         }
     }
 
@@ -2081,23 +2097,19 @@ public:
             return;
         }
 
-        if (!m_batchREM) {
-            m_batchREM = std::make_unique<BatchRenderEventManager>();
-        }
         auto renderScope = m_batchREM->EnterRenderScope();
 
         EnableRenderUpdateCallback(BatchRenderUpdateCallback);
 
-        // In a batch session, we disable resolving of all samples except the first and last.
-        // Also, if the user will keep progressive mode on, we support snapshoting (resolving intermediate renders)
-
-        // User might decide to completely disable progress updates to maximize performance.
-        // In this case, snapshoting is not available.
-        const bool isProgressive = m_delegate->IsProgressive();
-
         // Also, we try to maximize the number of samples rendered with one rprContextRender call.
         bool isMaximizingContextIterations = false;
-        if (isProgressive) {
+
+        // In a batch session, we disable resolving of all samples except the first and last.
+        // Also, if the user will keep progressive mode on, we support snapshoting (resolving intermediate renders)
+        //
+        // User might decide to completely disable progress updates to maximize performance.
+        // In this case, snapshoting is not available.
+        if (m_isProgressive) {
             // We can keep the ability to log progress and do snapshots
             // while maximizing RPR_CONTEXT_ITERATIONS, only if RUC is supported.
             if (m_isRenderUpdateCallbackEnabled) {
@@ -2401,7 +2413,7 @@ public:
 
         if (m_state == kStateRender) {
             try {
-                if (m_delegate->IsBatch()) {
+                if (m_isBatch) {
                     BatchRenderImpl(renderThread);
                 } else {
                     if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid &&
@@ -2653,7 +2665,7 @@ Don't show this message again?
         RprUsdMaterialRegistry::GetInstance().CommitResources(m_imageCache.get());
     }
 
-    void Resolve() {
+    void Resolve(SdfPath const& aovId) {
         // hdRpr's rendering is implemented asynchronously - rprContextRender spins in the background thread.
         //
         // Resolve works differently depending on the current rendering session type:
@@ -2662,9 +2674,8 @@ Don't show this message again?
         //   * In an interactive session, it simply does nothing because we always resolve
         //      data to HdRenderBuffer as fast as possible. It might change in the future though.
         //
-        if (m_batchREM) {
-            m_batchREM->OnResolveRequest();
-            m_batchREM->WaitUntilNextRenderEvent();
+        if (m_isBatch) {
+            m_batchREM->WaitForResolve(aovId);
         }
     }
 
@@ -3567,32 +3578,37 @@ private:
 
     class BatchRenderEventManager {
     public:
-        void WaitUntilNextRenderEvent() {
+        void WaitForResolve(SdfPath const& aovId) {
+            if (m_signalingAovId.IsEmpty()) {
+                m_signalingAovId = aovId;
+            } else if (m_signalingAovId != aovId) {
+                // When there is more than one bound aov,
+                // we want to avoid blocking resolve for each of them separately.
+                // Instead, block only on the first one only.
+                return;
+            }
+
+            m_isResolveRequested.store(true);
             std::unique_lock<std::mutex> lock(m_renderEventMutex);
             m_renderEventCV.wait(lock, [this]() -> bool { return !m_isRenderInProgress || !m_isResolveRequested; });
         }
 
         class RenderScopeGuard {
         public:
-            RenderScopeGuard(std::atomic<bool>* isRenderInProgress, std::condition_variable* renderEventCV)
-                : m_isRenderInProgress(isRenderInProgress), m_renderEventCV(renderEventCV) {
-                m_isRenderInProgress->store(true);
-                m_renderEventCV->notify_one();
+            RenderScopeGuard(BatchRenderEventManager* rem) : m_rem(rem) {
+                m_rem->m_signalingAovId = SdfPath::EmptyPath();
+                m_rem->m_isRenderInProgress.store(true);
+                m_rem->m_renderEventCV.notify_one();
             }
             ~RenderScopeGuard() {
-                m_isRenderInProgress->store(false);
-                m_renderEventCV->notify_one();
+                m_rem->m_isRenderInProgress.store(false);
+                m_rem->m_renderEventCV.notify_one();
             }
 
         private:
-            std::atomic<bool>* m_isRenderInProgress;
-            std::condition_variable* m_renderEventCV;
+            BatchRenderEventManager* m_rem;
         };
-        RenderScopeGuard EnterRenderScope() { return RenderScopeGuard(&m_isRenderInProgress, &m_renderEventCV); }
-
-        void OnResolveRequest() {
-            m_isResolveRequested.store(true);
-        }
+        RenderScopeGuard EnterRenderScope() { return RenderScopeGuard(this); }
 
         bool IsResolveRequested() const {
             return m_isResolveRequested;
@@ -3608,8 +3624,11 @@ private:
         std::condition_variable m_renderEventCV;
         std::atomic<bool> m_isRenderInProgress{false};
         std::atomic<bool> m_isResolveRequested{false};
+        SdfPath m_signalingAovId;
     };
     std::unique_ptr<BatchRenderEventManager> m_batchREM;
+    std::atomic<bool> m_isBatch{false};
+    bool m_isProgressive;
 
     struct ResolveData {
         struct AovEntry {
@@ -3930,8 +3949,8 @@ void HdRprApi::CommitResources() {
     m_impl->CommitResources();
 }
 
-void HdRprApi::Resolve() {
-    m_impl->Resolve();
+void HdRprApi::Resolve(SdfPath const& aovId) {
+    m_impl->Resolve(aovId);
 }
 
 void HdRprApi::Render(HdRprRenderThread* renderThread) {
