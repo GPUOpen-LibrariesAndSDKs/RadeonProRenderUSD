@@ -118,9 +118,6 @@ private:
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
     (percentDone) \
-    (renderMode) \
-    (batch) \
-    (progressive) \
     (RPR)
 );
 
@@ -157,8 +154,6 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
         SetRenderSetting(entry.first, entry.second);
     }
 
-    m_isBatch = GetRenderSetting(_tokens->renderMode) == _tokens->batch;
-    m_isProgressive = GetRenderSetting(_tokens->progressive).GetWithDefault(true);
 
     m_rprApi.reset(new HdRprApi(this));
     g_rprApi = m_rprApi.get();

@@ -396,10 +396,6 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
 
         bool isVisible = sceneDelegate->GetVisible(id);
         if (!isVisible) {
-            // Invisible light does not produces any emission on a scene.
-            // So we simply keep light primitive empty in that case.
-            // We can do it in such a way because Hydra releases light object
-            // whenever it changed and creates it from scratch
             *dirtyBits = DirtyBits::Clean;
             return;
         }

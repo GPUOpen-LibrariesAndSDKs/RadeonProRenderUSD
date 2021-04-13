@@ -78,7 +78,7 @@ render_setting_categories = [
         'name': 'RenderMode',
         'settings': [
             {
-                'name': 'renderMode',
+                'name': 'coreRenderMode',
                 'ui_name': 'Render Mode',
                 'defaultValue': 'Global Illumination',
                 'values': [
@@ -101,13 +101,13 @@ render_setting_categories = [
                 'minValue': 0.0,
                 'maxValue': 100.0,
                 'houdini': {
-                    'hidewhen': 'renderMode != "AmbientOcclusion"'
+                    'hidewhen': 'coreRenderMode != "AmbientOcclusion"'
                 }
             },
             {
                 'folder': 'Contour Settings',
                 'houdini': {
-                    'hidewhen': 'renderMode != "Contour"'
+                    'hidewhen': 'coreRenderMode != "Contour"'
                 },
                 'settings': [
                     {
@@ -117,7 +117,7 @@ render_setting_categories = [
                         'minValue': 0.0,
                         'maxValue': 1.0,
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     },
                     {
@@ -126,7 +126,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use geometry normals for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     },
                     {
@@ -137,7 +137,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via normals',
                         'houdini': {
-                            'hidewhen': ['renderMode != "Contour"', 'contourUseNormal == 0']
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseNormal == 0']
                         }
                     },
                     {
@@ -147,7 +147,7 @@ render_setting_categories = [
                         'minValue': 0.0,
                         'maxValue': 180.0,
                         'houdini': {
-                            'hidewhen': ['renderMode != "Contour"', 'contourUseNormal == 0']
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseNormal == 0']
                         }
                     },
                     {
@@ -156,7 +156,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use primitive Id for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     },
                     {
@@ -167,7 +167,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via primitive Id',
                         'houdini': {
-                            'hidewhen': ['renderMode != "Contour"', 'contourUsePrimId == 0']
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUsePrimId == 0']
                         }
                     },
                     {
@@ -176,7 +176,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use material Id for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     },
                     {
@@ -187,7 +187,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via material Id',
                         'houdini': {
-                            'hidewhen': ['renderMode != "Contour"', 'contourUseMaterialId == 0']
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseMaterialId == 0']
                         }
                     },
                     {
@@ -204,7 +204,7 @@ render_setting_categories = [
                                 ' * cyan - material Id + normal\\n'
                                 ' * black - all',
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     }
                 ]
@@ -573,6 +573,23 @@ render_setting_categories = [
             {
                 'name': 'rprExportUseImageCache',
                 'defaultValue': False
+            }
+        ]
+    },
+    {
+        'name': 'Session',
+        'settings': [
+            {
+                'name': 'renderMode',
+                'defaultValue': 'interactive',
+                'values': [
+                    SettingValue('batch'),
+                    SettingValue('interactive')
+                ]
+            },
+            {
+                'name': 'progressive',
+                'defaultValue': True
             }
         ]
     }

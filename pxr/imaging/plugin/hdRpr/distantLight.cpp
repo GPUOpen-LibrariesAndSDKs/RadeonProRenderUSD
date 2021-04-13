@@ -47,6 +47,17 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
 
     bool newLight = false;
     if (bits & HdLight::DirtyParams) {
+        bool isVisible = sceneDelegate->GetVisible(id);
+        if (!isVisible) {
+            if (m_rprLight) {
+                rprApi->Release(m_rprLight);
+                m_rprLight = nullptr;
+            }
+
+            *dirtyBits = HdLight::Clean;
+            return;
+        }
+
         float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
         float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
         float computedIntensity = computeLightIntensity(intensity, exposure);
