@@ -52,6 +52,7 @@ using json = nlohmann::json;
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
+#include "pxr/base/tf/fileUtils.h"
 #include "pxr/base/tf/getenv.h"
 
 #include "notify/message.h"
@@ -2462,6 +2463,14 @@ Don't show this message again?
             return;
         }
 #endif // BUILD_AS_HOUDINI_PLUGIN
+
+        // Create intermediate directories if needed
+        auto exportDir = TfGetPathName(m_rprSceneExportPath);
+        if (!exportDir.empty()) {
+            if (!TfMakeDirs(exportDir, -1, true)) {
+                fprintf(stderr, "Failed to create output directory\n");
+            }
+        }
 
         uint32_t currentYFlip;
         if (m_isOutputFlipped) {
