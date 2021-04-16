@@ -2219,7 +2219,7 @@ public:
                 }
             }
 
-            if (isAdaptiveSamplingEnabled &&
+            if (isAdaptiveSamplingEnabled && m_numSamples >= m_minSamples && 
                 RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                 m_activePixels = -1;
             }
@@ -2349,7 +2349,7 @@ public:
                 ResolveFramebuffers();
             }
 
-            if (IsAdaptiveSamplingEnabled() &&
+            if (IsAdaptiveSamplingEnabled() && m_numSamples >= m_minSamples &&
                 RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                 m_activePixels = -1;
             }
