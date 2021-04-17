@@ -8,35 +8,6 @@ from hutil.Qt import QtCore, QtGui, QtWidgets, QtUiTools
 
 material_library=None
 
-HOWTO_INSTALL_MD = '''
-### How to install
-1. Download MaterialX version of "Radeon ProRender Material Library" - [link](https://drive.google.com/file/d/1e2Qys1UMi9pu_x3wW5ctm9b8_FIohLKG/view?usp=sharing) (TODO: host somewhere)
-2. Unzip to any directory - this will be our `INSTALL_DIR`.
-3. Add `RPR_MTLX_MATERIAL_LIBRARY_PATH` environment variable value of which is `INSTALL_DIR`.
-    This can be done in a few ways:
-      * by modifying houdini.env file. [More info](https://www.sidefx.com/docs/houdini/basics/config_env.html) at "Setting environment variables"
-      * by modifying `HOUDINI_USER_PREF_DIR/packages/RPR_for_Houdini.json` package file. [More info](https://www.sidefx.com/docs/houdini/ref/plugins.html)
-      * by setting environment variable globally. [More info](https://superuser.com/questions/284342/what-are-path-and-other-environment-variables-and-how-can-i-set-or-use-them)
-4. Restart Houdini
-'''
-
-# Generated from HOWTO_INSTALL_MD
-HOWTO_INSTALL_HTML = '''
-<h3 id="how-to-install">How to install</h3>
-<ol>
-<li>Download MaterialX version of &quot;Radeon ProRender Material Library&quot; - <a href="https://drive.google.com/file/d/1e2Qys1UMi9pu_x3wW5ctm9b8_FIohLKG/view?usp=sharing">link</a> (TODO: host somewhere)</li>
-<li>Unzip to any directory - this will be our <code>INSTALL_DIR</code>.</li>
-<li>Add <code>RPR_MTLX_MATERIAL_LIBRARY_PATH</code> environment variable value of which is <code>INSTALL_DIR</code>.
- This can be done in a few ways:<ul>
-<li>by modifying houdini.env file. <a href="https://www.sidefx.com/docs/houdini/basics/config_env.html">More info</a> at &quot;Setting environment variables&quot;</li>
-<li>by modifying <code>HOUDINI_USER_PREF_DIR/packages/RPR_for_Houdini.json</code> package file. <a href="https://www.sidefx.com/docs/houdini/ref/plugins.html">More info</a></li>
-<li>by setting environment variable globally. <a href="https://superuser.com/questions/284342/what-are-path-and-other-environment-variables-and-how-can-i-set-or-use-them">More info</a></li>
-</ul>
-</li>
-<li>Restart Houdini</li>
-</ol>
-'''
-
 HELP_TEXT = '''
 To import a material click on a corresponding swatch. The material is always imported as a separate "Material Library" LOP node.
 
@@ -54,10 +25,9 @@ def recursive_mkdir(path):
 
 class MaterialLibrary:
     class InitError(Exception):
-        def __init__(self, brief_msg, full_msg):
-            self.brief_msg = brief_msg
-            self.full_msg = full_msg
-            super(MaterialLibrary.InitError, self).__init__(brief_msg)
+        def __init__(self, msg):
+            self.msg = msg
+            super(MaterialLibrary.InitError, self).__init__(msg)
 
 
     class MaterialData:
@@ -73,9 +43,7 @@ class MaterialLibrary:
 
         self.path = os.environ.get('RPR_MTLX_MATERIAL_LIBRARY_PATH')
         if not self.path:
-            raise MaterialLibrary.InitError(
-                'Material Library is not installed.',
-                HOWTO_INSTALL_HTML)
+            raise MaterialLibrary.InitError('Material Library is not installed: <a href="https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderUSD#rpr-material-library">install guide</a>')
 
         materials_json_file = os.path.join(self.path, 'materials.json')
         try:
@@ -109,13 +77,9 @@ class MaterialLibrary:
             self.material_groups.sort(key=lambda entry: entry[0])
 
         except IOError as e:
-            raise MaterialLibrary.InitError(
-                'Corrupted Material Library.',
-                'materials.json could not be read.')
+            raise MaterialLibrary.InitError('Corrupted Material Library: missing materials.json.')
         except ValueError:
-            raise MaterialLibrary.InitError(
-                'Corrupted Material Library',
-                'Invalid materials.json.')
+            raise MaterialLibrary.InitError('Corrupted Material Librar: invalid materials.json.')
 
     MATERIAL_LIBRARY_TAG='hdrpr_material_library_generated'
 
@@ -623,9 +587,8 @@ def import_material():
         except MaterialLibrary.InitError as e:
             msg = QtWidgets.QMessageBox(hou.qt.mainWindow())
             msg.setIcon(QtWidgets.QMessageBox.Critical)
-            msg.setText(e.brief_msg)
-            msg.setInformativeText(e.full_msg)
-            msg.setWindowTitle("Error")
+            msg.setText(e.msg)
+            msg.setWindowTitle("Material Library initialization failed")
             msg.show()
             return
 

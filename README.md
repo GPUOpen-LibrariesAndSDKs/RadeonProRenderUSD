@@ -110,3 +110,12 @@ Launch either usdview or Houdini's Solaris viewport and select RPR as the render
 *   `HDRPR_TRACING_DIR`
 
     To change the default directory, add the environment variable `HDRPR_TRACING_DIR` pointing to the location in which you wish the trace files to be recorded. For example, set `HDRPR_TRACING_DIR=C:\folder\` to activate the tracing in `C:\folder\`.
+
+Houdini
+-----------------------------
+
+##### RPR Material Library
+
+1. Download [.mtlx version of RPR Material Library](https://drive.google.com/file/d/1i5jdYGS7gmrxw_Y0y7uotx4gxXVr8cMB/view?usp=sharing).
+
+2. Follow instructions from INSTALL.md shipped with the material library.

@@ -25,14 +25,29 @@ GroupSources(RPR_for_Houdini)
 houdini_configure_target(RPR_for_Houdini "INSTDIR" "${CMAKE_INSTALL_PREFIX}/houdini/dso")
 
 set(HOUDINI_MAJOR_MINOR_VERSION "${Houdini_VERSION_MAJOR}.${Houdini_VERSION_MINOR}")
-configure_file(activateHoudiniPlugin.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.cpp)
-add_executable(activateHoudiniPlugin ${CMAKE_CURRENT_BINARY_DIR}/activateHoudiniPlugin.cpp)
-set_property(TARGET activateHoudiniPlugin PROPERTY CXX_STANDARD 11)
-target_link_libraries(activateHoudiniPlugin PRIVATE ghc_filesystem)
-target_compile_definitions(activateHoudiniPlugin PRIVATE GHC_WIN_WSTRING_STRING_TYPE)
-install(
-    TARGETS activateHoudiniPlugin
-    RUNTIME DESTINATION .)
+configure_file(houdiniPluginActivator.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/houdiniPluginActivator.cpp)
+
+function(add_plugin_activator name)
+    add_executable(${name} ${name}.cpp)
+    set_property(TARGET ${name} PROPERTY CXX_STANDARD 11)
+    target_link_libraries(${name} PRIVATE ghc_filesystem)
+    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+    target_compile_definitions(${name} PRIVATE GHC_WIN_WSTRING_STRING_TYPE)
+endfunction()
+
+add_plugin_activator(activateHoudiniPlugin)
+install(TARGETS activateHoudiniPlugin RUNTIME DESTINATION .)
+
+if(RPR_INSTALL_MATLIB_PACKAGE)
+    add_plugin_activator(activateMatlibPlugin)
+    install(TARGETS activateMatlibPlugin RUNTIME DESTINATION MaterialLibrary)
+
+    install(
+        FILES ${CMAKE_CURRENT_SOURCE_DIR}/MatLib_INSTALL.md
+        DESTINATION MaterialLibrary
+        RENAME INSTALL.md)
+endif()
+
 install(
     FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_exportRpr1.hda
