@@ -22,6 +22,7 @@ TF_REGISTRY_FUNCTION(TfDebug) {
     TF_DEBUG_ENVIRONMENT_SYMBOL(RPR_USD_DEBUG_CORE_UNSUPPORTED_ERROR, "signal about unsupported errors");
     TF_DEBUG_ENVIRONMENT_SYMBOL(RPR_USD_DEBUG_DUMP_MATERIALS, "Dump material networks to the files in the current working directory")
     TF_DEBUG_ENVIRONMENT_SYMBOL(RPR_USD_DEBUG_LEAKS, "signal about rpr_context leaks");
+    TF_DEBUG_ENVIRONMENT_SYMBOL(RPR_USD_DEBUG_MATERIAL_REGISTRY, "Print debug info about material registry");
 }
 
 bool RprUsdIsLeakCheckEnabled() {

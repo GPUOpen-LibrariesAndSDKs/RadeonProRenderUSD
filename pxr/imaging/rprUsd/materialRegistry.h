@@ -15,6 +15,7 @@ limitations under the License.
 #define RPRUSD_MATERIAL_REGISTRY_H
 
 #include "pxr/imaging/rprUsd/api.h"
+#include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/hd/material.h"
 #include "pxr/base/arch/demangle.h"
 #include "pxr/base/tf/singleton.h"
@@ -197,6 +198,8 @@ inline void RprUsdMaterialRegistry::Register(
     TfToken const& id,
     RprUsdMaterialNodeFactoryFnc factory,
     RprUsdMaterialNodeInfo const* info) {
+    TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("Registering material node with id \"%s\"\n", id.GetText());
+
     RprUsdMaterialNodeDesc desc = {};
     desc.factory = std::move(factory);
     desc.info = info;
