@@ -2601,15 +2601,16 @@ Don't show this message again?
                     if (aovDesc->id == kColorAlpha) {
                         aovDesc = &HdRprAovRegistry::GetInstance().GetAovDesc(RPR_AOV_COLOR, false);
                     } else if (aovDesc->id == kNdcDepth) {
-                        // RprsRender does not support it...yet?
-                        continue;
+                        // XXX: RprsRender does not support it but for the users, it is more expected if we map it to the linear depth instead of ignoring it at all
+                        aovDesc = &HdRprAovRegistry::GetInstance().GetAovDesc(RPR_AOV_DEPTH, false);
                     } else {
                         fprintf(stderr, "Unprocessed computed AOV: %u\n", aovDesc->id);
                         continue;
                     }
                 }
 
-                if (TF_VERIFY(aovDesc->id < kNumRprsAovNames) &&
+                if (TF_VERIFY(aovDesc->id != kAovNone) &&
+                    TF_VERIFY(aovDesc->id < kNumRprsAovNames) &&
                     TF_VERIFY(!aovDesc->computed)) {
                     auto aovName = kRprsAovNames[aovDesc->id];
                     if (aovDesc->id >= RPR_AOV_LPE_0 && aovDesc->id <= RPR_AOV_LPE_8) {
