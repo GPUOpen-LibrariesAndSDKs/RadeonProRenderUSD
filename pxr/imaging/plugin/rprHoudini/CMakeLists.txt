@@ -20,9 +20,16 @@ target_link_libraries(RPR_for_Houdini
     rprUsd
     Houdini)
 
+_pxr_init_rpath(rpath "houdini/dso")
+_pxr_add_rpath(rpath "${CMAKE_INSTALL_PREFIX}/lib")
+_pxr_install_rpath(rpath RPR_for_Houdini)
+
 GroupSources(RPR_for_Houdini)
 
-houdini_configure_target(RPR_for_Houdini "INSTDIR" "${CMAKE_INSTALL_PREFIX}/houdini/dso")
+set_target_properties(RPR_for_Houdini PROPERTIES PREFIX "")
+install(TARGETS RPR_for_Houdini
+        RUNTIME DESTINATION "houdini/dso"
+        LIBRARY DESTINATION "houdini/dso")
 
 set(HOUDINI_MAJOR_MINOR_VERSION "${Houdini_VERSION_MAJOR}.${Houdini_VERSION_MINOR}")
 configure_file(houdiniPluginActivator.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/houdiniPluginActivator.cpp)

@@ -61,6 +61,7 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
             TF_WARN("RPR environment variable is not set");
             return m_registeredNodes;
         }
+        TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("RPR: %s\n", RPR.c_str());
 
         if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
             MaterialX::FilePathVec libraryNames = {"libraries", "materials"};
@@ -84,6 +85,8 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
         }
 
         for (auto& file : materialFiles) {
+            TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("Processing material: \"%s\"\n", file.c_str());
+
             // UI Folder corresponds to subsections on UI
             // e.g. $RPR/Patterns/material.mtlx corresponds to Pattern UI folder
             auto uiFolder = file.substr(rprMaterialsPath.size() + 1);
