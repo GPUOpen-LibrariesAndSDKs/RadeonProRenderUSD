@@ -45,7 +45,7 @@ struct Mtlx2Rpr {
     std::map<std::string, rpr_material_node_arithmetic_operation> arithmeticOps;
 
     Mtlx2Rpr() {
-        nodes["diffuse_brdf"] = {
+        nodes["oren_nayar_diffuse_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_DIFFUSE_BRDF, {
                 {"color", RPR_MATERIAL_INPUT_COLOR},
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
@@ -53,7 +53,7 @@ struct Mtlx2Rpr {
                 {"normal", RPR_MATERIAL_INPUT_NORMAL},
             }
         };
-        nodes["dielectric_brdf"] = {
+        nodes["dielectric_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_DIELECTRIC_BRDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
                 {"tint", RPR_MATERIAL_INPUT_TINT},
@@ -78,10 +78,10 @@ struct Mtlx2Rpr {
                 {"base", RPR_MATERIAL_INPUT_BASE},
             }
         };
-        nodes["dielectric_btdf"] = {
+        nodes["translucent_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_DIELECTRIC_BTDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
-                {"tint", RPR_MATERIAL_INPUT_COLOR},
+                {"color", RPR_MATERIAL_INPUT_COLOR},
                 {"ior", RPR_MATERIAL_INPUT_IOR},
                 {"roughness", RPR_MATERIAL_INPUT_ROUGHNESS},
                 {"normal", RPR_MATERIAL_INPUT_NORMAL},
@@ -90,7 +90,7 @@ struct Mtlx2Rpr {
                 {"interior", RPR_MATERIAL_INPUT_INTERIOR},
             }
         };
-        nodes["sheen_brdf"] = {
+        nodes["sheen_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_SHEEN_BRDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
                 {"color", RPR_MATERIAL_INPUT_COLOR},
@@ -99,7 +99,7 @@ struct Mtlx2Rpr {
                 {"base", RPR_MATERIAL_INPUT_BASE},
             }
         };
-        nodes["subsurface_brdf"] = {
+        nodes["subsurface_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_SUBSURFACE_BRDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
                 {"color", RPR_MATERIAL_INPUT_COLOR},
@@ -115,7 +115,7 @@ struct Mtlx2Rpr {
                 {"normal", RPR_MATERIAL_INPUT_NORMAL},
             }
         };
-        nodes["conductor_brdf"] = {
+        nodes["conductor_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_CONDUCTOR_BRDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
                 {"reflectivity", RPR_MATERIAL_INPUT_REFLECTIVITY},
@@ -1257,7 +1257,6 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
     // Check for nodes with special handling first
     //
     if (mtlxNode->getCategory() == "surface") {
-        auto surfaceDef = mtlxNode->getNodeDef();
         // The surface node has 3 inputs: bsdf, edf and opacity.
         // Right now we can not implement bsdf and edf blending and,
         // as a workaround, our surface node simply transfers bsdf node further along connections
@@ -1277,6 +1276,47 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
         };
 
         return std::make_unique<SurfaceNode>();
+    } else if (mtlxNode->getCategory() == "layer") {
+        struct LayerNode : public RprNode {
+            bool isTopSet = false;
+            bool isBaseSet = false;
+
+            rpr_material_node m_baseNode = nullptr;
+            LayerNode() : RprNode(nullptr, false) {}
+
+            rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override {
+                if (downstreamElement->getName() == "top") {
+                    rprNode = upstreamRprNode;
+                    isTopSet = true;
+                } else if (downstreamElement->getName() == "base") {
+                    m_baseNode = upstreamRprNode;
+                    isBaseSet = true;
+                } else {
+                    LOG(context, "Unsupported layer input: %s", downstreamElement->getName().c_str());
+                    return RPR_ERROR_UNSUPPORTED;
+                }
+
+                if (isBaseSet && isTopSet) {
+                    if (rprNode) {
+                        if (m_baseNode) {
+                            return rprMaterialNodeSetInputNByKey(rprNode, RPR_MATERIAL_INPUT_BASE, m_baseNode);
+                        } else {
+                            return RPR_ERROR_UNSUPPORTED;
+                        }
+                    } else {
+                        if (m_baseNode) {
+                            rprNode = m_baseNode;
+                        } else {
+                            return RPR_ERROR_UNSUPPORTED;
+                        }
+                    }
+                }
+
+                return RPR_SUCCESS;
+            }
+        };
+
+        return std::make_unique<LayerNode>();
     } else if (mtlxNode->getCategory() == "displacement") {
         return std::make_unique<DisplacementNode>(context);
     } else if (mtlxNode->getCategory() == "convert") {
