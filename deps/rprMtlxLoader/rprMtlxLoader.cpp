@@ -442,22 +442,20 @@ struct PassthroughNode : public RprNode {
 
     rpr_status SetInput(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamValueElement, LoaderContext* context) override {
         if (downstreamElement->getName() == inputName) {
-            if (rprNode && isOwningRprNode) {
-                rprObjectDelete(rprNode);
+            if (rprNode && !isOwningRprNode) {
+                LOG(context, "Unsupported input: %s", downstreamElement->getName().c_str());
+                return RPR_ERROR_UNSUPPORTED;
             }
 
-            rprNode = nullptr;
-            auto status = rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_CONSTANT_TEXTURE, &rprNode);
-            if (status == RPR_SUCCESS) {
-                status = RprNode::SetInput(downstreamElement, RPR_MATERIAL_INPUT_VALUE, upstreamValueElement, context);
-                if (status == RPR_SUCCESS) {
-                    isOwningRprNode = true;
-                } else {
-                    rprObjectDelete(rprNode);
-                    rprNode = nullptr;
+            if (!rprNode) {
+                auto status = rprMaterialSystemCreateNode(context->rprMatSys, RPR_MATERIAL_NODE_CONSTANT_TEXTURE, &rprNode);
+                if (status != RPR_SUCCESS) {
+                    return status;
                 }
+                isOwningRprNode = true;
             }
-            return status;
+
+            return RprNode::SetInput(downstreamElement, RPR_MATERIAL_INPUT_VALUE, upstreamValueElement, context);
         } else {
             LOG(context, "Unsupported input: %s", downstreamElement->getName().c_str());
             return RPR_ERROR_UNSUPPORTED;
