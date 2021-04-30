@@ -9,6 +9,13 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    (color0)
+    (color1)
+    (color2)
+    (color3)
+);
+
 template<typename T>
 RprUsd_MaterialNode* RprUsd_CreateRprNode(
     RprUsd_MaterialBuilderContext* ctx,
@@ -33,7 +40,7 @@ RprUsd_RprNodeInfo* GetNodeInfo() {
 
     for (int i = 0; i < Node::kArity; ++i) {
         RprUsd_RprNodeInput input(RprUsd_RprNodeInput::kColor3);
-        input.name = TfStringPrintf("color%d", i);
+        input.name = _tokens->allTokens[i];
         input.uiName = TfStringPrintf("Color %d", i);
         input.valueString = "0,0,0";
         input.uiSoftMin = "0";
