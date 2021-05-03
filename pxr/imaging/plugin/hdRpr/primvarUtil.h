@@ -41,6 +41,7 @@ struct HdRprGeometrySettings {
     uint32_t visibilityMask = 0;
     bool ignoreContour = false;
     std::string cryptomatteName;
+    int numGeometrySamples = 1;
 };
 
 void HdRprParseGeometrySettings(
@@ -71,6 +72,107 @@ bool HdRprGetConstantPrimvar(TfToken const& name, HdSceneDelegate* sceneDelegate
     auto typeName = value.GetTypeName();
     TF_WARN("[%s] %s: unexpected type. Expected %s but actual type is %s", id.GetText(), name.GetText(), typeid(T).name(), typeName.c_str());
     return false;
+}
+
+template <typename T>
+bool HdRprSamplePrimvar(
+    SdfPath const& id,
+    TfToken const& key,
+    HdSceneDelegate* sceneDelegate,
+    size_t maxSampleCount,
+    VtArray<T>* sampleValuesPtr) {
+    /// A user might specify `maxSampleCount==0` to get all authored samples from the scene delegate.
+    /// Currently, we can query the actual amount of authored samples only by specifying maxSampleCount minimum to 1.
+    size_t querySampleCount = std::max(size_t(1), maxSampleCount);
+
+    std::vector<float> sampleTimes(querySampleCount);
+    std::vector<VtValue> sampleVtValues(querySampleCount);
+
+    size_t authoredSampleCount = sceneDelegate->SamplePrimvar(id, key, querySampleCount, sampleTimes.data(), sampleVtValues.data());
+    if (!authoredSampleCount) {
+        return false;
+    }
+
+    if (!maxSampleCount && authoredSampleCount > querySampleCount) {
+        sampleTimes.resize(authoredSampleCount);
+        sampleVtValues.resize(authoredSampleCount);
+        querySampleCount = sceneDelegate->SamplePrimvar(id, key, authoredSampleCount, sampleTimes.data(), sampleVtValues.data());
+    } else if (authoredSampleCount < querySampleCount) {
+        sampleTimes.resize(authoredSampleCount);
+        sampleVtValues.resize(authoredSampleCount);
+    }
+
+    if (sampleTimes.size() > 1) {
+        float baselineTimeStep = sampleTimes[1] - sampleTimes[0];
+        for (size_t i = 1; i < sampleTimes.size() - 1; ++i) {
+            float timeStep = sampleTimes[i + 1] - sampleTimes[i];
+            if (std::abs(baselineTimeStep - timeStep) > 1e-6f) {
+                // Definitely an issue but we can at least use such data with the current API, so just log a warning
+                TF_WARN("[%s] RPR does not support non-linear in time sub-frame primvar samples", id.GetText());
+                break;
+            }
+        }
+    }
+
+    size_t baselineSize = 0;
+
+    auto& sampleValues = *sampleValuesPtr;
+    sampleValues.resize(sampleVtValues.size());
+    for (size_t i = 0; i < sampleVtValues.size(); ++i) {
+        if (sampleVtValues[i].IsHolding<T>()) {
+            sampleValues[i] = sampleVtValues[i].UncheckedGet<T>();
+
+            if (i == 0) {
+                baselineSize = sampleValues[i].size();
+            } else if (baselineSize != sampleValues[i].size()) {
+                TF_RUNTIME_ERROR("[%s] RPR does not support non-uniform sub-frame samples - %s", id.GetText(), key.GetText());
+                return false;
+            }
+        } else {
+            TF_RUNTIME_ERROR("[%s] Failed to sample %s primvar data: unexpected underlying type - %s", id.GetText(), key.GetText(), sampleVtValues[i].GetTypeName().c_str());
+            return false;
+        }
+    }
+
+    return true;
+}
+
+template <typename T>
+bool HdRprSamplePrimvar(
+    SdfPath const& id,
+    TfToken const& key,
+    HdSceneDelegate* sceneDelegate,
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
+    size_t maxSampleCount,
+    VtArray<T>* sampleValues,
+    HdInterpolation* interpolation) {
+
+    for (auto& primvarDescsEntry : primvarDescsPerInterpolation) {
+        for (auto& pv : primvarDescsEntry.second) {
+            if (pv.name == key) {
+                if (!HdRprSamplePrimvar(id, key, sceneDelegate, maxSampleCount, sampleValues)) {
+                    return false;
+                }
+
+                *interpolation = primvarDescsEntry.first;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+inline void HdRprGetPrimvarIndices(HdInterpolation interpolation, VtIntArray const& faceIndices, VtIntArray* out_indices) {
+    out_indices->clear();
+    if (interpolation == HdInterpolationFaceVarying) {
+        out_indices->reserve(faceIndices.size());
+        for (int i = 0; i < faceIndices.size(); ++i) {
+            out_indices->push_back(i);
+        }
+    } else if (interpolation == HdInterpolationConstant) {
+        *out_indices = VtIntArray(faceIndices.size(), 0);
+    }
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

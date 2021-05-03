@@ -21,6 +21,7 @@ TF_DEFINE_PRIVATE_TOKENS(HdRprGeometryPrimvarTokens,
     ((subdivisionLevel, "rpr:subdivisionLevel"))
     ((ignoreContour, "rpr:ignoreContour"))
     ((cryptomatteName, "rpr:cryptomatteName"))
+    ((geomSamples, "rpr:geomSamples"))
     ((visibilityPrimary, "rpr:visibilityPrimary"))
     ((visibilityShadow, "rpr:visibilityShadow"))
     ((visibilityReflection, "rpr:visibilityReflection"))
@@ -63,6 +64,9 @@ void HdRprParseGeometrySettings(
             HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->ignoreContour, sceneDelegate, id, &geomSettings->ignoreContour);
         } else if (desc.name == HdRprGeometryPrimvarTokens->cryptomatteName) {
             HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->cryptomatteName, sceneDelegate, id, &geomSettings->cryptomatteName);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->geomSamples) {
+            HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->geomSamples, sceneDelegate, id, &geomSettings->numGeometrySamples);
+            geomSettings->numGeometrySamples = std::max(0, geomSettings->numGeometrySamples);
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityPrimary) {
             setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityPrimary, kVisiblePrimary);
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityShadow) {

@@ -144,6 +144,44 @@ GfVec4f ColorizeId(uint32_t id) {
     };
 }
 
+template <typename T>
+std::unique_ptr<T[]> MergeSamples(VtArray<VtArray<T>>* samples, size_t requiredNumSamples, rpr_float const** rprData, size_t* rprDataSize) {
+    if (samples->empty()) {
+        *rprData = nullptr;
+        *rprDataSize = 0;
+        return nullptr;
+    }
+
+    if (samples->size() != requiredNumSamples) {
+        samples->resize(requiredNumSamples, [backElem=samples->back()](auto begin, auto end) {
+            for (auto it = begin; it != end; ++it) {
+                *it = backElem;
+            }
+        });
+    }
+
+    const size_t numSampleValues = samples->cdata()[0].size();
+    auto mergedSamples = std::make_unique<T[]>(requiredNumSamples * numSampleValues);
+
+    for (size_t i = 0; i < requiredNumSamples; ++i) {
+        size_t offset = i * numSampleValues;
+        VtArray<T> const& values = samples->cdata()[i];
+        std::copy(values.cbegin(), values.cend(), mergedSamples.get() + offset);
+
+        if (values.size() != numSampleValues) {
+            TF_RUNTIME_ERROR("Non-uniform size between samples: %zu vs %zu", samples->size(), numSampleValues);
+            *rprData = nullptr;
+            *rprDataSize = 0;
+            return nullptr;
+        }
+    }
+
+    *rprData = (rpr_float const*)mergedSamples.get();
+    *rprDataSize = requiredNumSamples * numSampleValues;
+
+    return mergedSamples;
+}
+
 } // namespace anonymous
 
 TfToken GetRprLpeAovName(rpr::Aov aov) {
@@ -333,33 +371,51 @@ public:
         }
     }
 
-    rpr::Shape* CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes,
-                           VtVec3fArray normals, const VtIntArray& normalIndexes,
-                           VtVec2fArray uvs, const VtIntArray& uvIndexes,
-                           const VtIntArray& vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
+    rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndices,
+                           VtVec3fArray const& normals, VtIntArray const& normalIndices,
+                           VtVec2fArray const& uvs, VtIntArray const& uvIndices,
+                           VtIntArray const& vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
+        VtArray<VtVec3fArray> pointSamples;
+        VtArray<VtVec3fArray> normalSamples;
+        VtArray<VtVec2fArray> uvSamples;
+
+        if (!points.empty()) pointSamples.push_back(points);
+        if (!normals.empty()) normalSamples.push_back(normals);
+        if (!uvs.empty()) uvSamples.push_back(uvs);
+
+        return CreateMesh(pointSamples, pointIndices, normalSamples, normalIndices, uvSamples, uvIndices, vpf, polygonWinding);
+    }
+
+    rpr::Shape* CreateMesh(VtArray<VtVec3fArray> pointSamples, VtIntArray const& pointIndices,
+                           VtArray<VtVec3fArray> normalSamples, VtIntArray const& normalIndices,
+                           VtArray<VtVec2fArray> uvSamples, VtIntArray const& uvIndices,
+                           VtIntArray const& vpf, TfToken const& polygonWinding) {
         if (!m_rprContext) {
             return nullptr;
         }
 
-        VtIntArray newIndexes, newVpf;
-        SplitPolygons(pointIndexes, vpf, newIndexes, newVpf);
-        ConvertIndices(&newIndexes, newVpf, polygonWinding);
+        VtIntArray newIndices, newVpf;
+        SplitPolygons(pointIndices, vpf, newIndices, newVpf);
+        ConvertIndices(&newIndices, newVpf, polygonWinding);
 
-        VtIntArray newNormalIndexes;
-        if (normals.empty()) {
+        VtIntArray newNormalIndices;
+        if (normalSamples.empty()) {
             if (m_rprContextMetadata.pluginType == kPluginHybrid) {
                 // XXX (Hybrid): we need to generate geometry normals by ourself
+                VtVec3fArray normals;
                 normals.reserve(newVpf.size());
-                newNormalIndexes.clear();
-                newNormalIndexes.reserve(newIndexes.size());
+                newNormalIndices.clear();
+                newNormalIndices.reserve(newIndices.size());
+
+                auto& points = pointSamples[0];
 
                 size_t indicesOffset = 0u;
                 for (auto numVerticesPerFace : newVpf) {
                     for (int i = 0; i < numVerticesPerFace; ++i) {
-                        newNormalIndexes.push_back(normals.size());
+                        newNormalIndices.push_back(normals.size());
                     }
 
-                    auto indices = &newIndexes[indicesOffset];
+                    auto indices = &newIndices[indicesOffset];
                     indicesOffset += numVerticesPerFace;
 
                     auto p0 = points[indices[0]];
@@ -373,52 +429,106 @@ public:
                     GfNormalize(&normal);
                     normals.push_back(normal);
                 }
+
+                normalSamples.push_back(normals);
             }
         } else {
-            if (!normalIndexes.empty()) {
-                SplitPolygons(normalIndexes, vpf, newNormalIndexes);
-                ConvertIndices(&newNormalIndexes, newVpf, polygonWinding);
+            if (!normalIndices.empty()) {
+                SplitPolygons(normalIndices, vpf, newNormalIndices);
+                ConvertIndices(&newNormalIndices, newVpf, polygonWinding);
             } else {
-                newNormalIndexes = newIndexes;
+                newNormalIndices = newIndices;
             }
         }
 
-        VtIntArray newUvIndexes;
-        if (uvs.empty()) {
+        VtIntArray newUvIndices;
+        if (uvSamples.empty()) {
             if (m_rprContextMetadata.pluginType == kPluginHybrid) {
-                newUvIndexes = newIndexes;
-                uvs = VtVec2fArray(points.size(), GfVec2f(0.0f));
+                newUvIndices = newIndices;
+                VtVec2fArray uvs(pointSamples[0].size(), GfVec2f(0.0f));
+                uvSamples.push_back(uvs);
             }
         } else {
-            if (!uvIndexes.empty()) {
-                SplitPolygons(uvIndexes, vpf, newUvIndexes);
-                ConvertIndices(&newUvIndexes, newVpf, polygonWinding);
+            if (!uvIndices.empty()) {
+                SplitPolygons(uvIndices, vpf, newUvIndices);
+                ConvertIndices(&newUvIndices, newVpf, polygonWinding);
             } else {
-                newUvIndexes = newIndexes;
+                newUvIndices = newIndices;
             }
         }
 
-        auto normalIndicesData = !newNormalIndexes.empty() ? newNormalIndexes.data() : newIndexes.data();
-        if (normals.empty()) {
+        auto normalIndicesData = !newNormalIndices.empty() ? newNormalIndices.data() : newIndices.data();
+        if (normalSamples.empty()) {
             normalIndicesData = nullptr;
         }
 
-        auto uvIndicesData = !newUvIndexes.empty() ? newUvIndexes.data() : uvIndexes.data();
-        if (uvs.empty()) {
+        auto uvIndicesData = !newUvIndices.empty() ? newUvIndices.data() : uvIndices.data();
+        if (uvSamples.empty()) {
             uvIndicesData = nullptr;
         }
+
+        rpr_float const* pointsData = nullptr;
+        rpr_float const* normalsData = nullptr;
+        rpr_float const* uvsData = nullptr;
+        size_t numPoints = 0;
+        size_t numNormals = 0;
+        size_t numUvs = 0;
+
+        std::vector<rpr_mesh_info> meshProperties(1, rpr_mesh_info(0));
+
+        std::unique_ptr<GfVec3f[]> mergedPoints;
+        std::unique_ptr<GfVec3f[]> mergedNormals;
+        std::unique_ptr<GfVec2f[]> mergedUvs;
+
+        size_t numMeshSamples = std::max(std::max(pointSamples.size(), normalSamples.size()), uvSamples.size());
+
+        // XXX (RPR): Only Northstar supports deformation motion blur. Use only the first sample for all other plugins.
+        if (m_rprContextMetadata.pluginType != kPluginNorthstar) {
+            numMeshSamples = 1;
+        }
+
+        if (numMeshSamples > 1) {
+            meshProperties[0] = (rpr_mesh_info)RPR_MESH_MOTION_DIMENSION;
+            meshProperties[1] = (rpr_mesh_info)numMeshSamples;
+            meshProperties[2] = (rpr_mesh_info)0;
+
+            mergedPoints = MergeSamples(&pointSamples, numMeshSamples, &pointsData, &numPoints);
+            mergedNormals = MergeSamples(&normalSamples, numMeshSamples, &normalsData, &numNormals);
+            mergedUvs = MergeSamples(&uvSamples, numMeshSamples, &uvsData, &numUvs);
+
+        } else {
+            if (pointSamples.empty()) {
+                return nullptr;
+            }
+            pointsData = (rpr_float const*)pointSamples[0].cdata();
+            numPoints = pointSamples[0].size();
+
+            if (!normalSamples.empty()) {
+                normalsData = (rpr_float const*)normalSamples[0].data();
+                numNormals = normalSamples[0].size();
+            }
+            
+            if (!uvSamples.empty()) {
+                uvsData = (rpr_float const*)uvSamples[0].data();
+                numUvs = uvSamples[0].size();
+            }
+        }
+
+        rpr_int texCoordStride = sizeof(GfVec2f);
+        rpr_int texCoordIdxStride = sizeof(rpr_int);
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
         rpr::Status status;
         auto mesh = m_rprContext->CreateShape(
-            (rpr_float const*)points.data(), points.size(), sizeof(GfVec3f),
-            (rpr_float const*)(normals.data()), normals.size(), sizeof(GfVec3f),
-            (rpr_float const*)(uvs.data()), uvs.size(), sizeof(GfVec2f),
-            newIndexes.data(), sizeof(rpr_int),
+            pointsData, numPoints, sizeof(GfVec3f),
+            normalsData, numNormals, sizeof(GfVec3f),
+            nullptr, 0, 0,
+            1, &uvsData, &numUvs, &texCoordStride,
+            newIndices.data(), sizeof(rpr_int),
             normalIndicesData, sizeof(rpr_int),
-            uvIndicesData, sizeof(rpr_int),
-            newVpf.data(), newVpf.size(), &status);
+            &uvIndicesData, &texCoordIdxStride,
+            newVpf.data(), newVpf.size(), meshProperties.data(), &status);
         if (!mesh) {
             RPR_ERROR_CHECK(status, "Failed to create mesh");
             return nullptr;
@@ -3983,9 +4093,14 @@ HdRprApi::~HdRprApi() {
     delete m_impl;
 }
 
-rpr::Shape* HdRprApi::CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding) {
+rpr::Shape* HdRprApi::CreateMesh(VtArray<VtVec3fArray> const& pointSamples, VtIntArray const& pointIndexes, VtArray<VtVec3fArray> const& normalSamples, VtIntArray const& normalIndexes, VtArray<VtVec2fArray> const& uvSamples, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf, polygonWinding);
+    return m_impl->CreateMesh(pointSamples, pointIndexes, normalSamples, normalIndexes, uvSamples, uvIndexes, vpf, polygonWinding);
+}
+
+rpr::Shape* HdRprApi::CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndexes, VtVec3fArray const& normals, VtIntArray const& normalIndexes, VtVec2fArray const& uvs, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding) {
+    m_impl->InitIfNeeded();
+    return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uvs, uvIndexes, vpf, polygonWinding);
 }
 
 rpr::Curve* HdRprApi::CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
