@@ -15,7 +15,7 @@ limitations under the License.
 #define PXR_IMAGING_RPR_USD_CORE_IMAGE_H
 
 #include "pxr/imaging/rprUsd/api.h"
-#include "pxr/imaging/glf/uvTextureData.h"
+#include "pxr/imaging/rprUsd/util.h"
 
 #include <RadeonProRender.hpp>
 
@@ -30,9 +30,9 @@ public:
 
     struct UDIMTile {
         uint32_t id;
-        GlfUVTextureData* textureData;
+        RprUsdTextureData* textureData;
 
-        UDIMTile(uint32_t id, GlfUVTextureData* textureData) : id(id), textureData(textureData) {}
+        UDIMTile(uint32_t id, RprUsdTextureData* textureData) : id(id), textureData(textureData) {}
     };
     RPRUSD_API
     static RprUsdCoreImage* Create(rpr::Context* context, std::vector<UDIMTile> const& textureData, uint32_t numComponentsRequired);

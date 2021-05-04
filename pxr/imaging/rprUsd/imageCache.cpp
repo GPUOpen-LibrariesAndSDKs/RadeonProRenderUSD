@@ -81,7 +81,7 @@ RprUsdImageCache::GetImage(
         // Assume that all tiles have the same colorspace
         //
         auto data = tiles[0].textureData;
-        GLenum internalFormat = RprUsdGetGlfTextureMetadata(data).internalFormat;
+        GLenum internalFormat = data->GetGLMetadata().internalFormat;
         if (internalFormat == GL_SRGB ||
             internalFormat == GL_SRGB8 ||
             internalFormat == GL_SRGB_ALPHA ||
