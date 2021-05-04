@@ -378,6 +378,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
     }
 
+    isIdDirty |= *dirtyBits & HdChangeTracker::DirtyPrimID;
+
     m_smoothNormals = !m_displayStyle.flatShadingEnabled;
     // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
     if (m_enableSubdiv && m_refineLevel != 0) {
