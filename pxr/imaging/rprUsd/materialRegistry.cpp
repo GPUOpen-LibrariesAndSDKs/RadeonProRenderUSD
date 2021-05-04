@@ -12,7 +12,6 @@ limitations under the License.
 ************************************************************************/
 
 #include "pxr/imaging/rprUsd/util.h"
-#include "pxr/imaging/glf/uvTextureData.h"
 #include "pxr/imaging/rprUsd/materialRegistry.h"
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
@@ -133,7 +132,7 @@ void RprUsdMaterialRegistry::CommitResources(
         std::string path;
         uint32_t udimTileId;
 
-        GlfUVTextureDataRefPtr data;
+        RprUsdTextureDataRefPtr data;
 
         UniqueTextureInfo(std::string const& path, uint32_t udimTileId)
             : path(path), udimTileId(udimTileId), data(nullptr) {}
@@ -180,8 +179,7 @@ void RprUsdMaterialRegistry::CommitResources(
     WorkParallelForN(uniqueTextures.size(),
         [&uniqueTextures](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i) {
-                auto textureData = GlfUVTextureData::New(uniqueTextures[i].path, INT_MAX, 0, 0, 0, 0);
-                if (textureData && textureData->Read(0, false)) {
+                if (auto textureData = RprUsdTextureData::New(uniqueTextures[i].path)) {
                     uniqueTextures[i].data = textureData;
                 } else {
                     TF_RUNTIME_ERROR("Failed to load %s texture", uniqueTextures[i].path.c_str());

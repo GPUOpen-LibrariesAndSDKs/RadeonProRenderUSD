@@ -31,6 +31,16 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+#if PXR_VERSION >= 2105
+#define USD_LUX_TOKEN_SHAPING_IES_FILE UsdLuxTokens->inputsShapingIesFile
+#define USD_LUX_TOKEN_SHAPING_CONE_ANGLE UsdLuxTokens->inputsShapingConeAngle
+#define USD_LUX_TOKEN_SHAPING_CONE_SOFTNESS UsdLuxTokens->inputsShapingConeSoftness
+#else
+#define USD_LUX_TOKEN_SHAPING_IES_FILE UsdLuxTokens->shapingIesFile
+#define USD_LUX_TOKEN_SHAPING_CONE_ANGLE UsdLuxTokens->shapingConeAngle
+#define USD_LUX_TOKEN_SHAPING_CONE_SOFTNESS UsdLuxTokens->shapingConeSoftness
+#endif
+
 namespace {
 
 float GetDiskLightNormalization(GfMatrix4f const& transform, float radius) {
@@ -401,7 +411,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         bool newLight = false;
-        auto iesFile = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->shapingIesFile);
+        auto iesFile = sceneDelegate->GetLightParamValue(id, USD_LUX_TOKEN_SHAPING_IES_FILE);
         if (iesFile.IsHolding<SdfAssetPath>()) {
             auto& path = iesFile.UncheckedGet<SdfAssetPath>();
             if (!path.GetResolvedPath().empty()) {
@@ -411,8 +421,8 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
                 }
             }
         } else {
-            auto coneAngle = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->shapingConeAngle);
-            auto coneSoftness = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->shapingConeSoftness);
+            auto coneAngle = sceneDelegate->GetLightParamValue(id, USD_LUX_TOKEN_SHAPING_CONE_ANGLE);
+            auto coneSoftness = sceneDelegate->GetLightParamValue(id, USD_LUX_TOKEN_SHAPING_CONE_SOFTNESS);
             if (coneAngle.IsHolding<float>() && coneSoftness.IsHolding<float>()) {
                 if (auto light = rprApi->CreateSpotLight(coneAngle.UncheckedGet<float>(), coneSoftness.UncheckedGet<float>())) {
                     m_light = light;

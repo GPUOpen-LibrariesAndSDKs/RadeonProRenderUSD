@@ -22,26 +22,47 @@ limitations under the License.
 #include "pxr/imaging/glf/glew.h"
 #endif
 
+#if PXR_VERSION >= 2105
+#include "pxr/imaging/hio/image.h"
+#else
 #include "pxr/imaging/glf/uvTextureData.h"
+#endif
 
 #include <string>
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+class RPRUSD_API RprUsdTextureData {
+public:
+    static std::shared_ptr<RprUsdTextureData> New(std::string const& filepath);
+
+    uint8_t* GetData() const;
+    int GetWidth() const;
+    int GetHeight() const;
+
+    struct GLMetadata {
+        GLenum glFormat;
+        GLenum glType;
+        GLenum internalFormat;
+    };
+    GLMetadata GetGLMetadata() const;
+
+private:
+#if PXR_VERSION >= 2105
+    HioImage::StorageSpec _hioStorageSpec;
+    std::unique_ptr<uint8_t[]> _data;
+#else // PXR_VERSION < 2105
+    GlfUVTextureDataRefPtr _uvTextureData;
+#endif
+};
+
+using RprUsdTextureDataRefPtr = std::shared_ptr<RprUsdTextureData>;
 
 RPRUSD_API
 bool RprUsdGetUDIMFormatString(std::string const& filepath, std::string* out_formatString);
 
 RPRUSD_API
 bool RprUsdInitGLApi();
-
-struct RprUsdGlfTextureMetadata {
-    GLenum glType;
-    GLenum glFormat;
-    GLenum internalFormat;
-};
-
-RPRUSD_API
-RprUsdGlfTextureMetadata RprUsdGetGlfTextureMetadata(GlfUVTextureData* uvTextureData);
 
 PXR_NAMESPACE_CLOSE_SCOPE
 

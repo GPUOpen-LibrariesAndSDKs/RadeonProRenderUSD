@@ -30,8 +30,6 @@ using json = nlohmann::json;
 #include "renderParam.h"
 
 #include "pxr/imaging/rprUsd/util.h"
-#include "pxr/imaging/glf/uvTextureData.h"
-
 #include "pxr/imaging/rprUsd/config.h"
 #include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/helpers.h"
@@ -3405,16 +3403,16 @@ private:
             return false;
         }
 
-        auto textureData = GlfUVTextureData::New(path, INT_MAX, 0, 0, 0, 0);
-        if (textureData && textureData->Read(0, false)) {
+        auto textureData = RprUsdTextureData::New(path);
+        if (textureData) {
             rif_image_desc imageDesc = {};
-            imageDesc.image_width = textureData->ResizedWidth();
-            imageDesc.image_height = textureData->ResizedHeight();
+            imageDesc.image_width = textureData->GetWidth();
+            imageDesc.image_height = textureData->GetHeight();
             imageDesc.image_depth = 1;
             imageDesc.image_row_pitch = 0;
             imageDesc.image_slice_pitch = 0;
 
-            auto textureMetadata = RprUsdGetGlfTextureMetadata(&(*textureData));
+            auto textureMetadata = textureData->GetGLMetadata();
 
             uint8_t bytesPerComponent;
             if (textureMetadata.glType == GL_UNSIGNED_BYTE) {
@@ -3449,7 +3447,7 @@ private:
                 return false;
             }
             size_t imageSize = bytesPerComponent * imageDesc.num_components * imageDesc.image_width * imageDesc.image_height;
-            std::memcpy(mappedData, textureData->GetRawBuffer(), imageSize);
+            std::memcpy(mappedData, textureData->GetData(), imageSize);
             RIF_ERROR_CHECK(rifImageUnmap(rifImage->GetHandle(), mappedData), "Failed to unmap rif image");
 
             auto colorRb = static_cast<HdRprRenderBuffer*>(colorOutputRb->aovBinding->renderBuffer);
