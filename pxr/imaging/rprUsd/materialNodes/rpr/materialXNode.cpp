@@ -367,33 +367,33 @@ public:
         nodeInfo.uiFolder = "Shaders";
 
         RprUsd_RprNodeInput fileInput(RprUsdMaterialNodeElement::kFilepath);
-        fileInput.name = RprUsdRprMaterialXNodeTokens->file.GetText();
+        fileInput.name = RprUsdRprMaterialXNodeTokens->file;
         fileInput.uiName = "File";
         nodeInfo.inputs.push_back(fileInput);
 
         RprUsd_RprNodeInput stringInput(RprUsdMaterialNodeElement::kString);
-        stringInput.name = RprUsdRprMaterialXNodeTokens->string.GetText();
+        stringInput.name = RprUsdRprMaterialXNodeTokens->string;
         stringInput.uiName = ""; // hide from UI
         nodeInfo.inputs.push_back(stringInput);
 
         RprUsd_RprNodeInput basePathInput(RprUsdMaterialNodeElement::kString);
-        basePathInput.name = RprUsdRprMaterialXNodeTokens->basePath.GetText();
+        basePathInput.name = RprUsdRprMaterialXNodeTokens->basePath;
         basePathInput.uiName = ""; // hide from UI
         nodeInfo.inputs.push_back(basePathInput);
 
         RprUsd_RprNodeInput stPrimvarNameInput(RprUsdMaterialNodeElement::kString);
-        stPrimvarNameInput.name = RprUsdRprMaterialXNodeTokens->stPrimvarName.GetText();
+        stPrimvarNameInput.name = RprUsdRprMaterialXNodeTokens->stPrimvarName;
         stPrimvarNameInput.uiName = "UV Primvar Name";
         stPrimvarNameInput.valueString = "st";
         nodeInfo.inputs.push_back(stPrimvarNameInput);
 
         RprUsd_RprNodeInput surfaceElementInput(RprUsdMaterialNodeElement::kString);
-        surfaceElementInput.name = RprUsdRprMaterialXNodeTokens->surfaceElement.GetText();
+        surfaceElementInput.name = RprUsdRprMaterialXNodeTokens->surfaceElement;
         surfaceElementInput.uiName = "Surface Element";
         nodeInfo.inputs.push_back(surfaceElementInput);
 
         RprUsd_RprNodeInput displacementElementInput(RprUsdMaterialNodeElement::kString);
-        displacementElementInput.name = RprUsdRprMaterialXNodeTokens->displacementElement.GetText();
+        displacementElementInput.name = RprUsdRprMaterialXNodeTokens->displacementElement;
         displacementElementInput.uiName = "Displacement Element";
         nodeInfo.inputs.push_back(displacementElementInput);
 

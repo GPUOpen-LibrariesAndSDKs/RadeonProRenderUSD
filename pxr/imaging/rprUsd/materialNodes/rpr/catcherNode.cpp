@@ -20,7 +20,7 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PRIVATE_TOKENS(RprUsdRprCatcherNodeTokens,
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (in)
     (enable)
 );
@@ -49,10 +49,10 @@ public:
     bool SetInput(
         TfToken const& inputId,
         VtValue const& value) override {
-        if (inputId == RprUsdRprCatcherNodeTokens->in) {
+        if (inputId == _tokens->in) {
             m_output = value;
             return true;
-        } else if (inputId == RprUsdRprCatcherNodeTokens->enable) {
+        } else if (inputId == _tokens->enable) {
             if (value.IsHolding<int>()) {
                 *m_catcherToggle = value.UncheckedGet<int>() != 0;
                 return true;
@@ -72,11 +72,11 @@ public:
         nodeInfo.name = "rpr_" + catcherType + "_catcher";
 
         RprUsd_RprNodeInput in(RprUsdMaterialNodeElement::kSurfaceShader);
-        in.name = "in";
+        in.name = _tokens->in;
         nodeInfo.inputs.push_back(in);
 
         RprUsd_RprNodeInput enable(RprUsdMaterialNodeElement::kBoolean);
-        enable.name = "enable";
+        enable.name = _tokens->enable;
         enable.uiName = "Enable";
         enable.valueString = "true";
         nodeInfo.inputs.push_back(enable);
