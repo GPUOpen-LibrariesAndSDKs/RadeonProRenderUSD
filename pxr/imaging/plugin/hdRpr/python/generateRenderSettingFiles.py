@@ -234,6 +234,27 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'Upscaler',
+        'settings': [
+            {
+                'name': 'enableUpscaler',
+                'ui_name': 'Enable upscaler',
+                'help': 'Enable RIF upscale filter. More info in RIF documentation',
+                'defaultValue': False
+            },
+            {
+                'name': 'upscalerMode',
+                'ui_name': 'Upscaler mode',
+                'defaultValue': 'Good',
+                'values': [
+                    SettingValue('Good'),
+                    SettingValue('Best'),
+                    SettingValue('Fast'),
+                ]
+            }
+        ]
+    },
+    {
         'name': 'Denoise',
         'houdini': {
             'hidewhen': lambda settings: hidewhen_render_quality('<', 'High', settings)

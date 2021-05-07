@@ -53,8 +53,9 @@ enum class FilterType
     AIDenoise,
     Resample,
     EawDenoise,
+	Upscale,
     FIRST = AIDenoise,
-    LAST = EawDenoise
+    LAST = Upscale
 };
 
 class Filter {

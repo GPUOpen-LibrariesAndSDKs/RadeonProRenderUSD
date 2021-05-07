@@ -1396,6 +1396,7 @@ public:
         bool clearAovs = false;
         RenderSetting<bool> enableDenoise;
         RenderSetting<HdRprApiColorAov::TonemapParams> tonemap;
+        RenderSetting<HdRprApiColorAov::UpscaleParams> upscale;
         RenderSetting<bool> instantaneousShutter;
         RenderSetting<TfToken> aspectRatioPolicy;
         {
@@ -1418,6 +1419,27 @@ public:
                 tonemap.value.fstop = config->GetTonemapFstop();
                 tonemap.value.gamma = config->GetTonemapGamma();
             }
+
+			upscale.isDirty = config->IsDirty(HdRprConfig::DirtyUpscaler);
+			if (upscale.isDirty)
+			{
+				upscale.value.enable = config->GetEnableUpscaler();
+
+				TfToken mode = config->GetUpscalerMode();
+
+				if (mode == TfToken("Good"))
+				{
+					upscale.value.mode = HdRprApiColorAov::UpscaleParams::Mode::Good;
+				}
+				else if (mode == TfToken("Best"))
+				{
+					upscale.value.mode = HdRprApiColorAov::UpscaleParams::Mode::Best;
+				}
+				else if (mode == TfToken("Fast"))
+				{
+					upscale.value.mode = HdRprApiColorAov::UpscaleParams::Mode::Fast;
+				}
+			}
 
             aspectRatioPolicy.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
             aspectRatioPolicy.value = config->GetAspectRatioConformPolicy();
@@ -1480,7 +1502,7 @@ public:
             config->ResetDirty();
         }
         UpdateCamera(aspectRatioPolicy, instantaneousShutter);
-        UpdateAovs(rprRenderParam, enableDenoise, tonemap, clearAovs);
+        UpdateAovs(rprRenderParam, enableDenoise, tonemap, upscale, clearAovs);
 
         m_dirtyFlags = ChangeTracker::Clean;
         if (m_hdCamera) {
@@ -1888,8 +1910,20 @@ public:
         return false;
     }
 
-    void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, bool clearAovs) {
+    void UpdateAovs(
+		HdRprRenderParam* rprRenderParam, 
+		RenderSetting<bool> enableDenoise,
+		RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, 
+		RenderSetting<HdRprApiColorAov::UpscaleParams> upscale,
+		bool clearAovs
+	) {
         UpdateDenoising(enableDenoise);
+
+		if (upscale.isDirty)
+		{
+			auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
+			m_colorAov->SetUpscale(upscale.value, rprApi, m_rifContext.get());
+		}
 
         if (tonemap.isDirty) {
             m_colorAov->SetTonemap(tonemap.value);
@@ -3663,6 +3697,8 @@ private:
     bool m_isDenoiseEnabled = false;
     int m_denoiseMinIter;
     int m_denoiseIterStep;
+
+	bool m_isUpscaleEnabled = false;
 
     GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);

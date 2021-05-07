@@ -314,6 +314,12 @@ void HdRprApiColorAov::SetTonemap(TonemapParams const& params) {
     }
 }
 
+void HdRprApiColorAov::SetUpscale(UpscaleParams const& params, HdRprApi const* rprApi, rif::Context* rifContext)
+{
+	SetFilter(kFilterUpscale, params.enable);
+	Update(rprApi, rifContext);
+}
+
 void HdRprApiColorAov::SetTonemapFilterParams(rif::Filter* filter) {
     filter->SetParam("exposureTime", m_tonemap.exposureTime);
     filter->SetParam("sensitivity", m_tonemap.sensitivity);
@@ -357,7 +363,8 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
         if ((m_enabledFilters & kFilterAIDenoise) ||
             (m_enabledFilters & kFilterEAWDenoise) ||
             (m_enabledFilters & kFilterComposeOpacity) ||
-            (m_enabledFilters & kFilterTonemap)) {
+            (m_enabledFilters & kFilterTonemap) ||
+			(m_enabledFilters & kFilterUpscale)) {
 
             auto addFilter = [this, &filterPool](Filter type, std::function<std::unique_ptr<rif::Filter>()> filterCreator) {
                 std::unique_ptr<rif::Filter> filter;
@@ -413,6 +420,16 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
                     }
                 );
             }
+
+			if (m_enabledFilters & kFilterUpscale)
+			{
+				addFilter(kFilterUpscale,
+					[this, rifContext]() {
+						auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
+						return rif::Filter::Create(rif::FilterType::Upscale, rifContext, fbDesc.fb_width, fbDesc.fb_height);
+					}
+				);
+			}
         } else if (m_enabledFilters & kFilterResample) {
             m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
             m_filter->SetParam("interpOperator", (int) RIF_IMAGE_INTERPOLATION_NEAREST);

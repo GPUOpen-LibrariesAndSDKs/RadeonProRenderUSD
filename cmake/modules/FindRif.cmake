@@ -35,7 +35,10 @@ find_library(RIF_LIBRARY
 if(WIN32)
     set(RIF_BINARIES
         ${RIF_LOCATION_LIB}/dxcompiler.dll
+        ${RIF_LOCATION_LIB}/dxil.dll
+        ${RIF_LOCATION_LIB}/OpenImageDenoise.dll
         ${RIF_LOCATION_LIB}/MIOpen.dll
+        ${RIF_LOCATION_LIB}/RadeonML.dll
         ${RIF_LOCATION_LIB}/RadeonImageFilters.dll
         ${RIF_LOCATION_LIB}/RadeonML_MIOpen.dll
         ${RIF_LOCATION_LIB}/RadeonML_DirectML.dll)

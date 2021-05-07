@@ -113,7 +113,23 @@ public:
             return !(*this == lhs);
         }
     };
+
+	struct UpscaleParams
+	{
+		bool enable;
+
+		enum class Mode
+		{
+			Good,
+			Best,
+			Fast
+		};
+
+		Mode mode;
+	};
+
     void SetTonemap(TonemapParams const& params);
+    void SetUpscale(UpscaleParams const& params, HdRprApi const* rprApi, rif::Context* rifContext);
 
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
@@ -127,6 +143,7 @@ private:
         kFilterEAWDenoise = 1 << 2,
         kFilterComposeOpacity = 1 << 3,
         kFilterTonemap = 1 << 4,
+		kFilterUpscale = 1 << 5
     };
     void SetFilter(Filter filter, bool enable);
     
