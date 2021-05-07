@@ -81,23 +81,15 @@ bool HdRprSamplePrimvar(
     HdSceneDelegate* sceneDelegate,
     size_t maxSampleCount,
     VtArray<T>* sampleValuesPtr) {
-    /// A user might specify `maxSampleCount==0` to get all authored samples from the scene delegate.
-    /// Currently, we can query the actual amount of authored samples only by specifying maxSampleCount minimum to 1.
-    size_t querySampleCount = std::max(size_t(1), maxSampleCount);
+    std::vector<float> sampleTimes(maxSampleCount);
+    std::vector<VtValue> sampleVtValues(maxSampleCount);
 
-    std::vector<float> sampleTimes(querySampleCount);
-    std::vector<VtValue> sampleVtValues(querySampleCount);
-
-    size_t authoredSampleCount = sceneDelegate->SamplePrimvar(id, key, querySampleCount, sampleTimes.data(), sampleVtValues.data());
+    size_t authoredSampleCount = sceneDelegate->SamplePrimvar(id, key, maxSampleCount, sampleTimes.data(), sampleVtValues.data());
     if (!authoredSampleCount) {
         return false;
     }
 
-    if (!maxSampleCount && authoredSampleCount > querySampleCount) {
-        sampleTimes.resize(authoredSampleCount);
-        sampleVtValues.resize(authoredSampleCount);
-        querySampleCount = sceneDelegate->SamplePrimvar(id, key, authoredSampleCount, sampleTimes.data(), sampleVtValues.data());
-    } else if (authoredSampleCount < querySampleCount) {
+    if (authoredSampleCount < maxSampleCount) {
         sampleTimes.resize(authoredSampleCount);
         sampleVtValues.resize(authoredSampleCount);
     }

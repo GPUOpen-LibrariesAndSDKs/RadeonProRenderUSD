@@ -66,7 +66,7 @@ void HdRprParseGeometrySettings(
             HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->cryptomatteName, sceneDelegate, id, &geomSettings->cryptomatteName);
         } else if (desc.name == HdRprGeometryPrimvarTokens->geomSamples) {
             HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->geomSamples, sceneDelegate, id, &geomSettings->numGeometrySamples);
-            geomSettings->numGeometrySamples = std::max(0, geomSettings->numGeometrySamples);
+            geomSettings->numGeometrySamples = std::max(1, geomSettings->numGeometrySamples);
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityPrimary) {
             setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityPrimary, kVisiblePrimary);
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityShadow) {
