@@ -152,6 +152,10 @@ pxr_plugin(hdRpr
         ndrParserPlugin.cpp
 )
 
+if(RPR_EXR_EXPORT_ENABLED)
+    target_compile_definitions(hdRpr PRIVATE -DRPR_EXR_EXPORT_ENABLED)
+endif()
+
 target_sources(hdRpr PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.h)
 if(APPLE)

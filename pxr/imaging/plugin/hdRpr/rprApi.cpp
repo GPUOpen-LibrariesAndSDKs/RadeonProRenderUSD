@@ -61,10 +61,12 @@ using json = nlohmann::json;
 #include <RadeonProRender_Baikal.h>
 #include <RprLoadStore.h>
 
+#ifdef RPR_EXR_EXPORT_ENABLED
 #include <MurmurHash3.h>
 #include <ImfOutputFile.h>
 #include <ImfChannelList.h>
 #include <ImfStringAttribute.h>
+#endif // RPR_EXR_EXPORT_ENABLED
 
 #ifdef BUILD_AS_HOUDINI_PLUGIN
 #include <HOM/HOM_Module.h>
@@ -1679,8 +1681,14 @@ public:
             }
 
             if (preferences.IsDirty(HdRprConfig::DirtyCryptomatte) || force) {
+#ifdef RPR_EXR_EXPORT_ENABLED
                 m_cryptomatteOutputPath = preferences.GetCryptomatteOutputPath();
                 m_cryptomattePreviewLayer = preferences.GetCryptomattePreviewLayer();
+#else
+                if (!preferences.GetCryptomatteOutputPath().empty()) {
+                    fprintf(stderr, "Cryptomatte export is not supported: hdRpr compiled without .exr support\n");
+                }
+#endif // RPR_EXR_EXPORT_ENABLED
             }
         }
     }
@@ -2180,6 +2188,7 @@ public:
     }
 
     void SaveCryptomatte() {
+#ifdef RPR_EXR_EXPORT_ENABLED
         if (m_cryptomatteAovs &&
             m_numSamples == m_maxSamples) {
 
@@ -2331,6 +2340,7 @@ public:
                 fprintf(stderr, "Failed to save cryptomatte: %s", e.what());
             }
         }
+#endif // RPR_EXR_EXPORT_ENABLED
     }
 
     void BatchRenderImpl(HdRprRenderThread* renderThread) {

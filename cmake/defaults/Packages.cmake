@@ -99,13 +99,29 @@ else()
     find_package(OpenVDB QUIET)
 endif()
 
-if(HoudiniUSD_FOUND)
-    find_package(OpenEXR QUIET COMPONENTS Half_sidefx IlmImf_sidefx Iex_sidefx)
+macro(find_exr)
+    if(NOT OpenEXR_FOUND)
+        set(SIDEFX_COMPONENTS ${ARGV})
+        list(TRANSFORM SIDEFX_COMPONENTS APPEND "_sidefx")
+
+        if(HoudiniUSD_FOUND)
+            find_package(OpenEXR QUIET COMPONENTS ${SIDEFX_COMPONENTS})
+        endif()
+
+        if(NOT OpenEXR_FOUND)
+            find_package(OpenEXR QUIET COMPONENTS ${ARGV})
+        endif()
+    endif()
+endmacro()
+
+find_exr(Half IlmImf Iex)
+
+set(RPR_EXR_EXPORT_ENABLED TRUE)
+if(NOT OpenEXR_FOUND)
+    set(RPR_EXR_EXPORT_ENABLED FALSE)
 endif()
 
-if(NOT OpenEXR_FOUND)
-    find_package(OpenEXR QUIET COMPONENTS Half IlmImf Iex)
-endif()
+find_exr(Half)
 
 if(NOT OpenEXR_FOUND)
     message(FATAL_ERROR "Failed to find Half library")
