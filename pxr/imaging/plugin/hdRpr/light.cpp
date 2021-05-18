@@ -397,7 +397,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
     HdDirtyBits bits = *dirtyBits;
 
     if (bits & DirtyBits::DirtyTransform) {
-        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
+        m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
     }
 
     if (bits & DirtyParams) {

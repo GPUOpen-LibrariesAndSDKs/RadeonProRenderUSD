@@ -1806,7 +1806,9 @@ public:
 
             float focusDistance = 1.0f;
             m_hdCamera->GetFocusDistance(&focusDistance);
-            RPR_ERROR_CHECK(m_camera->SetFocusDistance(focusDistance), "Failed to set camera focus distance");
+            if (focusDistance > 0.0f) {
+                RPR_ERROR_CHECK(m_camera->SetFocusDistance(focusDistance), "Failed to set camera focus distance");
+            }
 
             float fstop = 0.0f;
             m_hdCamera->GetFStop(&fstop);
