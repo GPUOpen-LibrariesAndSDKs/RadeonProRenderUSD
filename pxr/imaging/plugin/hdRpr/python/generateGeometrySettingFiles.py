@@ -39,6 +39,13 @@ geometry_settings = [
                 'help': 'Whether to extract contour for a mesh or not'
             },
             {
+                'name': 'primvars:rpr:cryptomatteName',
+                'ui_name': 'Cryptomatte Name',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'help': 'String used to generate cryptomatte ID. If not specified, the path to a primitive used.'
+            },
+            {
                 'folder': 'Visibility Settings',
                 'settings': visibility_flag_settings
             }

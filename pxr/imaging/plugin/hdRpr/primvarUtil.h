@@ -40,6 +40,7 @@ struct HdRprGeometrySettings {
     int subdivisionLevel = 0;
     uint32_t visibilityMask = 0;
     bool ignoreContour = false;
+    std::string cryptomatteName;
 };
 
 void HdRprParseGeometrySettings(

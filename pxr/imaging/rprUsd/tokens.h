@@ -23,7 +23,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 #define RPRUSD_TOKENS \
     (rpr) \
     /* UsdShadeShader */ \
-    ((id, "rpr:id"))
+    ((id, "rpr:id")) \
+    ((cryptomatteName, "rpr:cryptomatteName"))
 
 
 TF_DECLARE_PUBLIC_TOKENS(RprUsdTokens, RPRUSD_API, RPRUSD_TOKENS);

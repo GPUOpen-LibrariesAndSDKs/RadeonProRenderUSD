@@ -52,11 +52,19 @@ using json = nlohmann::json;
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/fileUtils.h"
 #include "pxr/base/tf/getenv.h"
+#include "pxr/base/work/loops.h"
 
 #include "notify/message.h"
 
 #include <RadeonProRender_Baikal.h>
 #include <RprLoadStore.h>
+
+#ifdef RPR_EXR_EXPORT_ENABLED
+#include <MurmurHash3.h>
+#include <ImfOutputFile.h>
+#include <ImfChannelList.h>
+#include <ImfStringAttribute.h>
+#endif // RPR_EXR_EXPORT_ENABLED
 
 #ifdef BUILD_AS_HOUDINI_PLUGIN
 #include <HOM/HOM_Module.h>
@@ -111,6 +119,29 @@ RprUsdRenderDeviceType ToRprUsd(TfToken const& configDeviceType) {
     } else {
         return RprUsdRenderDeviceType::Invalid;
     }
+}
+
+bool CreateIntermediateDirectories(std::string const& filePath) {
+    auto dir = TfGetPathName(filePath);
+    if (!dir.empty()) {
+        return TfMakeDirs(dir, -1, true);
+    }
+    return true;
+}
+
+template <typename T>
+void UnalignedRead(void const* src, size_t* offset, T* dst) {
+    std::memcpy(dst, (uint8_t const*)src + *offset, sizeof(T));
+    *offset += sizeof(T);
+}
+
+GfVec4f ColorizeId(uint32_t id) {
+    return {
+        (float)(id & 0xFF) / 0xFF,
+        (float)((id & 0xFF00) >> 8) / 0xFF,
+        (float)((id & 0xFF0000) >> 16) / 0xFF,
+        1.0f
+    };
 }
 
 } // namespace anonymous
@@ -1009,13 +1040,13 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    RprUsdMaterial* CreateMaterial(HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
+    RprUsdMaterial* CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
         if (!m_rprContext) {
             return nullptr;
         }
 
         LockGuard rprLock(m_rprContext->GetMutex());
-        return RprUsdMaterialRegistry::GetInstance().CreateMaterial(sceneDelegate, materialNetwork, m_rprContext.get(), m_imageCache.get());
+        return RprUsdMaterialRegistry::GetInstance().CreateMaterial(materialId, sceneDelegate, materialNetwork, m_rprContext.get(), m_imageCache.get());
     }
 
     RprUsdMaterial* CreatePointsMaterial(VtVec3fArray const& colors) {
@@ -1646,6 +1677,17 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_RENDERING_COLOR_SPACE, preferences.GetOcioRenderingColorSpace().c_str()), "Faled to set OCIO rendering color space");
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyCryptomatte) || force) {
+#ifdef RPR_EXR_EXPORT_ENABLED
+                m_cryptomatteOutputPath = preferences.GetCryptomatteOutputPath();
+                m_cryptomattePreviewLayer = preferences.GetCryptomattePreviewLayer();
+#else
+                if (!preferences.GetCryptomatteOutputPath().empty()) {
+                    fprintf(stderr, "Cryptomatte export is not supported: hdRpr compiled without .exr support\n");
+                }
+#endif // RPR_EXR_EXPORT_ENABLED
+            }
         }
     }
 
@@ -1696,6 +1738,32 @@ public:
                 m_isBatch = isBatch;
                 m_batchREM = isBatch ? std::make_unique<BatchRenderEventManager>() : nullptr;
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtySession) || preferences.IsDirty(HdRprConfig::DirtyCryptomatte) || force) {
+            if (!m_cryptomatteOutputPath.empty() &&
+                (m_isBatch || preferences.GetCryptomatteOutputMode() == HdRprCryptomatteOutputModeTokens->Interactive) &&
+                m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                if (!m_cryptomatteAovs) {
+                    auto cryptomatteAovs = std::make_unique<CryptomatteAovs>();
+                    cryptomatteAovs->obj.aov[0] = CreateAov(HdRprAovTokens->cryptomatteObj0);
+                    cryptomatteAovs->obj.aov[1] = CreateAov(HdRprAovTokens->cryptomatteObj1);
+                    cryptomatteAovs->obj.aov[2] = CreateAov(HdRprAovTokens->cryptomatteObj2);
+                    cryptomatteAovs->mat.aov[0] = CreateAov(HdRprAovTokens->cryptomatteMat0);
+                    cryptomatteAovs->mat.aov[1] = CreateAov(HdRprAovTokens->cryptomatteMat1);
+                    cryptomatteAovs->mat.aov[2] = CreateAov(HdRprAovTokens->cryptomatteMat2);
+                    for (int i = 0; i < 3; ++i) {
+                        if (!cryptomatteAovs->obj.aov[i] ||
+                            !cryptomatteAovs->mat.aov[i]) {
+                            cryptomatteAovs = nullptr;
+                            break;
+                        }
+                    }
+                    m_cryptomatteAovs = std::move(cryptomatteAovs);
+                }
+            } else {
+                m_cryptomatteAovs = nullptr;
             }
         }
     }
@@ -2093,6 +2161,188 @@ public:
         return true;
     }
 
+    uint32_t cryptomatte_avoid_bad_float_hash(uint32_t hash) {
+        // from Cryptomatte Specification version 1.2.0
+        // This is for avoiding nan, inf, subnormals
+        // 
+        // if all exponent bits are 0 (subnormals, +zero, -zero) set exponent to 1
+        // if all exponent bits are 1 (NaNs, +inf, -inf) set exponent to 254
+        uint32_t exponent = hash >> 23 & 255; // extract exponent (8 bits)
+        if (exponent == 0 || exponent == 255) {
+            hash ^= 1 << 23; // toggle bit
+        }
+        return hash;
+    }
+    std::string cryptomatte_hash_name(const char* name, size_t size) {
+        uint32_t m3hash = 0;
+        MurmurHash3_x86_32(name, size, 0, &m3hash);
+        m3hash = cryptomatte_avoid_bad_float_hash(m3hash);
+        return TfStringPrintf("%08x", m3hash);
+    }
+    template <size_t size>
+    std::string cryptomatte_hash_name(char (&name)[size]) {
+        return cryptomatte_hash_name(name, size);
+    }
+    std::string cryptomatte_hash_name(std::string const& name) {
+        return cryptomatte_hash_name(name.c_str(), name.size());
+    }
+
+    void SaveCryptomatte() {
+#ifdef RPR_EXR_EXPORT_ENABLED
+        if (m_cryptomatteAovs &&
+            m_numSamples == m_maxSamples) {
+
+            std::string outputPath = m_cryptomatteOutputPath;
+            std::string filename = TfGetBaseName(outputPath);
+            if (filename.empty()) {
+                TF_WARN("Cryptomatte output path should be a path to .exr file");
+                outputPath = TfStringCatPaths(outputPath, "cryptomatte.exr");
+            } else if (!TfStringEndsWith(outputPath, ".exr")) {
+                TF_WARN("Cryptomatte output path should be a path to .exr file");
+                outputPath += ".exr";
+            }
+
+            if (!CreateIntermediateDirectories(outputPath)) {
+                fprintf(stderr, "Failed to save cryptomatte aov: cannot create intermediate directories - %s\n", outputPath.c_str());
+                return;
+            }
+
+            // Generate manifests
+            std::string objectManifestEncoded;
+            std::string materialManifestEncoded;
+
+            if (auto shapes = RprUsdGetListInfo<rpr_shape>(m_rprContext.get(), RPR_CONTEXT_LIST_CREATED_SHAPES)) {
+                json objectManifest;
+                json materialManifest;
+                for (size_t iShape = 0; iShape < shapes.size; ++iShape) {
+                    auto shape = RprUsdGetRprObject<rpr::Shape>(shapes.data[iShape]);
+                    if (auto name = RprUsdGetListInfo<char>(shape, RPR_SHAPE_NAME)) {
+                        objectManifest[name.data.get()] = cryptomatte_hash_name(name.data.get(), name.size - 1);
+                    }
+
+                    if (rpr_material_node rprMaterialNode = RprUsdGetInfo<rpr_material_node>(shape, RPR_SHAPE_MATERIAL)) {
+                        auto name = RprUsdGetListInfo<char>(
+                            [rprMaterialNode](size_t size, void* data, size_t* size_ret) {
+                                return rprMaterialNodeGetInfo(rprMaterialNode, RPR_MATERIAL_NODE_NAME, size, data, size_ret);
+                            }
+                        );
+                        if (name) {
+                            materialManifest[name.data.get()] = cryptomatte_hash_name(name.data.get(), name.size - 1);
+                        }
+                    }
+                }
+                objectManifestEncoded = objectManifest.dump();
+                materialManifestEncoded = materialManifest.dump();
+            }
+
+            try {
+                namespace exr = OPENEXR_IMF_NAMESPACE;
+                exr::FrameBuffer exrFb;
+                exr::Header exrHeader(m_viewportSize[0], m_viewportSize[1]);
+                exrHeader.compression() = exr::ZIPS_COMPRESSION;
+
+                const int kNumComponents = 4;
+                const char* kComponentNames[kNumComponents] = {".R", ".G", ".B", ".A"};
+
+                size_t linesize = m_viewportSize[0] * kNumComponents * sizeof(float);
+                size_t layersize = m_viewportSize[1] * linesize;
+                std::unique_ptr<char[]> flipBuffer;
+                if (m_isOutputFlipped) {
+                    flipBuffer = std::make_unique<char[]>(layersize);
+                }
+
+                std::vector<std::unique_ptr<char[]>> cryptomatteLayers;
+                std::vector<std::unique_ptr<GfVec4f[]>> previewLayers;
+
+                auto addCryptomatte = [&](const char* name, CryptomatteAov const& cryptomatte, std::string const& manifest) {
+                    std::string nameHash = cryptomatte_hash_name(name).substr(0, 7);
+                    std::string cryptoPrefix = "cryptomatte/" + nameHash + "/";
+                    exrHeader.insert(cryptoPrefix + "name", exr::StringAttribute(name));
+                    exrHeader.insert(cryptoPrefix + "hash", exr::StringAttribute("MurmurHash3_32"));
+                    exrHeader.insert(cryptoPrefix + "conversion", exr::StringAttribute("uint32_to_float32"));
+                    exrHeader.insert(cryptoPrefix + "manifest", exr::StringAttribute(manifest));
+
+                    auto addLayer = [&](const char* layerName, char* basePtr) {
+                        for (int iComponent = 0; iComponent < kNumComponents; ++iComponent) {
+                            std::string channelName = TfStringPrintf("%s%s", layerName, kComponentNames[iComponent]);
+                            exrHeader.channels().insert(channelName.c_str(), exr::Channel(exr::FLOAT));
+
+                            char* dataPtr = &basePtr[iComponent * sizeof(float)];
+                            size_t xStride = kNumComponents * sizeof(float);
+                            size_t yStride = xStride * m_viewportSize[0];
+                            exrFb.insert(channelName.c_str(), exr::Slice(exr::FLOAT, dataPtr, xStride, yStride));
+                        }
+                    };
+
+                    for (int i = 0; i < 3; ++i) {
+                        auto rprLayer = cryptomatte.aov[i]->GetResolvedFb();
+                        cryptomatteLayers.push_back(std::make_unique<char[]>(layersize));
+                        if (!rprLayer->GetData(cryptomatteLayers.back().get(), layersize)) {
+                            throw std::runtime_error("failed to get RPR fb data");
+                        }
+
+                        if (m_isOutputFlipped) {
+                            for (int y = 0; y < m_viewportSize[1]; ++y) {
+                                void* src = &cryptomatteLayers.back()[y * linesize];
+                                void* dst = &flipBuffer[(m_viewportSize[1] - y - 1) * linesize];
+                                std::memcpy(dst, src, linesize);
+                            }
+                            std::swap(flipBuffer, cryptomatteLayers.back());
+                        }
+
+                        std::string layerName = TfStringPrintf("%s0%d", name, i);
+                        addLayer(layerName.c_str(), cryptomatteLayers.back().get());
+                    }
+
+                    if (m_cryptomattePreviewLayer) {
+                        size_t numPixels = m_viewportSize[0] * m_viewportSize[1];
+                        previewLayers.push_back(std::make_unique<GfVec4f[]>(numPixels));
+                        std::memset(previewLayers.back().get(), 0, numPixels * sizeof(GfVec4f));
+
+                        size_t channelOffset = cryptomatteLayers.size() - 3;
+
+                        GfVec4f* previewLayer = previewLayers.back().get();
+                        WorkParallelForN(numPixels,
+                            [&](size_t begin, size_t end) {
+                                for (size_t iChannel = 0; iChannel < 3; ++iChannel) {
+                                    auto channelData = cryptomatteLayers[channelOffset + iChannel].get();
+                                    for (size_t iPixel = begin; iPixel < end; ++iPixel) {
+                                        size_t offset = iPixel * kNumComponents * sizeof(float);
+
+                                        uint32_t id;
+                                        float contrib;
+                                        UnalignedRead(channelData, &offset, &id);
+                                        UnalignedRead(channelData, &offset, &contrib);
+                                        GfVec4f color = ColorizeId(id) * contrib;
+
+                                        UnalignedRead(channelData, &offset, &id);
+                                        UnalignedRead(channelData, &offset, &contrib);
+                                        color += ColorizeId(id) * contrib;
+
+                                        previewLayer[iPixel] += color;
+                                    }
+                                }
+                            }
+                        );
+
+                        addLayer(name, (char*)previewLayer);
+                    }
+                };
+
+                addCryptomatte("CryptoObject", m_cryptomatteAovs->obj, objectManifestEncoded);
+                addCryptomatte("CryptoMaterial", m_cryptomatteAovs->mat, materialManifestEncoded);
+
+                ArchUnlinkFile(outputPath.c_str());
+                exr::OutputFile exrFile(outputPath.c_str(), exrHeader);
+                exrFile.setFrameBuffer(exrFb);
+                exrFile.writePixels(m_viewportSize[1]);
+            } catch (std::exception& e) {
+                fprintf(stderr, "Failed to save cryptomatte: %s", e.what());
+            }
+        }
+#endif // RPR_EXR_EXPORT_ENABLED
+    }
+
     void BatchRenderImpl(HdRprRenderThread* renderThread) {
         if (!CommonRenderImplPrologue()) {
             return;
@@ -2424,6 +2674,7 @@ public:
                         RenderImpl(renderThread);
                     }
                 }
+                SaveCryptomatte();
             } catch (std::runtime_error const& e) {
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
             }
@@ -2464,12 +2715,8 @@ Don't show this message again?
         }
 #endif // BUILD_AS_HOUDINI_PLUGIN
 
-        // Create intermediate directories if needed
-        auto exportDir = TfGetPathName(m_rprSceneExportPath);
-        if (!exportDir.empty()) {
-            if (!TfMakeDirs(exportDir, -1, true)) {
-                fprintf(stderr, "Failed to create output directory\n");
-            }
+        if (!CreateIntermediateDirectories(m_rprSceneExportPath)) {
+            fprintf(stderr, "Failed to create .rpr export output directory\n");
         }
 
         uint32_t currentYFlip;
@@ -3712,6 +3959,17 @@ private:
     bool m_rprExportAsSingleFile;
     bool m_rprExportUseImageCache;
 
+    std::string m_cryptomatteOutputPath;
+    bool m_cryptomattePreviewLayer;
+    struct CryptomatteAov {
+        std::shared_ptr<HdRprApiAov> aov[3];
+    };
+    struct CryptomatteAovs {
+        CryptomatteAov mat;
+        CryptomatteAov obj;
+    };
+    std::unique_ptr<CryptomatteAovs> m_cryptomatteAovs;
+
     std::condition_variable* m_presentedConditionVariable = nullptr;
     bool* m_presentedCondition = nullptr;
     rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
@@ -3836,9 +4094,9 @@ HdRprApiVolume* HdRprApi::CreateVolume(
         gridSize, voxelSize, gridBBLow, materialParams);
 }
 
-RprUsdMaterial* HdRprApi::CreateMaterial(HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
+RprUsdMaterial* HdRprApi::CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateMaterial(sceneDelegate, materialNetwork);
+    return m_impl->CreateMaterial(materialId, sceneDelegate, materialNetwork);
 }
 
 RprUsdMaterial* HdRprApi::CreatePointsMaterial(VtVec3fArray const& colors) {

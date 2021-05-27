@@ -20,6 +20,7 @@ TF_DEFINE_PRIVATE_TOKENS(HdRprGeometryPrimvarTokens,
     ((id, "rpr:id"))
     ((subdivisionLevel, "rpr:subdivisionLevel"))
     ((ignoreContour, "rpr:ignoreContour"))
+    ((cryptomatteName, "rpr:cryptomatteName"))
     ((visibilityPrimary, "rpr:visibilityPrimary"))
     ((visibilityShadow, "rpr:visibilityShadow"))
     ((visibilityReflection, "rpr:visibilityReflection"))
@@ -60,6 +61,8 @@ void HdRprParseGeometrySettings(
             }
         } else if (desc.name == HdRprGeometryPrimvarTokens->ignoreContour) {
             HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->ignoreContour, sceneDelegate, id, &geomSettings->ignoreContour);
+        } else if (desc.name == HdRprGeometryPrimvarTokens->cryptomatteName) {
+            HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->cryptomatteName, sceneDelegate, id, &geomSettings->cryptomatteName);
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityPrimary) {
             setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityPrimary, kVisiblePrimary);
         } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityShadow) {

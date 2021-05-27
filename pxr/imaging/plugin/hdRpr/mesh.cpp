@@ -140,10 +140,7 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
         }
 
         m_fallbackMaterial = rprApi->CreateDiffuseMaterial(color);
-
-        if (RprUsdIsLeakCheckEnabled()) {
-            rprApi->SetName(m_fallbackMaterial, GetId().GetText());
-        }
+        rprApi->SetName(m_fallbackMaterial, GetId().GetText());
     }
 
     return m_fallbackMaterial;
@@ -376,6 +373,10 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             m_ignoreContour = geomSettings.ignoreContour;
             isIgnoreContourDirty = true;
         }
+
+        if (m_cryptomatteName != geomSettings.cryptomatteName) {
+            m_cryptomatteName = geomSettings.cryptomatteName;
+        }
     }
 
     isIdDirty |= *dirtyBits & HdChangeTracker::DirtyPrimID;
@@ -537,11 +538,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (!m_rprMeshes.empty()) {
-        if (newMesh && RprUsdIsLeakCheckEnabled()) {
-            auto name = id.GetText();
-            for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetName(rprMesh, name);
-            }
+        auto name = m_cryptomatteName.empty() ? id.GetText() : m_cryptomatteName.c_str();
+        for (auto& rprMesh : m_rprMeshes) {
+            rprApi->SetName(rprMesh, name);
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtySubdivTags)) {
