@@ -184,7 +184,37 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, desc.name)) {
-            // TODO: deformation motion blur for UsdSkel
+            m_pointSamples.clear();
+
+#if PXR_VERSION >= 2105
+            HdExtComputationUtils::SampledValueStore<2> valueStore;
+            HdExtComputationUtils::SampleComputedPrimvarValues({desc}, sceneDelegate, m_numGeometrySamples, &valueStore);
+            auto pointValueIt = valueStore.find(desc.name);
+            if (pointValueIt != valueStore.end()) {
+                auto& sampleValues = pointValueIt->second.values;
+                VtArray<VtVec3fArray> newPointSamples;
+                newPointSamples.reserve(sampleValues.size());
+                for (auto& sampleValue : sampleValues) {
+                    if (sampleValue.IsHolding<VtVec3fArray>()) {
+                        newPointSamples.push_back(sampleValue.UncheckedGet<VtVec3fArray>());
+                    } else {
+                        newPointSamples.clear();
+                        break;
+                    }
+                }
+
+                if (!newPointSamples.empty()) {
+                    m_pointSamples = std::move(newPointSamples);
+                    m_normalsValid = false;
+                    pointsIsComputed = true;
+
+                    newMesh = true;
+                }
+            }
+#else // PXR_VERSION < 2105
+            if (m_numGeometrySamples != 1) {
+                TF_WARN("UsdSkel deformation motion blur is supported only in USD 21.05+ (current version %d.%d)", PXR_MINOR_VERSION, PXR_PATCH_VERSION);
+            }
             auto valueStore = HdExtComputationUtils::GetComputedPrimvarValues({desc}, sceneDelegate);
             auto pointValueIt = valueStore.find(desc.name);
             if (pointValueIt != valueStore.end()) {
@@ -194,6 +224,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                 newMesh = true;
             }
+#endif // PXR_VERSION >= 2105
         }
 
         break;
