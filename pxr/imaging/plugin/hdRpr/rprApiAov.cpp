@@ -54,25 +54,29 @@ bool ReadRifImage(rif_image image, void* dstBuffer, size_t dstBufferSize) {
 } // namespace anonymous
 
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                         rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter)
+                         rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter, float renderResolution)
     : m_aovDescriptor(HdRprAovRegistry::GetInstance().GetAovDesc(rprAovType, false))
     , m_filter(std::move(filter))
-    , m_format(format) {
+    , m_format(format)
+	, m_width(width)
+	, m_height(height)
+	, m_renderResolution(renderResolution) {
     if (rif::Image::GetDesc(0, 0, format).type == 0) {
         RIF_THROW_ERROR_MSG("Unsupported format: " + TfEnum::GetName(format));
     }
 
-    m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height);
+    m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width * renderResolution, height * renderResolution);
     m_aov->AttachAs(rprAovType);
 
     // XXX (Hybrid): Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
     if (rprContextMetadata.pluginType != kPluginHybrid) {
-        m_resolved = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height);
+        m_resolved = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width * renderResolution, height * renderResolution);
     }
 }
 
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                         rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
+                         rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, 
+						 float renderResolution)
     : HdRprApiAov(rprAovType, width, height, format, rprContext, rprContextMetadata, [format, rifContext]() -> std::unique_ptr<rif::Filter> {
         if (format == HdFormatFloat32Vec4) {
             // RPR framebuffers by default with such format
@@ -86,7 +90,7 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
 
         filter->SetParam("interpOperator", (int) RIF_IMAGE_INTERPOLATION_NEAREST);
         return filter;
-    }()) {
+    }(), renderResolution) {
 
 }
 
@@ -141,17 +145,24 @@ bool HdRprApiAov::GetData(void* dstBuffer, size_t dstBufferSize) {
     return false;
 }
 
-void HdRprApiAov::Resize(int width, int height, HdFormat format) {
+void HdRprApiAov::Resize(int width, int height, HdFormat format, float renderResolution) {
+	if (m_width != width || m_height != height || m_renderResolution != renderResolution) {
+		m_width = width;
+		m_height = height;
+		m_renderResolution = renderResolution;
+		m_dirtyBits |= ChangeTracker::DirtySize;
+	}
+
     if (m_format != format) {
         m_format = format;
         m_dirtyBits |= ChangeTracker::DirtyFormat;
     }
 
-    if (m_aov && m_aov->Resize(width, height)) {
+    if (m_aov && m_aov->Resize(width * m_renderResolution, height * m_renderResolution)) {
         m_dirtyBits |= ChangeTracker::DirtySize;
     }
 
-    if (m_resolved && m_resolved->Resize(width, height)) {
+    if (m_resolved && m_resolved->Resize(width * m_renderResolution, height * m_renderResolution)) {
         m_dirtyBits |= ChangeTracker::DirtyFormat;
     }
 }
@@ -187,11 +198,10 @@ void HdRprApiAov::OnFormatChange(rif::Context* rifContext) {
 
 void HdRprApiAov::OnSizeChange(rif::Context* rifContext) {
     if (m_filter) {
-        auto fbDesc = m_aov->GetDesc();
-        m_filter->Resize(fbDesc.fb_width, fbDesc.fb_height);
+        m_filter->Resize(m_width, m_height);
         m_filter->SetInput(rif::Color, GetResolvedFb());
-        m_filter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width, fbDesc.fb_height, m_format));
-        m_filter->SetParam("outSize", GfVec2i(fbDesc.fb_width, fbDesc.fb_height));
+        m_filter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+        m_filter->SetParam("outSize", GfVec2i(m_width, m_height));
     }
 }
 
@@ -332,16 +342,6 @@ bool HdRprApiColorAov::CanComposeAlpha() {
     return HdGetComponentCount(m_format) == 4 && m_retainedOpacity;
 }
 
-void HdRprApiColorAov::Resize(int width, int height, HdFormat format) {
-    if (m_width != width || m_height != height) {
-        m_width = width;
-        m_height = height;
-        m_dirtyBits |= ChangeTracker::DirtySize;
-    }
-
-    HdRprApiAov::Resize(width, height, format);
-}
-
 void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
     if (m_dirtyBits & ChangeTracker::DirtyFormat) {
         OnFormatChange(rifContext);
@@ -375,6 +375,12 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
                 } else {
                     filter = filterCreator();
                 }
+
+				if (filter == nullptr)
+				{
+					m_isEnabledFiltersDirty = true;
+					return;
+				}
 
                 if (m_filter) {
                     m_auxFilters.emplace_back(m_mainFilterType, std::move(m_filter));
@@ -425,8 +431,7 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
 			{
 				addFilter(kFilterUpscale,
 					[this, rifContext]() {
-						auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
-						return rif::Filter::Create(rif::FilterType::Upscale, rifContext, fbDesc.fb_width, fbDesc.fb_height);
+						return rif::Filter::Create(rif::FilterType::Upscale, rifContext, 1, 1);
 					}
 				);
 			}
@@ -505,27 +510,26 @@ void HdRprApiColorAov::OnSizeChange(rif::Context* rifContext) {
         return;
     }
 
-    auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
     if (m_auxFilters.empty()) {
-        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_mainFilterType, m_filter.get(), m_retainedRawColor->GetResolvedFb());
+        ResizeFilter(m_width, m_height, m_mainFilterType, m_filter.get(), m_retainedRawColor->GetResolvedFb());
     } else {
         // Ideally we would use "Filter combining" functionality, but it does not work with user-defined filter
         // So we attach each filter separately
 
         auto filter = m_auxFilters.front().second.get();
-        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters.front().first, filter, m_retainedRawColor->GetResolvedFb());
+        ResizeFilter(m_width, m_height, m_auxFilters.front().first, filter, m_retainedRawColor->GetResolvedFb());
         for (int i = 1; i < m_auxFilters.size(); ++i) {
             auto filterInput = m_auxFilters[i - 1].second->GetOutput();
-            ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters[i].first, m_auxFilters[i].second.get(), filterInput);
+            ResizeFilter(m_width, m_height, m_auxFilters[i].first, m_auxFilters[i].second.get(), filterInput);
         }
-        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_mainFilterType, m_filter.get(), m_auxFilters.back().second->GetOutput());
+        ResizeFilter(m_width, m_height, m_mainFilterType, m_filter.get(), m_auxFilters.back().second->GetOutput());
     }
 }
 
 HdRprApiNormalAov::HdRprApiNormalAov(
     int width, int height, HdFormat format,
-    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
-    : HdRprApiAov(RPR_AOV_SHADING_NORMAL, width, height, format, rprContext, rprContextMetadata, rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext)) {
+    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution)
+    : HdRprApiAov(RPR_AOV_SHADING_NORMAL, width, height, format, rprContext, rprContextMetadata, rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext), renderResolution) {
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create normal AOV: RIF context required");
     }
@@ -540,30 +544,16 @@ void HdRprApiNormalAov::OnFormatChange(rif::Context* rifContext) {
 }
 
 void HdRprApiNormalAov::OnSizeChange(rif::Context* rifContext) {
-    auto fbDesc = m_aov->GetDesc();
-    m_filter->Resize(fbDesc.fb_width, fbDesc.fb_height);
+    m_filter->Resize(m_width, m_height);
     m_filter->SetInput(rif::Color, GetResolvedFb());
-    m_filter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width, fbDesc.fb_height, m_format));
-}
-
-void HdRprApiComputedAov::Resize(int width, int height, HdFormat format) {
-    if (m_format != format) {
-        m_format = format;
-        m_dirtyBits |= ChangeTracker::DirtyFormat;
-    }
-
-    if (m_width != width || m_height != height) {
-        m_width = width;
-        m_height = height;
-        m_dirtyBits |= ChangeTracker::DirtySize;
-    }
+    m_filter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
 }
 
 HdRprApiDepthAov::HdRprApiDepthAov(
     int width, int height, HdFormat format,
     std::shared_ptr<HdRprApiAov> worldCoordinateAov,
-    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
-    : HdRprApiComputedAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true), width, height, format)
+    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution)
+    : HdRprApiComputedAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true), width, height, format, renderResolution)
     , m_retainedWorldCoordinateAov(worldCoordinateAov) {
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create depth AOV: RIF context required");
@@ -592,12 +582,12 @@ void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
 
         if (m_remapFilter) {
             m_ndcFilter->SetInput(rif::Color, m_retainedWorldCoordinateAov->GetResolvedFb());
-            m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+            m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width * m_renderResolution, m_height * m_renderResolution, m_format));
             m_remapFilter->SetInput(rif::Color, m_ndcFilter->GetOutput());
-            m_remapFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+            m_remapFilter->SetOutput(rif::Image::GetDesc(m_width * m_renderResolution, m_height * m_renderResolution, m_format));
         } else {
             m_ndcFilter->SetInput(rif::Color, m_retainedWorldCoordinateAov->GetResolvedFb());
-            m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+            m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width * m_renderResolution, m_height * m_renderResolution, m_format));
         }
     }
     m_dirtyBits = ChangeTracker::Clean;
@@ -623,8 +613,8 @@ void HdRprApiDepthAov::Resolve() {
 HdRprApiIdMaskAov::HdRprApiIdMaskAov(
     HdRprAovDescriptor const& aovDescriptor, std::shared_ptr<HdRprApiAov> const& baseIdAov,
     int width, int height, HdFormat format,
-    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
-    : HdRprApiComputedAov(aovDescriptor, width, height, format)
+    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution)
+    : HdRprApiComputedAov(aovDescriptor, width, height, format, renderResolution)
     , m_baseIdAov(baseIdAov) {
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create id mask AOV: RIF context required");

@@ -28,12 +28,12 @@ struct RprUsdContextMetadata;
 class HdRprApiAov {
 public:
     HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter);
+                rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter, float renderResolution);
     HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+                rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution);
     virtual ~HdRprApiAov() = default;
 
-    virtual void Resize(int width, int height, HdFormat format);
+    virtual void Resize(int width, int height, HdFormat format, float renderResolution);
     virtual void Update(HdRprApi const* rprApi, rif::Context* rifContext);
     virtual void Resolve();
 
@@ -49,6 +49,10 @@ public:
 protected:
     HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
         : m_aovDescriptor(aovDescriptor), m_format(format) {};
+
+	HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format, int width, int height, float renderResolution)
+		: m_aovDescriptor(aovDescriptor), m_format(format), m_width(width), m_height(height), m_renderResolution(renderResolution)
+	{};
 
     virtual void OnFormatChange(rif::Context* rifContext);
     virtual void OnSizeChange(rif::Context* rifContext);
@@ -69,6 +73,10 @@ protected:
     };
     uint32_t m_dirtyBits = AllDirty;
 
+	float m_renderResolution = 1.0f;
+	int m_width = 0;
+	int m_height = 0;
+
 private:
     bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
 };
@@ -78,7 +86,6 @@ public:
     HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata);
     ~HdRprApiColorAov() override = default;
 
-    void Resize(int width, int height, HdFormat format) override;
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
     bool GetData(void* dstBuffer, size_t dstBufferSize) override;
     void Resolve() override;
@@ -167,15 +174,12 @@ private:
     bool m_isEnabledFiltersDirty = true;
 
     TonemapParams m_tonemap;
-
-    int m_width = 0;
-    int m_height = 0;
 };
 
 class HdRprApiNormalAov : public HdRprApiAov {
 public:
     HdRprApiNormalAov(int width, int height, HdFormat format,
-                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution);
     ~HdRprApiNormalAov() override = default;
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
@@ -184,22 +188,16 @@ protected:
 
 class HdRprApiComputedAov : public HdRprApiAov {
 public:
-    HdRprApiComputedAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format)
-        : HdRprApiAov(aovDescriptor, format), m_width(width), m_height(height) {}
+    HdRprApiComputedAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format, float renderResolution)
+        : HdRprApiAov(aovDescriptor, format, width, height, renderResolution) {}
     ~HdRprApiComputedAov() override = default;
-
-    void Resize(int width, int height, HdFormat format) override final;
-
-protected:
-    int m_width = -1;
-    int m_height = -1;
 };
 
 class HdRprApiDepthAov : public HdRprApiComputedAov {
 public:
     HdRprApiDepthAov(int width, int height, HdFormat format,
                      std::shared_ptr<HdRprApiAov> worldCoordinateAov,
-                     rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+                     rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution);
     ~HdRprApiDepthAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
@@ -218,7 +216,7 @@ class HdRprApiIdMaskAov : public HdRprApiComputedAov {
 public:
     HdRprApiIdMaskAov(HdRprAovDescriptor const& aovDescriptor, std::shared_ptr<HdRprApiAov> const& baseIdAov,
                       int width, int height, HdFormat format,
-                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution);
     ~HdRprApiIdMaskAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;

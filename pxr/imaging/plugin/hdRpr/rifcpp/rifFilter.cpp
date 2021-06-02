@@ -71,8 +71,6 @@ class FilterUpscale final : public Filter
 public:
 	explicit FilterUpscale(Context* rifContext, std::uint32_t width, std::uint32_t height);
 	~FilterUpscale() override = default;
-
-	void Resize(std::uint32_t width, std::uint32_t height) override;
 };
 
 class FilterCustom final : public Filter {
@@ -179,12 +177,7 @@ FilterUpscale::FilterUpscale(Context* rifContext, std::uint32_t width, std::uint
 
 	// setup const parameters
 	RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterString(m_rifFilter, "modelPath", rifContext->GetModelPath().c_str()), "Failed to set filter \"modelPath\" parameter");
-	RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1u(m_rifFilter, "mode", RIF_AI_UPSCALE_MODE_GOOD_2X), "Failed to set parameter of upscale filter");
-}
-
-void FilterUpscale::Resize(std::uint32_t width, std::uint32_t height)
-{
-	Filter::Resize(width, height);
+	RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1u(m_rifFilter, "mode", RIF_AI_UPSCALE_MODE_FAST_2X), "Failed to set parameter of upscale filter");
 }
 
 } // namespace anonymous
@@ -341,7 +334,7 @@ void Filter::Resolve() {
 }
 
 void Filter::AttachFilter(rif_image inputImage) {
-    m_rifContext->AttachFilter(m_rifFilter, inputImage, m_outputImage);
+	m_rifContext->AttachFilter(m_rifFilter, inputImage, m_outputImage);
 }
 
 void Filter::DetachFilter() {
