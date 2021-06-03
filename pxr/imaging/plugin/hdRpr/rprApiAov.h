@@ -28,8 +28,15 @@ struct RprUsdContextMetadata;
 
 class HdRprApiAov {
 public:
-    HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution);
+    HdRprApiAov(
+		rpr_aov rprAovType, 
+		int width, 
+		int height, 
+		HdFormat format,
+		rpr::Context* rprContext, 
+		RprUsdContextMetadata const& rprContextMetadata, 
+		rif::Context* rifContext, 
+		float renderResolution);
     virtual ~HdRprApiAov() = default;
 
     virtual void Resize(int width, int height, HdFormat format, float renderResolution);
@@ -45,51 +52,35 @@ public:
     HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); };
     HdRprApiFramebuffer* GetResolvedFb();
 
-	virtual HdRprApiFramebuffer* GetFbForRifInput()
-	{
-		return GetResolvedFb();
-	}
-
-	enum FilterType
-	{
-		kFilterNone = 0,
-		kFilterResample = 1 << 0,
-		kFilterAIDenoise = 1 << 1,
-		kFilterEAWDenoise = 1 << 2,
-		kFilterComposeOpacity = 1 << 3,
-		kFilterTonemap = 1 << 4,
-		kFilterUpscale = 1 << 5,
-		kFilterRemapRange = 1 << 6,
-		kFilterUserDefined = 1 << 7,
-		kFilterNdcDepth = 1 << 8
-	};
-
-	rif::Filter* FindFilter(FilterType type)
-	{
-		auto it = std::find_if(m_filters.begin(), m_filters.end(), [type](auto& entry) {
-			return entry.first == type;
-		});
-
-		if (it != m_filters.end())
-		{
-			return it->second.get();
-		}
-		else
-		{
-			return nullptr;
-		}
-	}
+	virtual HdRprApiFramebuffer* GetRifInputFramebuffer();
 
 protected:
-    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
-        : m_aovDescriptor(aovDescriptor), m_format(format) {};
+    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format, rif::Context* rifContext)
+        : m_aovDescriptor(aovDescriptor), m_format(format), m_rifContext(rifContext) {};
 
-	HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format, int width, int height, float renderResolution)
-		: m_aovDescriptor(aovDescriptor), m_format(format), m_width(width), m_height(height), m_renderResolution(renderResolution)
+	HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format, int width, int height, float renderResolution, rif::Context* rifContext)
+		: m_aovDescriptor(aovDescriptor), m_format(format), m_width(width), m_height(height), m_renderResolution(renderResolution), m_rifContext(rifContext)
 	{};
 
     virtual void OnFormatChange(rif::Context* rifContext);
     virtual void OnSizeChange(rif::Context* rifContext);
+
+	enum class FilterType
+	{
+		kFilterNone,
+		kFilterAIDenoise,
+		kFilterEAWDenoise,
+		kFilterComposeOpacity,
+		kFilterTonemap,
+		kFilterRemapRange,
+		kFilterUserDefined,
+		kFilterNdcDepth,
+		kFilterUpscale,
+		kFilterResample,
+	};
+
+	rif::Filter* FindFilter(FilterType type);
+	void SetFilter(FilterType filter, bool enable);
 
 protected:
     HdRprAovDescriptor const& m_aovDescriptor;
@@ -98,11 +89,7 @@ protected:
     std::unique_ptr<HdRprApiFramebuffer> m_aov;
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
 
-
-	uint32_t m_enabledFilters = kFilterNone;
-	bool m_isEnabledFiltersDirty = true;
 	std::list<std::pair<FilterType, std::unique_ptr<rif::Filter>>> m_filters;
-	void SetFilter(FilterType filter, bool enable);
 
     enum ChangeTracker {
         Clean = 0,
@@ -116,14 +103,15 @@ protected:
 	int m_width = 0;
 	int m_height = 0;
 
+	rif::Context* m_rifContext = nullptr;
+
 private:
     bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
-	void GenerateFilterChain(rif::Context* rifContext);
 };
 
 class HdRprApiColorAov : public HdRprApiAov {
 public:
-    HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata);
+    HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     ~HdRprApiColorAov() override = default;
 
     bool GetData(void* dstBuffer, size_t dstBufferSize) override;
@@ -141,10 +129,7 @@ public:
     void DeinitDenoise(rif::Context* rifContext);
     void SetDenoise(bool enable, HdRprApi const* rprApi, rif::Context* rifContext);
 
-	virtual HdRprApiFramebuffer* GetFbForRifInput()
-	{
-		return m_retainedRawColor->GetResolvedFb();
-	}
+	HdRprApiFramebuffer* GetRifInputFramebuffer() override;
 
     struct TonemapParams {
         bool enable;
@@ -183,6 +168,7 @@ public:
 
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
+	void OnSizeChange(rif::Context* rifContext) override;
 
 private:
     void SetTonemapFilterParams(rif::Filter* filter);
@@ -193,7 +179,7 @@ private:
     std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
     std::shared_ptr<HdRprApiAov> m_retainedDenoiseInputs[rif::MaxInput];
-    FilterType m_denoiseFilterType = kFilterNone;
+    FilterType m_denoiseFilterType = FilterType::kFilterNone;
 
     TonemapParams m_tonemap;
 };
@@ -209,8 +195,8 @@ protected:
 
 class HdRprApiComputedAov : public HdRprApiAov {
 public:
-    HdRprApiComputedAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format, float renderResolution)
-        : HdRprApiAov(aovDescriptor, format, width, height, renderResolution) {}
+    HdRprApiComputedAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format, float renderResolution, rif::Context* rifContext)
+        : HdRprApiAov(aovDescriptor, format, width, height, renderResolution, rifContext) {}
     ~HdRprApiComputedAov() override = default;
 };
 
@@ -223,10 +209,7 @@ public:
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
 
-	virtual HdRprApiFramebuffer* GetFbForRifInput() override
-	{
-		return m_retainedWorldCoordinateAov->GetResolvedFb();
-	}
+	HdRprApiFramebuffer* GetRifInputFramebuffer() override;
 
 private:
     std::shared_ptr<HdRprApiAov> m_retainedWorldCoordinateAov;
@@ -239,10 +222,7 @@ public:
                       rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution);
     ~HdRprApiIdMaskAov() override = default;
 
-	virtual HdRprApiFramebuffer* GetFbForRifInput() override
-	{
-		return m_baseIdAov->GetResolvedFb();
-	}
+	HdRprApiFramebuffer* GetRifInputFramebuffer() override;
 
 private:
     std::shared_ptr<HdRprApiAov> m_baseIdAov;

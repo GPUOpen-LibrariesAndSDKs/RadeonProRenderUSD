@@ -3340,7 +3340,7 @@ private:
                         return nullptr;
                     }
 
-                    auto colorAov = new HdRprApiColorAov(format, std::move(rawColorAov), m_rprContext.get(), m_rprContextMetadata);
+                    auto colorAov = new HdRprApiColorAov(format, std::move(rawColorAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                     UpdateColorAlpha(colorAov);
 
                     newAov = colorAov;
