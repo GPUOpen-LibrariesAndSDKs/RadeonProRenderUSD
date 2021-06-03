@@ -19,6 +19,7 @@ limitations under the License.
 #include "rifcpp/rifFilter.h"
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/imaging/hd/types.h"
+#include <list>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -27,8 +28,6 @@ struct RprUsdContextMetadata;
 
 class HdRprApiAov {
 public:
-    HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
-                rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter, float renderResolution);
     HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
                 rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution);
     virtual ~HdRprApiAov() = default;
@@ -45,6 +44,41 @@ public:
 
     HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); };
     HdRprApiFramebuffer* GetResolvedFb();
+
+	virtual HdRprApiFramebuffer* GetFbForRifInput()
+	{
+		return GetResolvedFb();
+	}
+
+	enum FilterType
+	{
+		kFilterNone = 0,
+		kFilterResample = 1 << 0,
+		kFilterAIDenoise = 1 << 1,
+		kFilterEAWDenoise = 1 << 2,
+		kFilterComposeOpacity = 1 << 3,
+		kFilterTonemap = 1 << 4,
+		kFilterUpscale = 1 << 5,
+		kFilterRemapRange = 1 << 6,
+		kFilterUserDefined = 1 << 7,
+		kFilterNdcDepth = 1 << 8
+	};
+
+	rif::Filter* FindFilter(FilterType type)
+	{
+		auto it = std::find_if(m_filters.begin(), m_filters.end(), [type](auto& entry) {
+			return entry.first == type;
+		});
+
+		if (it != m_filters.end())
+		{
+			return it->second.get();
+		}
+		else
+		{
+			return nullptr;
+		}
+	}
 
 protected:
     HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
@@ -63,7 +97,12 @@ protected:
 
     std::unique_ptr<HdRprApiFramebuffer> m_aov;
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
-    std::unique_ptr<rif::Filter> m_filter;
+
+
+	uint32_t m_enabledFilters = kFilterNone;
+	bool m_isEnabledFiltersDirty = true;
+	std::list<std::pair<FilterType, std::unique_ptr<rif::Filter>>> m_filters;
+	void SetFilter(FilterType filter, bool enable);
 
     enum ChangeTracker {
         Clean = 0,
@@ -79,6 +118,7 @@ protected:
 
 private:
     bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
+	void GenerateFilterChain(rif::Context* rifContext);
 };
 
 class HdRprApiColorAov : public HdRprApiAov {
@@ -86,9 +126,7 @@ public:
     HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata);
     ~HdRprApiColorAov() override = default;
 
-    void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
     bool GetData(void* dstBuffer, size_t dstBufferSize) override;
-    void Resolve() override;
 
     void SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity);
 
@@ -102,6 +140,11 @@ public:
                           std::shared_ptr<HdRprApiAov> worldCoordinate);
     void DeinitDenoise(rif::Context* rifContext);
     void SetDenoise(bool enable, HdRprApi const* rprApi, rif::Context* rifContext);
+
+	virtual HdRprApiFramebuffer* GetFbForRifInput()
+	{
+		return m_retainedRawColor->GetResolvedFb();
+	}
 
     struct TonemapParams {
         bool enable;
@@ -140,23 +183,8 @@ public:
 
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
-    void OnSizeChange(rif::Context* rifContext) override;
 
 private:
-    enum Filter {
-        kFilterNone = 0,
-        kFilterResample = 1 << 0,
-        kFilterAIDenoise = 1 << 1,
-        kFilterEAWDenoise = 1 << 2,
-        kFilterComposeOpacity = 1 << 3,
-        kFilterTonemap = 1 << 4,
-		kFilterUpscale = 1 << 5
-    };
-    void SetFilter(Filter filter, bool enable);
-    
-    template <typename T>
-    void ResizeFilter(int width, int height, Filter filterType, rif::Filter* filter, T input);
-
     void SetTonemapFilterParams(rif::Filter* filter);
 
     bool CanComposeAlpha();
@@ -165,13 +193,7 @@ private:
     std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
     std::shared_ptr<HdRprApiAov> m_retainedDenoiseInputs[rif::MaxInput];
-    Filter m_denoiseFilterType = kFilterNone;
-
-    Filter m_mainFilterType = kFilterNone;
-    std::vector<std::pair<Filter, std::unique_ptr<rif::Filter>>> m_auxFilters;
-
-    uint32_t m_enabledFilters = kFilterNone;
-    bool m_isEnabledFiltersDirty = true;
+    FilterType m_denoiseFilterType = kFilterNone;
 
     TonemapParams m_tonemap;
 };
@@ -183,7 +205,6 @@ public:
     ~HdRprApiNormalAov() override = default;
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
-    void OnSizeChange(rif::Context* rifContext) override;
 };
 
 class HdRprApiComputedAov : public HdRprApiAov {
@@ -201,14 +222,13 @@ public:
     ~HdRprApiDepthAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
-    void Resolve() override;
+
+	virtual HdRprApiFramebuffer* GetFbForRifInput() override
+	{
+		return m_retainedWorldCoordinateAov->GetResolvedFb();
+	}
 
 private:
-    std::unique_ptr<rif::Filter> m_retainedFilter;
-
-    rif::Filter* m_ndcFilter;
-    rif::Filter* m_remapFilter;
-
     std::shared_ptr<HdRprApiAov> m_retainedWorldCoordinateAov;
 };
 
@@ -219,7 +239,10 @@ public:
                       rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext, float renderResolution);
     ~HdRprApiIdMaskAov() override = default;
 
-    void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+	virtual HdRprApiFramebuffer* GetFbForRifInput() override
+	{
+		return m_baseIdAov->GetResolvedFb();
+	}
 
 private:
     std::shared_ptr<HdRprApiAov> m_baseIdAov;
