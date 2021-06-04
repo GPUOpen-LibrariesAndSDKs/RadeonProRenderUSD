@@ -1315,7 +1315,6 @@ public:
 
                 // Create new RPR AOV
                 outRb.rprAov = CreateAov(outRb.aovName, rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat);
-                outRb.rprAov->Resize(rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat, GetRenderResolution());
             } else if (outputRenderBufferIt->rprAov) {
                 // Reuse previously created RPR AOV
                 std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
@@ -1422,22 +1421,17 @@ public:
             }
 
             upscale.isDirty = config->IsDirty(HdRprConfig::DirtyUpscaler);
-            if (upscale.isDirty)
-            {
+
+            if (upscale.isDirty) {
                 upscale.value.enable = config->GetEnableUpscaler();
 
                 TfToken mode = config->GetUpscalerMode();
 
-                if (mode == TfToken("Good"))
-                {
+                if (mode == TfToken("Good")) {
                     upscale.value.mode = HdRprApiColorAov::UpscaleParams::Mode::Good;
-                }
-                else if (mode == TfToken("Best"))
-                {
+                } else if (mode == TfToken("Best")) {
                     upscale.value.mode = HdRprApiColorAov::UpscaleParams::Mode::Best;
-                }
-                else if (mode == TfToken("Fast"))
-                {
+                } else if (mode == TfToken("Fast")) {
                     upscale.value.mode = HdRprApiColorAov::UpscaleParams::Mode::Fast;
                 }
             }
@@ -1911,12 +1905,11 @@ public:
         return false;
     }
 
-    void UpdateAovs(
-        HdRprRenderParam* rprRenderParam, 
-        RenderSetting<bool> enableDenoise,
-        RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, 
-        RenderSetting<HdRprApiColorAov::UpscaleParams> upscale,
-        bool clearAovs
+    void UpdateAovs(HdRprRenderParam* rprRenderParam, 
+                    RenderSetting<bool> enableDenoise,
+                    RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, 
+                    RenderSetting<HdRprApiColorAov::UpscaleParams> upscale,
+                    bool clearAovs
     ) {
         UpdateDenoising(enableDenoise);
 
