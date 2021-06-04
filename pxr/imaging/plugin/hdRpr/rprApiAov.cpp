@@ -137,12 +137,7 @@ HdRprApiAov::HdRprApiAov(int width,
     }
 
     // RPR framebuffers by default with such format
-    if (format != HdFormatFloat32Vec4) {
-        SetFilter(FilterType::kFilterResample, true);
-    }
-
-    // Resample filter also required for aov's rendered in half resolution
-    if (renderResolution != 1.0f) {
+    if (format != HdFormatFloat32Vec4 || renderResolution != 1.0f) {
         SetFilter(FilterType::kFilterResample, true);
     }
 }
@@ -282,7 +277,7 @@ HdRprApiAov::FindFilter(FilterType type)
 void 
 HdRprApiAov::OnFormatChange(rif::Context* rifContext)
 {
-    if (rifContext && m_format != HdFormatFloat32Vec4) {
+    if (rifContext && (m_format != HdFormatFloat32Vec4 || m_renderResolution != 1.0f)) {
         SetFilter(FilterType::kFilterResample, true);
 
         // Reset inputs
