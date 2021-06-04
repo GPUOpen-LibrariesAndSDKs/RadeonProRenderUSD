@@ -1358,13 +1358,6 @@ public:
         m_resolveData.ForAllAovs([&](ResolveData::AovEntry& e) {
             if (m_isFirstSample || e.isMultiSampled) {
                 e.aov->Resolve();
-
-				static int counter = 0;
-
-				if (auto object = e.aov->GetResolvedFb())
-				{
-					object->GetRprObject()->SaveToFile(("D://Images/" + std::to_string(counter++) + ".png").c_str());
-				}
             }
         });
 
@@ -3330,33 +3323,47 @@ private:
 
         try {
             if (!aov) {
-                HdRprApiAov* newAov = nullptr;
+				HdRprApiAov* newAov = nullptr;
+				HdRprApiAovBuilder builder = HdRprApiAov::Builder()
+					.WithType(rpr::Aov(aovDesc.id))
+					.WithFormat(format)
+					.WithSize(width, height)
+					.WithRprContext(m_rprContext.get())
+					.WithRprContextMetadata(&m_rprContextMetadata)
+					.WithRifContext(m_rifContext.get())
+					.WithRenderResolution(GetRenderResolution());
+
                 std::function<void(HdRprApiAov*)> aovCustomDestructor;
 
                 if (aovName == HdAovTokens->color) {
-                    auto rawColorAov = GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4);
+                    auto rawColorAov = std::static_pointer_cast<HdRprApiColorAov>(GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4));
                     if (!rawColorAov) {
                         TF_RUNTIME_ERROR("Failed to create color AOV: can't create rawColor AOV");
                         return nullptr;
                     }
 
-                    auto colorAov = new HdRprApiColorAov(format, std::move(rawColorAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
-                    UpdateColorAlpha(colorAov);
-
-                    newAov = colorAov;
+					newAov = builder
+						.WithType(rpr::Aov::RPR_AOV_COLOR)
+						.WithRawColorAov(std::move(rawColorAov))
+						.Build();
+					
+                    UpdateColorAlpha((HdRprApiColorAov*)newAov);
                 } else if (aovName == HdAovTokens->normal) {
-                    newAov = new HdRprApiNormalAov(width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get(), GetRenderResolution());
-                } else if (aovName == HdAovTokens->depth) {
+					newAov = builder.Build();
+				} else if (aovName == HdAovTokens->depth) {
                     auto worldCoordinateAov = GetAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4);
                     if (!worldCoordinateAov) {
                         TF_RUNTIME_ERROR("Failed to create depth AOV: can't create worldCoordinate AOV");
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get(), GetRenderResolution());
-                } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
-                    newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get(), GetRenderResolution());
-                    aovCustomDestructor = [this](HdRprApiAov* aov) {
+					newAov = builder
+						.WithWorldCoordinateAov(std::move(worldCoordinateAov))
+						.Build();
+				} else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
+					newAov = builder.Build();
+					
+					aovCustomDestructor = [this](HdRprApiAov* aov) {
                         // Each LPE AOV reserves RPR's LPE AOV id (RPR_AOV_LPE_0, ...)
                         // As soon as LPE AOV is released we want to return reserved id to the pool
                         m_lpeAovPool.push_back(GetRprLpeAovName(aov->GetAovFb()->GetAovId()));
@@ -3381,10 +3388,13 @@ private:
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiIdMaskAov(aovDesc, baseAov, width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get(), GetRenderResolution());
+					newAov = builder
+						.WithBaseIdAov(baseAov)
+						.WithAovDesc(aovDesc)
+						.Build();
                 } else {
                     if (!aovDesc.computed) {
-                        newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get(), GetRenderResolution());
+						newAov = builder.Build();
                     } else {
                         TF_CODING_ERROR("Failed to create %s AOV: unprocessed computed AOV", aovName.GetText());
                     }
