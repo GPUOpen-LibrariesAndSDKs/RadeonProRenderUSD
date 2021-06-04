@@ -1920,13 +1920,7 @@ public:
 	) {
         UpdateDenoising(enableDenoise);
 
-		if (upscale.isDirty)
-		{
-			auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
-			m_isUpscaleEnabled = upscale.value.enable;
-			m_colorAov->SetUpscale(upscale.value, rprApi, m_rifContext.get());
-			m_dirtyFlags |= ChangeTracker::DirtyViewport;
-		}
+		UpdateUpscaling(upscale);
 
         if (tonemap.isDirty) {
             m_colorAov->SetTonemap(tonemap.value);
@@ -1999,6 +1993,17 @@ public:
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
         }
     }
+
+	void UpdateUpscaling(RenderSetting<HdRprApiColorAov::UpscaleParams> upscale)
+	{
+		if (!upscale.isDirty) {
+			return;
+		}
+
+		m_isUpscaleEnabled = upscale.value.enable;
+		m_colorAov->SetUpscale(upscale.value);
+		m_dirtyFlags |= ChangeTracker::DirtyViewport;
+	}
 
     void UpdateDenoising(RenderSetting<bool> enableDenoise) {
         // Disable denoiser to prevent possible crashes due to incorrect AI models

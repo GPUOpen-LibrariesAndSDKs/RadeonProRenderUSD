@@ -502,6 +502,10 @@ HdRprApiColorAov::DeinitDenoise(rif::Context* rifContext)
     }
 
     m_denoiseFilterType = FilterType::kFilterNone;
+
+	SetFilter(FilterType::kFilterAIDenoise, false);
+	SetFilter(FilterType::kFilterEAWDenoise, false);
+	OnSizeChange(rifContext);
 }
 
 void
@@ -538,10 +542,29 @@ HdRprApiColorAov::SetTonemap(TonemapParams const& params)
 }
 
 void
-HdRprApiColorAov::SetUpscale(UpscaleParams const& params, HdRprApi const* rprApi, rif::Context* rifContext)
+HdRprApiColorAov::SetUpscale(UpscaleParams const& params)
 {
 	SetFilter(FilterType::kFilterUpscale, params.enable);
-	Update(rprApi, rifContext);
+
+	if (params.enable)
+	{
+		rif::Filter* filter = FindFilter(FilterType::kFilterUpscale);
+
+		switch (params.mode)
+		{
+		case HdRprApiColorAov::UpscaleParams::Mode::Best:
+			filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_BEST_2X);
+			break;
+
+		case HdRprApiColorAov::UpscaleParams::Mode::Good:
+			filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_GOOD_2X);
+			break;
+
+		case HdRprApiColorAov::UpscaleParams::Mode::Fast:
+			filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_FAST_2X);
+			break;
+		}
+	}
 }
 
 void

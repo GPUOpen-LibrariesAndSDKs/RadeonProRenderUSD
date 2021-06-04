@@ -50,7 +50,6 @@ public:
 	HdRprApiAov* Build();
 
 private:
-	/// Could be created only from HdRprApiAov
 	friend class HdRprApiAov;
 	HdRprApiAovBuilder() = default;
 
@@ -227,7 +226,7 @@ public:
 	};
 
     void SetTonemap(TonemapParams const& params);
-    void SetUpscale(UpscaleParams const& params, HdRprApi const* rprApi, rif::Context* rifContext);
+    void SetUpscale(UpscaleParams const& params);
 
 protected:
 	void OnFormatChange(rif::Context* rifContext) override;
