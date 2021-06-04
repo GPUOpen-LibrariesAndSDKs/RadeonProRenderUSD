@@ -150,7 +150,7 @@ private:
     std::shared_ptr<rpr::MaterialNode> m_toonClosureNode;
 };
 
-ARCH_CONSTRUCTOR(RprUsd_InitDisplaceNode, 255, void) {
+ARCH_CONSTRUCTOR(RprUsd_InitToonNode, 255, void) {
     auto nodeInfo = RprUsd_RprToonNode::GetInfo();
     RprUsdMaterialRegistry::GetInstance().Register(
         TfToken(nodeInfo->name, TfToken::Immortal),
