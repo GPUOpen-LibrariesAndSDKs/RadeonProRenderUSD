@@ -69,8 +69,8 @@ public:
 class FilterUpscale final : public Filter
 {
 public:
-	explicit FilterUpscale(Context* rifContext, std::uint32_t width, std::uint32_t height);
-	~FilterUpscale() override = default;
+    explicit FilterUpscale(Context* rifContext, std::uint32_t width, std::uint32_t height);
+    ~FilterUpscale() override = default;
 };
 
 class FilterCustom final : public Filter {
@@ -173,11 +173,11 @@ void FilterResample::Resize(std::uint32_t width, std::uint32_t height) {
 
 FilterUpscale::FilterUpscale(Context* rifContext, std::uint32_t width, std::uint32_t height) : Filter(rifContext)
 {
-	m_rifFilter = rifContext->CreateImageFilter(RIF_IMAGE_FILTER_AI_UPSCALE);
+    m_rifFilter = rifContext->CreateImageFilter(RIF_IMAGE_FILTER_AI_UPSCALE);
 
-	// setup const parameters
-	RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterString(m_rifFilter, "modelPath", rifContext->GetModelPath().c_str()), "Failed to set filter \"modelPath\" parameter");
-	RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1u(m_rifFilter, "mode", RIF_AI_UPSCALE_MODE_FAST_2X), "Failed to set parameter of upscale filter");
+    // setup const parameters
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterString(m_rifFilter, "modelPath", rifContext->GetModelPath().c_str()), "Failed to set filter \"modelPath\" parameter");
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1u(m_rifFilter, "mode", RIF_AI_UPSCALE_MODE_FAST_2X), "Failed to set parameter of upscale filter");
 }
 
 } // namespace anonymous
@@ -194,8 +194,8 @@ std::unique_ptr<Filter> Filter::Create(FilterType type, Context* rifContext, std
             return std::unique_ptr<FilterEaw>(new FilterEaw(rifContext, width, height));
         case FilterType::Resample:
             return std::unique_ptr<FilterResample>(new FilterResample(rifContext, width, height));
-		case FilterType::Upscale:
-			return std::unique_ptr<FilterUpscale>(new FilterUpscale(rifContext, width, height));
+        case FilterType::Upscale:
+            return std::unique_ptr<FilterUpscale>(new FilterUpscale(rifContext, width, height));
         default:
             return nullptr;
     }
@@ -334,7 +334,7 @@ void Filter::Resolve() {
 }
 
 void Filter::AttachFilter(rif_image inputImage) {
-	m_rifContext->AttachFilter(m_rifFilter, inputImage, m_outputImage);
+    m_rifContext->AttachFilter(m_rifFilter, inputImage, m_outputImage);
 }
 
 void Filter::DetachFilter() {

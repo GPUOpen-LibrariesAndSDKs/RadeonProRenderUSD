@@ -34,45 +34,45 @@ ReadRifImage(rif_image image, void* dstBuffer, std::size_t dstBufferSize, std::i
     std::size_t dummy;
     auto rifStatus = rifImageGetInfo(image, RIF_IMAGE_DATA_SIZEBYTE, sizeof(rifImageSize), &rifImageSize, &dummy);
 
-	if (rifStatus != RIF_SUCCESS) {
-		return false;
-	}
-	
-	const std::int32_t pixelSize = rifImageSize / (width * height);
-	const std::int32_t rowSize = width * pixelSize;
+    if (rifStatus != RIF_SUCCESS) {
+        return false;
+    }
+    
+    const std::int32_t pixelSize = rifImageSize / (width * height);
+    const std::int32_t rowSize = width * pixelSize;
 
-	enum class MappingMode
-	{
-		EqualSize,
-		AdditionalRow,
-		AdditionalColumn
-	};
+    enum class MappingMode
+    {
+        EqualSize,
+        AdditionalRow,
+        AdditionalColumn
+    };
 
-	MappingMode mode = MappingMode::EqualSize;
+    MappingMode mode = MappingMode::EqualSize;
 
-	// For upscaled images destination size might not exactly be equal to RIF output
-	// To prevent data loss plugin renders image with bigger size
-	if (dstBufferSize != rifImageSize) {
-		bool validBufferSize = false;
+    // For upscaled images destination size might not exactly be equal to RIF output
+    // To prevent data loss plugin renders image with bigger size
+    if (dstBufferSize != rifImageSize) {
+        bool validBufferSize = false;
 
-		const std::int32_t additionalRowSize = pixelSize * width;
+        const std::int32_t additionalRowSize = pixelSize * width;
 
-		if (dstBufferSize + additionalRowSize == rifImageSize) {
-			validBufferSize = true;
-			mode = MappingMode::AdditionalRow;
-		}
+        if (dstBufferSize + additionalRowSize == rifImageSize) {
+            validBufferSize = true;
+            mode = MappingMode::AdditionalRow;
+        }
 
-		const std::int32_t additionalColSize = pixelSize * height;
+        const std::int32_t additionalColSize = pixelSize * height;
 
-		if (dstBufferSize + additionalColSize == rifImageSize) {
-			validBufferSize = true;
-			mode = MappingMode::AdditionalColumn;
-		}
+        if (dstBufferSize + additionalColSize == rifImageSize) {
+            validBufferSize = true;
+            mode = MappingMode::AdditionalColumn;
+        }
 
-		if (!validBufferSize) {
-			return false;
-		}
-	}
+        if (!validBufferSize) {
+            return false;
+        }
+    }
 
     void* data = nullptr;
     rifStatus = rifImageMap(image, RIF_IMAGE_MAP_READ, &data);
@@ -81,23 +81,23 @@ ReadRifImage(rif_image image, void* dstBuffer, std::size_t dstBufferSize, std::i
         return false;
     }
 
-	switch (mode)
-	{
-	// If output dimesions equal to input dimensions use simple copy
-	// Additional row (if rendered) would be discarded
-	case MappingMode::EqualSize:
-	case MappingMode::AdditionalRow:
-		std::memcpy(dstBuffer, data, dstBufferSize);
-		break;
+    switch (mode)
+    {
+    // If output dimesions equal to input dimensions use simple copy
+    // Additional row (if rendered) would be discarded
+    case MappingMode::EqualSize:
+    case MappingMode::AdditionalRow:
+        std::memcpy(dstBuffer, data, dstBufferSize);
+        break;
 
-	// For additional column each last row pixel should be discarded
-	case MappingMode::AdditionalColumn:
-		for (std::int32_t i = 0; i < height; i++) {
-			const std::int32_t offset = i * rowSize;
-			std::memcpy(((std::byte*)dstBuffer) + offset, ((std::byte*)data) + offset + i * pixelSize, rowSize);
-		}
-		break;
-	}
+    // For additional column each last row pixel should be discarded
+    case MappingMode::AdditionalColumn:
+        for (std::int32_t i = 0; i < height; i++) {
+            const std::int32_t offset = i * rowSize;
+            std::memcpy(((std::byte*)dstBuffer) + offset, ((std::byte*)data) + offset + i * pixelSize, rowSize);
+        }
+        break;
+    }
 
     rifStatus = rifImageUnmap(image, data);
     if (rifStatus != RIF_SUCCESS) {
@@ -110,19 +110,19 @@ ReadRifImage(rif_image image, void* dstBuffer, std::size_t dstBufferSize, std::i
 } // namespace anonymous
 
 HdRprApiAov::HdRprApiAov(int width,
-						 int height,
-						 float renderResolution,
-						 HdFormat format,
-						 rif::Context* rifContext,
-						 rpr_aov rprAovType,
-						 rpr::Context* rprContext,
-						 RprUsdContextMetadata const& rprContextMetadata)
+                         int height,
+                         float renderResolution,
+                         HdFormat format,
+                         rif::Context* rifContext,
+                         rpr_aov rprAovType,
+                         rpr::Context* rprContext,
+                         RprUsdContextMetadata const& rprContextMetadata)
     : m_aovDescriptor(HdRprAovRegistry::GetInstance().GetAovDesc(rprAovType, false))
     , m_format(format)
-	, m_width(width)
-	, m_height(height)
-	, m_renderResolution(renderResolution)
-	, m_rifContext(rifContext)
+    , m_width(width)
+    , m_height(height)
+    , m_renderResolution(renderResolution)
+    , m_rifContext(rifContext)
 {
     if (rif::Image::GetDesc(0, 0, format).type == 0) {
         RIF_THROW_ERROR_MSG("Unsupported format: " + TfEnum::GetName(format));
@@ -136,29 +136,29 @@ HdRprApiAov::HdRprApiAov(int width,
         m_resolved = pxr::make_unique<HdRprApiFramebuffer>(rprContext, std::ceil(width * renderResolution), std::ceil(height * renderResolution));
     }
 
-	// RPR framebuffers by default with such format
-	if (format != HdFormatFloat32Vec4) {
-		SetFilter(FilterType::kFilterResample, true);
-	}
+    // RPR framebuffers by default with such format
+    if (format != HdFormatFloat32Vec4) {
+        SetFilter(FilterType::kFilterResample, true);
+    }
 
-	// Resample filter also required for aov's rendered in half resolution
-	if (renderResolution != 1.0f) {
-		SetFilter(FilterType::kFilterResample, true);
-	}
+    // Resample filter also required for aov's rendered in half resolution
+    if (renderResolution != 1.0f) {
+        SetFilter(FilterType::kFilterResample, true);
+    }
 }
 
 HdRprApiAov::HdRprApiAov(int width,
-						 int height,
-						 float renderResolution,
-						 HdFormat format,
-						 rif::Context* rifContext,
-						 HdRprAovDescriptor const& aovDescriptor)
-	: m_aovDescriptor(aovDescriptor)
-	, m_format(format)
-	, m_width(width)
-	, m_height(height)
-	, m_renderResolution(renderResolution)
-	, m_rifContext(rifContext)
+                         int height,
+                         float renderResolution,
+                         HdFormat format,
+                         rif::Context* rifContext,
+                         HdRprAovDescriptor const& aovDescriptor)
+    : m_aovDescriptor(aovDescriptor)
+    , m_format(format)
+    , m_width(width)
+    , m_height(height)
+    , m_renderResolution(renderResolution)
+    , m_rifContext(rifContext)
 {}
 
 void 
@@ -168,9 +168,9 @@ HdRprApiAov::Resolve()
         m_aov->Resolve(m_resolved.get());
     }
 
-	for (auto& filter : m_filters) {
-		filter.second->Resolve();
-	}
+    for (auto& filter : m_filters) {
+        filter.second->Resolve();
+    }
 }
 
 void
@@ -224,14 +224,14 @@ HdRprApiAov::GetData(void* dstBuffer, size_t dstBufferSize)
 void
 HdRprApiAov::Resize(int width, int height, HdFormat format, float renderResolution)
 {
-	if (m_width != width || m_height != height || m_renderResolution != renderResolution) {
-		m_width = width;
-		m_height = height;
-		m_renderResolution = renderResolution;
-		
-		// Mark size dirty here because when upscaler gets enabled, RIF size should be updated while RPR not
-		m_dirtyBits |= ChangeTracker::DirtySize;
-	}
+    if (m_width != width || m_height != height || m_renderResolution != renderResolution) {
+        m_width = width;
+        m_height = height;
+        m_renderResolution = renderResolution;
+        
+        // Mark size dirty here because when upscaler gets enabled, RIF size should be updated while RPR not
+        m_dirtyBits |= ChangeTracker::DirtySize;
+    }
 
     if (m_format != format) {
         m_format = format;
@@ -260,30 +260,30 @@ HdRprApiAov::Update(HdRprApi const* rprApi, rif::Context* rifContext)
 
     m_dirtyBits = ChangeTracker::Clean;
 
-	for (auto& filter : m_filters) {
-		filter.second->Update();
-	}
+    for (auto& filter : m_filters) {
+        filter.second->Update();
+    }
 }
 
 rif::Filter*
 HdRprApiAov::FindFilter(FilterType type)
 {
-	auto it = std::find_if(m_filters.begin(), m_filters.end(), [type](auto& entry) {
-		return entry.first == type;
-	});
+    auto it = std::find_if(m_filters.begin(), m_filters.end(), [type](auto& entry) {
+        return entry.first == type;
+    });
 
-	if (it != m_filters.end()) {
-		return it->second.get();
-	} else {
-		return nullptr;
-	}
+    if (it != m_filters.end()) {
+        return it->second.get();
+    } else {
+        return nullptr;
+    }
 }
 
 void 
 HdRprApiAov::OnFormatChange(rif::Context* rifContext)
 {
     if (rifContext && m_format != HdFormatFloat32Vec4) {
-		SetFilter(FilterType::kFilterResample, true);
+        SetFilter(FilterType::kFilterResample, true);
 
         // Reset inputs
         m_dirtyBits |= ChangeTracker::DirtySize;
@@ -293,51 +293,51 @@ HdRprApiAov::OnFormatChange(rif::Context* rifContext)
 void
 HdRprApiAov::OnSizeChange(rif::Context* rifContext)
 {
-	if (m_filters.empty()) {
-		return;
-	}
+    if (m_filters.empty()) {
+        return;
+    }
 
-	auto resizeFilter = [this](int width, int height, rif::Filter* filter, auto input) {
-		filter->Resize(width, height);
-		filter->SetInput(rif::Color, input);
-		filter->SetOutput(rif::Image::GetDesc(width, height, m_format));
-	};
+    auto resizeFilter = [this](int width, int height, rif::Filter* filter, auto input) {
+        filter->Resize(width, height);
+        filter->SetInput(rif::Color, input);
+        filter->SetOutput(rif::Image::GetDesc(width, height, m_format));
+    };
 
-	if (m_filters.size() == 1) {
-		resizeFilter(m_width, m_height, m_filters.back().second.get(), GetRifInputFramebuffer());
-	} else {
-		std::int32_t intermediateWidth = std::ceil(m_width * m_renderResolution);
-		std::int32_t intermediateHeight = std::ceil(m_height * m_renderResolution);
-		
-		// Process filter chain
-		void* filterInput = GetRifInputFramebuffer();
+    if (m_filters.size() == 1) {
+        resizeFilter(m_width, m_height, m_filters.back().second.get(), GetRifInputFramebuffer());
+    } else {
+        std::int32_t intermediateWidth = std::ceil(m_width * m_renderResolution);
+        std::int32_t intermediateHeight = std::ceil(m_height * m_renderResolution);
+        
+        // Process filter chain
+        void* filterInput = GetRifInputFramebuffer();
 
-		for (auto it = m_filters.begin(); it != std::prev(m_filters.end()); ++it) {
-			if (it == m_filters.begin())
-			{
-				resizeFilter(intermediateWidth, intermediateHeight, it->second.get(), (HdRprApiFramebuffer*)filterInput);
-			}
-			else
-			{
-				resizeFilter(intermediateWidth, intermediateHeight, it->second.get(), (rif_image)filterInput);
-			}
-			filterInput = it->second->GetOutput();
-		}
+        for (auto it = m_filters.begin(); it != std::prev(m_filters.end()); ++it) {
+            if (it == m_filters.begin())
+            {
+                resizeFilter(intermediateWidth, intermediateHeight, it->second.get(), (HdRprApiFramebuffer*)filterInput);
+            }
+            else
+            {
+                resizeFilter(intermediateWidth, intermediateHeight, it->second.get(), (rif_image)filterInput);
+            }
+            filterInput = it->second->GetOutput();
+        }
 
-		// Process last filter
-		auto& lastFilter = m_filters.back().second;
-		resizeFilter(m_width, m_height, lastFilter.get(), (rif_image)filterInput);
-	}
+        // Process last filter
+        auto& lastFilter = m_filters.back().second;
+        resizeFilter(m_width, m_height, lastFilter.get(), (rif_image)filterInput);
+    }
 }
 
 HdRprApiColorAov::HdRprApiColorAov(int width,
-								   int height,
-								   float renderResolution,
-								   HdFormat format,
-								   rif::Context* rifContext,
-								   rpr::Context* rprContext,
-								   RprUsdContextMetadata const& rprContextMetadata,
-								   std::shared_ptr<HdRprApiAov> rawColorAov)
+                                   int height,
+                                   float renderResolution,
+                                   HdFormat format,
+                                   rif::Context* rifContext,
+                                   rpr::Context* rprContext,
+                                   RprUsdContextMetadata const& rprContextMetadata,
+                                   std::shared_ptr<HdRprApiAov> rawColorAov)
     : HdRprApiAov(width, height, renderResolution, format, rifContext, HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kColorAlpha), true))
     , m_retainedRawColor(std::move(rawColorAov)) 
 {}
@@ -345,91 +345,91 @@ HdRprApiColorAov::HdRprApiColorAov(int width,
 void
 HdRprApiAov::SetFilter(FilterType filter, bool enable)
 {
-	// Disable filter
-	if (!enable) {
-		m_filters.remove_if([filter](auto& entry) { return entry.first == filter; });
-		return;
-	}
+    // Disable filter
+    if (!enable) {
+        m_filters.remove_if([filter](auto& entry) { return entry.first == filter; });
+        return;
+    }
 
-	// Do not do anything if filter of that type already created
-	if (FindFilter(filter)) {
-		return;
-	}
+    // Do not do anything if filter of that type already created
+    if (FindFilter(filter)) {
+        return;
+    }
 
-	// Enable filter
-	std::unique_ptr<rif::Filter> createdFilter;
+    // Enable filter
+    std::unique_ptr<rif::Filter> createdFilter;
 
-	switch (filter) {
-	case FilterType::kFilterTonemap: {
-			createdFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_PHOTO_LINEAR_TONEMAP, m_rifContext);
-		}
-		break;
+    switch (filter) {
+    case FilterType::kFilterTonemap: {
+            createdFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_PHOTO_LINEAR_TONEMAP, m_rifContext);
+        }
+        break;
 
-	case FilterType::kFilterAIDenoise:
-	case FilterType::kFilterEAWDenoise: {
-			auto denoiseFilterType = (filter == FilterType::kFilterAIDenoise) ? rif::FilterType::AIDenoise : rif::FilterType::EawDenoise;
-			createdFilter = rif::Filter::Create(denoiseFilterType, m_rifContext, m_width, m_height);
-		}
-		break;
+    case FilterType::kFilterAIDenoise:
+    case FilterType::kFilterEAWDenoise: {
+            auto denoiseFilterType = (filter == FilterType::kFilterAIDenoise) ? rif::FilterType::AIDenoise : rif::FilterType::EawDenoise;
+            createdFilter = rif::Filter::Create(denoiseFilterType, m_rifContext, m_width, m_height);
+        }
+        break;
 
-	case FilterType::kFilterComposeOpacity: {
-			createdFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, m_rifContext);
-			auto opacityComposingKernelCode = std::string(R"(
+    case FilterType::kFilterComposeOpacity: {
+            createdFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, m_rifContext);
+            auto opacityComposingKernelCode = std::string(R"(
                            int2 coord;
                            GET_COORD_OR_RETURN(coord, GET_BUFFER_SIZE(inputImage));
                            vec4 alpha = ReadPixelTyped(alphaImage, coord.x, coord.y);
                            vec4 color = ReadPixelTyped(inputImage, coord.x, coord.y) * alpha.x;
                            WritePixelTyped(outputImage, coord.x, coord.y, make_vec4(color.x, color.y, color.z, alpha.x));
                        )");
-			createdFilter->SetParam("code", opacityComposingKernelCode);
-		}
-		break;
+            createdFilter->SetParam("code", opacityComposingKernelCode);
+        }
+        break;
 
-	case FilterType::kFilterUpscale: {
-			createdFilter = rif::Filter::Create(rif::FilterType::Upscale, m_rifContext, 1, 1);
-		}
-		break;
+    case FilterType::kFilterUpscale: {
+            createdFilter = rif::Filter::Create(rif::FilterType::Upscale, m_rifContext, 1, 1);
+        }
+        break;
 
-	case FilterType::kFilterResample: {
-			createdFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, m_rifContext);
-			createdFilter->SetParam("interpOperator", (int)RIF_IMAGE_INTERPOLATION_NEAREST);
-			createdFilter->SetParam("outSize", GfVec2i(m_width, m_height));
-		}
-		break;
+    case FilterType::kFilterResample: {
+            createdFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, m_rifContext);
+            createdFilter->SetParam("interpOperator", (int)RIF_IMAGE_INTERPOLATION_NEAREST);
+            createdFilter->SetParam("outSize", GfVec2i(m_width, m_height));
+        }
+        break;
 
-	default:
-		throw std::runtime_error("Unsupported filter was set");
-	}
+    default:
+        throw std::runtime_error("Unsupported filter was set");
+    }
 
-	AddFilter(filter, std::move(createdFilter));
+    AddFilter(filter, std::move(createdFilter));
 }
 
 void 
 HdRprApiAov::AddFilter(FilterType type, std::unique_ptr<rif::Filter> filter)
 {
-	// Do not do anything if filter of that type already created
-	if (FindFilter(type)) {
-		throw std::runtime_error("Trying to add existing filter type");
-	}
+    // Do not do anything if filter of that type already created
+    if (FindFilter(type)) {
+        throw std::runtime_error("Trying to add existing filter type");
+    }
 
-	if (m_filters.empty()) {
-		m_filters.emplace_back(type, std::move(filter));
-	} else {
-		std::int32_t newFilterPriority = static_cast<std::underlying_type_t<FilterType>>(type);
-		auto it = m_filters.begin();
+    if (m_filters.empty()) {
+        m_filters.emplace_back(type, std::move(filter));
+    } else {
+        std::int32_t newFilterPriority = static_cast<std::underlying_type_t<FilterType>>(type);
+        auto it = m_filters.begin();
 
-		for (; it != m_filters.end(); it++) {
-			std::int32_t priority = static_cast<std::underlying_type_t<FilterType>>(it->first);
-			if (newFilterPriority < priority) {
-				break;
-			}
-		}
+        for (; it != m_filters.end(); it++) {
+            std::int32_t priority = static_cast<std::underlying_type_t<FilterType>>(it->first);
+            if (newFilterPriority < priority) {
+                break;
+            }
+        }
 
-		m_filters.emplace(it, type, std::move(filter));
-	}
+        m_filters.emplace(it, type, std::move(filter));
+    }
 
-	// Signal to update inputs
-	m_dirtyBits |= ChangeTracker::DirtySize;
+    // Signal to update inputs
+    m_dirtyBits |= ChangeTracker::DirtySize;
 }
 
 void
@@ -443,8 +443,8 @@ HdRprApiColorAov::SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity)
 
 void
 HdRprApiColorAov::InitAIDenoise(std::shared_ptr<HdRprApiAov> albedo,
-								std::shared_ptr<HdRprApiAov> normal,
-								std::shared_ptr<HdRprApiAov> linearDepth)
+                                std::shared_ptr<HdRprApiAov> normal,
+                                std::shared_ptr<HdRprApiAov> linearDepth)
 {
     if (FindFilter(FilterType::kFilterAIDenoise)) {
         return;
@@ -467,10 +467,10 @@ HdRprApiColorAov::InitAIDenoise(std::shared_ptr<HdRprApiAov> albedo,
 
 void
 HdRprApiColorAov::InitEAWDenoise(std::shared_ptr<HdRprApiAov> albedo,
-								 std::shared_ptr<HdRprApiAov> normal,
-								 std::shared_ptr<HdRprApiAov> linearDepth,
-								 std::shared_ptr<HdRprApiAov> objectId,
-								 std::shared_ptr<HdRprApiAov> worldCoordinate)
+                                 std::shared_ptr<HdRprApiAov> normal,
+                                 std::shared_ptr<HdRprApiAov> linearDepth,
+                                 std::shared_ptr<HdRprApiAov> objectId,
+                                 std::shared_ptr<HdRprApiAov> worldCoordinate)
 {
     if (FindFilter(FilterType::kFilterEAWDenoise)) {
         return;
@@ -503,9 +503,9 @@ HdRprApiColorAov::DeinitDenoise(rif::Context* rifContext)
 
     m_denoiseFilterType = FilterType::kFilterNone;
 
-	SetFilter(FilterType::kFilterAIDenoise, false);
-	SetFilter(FilterType::kFilterEAWDenoise, false);
-	OnSizeChange(rifContext);
+    SetFilter(FilterType::kFilterAIDenoise, false);
+    SetFilter(FilterType::kFilterEAWDenoise, false);
+    OnSizeChange(rifContext);
 }
 
 void
@@ -536,7 +536,7 @@ HdRprApiColorAov::SetTonemap(TonemapParams const& params)
         m_tonemap = params;
 
         if (!tonemapEnableDirty && isTonemapEnabled) {
-			SetTonemapFilterParams(FindFilter(FilterType::kFilterTonemap));
+            SetTonemapFilterParams(FindFilter(FilterType::kFilterTonemap));
         }
     }
 }
@@ -544,27 +544,27 @@ HdRprApiColorAov::SetTonemap(TonemapParams const& params)
 void
 HdRprApiColorAov::SetUpscale(UpscaleParams const& params)
 {
-	SetFilter(FilterType::kFilterUpscale, params.enable);
+    SetFilter(FilterType::kFilterUpscale, params.enable);
 
-	if (params.enable)
-	{
-		rif::Filter* filter = FindFilter(FilterType::kFilterUpscale);
+    if (params.enable)
+    {
+        rif::Filter* filter = FindFilter(FilterType::kFilterUpscale);
 
-		switch (params.mode)
-		{
-		case HdRprApiColorAov::UpscaleParams::Mode::Best:
-			filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_BEST_2X);
-			break;
+        switch (params.mode)
+        {
+        case HdRprApiColorAov::UpscaleParams::Mode::Best:
+            filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_BEST_2X);
+            break;
 
-		case HdRprApiColorAov::UpscaleParams::Mode::Good:
-			filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_GOOD_2X);
-			break;
+        case HdRprApiColorAov::UpscaleParams::Mode::Good:
+            filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_GOOD_2X);
+            break;
 
-		case HdRprApiColorAov::UpscaleParams::Mode::Fast:
-			filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_FAST_2X);
-			break;
-		}
-	}
+        case HdRprApiColorAov::UpscaleParams::Mode::Fast:
+            filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_FAST_2X);
+            break;
+        }
+    }
 }
 
 void
@@ -608,53 +608,53 @@ HdRprApiColorAov::OnFormatChange(rif::Context* rifContext)
 void
 HdRprApiColorAov::OnSizeChange(rif::Context* rifContext)
 {
-	if (auto filter = FindFilter(FilterType::kFilterAIDenoise) ? FindFilter(FilterType::kFilterAIDenoise) : FindFilter(FilterType::kFilterEAWDenoise)) {
-		for (int i = 0; i < rif::MaxInput; ++i) {
-			if (auto retainedInput = m_retainedDenoiseInputs[i].get()) {
-				filter->SetInput(static_cast<rif::FilterInputType>(i), retainedInput->GetResolvedFb());
-			}
-		}
-	}
+    if (auto filter = FindFilter(FilterType::kFilterAIDenoise) ? FindFilter(FilterType::kFilterAIDenoise) : FindFilter(FilterType::kFilterEAWDenoise)) {
+        for (int i = 0; i < rif::MaxInput; ++i) {
+            if (auto retainedInput = m_retainedDenoiseInputs[i].get()) {
+                filter->SetInput(static_cast<rif::FilterInputType>(i), retainedInput->GetResolvedFb());
+            }
+        }
+    }
 
-	if (auto filter = FindFilter(FilterType::kFilterComposeOpacity)) {
-		filter->SetInput("alphaImage", m_retainedOpacity->GetResolvedFb());
-	}
+    if (auto filter = FindFilter(FilterType::kFilterComposeOpacity)) {
+        filter->SetInput("alphaImage", m_retainedOpacity->GetResolvedFb());
+    }
 
-	if (auto filter = FindFilter(FilterType::kFilterTonemap)) {
-		SetTonemapFilterParams(filter);
-	}
+    if (auto filter = FindFilter(FilterType::kFilterTonemap)) {
+        SetTonemapFilterParams(filter);
+    }
 
-	HdRprApiAov::OnSizeChange(rifContext);
+    HdRprApiAov::OnSizeChange(rifContext);
 }
 
 HdRprApiComputedAov::HdRprApiComputedAov(int width,
-										 int height,
-										 float renderResolution,
-										 HdFormat format,
-										 rif::Context* rifContext,
-										 HdRprAovDescriptor const& aovDescriptor)
-	: HdRprApiAov(width, height, renderResolution, format, rifContext, aovDescriptor)
+                                         int height,
+                                         float renderResolution,
+                                         HdFormat format,
+                                         rif::Context* rifContext,
+                                         HdRprAovDescriptor const& aovDescriptor)
+    : HdRprApiAov(width, height, renderResolution, format, rifContext, aovDescriptor)
 {}
 
 HdRprApiNormalAov::HdRprApiNormalAov(int width,
-									 int height,
-									 float renderResolution,
-									 HdFormat format,
-									 rif::Context* rifContext,
-									 rpr::Context* rprContext,
-									 RprUsdContextMetadata const& rprContextMetadata)
+                                     int height,
+                                     float renderResolution,
+                                     HdFormat format,
+                                     rif::Context* rifContext,
+                                     rpr::Context* rprContext,
+                                     RprUsdContextMetadata const& rprContextMetadata)
     : HdRprApiAov(width, height, renderResolution, format, rifContext, RPR_AOV_SHADING_NORMAL, rprContext, rprContextMetadata)
 {
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create normal AOV: RIF context required");
     }
 
-	auto filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext);
-	filter->SetParam("srcRangeAuto", 0);
-	filter->SetParam("dstLo", -1.0f);
-	filter->SetParam("dstHi", 1.0f);
+    auto filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext);
+    filter->SetParam("srcRangeAuto", 0);
+    filter->SetParam("dstLo", -1.0f);
+    filter->SetParam("dstHi", 1.0f);
 
-	AddFilter(FilterType::kFilterRemapRange, std::move(filter));
+    AddFilter(FilterType::kFilterRemapRange, std::move(filter));
 }
 
 void
@@ -664,13 +664,13 @@ HdRprApiNormalAov::OnFormatChange(rif::Context* rifContext)
 }
 
 HdRprApiDepthAov::HdRprApiDepthAov(int width,
-								   int height,
-								   float renderResolution,
-								   HdFormat format,
-								   rif::Context* rifContext,
-								   rpr::Context* rprContext,
-								   RprUsdContextMetadata const& rprContextMetadata,
-								   std::shared_ptr<HdRprApiAov> worldCoordinateAov)
+                                   int height,
+                                   float renderResolution,
+                                   HdFormat format,
+                                   rif::Context* rifContext,
+                                   rpr::Context* rprContext,
+                                   RprUsdContextMetadata const& rprContextMetadata,
+                                   std::shared_ptr<HdRprApiAov> worldCoordinateAov)
     : HdRprApiComputedAov(width, height, renderResolution, format, rifContext, HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true))
     , m_retainedWorldCoordinateAov(worldCoordinateAov)
 {
@@ -679,37 +679,37 @@ HdRprApiDepthAov::HdRprApiDepthAov(int width,
     }
 
     auto ndcFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, rifContext);
-	AddFilter(FilterType::kFilterNdcDepth, std::move(ndcFilter));
+    AddFilter(FilterType::kFilterNdcDepth, std::move(ndcFilter));
 
 #if PXR_VERSION >= 2002
     auto remapFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext);
-	remapFilter->SetParam("srcRangeAuto", 0);
-	remapFilter->SetParam("srcLo", -1.0f);
-	remapFilter->SetParam("srcHi", 1.0f);
-	remapFilter->SetParam("dstLo", 0.0f);
-	remapFilter->SetParam("dstHi", 1.0f);
-	AddFilter(FilterType::kFilterRemapRange, std::move(remapFilter));
+    remapFilter->SetParam("srcRangeAuto", 0);
+    remapFilter->SetParam("srcLo", -1.0f);
+    remapFilter->SetParam("srcHi", 1.0f);
+    remapFilter->SetParam("dstLo", 0.0f);
+    remapFilter->SetParam("dstHi", 1.0f);
+    AddFilter(FilterType::kFilterRemapRange, std::move(remapFilter));
 #endif
 }
 
 void
 HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext)
 {
-	auto viewProjectionMatrix = rprApi->GetCameraViewMatrix() * rprApi->GetCameraProjectionMatrix();
-	FindFilter(FilterType::kFilterNdcDepth)->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
+    auto viewProjectionMatrix = rprApi->GetCameraViewMatrix() * rprApi->GetCameraProjectionMatrix();
+    FindFilter(FilterType::kFilterNdcDepth)->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
 
-	HdRprApiAov::Update(rprApi, rifContext);
+    HdRprApiAov::Update(rprApi, rifContext);
 }
 
 HdRprApiIdMaskAov::HdRprApiIdMaskAov(int width,
-									 int height,
-									 float renderResolution,
-									 HdFormat format,
-									 rif::Context* rifContext,
-									 HdRprAovDescriptor const& aovDescriptor,
-									 rpr::Context* rprContext,
-									 RprUsdContextMetadata const& rprContextMetadata,
-									 std::shared_ptr<HdRprApiAov> const& baseIdAov)
+                                     int height,
+                                     float renderResolution,
+                                     HdFormat format,
+                                     rif::Context* rifContext,
+                                     HdRprAovDescriptor const& aovDescriptor,
+                                     rpr::Context* rprContext,
+                                     RprUsdContextMetadata const& rprContextMetadata,
+                                     std::shared_ptr<HdRprApiAov> const& baseIdAov)
     : HdRprApiComputedAov(width, height, renderResolution, format, rifContext, aovDescriptor)
     , m_baseIdAov(baseIdAov)
 {
@@ -744,172 +744,172 @@ HdRprApiIdMaskAov::HdRprApiIdMaskAov(int width,
     )");
     filter->SetParam("code", colorizeIdKernelCode);
 
-	AddFilter(FilterType::kFilterUserDefined, std::move(filter));
+    AddFilter(FilterType::kFilterUserDefined, std::move(filter));
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithType(rpr_aov type)
 {
-	this->type = type;
-	return *this;
+    this->type = type;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithSize(int width, int height)
 {
-	this->width = width;
-	this->height = height;
-	return *this;
+    this->width = width;
+    this->height = height;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithFormat(HdFormat format)
 {
-	this->format = format;
-	return *this;
+    this->format = format;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithRprContext(rpr::Context* context)
 {
-	this->rprContext = context;
-	return *this;
+    this->rprContext = context;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithRifContext(rif::Context* context)
 {
-	this->rifContext = context;
-	return *this;
+    this->rifContext = context;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithRprContextMetadata(RprUsdContextMetadata* metadata)
 {
-	this->rprContextMetadata = metadata;
-	return *this;
+    this->rprContextMetadata = metadata;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithRenderResolution(float renderResolution)
 {
-	this->renderResolution = renderResolution;
-	return *this;
+    this->renderResolution = renderResolution;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithRawColorAov(std::shared_ptr<HdRprApiColorAov> rawColorAov)
 {
-	this->rawColorAov = rawColorAov;
-	return *this;
+    this->rawColorAov = rawColorAov;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithWorldCoordinateAov(std::shared_ptr<HdRprApiAov> worldCoordinateAov)
 {
-	this->worldCoordinateAov = worldCoordinateAov;
-	return *this;
+    this->worldCoordinateAov = worldCoordinateAov;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithBaseIdAov(std::shared_ptr<HdRprApiAov> baseIdAov)
 {
-	this->baseIdAov = baseIdAov;
-	return *this;
+    this->baseIdAov = baseIdAov;
+    return *this;
 }
 
 HdRprApiAovBuilder&
 HdRprApiAovBuilder::WithAovDesc(HdRprAovDescriptor aovDesc)
 {
-	this->aovDesc = aovDesc;
-	return *this;
+    this->aovDesc = aovDesc;
+    return *this;
 }
 
 HdRprApiAov*
 HdRprApiAovBuilder::Build()
 {
-	if (!type.has_value()) {
-		throw std::runtime_error("Type is required parameter");
-	}
+    if (!type.has_value()) {
+        throw std::runtime_error("Type is required parameter");
+    }
 
-	switch (type.value()) {
-	case rpr::Aov::RPR_AOV_COLOR:
-		if (baseIdAov.has_value()) {
-			return new HdRprApiIdMaskAov(
-				width.value(), 
-				height.value(), 
-				renderResolution.value(),
-				format.value(),
-				rifContext.value(),
-				aovDesc.value(), 
-				rprContext.value(), 
-				*rprContextMetadata.value(),
-				baseIdAov.value()
-			);
-		} else if (worldCoordinateAov.has_value()) {
-			return new HdRprApiDepthAov(
-				width.value(),
-				height.value(),
-				renderResolution.value(),
-				format.value(),
-				rifContext.value(),
-				rprContext.value(), 
-				*rprContextMetadata.value(), 
-				worldCoordinateAov.value()
-			);
-		} else if (rawColorAov.has_value()) {
-			return new HdRprApiColorAov(
-				width.value(),
-				height.value(),
-				renderResolution.value(),
-				format.value(),
-				rifContext.value(),
-				rprContext.value(), 
-				*rprContextMetadata.value(), 
-				rawColorAov.value()
-			);
-		} else {
-			return new HdRprApiAov(
-				width.value(),
-				height.value(),
-				renderResolution.value(),
-				format.value(),
-				rifContext.value(),
-				type.value(), 
-				rprContext.value(), 
-				*rprContextMetadata.value()
-			);
-		}
+    switch (type.value()) {
+    case rpr::Aov::RPR_AOV_COLOR:
+        if (baseIdAov.has_value()) {
+            return new HdRprApiIdMaskAov(
+                width.value(), 
+                height.value(), 
+                renderResolution.value(),
+                format.value(),
+                rifContext.value(),
+                aovDesc.value(), 
+                rprContext.value(), 
+                *rprContextMetadata.value(),
+                baseIdAov.value()
+            );
+        } else if (worldCoordinateAov.has_value()) {
+            return new HdRprApiDepthAov(
+                width.value(),
+                height.value(),
+                renderResolution.value(),
+                format.value(),
+                rifContext.value(),
+                rprContext.value(), 
+                *rprContextMetadata.value(), 
+                worldCoordinateAov.value()
+            );
+        } else if (rawColorAov.has_value()) {
+            return new HdRprApiColorAov(
+                width.value(),
+                height.value(),
+                renderResolution.value(),
+                format.value(),
+                rifContext.value(),
+                rprContext.value(), 
+                *rprContextMetadata.value(), 
+                rawColorAov.value()
+            );
+        } else {
+            return new HdRprApiAov(
+                width.value(),
+                height.value(),
+                renderResolution.value(),
+                format.value(),
+                rifContext.value(),
+                type.value(), 
+                rprContext.value(), 
+                *rprContextMetadata.value()
+            );
+        }
 
-	case rpr::Aov::RPR_AOV_SHADING_NORMAL:
-		return new HdRprApiNormalAov(
-			width.value(), 
-			height.value(), 
-			renderResolution.value(),
-			format.value(), 
-			rifContext.value(), 
-			rprContext.value(), 
-			*rprContextMetadata.value()
-		);
+    case rpr::Aov::RPR_AOV_SHADING_NORMAL:
+        return new HdRprApiNormalAov(
+            width.value(), 
+            height.value(), 
+            renderResolution.value(),
+            format.value(), 
+            rifContext.value(), 
+            rprContext.value(), 
+            *rprContextMetadata.value()
+        );
 
-	case rpr::Aov::RPR_AOV_WORLD_COORDINATE:
-	case rpr::Aov::RPR_AOV_OBJECT_ID:
-	case rpr::Aov::RPR_AOV_VARIANCE:
-	case rpr::Aov::RPR_AOV_DIFFUSE_ALBEDO:
-	default:
-		return new HdRprApiAov(
-			width.value(),
-			height.value(),
-			renderResolution.value(),
-			format.value(),
-			rifContext.value(),
-			type.value(),
-			rprContext.value(),
-			*rprContextMetadata.value()
-		);
-	}
+    case rpr::Aov::RPR_AOV_WORLD_COORDINATE:
+    case rpr::Aov::RPR_AOV_OBJECT_ID:
+    case rpr::Aov::RPR_AOV_VARIANCE:
+    case rpr::Aov::RPR_AOV_DIFFUSE_ALBEDO:
+    default:
+        return new HdRprApiAov(
+            width.value(),
+            height.value(),
+            renderResolution.value(),
+            format.value(),
+            rifContext.value(),
+            type.value(),
+            rprContext.value(),
+            *rprContextMetadata.value()
+        );
+    }
 
-	throw std::runtime_error("Can't build\n");
+    throw std::runtime_error("Can't build\n");
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
