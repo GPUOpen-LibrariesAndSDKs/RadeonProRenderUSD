@@ -118,7 +118,7 @@ ReadRifImage(rif_image image, void* dstBuffer, std::size_t dstBufferSize, std::i
 
 HdRprApiAov::HdRprApiAov(int width,
                          int height,
-                         float renderResolution,
+                         float renderResolutionScale,
                          HdFormat format,
                          rif::Context* rifContext,
                          rpr_aov rprAovType,
@@ -128,15 +128,15 @@ HdRprApiAov::HdRprApiAov(int width,
     , m_format(format)
     , m_width(width)
     , m_height(height)
-    , m_renderResolution(renderResolution)
+    , m_renderResolutionScale(renderResolutionScale)
     , m_rifContext(rifContext)
 {
     if (rif::Image::GetDesc(0, 0, format).type == 0) {
         RIF_THROW_ERROR_MSG("Unsupported format: " + TfEnum::GetName(format));
     }
 
-    std::int32_t actualWidth = std::ceil(width * renderResolution);
-    std::int32_t actualHeight = std::ceil(height * renderResolution);
+    std::int32_t actualWidth = std::ceil(width * renderResolutionScale);
+    std::int32_t actualHeight = std::ceil(height * renderResolutionScale);
 
     m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, actualWidth, actualHeight);
     m_aov->AttachAs(rprAovType);
@@ -150,7 +150,7 @@ HdRprApiAov::HdRprApiAov(int width,
 
 HdRprApiAov::HdRprApiAov(int width,
                          int height,
-                         float renderResolution,
+                         float renderResolutionScale,
                          HdFormat format,
                          rif::Context* rifContext,
                          HdRprAovDescriptor const& aovDescriptor)
@@ -158,7 +158,7 @@ HdRprApiAov::HdRprApiAov(int width,
     , m_format(format)
     , m_width(width)
     , m_height(height)
-    , m_renderResolution(renderResolution)
+    , m_renderResolutionScale(renderResolutionScale)
     , m_rifContext(rifContext)
 {}
 
@@ -223,12 +223,12 @@ HdRprApiAov::GetData(void* dstBuffer, size_t dstBufferSize)
 }
 
 void
-HdRprApiAov::Resize(int width, int height, HdFormat format, float renderResolution)
+HdRprApiAov::Resize(int width, int height, HdFormat format, float renderResolutionScale)
 {
-    if (m_width != width || m_height != height || m_renderResolution != renderResolution) {
+    if (m_width != width || m_height != height || m_renderResolutionScale != renderResolutionScale) {
         m_width = width;
         m_height = height;
-        m_renderResolution = renderResolution;
+        m_renderResolutionScale = renderResolutionScale;
         m_dirtyBits |= ChangeTracker::DirtySize;
     }
 
@@ -237,11 +237,11 @@ HdRprApiAov::Resize(int width, int height, HdFormat format, float renderResoluti
         m_dirtyBits |= ChangeTracker::DirtyFormat;
     }
 
-    if (m_aov && m_aov->Resize(std::ceil(width * m_renderResolution), std::ceil(height * m_renderResolution))) {
+    if (m_aov && m_aov->Resize(std::ceil(width * m_renderResolutionScale), std::ceil(height * m_renderResolutionScale))) {
         m_dirtyBits |= ChangeTracker::DirtySize;
     }
 
-    if (m_resolved && m_resolved->Resize(std::ceil(width * m_renderResolution), std::ceil(height * m_renderResolution))) {
+    if (m_resolved && m_resolved->Resize(std::ceil(width * m_renderResolutionScale), std::ceil(height * m_renderResolutionScale))) {
         m_dirtyBits |= ChangeTracker::DirtyFormat;
     }
 }
@@ -281,7 +281,7 @@ HdRprApiAov::FindFilter(FilterType type)
 void 
 HdRprApiAov::OnFormatChange(rif::Context* rifContext)
 {
-    if (rifContext && (m_format != HdFormatFloat32Vec4 || m_renderResolution != 1.0f)) {
+    if (rifContext && (m_format != HdFormatFloat32Vec4 || m_renderResolutionScale != 1.0f)) {
         SetFilter(FilterType::kFilterResample, true);
 
         // Reset inputs
@@ -305,8 +305,8 @@ HdRprApiAov::OnSizeChange(rif::Context* rifContext)
     if (m_filters.size() == 1) {
         resizeFilter(m_width, m_height, m_filters.back().second.get(), GetRifInputFramebuffer());
     } else {
-        std::int32_t intermediateWidth = std::ceil(m_width * m_renderResolution);
-        std::int32_t intermediateHeight = std::ceil(m_height * m_renderResolution);
+        std::int32_t intermediateWidth = std::ceil(m_width * m_renderResolutionScale);
+        std::int32_t intermediateHeight = std::ceil(m_height * m_renderResolutionScale);
         
         // Process filter chain
         void* filterInput = GetRifInputFramebuffer();
@@ -331,13 +331,13 @@ HdRprApiAov::OnSizeChange(rif::Context* rifContext)
 
 HdRprApiColorAov::HdRprApiColorAov(int width,
                                    int height,
-                                   float renderResolution,
+                                   float renderResolutionScale,
                                    HdFormat format,
                                    rif::Context* rifContext,
                                    rpr::Context* rprContext,
                                    RprUsdContextMetadata const& rprContextMetadata,
                                    std::shared_ptr<HdRprApiAov> rawColorAov)
-    : HdRprApiAov(width, height, renderResolution, format, rifContext, HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kColorAlpha), true))
+    : HdRprApiAov(width, height, renderResolutionScale, format, rifContext, HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kColorAlpha), true))
     , m_retainedRawColor(std::move(rawColorAov)) 
 {}
 
@@ -625,21 +625,21 @@ HdRprApiColorAov::OnSizeChange(rif::Context* rifContext)
 
 HdRprApiComputedAov::HdRprApiComputedAov(int width,
                                          int height,
-                                         float renderResolution,
+                                         float renderResolutionScale,
                                          HdFormat format,
                                          rif::Context* rifContext,
                                          HdRprAovDescriptor const& aovDescriptor)
-    : HdRprApiAov(width, height, renderResolution, format, rifContext, aovDescriptor)
+    : HdRprApiAov(width, height, renderResolutionScale, format, rifContext, aovDescriptor)
 {}
 
 HdRprApiNormalAov::HdRprApiNormalAov(int width,
                                      int height,
-                                     float renderResolution,
+                                     float renderResolutionScale,
                                      HdFormat format,
                                      rif::Context* rifContext,
                                      rpr::Context* rprContext,
                                      RprUsdContextMetadata const& rprContextMetadata)
-    : HdRprApiAov(width, height, renderResolution, format, rifContext, RPR_AOV_SHADING_NORMAL, rprContext, rprContextMetadata)
+    : HdRprApiAov(width, height, renderResolutionScale, format, rifContext, RPR_AOV_SHADING_NORMAL, rprContext, rprContextMetadata)
 {
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create normal AOV: RIF context required");
@@ -661,13 +661,13 @@ HdRprApiNormalAov::OnFormatChange(rif::Context* rifContext)
 
 HdRprApiDepthAov::HdRprApiDepthAov(int width,
                                    int height,
-                                   float renderResolution,
+                                   float renderResolutionScale,
                                    HdFormat format,
                                    rif::Context* rifContext,
                                    rpr::Context* rprContext,
                                    RprUsdContextMetadata const& rprContextMetadata,
                                    std::shared_ptr<HdRprApiAov> worldCoordinateAov)
-    : HdRprApiComputedAov(width, height, renderResolution, format, rifContext, HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true))
+    : HdRprApiComputedAov(width, height, renderResolutionScale, format, rifContext, HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true))
     , m_retainedWorldCoordinateAov(worldCoordinateAov)
 {
     if (!rifContext) {
@@ -699,14 +699,14 @@ HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext)
 
 HdRprApiIdMaskAov::HdRprApiIdMaskAov(int width,
                                      int height,
-                                     float renderResolution,
+                                     float renderResolutionScale,
                                      HdFormat format,
                                      rif::Context* rifContext,
                                      HdRprAovDescriptor const& aovDescriptor,
                                      rpr::Context* rprContext,
                                      RprUsdContextMetadata const& rprContextMetadata,
                                      std::shared_ptr<HdRprApiAov> const& baseIdAov)
-    : HdRprApiComputedAov(width, height, renderResolution, format, rifContext, aovDescriptor)
+    : HdRprApiComputedAov(width, height, renderResolutionScale, format, rifContext, aovDescriptor)
     , m_baseIdAov(baseIdAov)
 {
     if (!rifContext) {
@@ -787,9 +787,9 @@ HdRprApiAovBuilder::WithRprContextMetadata(RprUsdContextMetadata* metadata)
 }
 
 HdRprApiAovBuilder&
-HdRprApiAovBuilder::WithRenderResolution(float renderResolution)
+HdRprApiAovBuilder::WithRenderResolutionScale(float renderResolutionScale)
 {
-    this->renderResolution = renderResolution;
+    this->renderResolutionScale = renderResolutionScale;
     return *this;
 }
 
@@ -831,7 +831,7 @@ HdRprApiAovBuilder::Build()
         !rprContext.has_value() ||
         !rprContextMetadata.has_value() ||
         !rifContext.has_value() ||
-        !renderResolution.has_value()) {
+        !renderResolutionScale.has_value()) {
         throw std::runtime_error("Required parameter for HdRprApiAov wasn't set in HdRprApiAovBuilder");
     }
 
@@ -841,7 +841,7 @@ HdRprApiAovBuilder::Build()
             return new HdRprApiIdMaskAov(
                 width.value(), 
                 height.value(), 
-                renderResolution.value(),
+                renderResolutionScale.value(),
                 format.value(),
                 rifContext.value(),
                 aovDesc.value(), 
@@ -853,7 +853,7 @@ HdRprApiAovBuilder::Build()
             return new HdRprApiDepthAov(
                 width.value(),
                 height.value(),
-                renderResolution.value(),
+                renderResolutionScale.value(),
                 format.value(),
                 rifContext.value(),
                 rprContext.value(), 
@@ -864,7 +864,7 @@ HdRprApiAovBuilder::Build()
             return new HdRprApiColorAov(
                 width.value(),
                 height.value(),
-                renderResolution.value(),
+                renderResolutionScale.value(),
                 format.value(),
                 rifContext.value(),
                 rprContext.value(), 
@@ -875,7 +875,7 @@ HdRprApiAovBuilder::Build()
             return new HdRprApiAov(
                 width.value(),
                 height.value(),
-                renderResolution.value(),
+                renderResolutionScale.value(),
                 format.value(),
                 rifContext.value(),
                 type.value(), 
@@ -888,7 +888,7 @@ HdRprApiAovBuilder::Build()
         return new HdRprApiNormalAov(
             width.value(), 
             height.value(), 
-            renderResolution.value(),
+            renderResolutionScale.value(),
             format.value(), 
             rifContext.value(), 
             rprContext.value(), 
@@ -903,7 +903,7 @@ HdRprApiAovBuilder::Build()
         return new HdRprApiAov(
             width.value(),
             height.value(),
-            renderResolution.value(),
+            renderResolutionScale.value(),
             format.value(),
             rifContext.value(),
             type.value(),

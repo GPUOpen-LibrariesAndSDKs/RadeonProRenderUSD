@@ -41,7 +41,7 @@ public:
     HdRprApiAovBuilder& WithRprContext(rpr::Context* context);
     HdRprApiAovBuilder& WithRifContext(rif::Context* context);
     HdRprApiAovBuilder& WithRprContextMetadata(RprUsdContextMetadata* metadata);
-    HdRprApiAovBuilder& WithRenderResolution(float renderResolution);
+    HdRprApiAovBuilder& WithRenderResolutionScale(float renderResolutionScale);
     HdRprApiAovBuilder& WithRawColorAov(std::shared_ptr<HdRprApiAov> rawColorAov);
     HdRprApiAovBuilder& WithWorldCoordinateAov(std::shared_ptr<HdRprApiAov> worldCoordinateAov);
     HdRprApiAovBuilder& WithBaseIdAov(std::shared_ptr<HdRprApiAov> baseIdAov);
@@ -60,7 +60,7 @@ private:
     std::optional<rpr::Context*> rprContext;
     std::optional<RprUsdContextMetadata*> rprContextMetadata;
     std::optional<rif::Context*> rifContext;
-    std::optional<float> renderResolution;
+    std::optional<float> renderResolutionScale;
     std::optional<std::shared_ptr<HdRprApiAov>> rawColorAov;
     std::optional<std::shared_ptr<HdRprApiAov>> worldCoordinateAov;
     std::optional<std::shared_ptr<HdRprApiAov>> baseIdAov;
@@ -78,7 +78,7 @@ public:
     static HdRprApiAovBuilder Builder() { return HdRprApiAovBuilder(); }
     virtual ~HdRprApiAov() = default;
 
-    virtual void Resize(int width, int height, HdFormat format, float renderResolution);
+    virtual void Resize(int width, int height, HdFormat format, float renderResolutionScale);
     virtual void Update(HdRprApi const* rprApi, rif::Context* rifContext);
     virtual void Resolve();
     virtual bool GetData(void* dstBuffer, size_t dstBufferSize);
@@ -109,7 +109,7 @@ protected:
     /// Create and own RPR framebuffer
     HdRprApiAov(int width,
                 int height,
-                float renderResolution,
+                float renderResolutionScale,
                 HdFormat format,
                 rif::Context* rifContext,
                 rpr_aov rprAovType,
@@ -119,7 +119,7 @@ protected:
     /// Doesn't own framebuffer directly
     HdRprApiAov(int width,
                 int height,
-                float renderResolution,
+                float renderResolutionScale,
                 HdFormat format,
                 rif::Context* rifContext,
                 HdRprAovDescriptor const& aovDescriptor);
@@ -159,7 +159,7 @@ protected:
     HdFormat m_format;
     int m_width = 0;
     int m_height = 0;
-    float m_renderResolution = 1.0f;
+    float m_renderResolutionScale = 1.0f;
 
     std::unique_ptr<HdRprApiFramebuffer> m_aov;
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
@@ -235,7 +235,7 @@ protected:
 private:
     HdRprApiColorAov(int width, 
                      int height, 
-                     float renderResolution, 
+                     float renderResolutionScale, 
                      HdFormat format,
                      rif::Context* rifContext,
                      rpr::Context* rprContext, 
@@ -263,7 +263,7 @@ protected:
 private:
     HdRprApiNormalAov(int width,
                       int height,
-                      float renderResolution,
+                      float renderResolutionScale,
                       HdFormat format,
                       rif::Context* rifContext,
                       rpr::Context* rprContext, 
@@ -277,7 +277,7 @@ public:
 protected:
     HdRprApiComputedAov(int width,
                         int height,
-                        float renderResolution,
+                        float renderResolutionScale,
                         HdFormat format,
                         rif::Context* rifContext,
                         HdRprAovDescriptor const& aovDescriptor);
@@ -298,7 +298,7 @@ private:
     HdRprApiDepthAov(
         int width,
         int height,
-        float renderResolution,
+        float renderResolutionScale,
         HdFormat format,
         rif::Context* rifContext,
         rpr::Context* rprContext,
@@ -321,7 +321,7 @@ private:
     HdRprApiIdMaskAov(
         int width,
         int height,
-        float renderResolution,
+        float renderResolutionScale,
         HdFormat format,
         rif::Context* rifContext,
         HdRprAovDescriptor const& aovDescriptor,

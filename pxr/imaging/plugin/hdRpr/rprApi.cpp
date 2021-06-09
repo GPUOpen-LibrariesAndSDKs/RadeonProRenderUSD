@@ -3317,7 +3317,7 @@ private:
                     .WithRprContext(m_rprContext.get())
                     .WithRprContextMetadata(&m_rprContextMetadata)
                     .WithRifContext(m_rifContext.get())
-                    .WithRenderResolution(GetRenderResolutionScale());
+                    .WithRenderResolutionScale(GetRenderResolutionScale());
 
                 std::function<void(HdRprApiAov*)> aovCustomDestructor;
 
