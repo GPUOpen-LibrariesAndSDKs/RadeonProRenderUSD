@@ -824,8 +824,15 @@ HdRprApiAovBuilder::WithAovDesc(HdRprAovDescriptor aovDesc)
 HdRprApiAov*
 HdRprApiAovBuilder::Build()
 {
-    if (!type.has_value()) {
-        throw std::runtime_error("Type is required parameter");
+    if (!type.has_value() ||
+		!format.has_value() ||
+		!width.has_value() ||
+		!height.has_value() ||
+		!rprContext.has_value() ||
+		!rprContextMetadata.has_value() ||
+		!rifContext.has_value() ||
+		!renderResolution.has_value()) {
+        throw std::runtime_error("Required parameter for HdRprApiAov wasn't set in HdRprApiAovBuilder");
     }
 
     switch (type.value()) {
