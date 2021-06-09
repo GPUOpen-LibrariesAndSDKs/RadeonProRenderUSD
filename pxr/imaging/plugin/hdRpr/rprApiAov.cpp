@@ -45,7 +45,8 @@ ReadRifImage(rif_image image, void* dstBuffer, std::size_t dstBufferSize, std::i
     {
         EqualSize,
         AdditionalRow,
-        AdditionalColumn
+        AdditionalColumn,
+        AdditionalRowAndColumn
     };
 
     MappingMode mode = MappingMode::EqualSize;
@@ -67,6 +68,11 @@ ReadRifImage(rif_image image, void* dstBuffer, std::size_t dstBufferSize, std::i
         if (dstBufferSize + additionalColSize == rifImageSize) {
             validBufferSize = true;
             mode = MappingMode::AdditionalColumn;
+        }
+
+        if (dstBufferSize + additionalColSize + additionalRowSize + pixelSize == rifImageSize) {
+            validBufferSize = true;
+            mode = MappingMode::AdditionalRowAndColumn;
         }
 
         if (!validBufferSize) {
@@ -92,6 +98,7 @@ ReadRifImage(rif_image image, void* dstBuffer, std::size_t dstBufferSize, std::i
 
     // For additional column each last row pixel should be discarded
     case MappingMode::AdditionalColumn:
+    case MappingMode::AdditionalRowAndColumn:
         for (std::int32_t i = 0; i < height; i++) {
             const std::int32_t offset = i * rowSize;
             std::memcpy(((std::byte*)dstBuffer) + offset, ((std::byte*)data) + offset + i * pixelSize, rowSize);
@@ -128,17 +135,16 @@ HdRprApiAov::HdRprApiAov(int width,
         RIF_THROW_ERROR_MSG("Unsupported format: " + TfEnum::GetName(format));
     }
 
-    m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, std::ceil(width * renderResolution), std::ceil(height * renderResolution));
+    std::int32_t actualWidth = std::ceil(width * renderResolution);
+    std::int32_t actualHeight = std::ceil(height * renderResolution);
+
+    m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, actualWidth, actualHeight);
     m_aov->AttachAs(rprAovType);
+
 
     // XXX (Hybrid): Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
     if (rprContextMetadata.pluginType != kPluginHybrid) {
-        m_resolved = pxr::make_unique<HdRprApiFramebuffer>(rprContext, std::ceil(width * renderResolution), std::ceil(height * renderResolution));
-    }
-
-    // RPR framebuffers by default with such format
-    if (format != HdFormatFloat32Vec4 || renderResolution != 1.0f) {
-        SetFilter(FilterType::kFilterResample, true);
+        m_resolved = pxr::make_unique<HdRprApiFramebuffer>(rprContext, actualWidth, actualHeight);
     }
 }
 
@@ -223,8 +229,6 @@ HdRprApiAov::Resize(int width, int height, HdFormat format, float renderResoluti
         m_width = width;
         m_height = height;
         m_renderResolution = renderResolution;
-        
-        // Mark size dirty here because when upscaler gets enabled, RIF size should be updated while RPR not
         m_dirtyBits |= ChangeTracker::DirtySize;
     }
 
@@ -537,25 +541,23 @@ HdRprApiColorAov::SetTonemap(TonemapParams const& params)
 }
 
 void
-HdRprApiColorAov::SetUpscale(UpscaleParams const& params)
+HdRprApiColorAov::SetUpscale(UpscaleAndDenoiseParams const& params)
 {
     SetFilter(FilterType::kFilterUpscale, params.enable);
 
-    if (params.enable)
-    {
+    if (params.enable) {
         rif::Filter* filter = FindFilter(FilterType::kFilterUpscale);
 
-        switch (params.mode)
-        {
-        case HdRprApiColorAov::UpscaleParams::Mode::Best:
+        switch (params.mode) {
+        case HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Best:
             filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_BEST_2X);
             break;
 
-        case HdRprApiColorAov::UpscaleParams::Mode::Good:
+        case HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Good:
             filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_GOOD_2X);
             break;
 
-        case HdRprApiColorAov::UpscaleParams::Mode::Fast:
+        case HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Fast:
             filter->SetParam("mode", (int)RIF_AI_UPSCALE_MODE_FAST_2X);
             break;
         }
@@ -595,9 +597,8 @@ HdRprApiColorAov::GetData(void* dstBuffer, size_t dstBufferSize)
 void
 HdRprApiColorAov::OnFormatChange(rif::Context* rifContext)
 {
-    SetFilter(FilterType::kFilterResample, m_format != HdFormatFloat32Vec4);
     SetFilter(FilterType::kFilterComposeOpacity, CanComposeAlpha());
-    m_dirtyBits |= ChangeTracker::DirtySize;
+    HdRprApiAov::OnFormatChange(rifContext);
 }
 
 void
@@ -655,7 +656,7 @@ HdRprApiNormalAov::HdRprApiNormalAov(int width,
 void
 HdRprApiNormalAov::OnFormatChange(rif::Context* rifContext)
 {
-    m_dirtyBits |= ChangeTracker::DirtySize;
+    HdRprApiAov::OnFormatChange(rifContext);
 }
 
 HdRprApiDepthAov::HdRprApiDepthAov(int width,
@@ -793,7 +794,7 @@ HdRprApiAovBuilder::WithRenderResolution(float renderResolution)
 }
 
 HdRprApiAovBuilder&
-HdRprApiAovBuilder::WithRawColorAov(std::shared_ptr<HdRprApiColorAov> rawColorAov)
+HdRprApiAovBuilder::WithRawColorAov(std::shared_ptr<HdRprApiAov> rawColorAov)
 {
     this->rawColorAov = rawColorAov;
     return *this;

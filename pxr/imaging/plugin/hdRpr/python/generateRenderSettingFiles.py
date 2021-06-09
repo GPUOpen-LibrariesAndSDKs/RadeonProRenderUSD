@@ -234,35 +234,14 @@ render_setting_categories = [
         ]
     },
     {
-        'name': 'Upscaler',
-        'settings': [
-            {
-                'name': 'enableUpscaler',
-                'ui_name': 'Enable upscaler',
-                'help': 'Enable RIF upscale filter. More info in RIF documentation',
-                'defaultValue': False
-            },
-            {
-                'name': 'upscalerMode',
-                'ui_name': 'Upscaler mode',
-                'defaultValue': 'Good',
-                'values': [
-                    SettingValue('Good'),
-                    SettingValue('Best'),
-                    SettingValue('Fast'),
-                ]
-            }
-        ]
-    },
-    {
-        'name': 'Denoise',
+        'name': 'UpscaleAndDenoise',
         'houdini': {
             'hidewhen': lambda settings: hidewhen_render_quality('<', 'High', settings)
         },
         'settings': [
             {
-                'name': 'enableDenoising',
-                'ui_name': 'Enable AI Denoising',
+                'name': 'enableUpscalingAndDenoising',
+                'ui_name': 'Enable AI Denoising + Upscaling',
                 'defaultValue': False,
                 'houdini': {
                     'custom_tags': [
@@ -271,9 +250,9 @@ render_setting_categories = [
                 }
             },
             {
-                'folder': 'Denoise Settings',
+                'folder': 'Upscale and Denoise Settings',
                 'houdini': {
-                    'hidewhen': 'enableDenoising == 0'
+                    'hidewhen': 'enableUpscalingAndDenoising == 0'
                 },
                 'settings': [
                     {
@@ -291,6 +270,16 @@ render_setting_categories = [
                         'minValue': 1,
                         'maxValue': 2 ** 16,
                         'help': 'Denoise use frequency. To denoise on each iteration, set to 1.'
+                    },
+                    {
+                        'name': 'upscalerMode',
+                        'ui_name': 'Upscaler mode',
+                        'defaultValue': 'Fast',
+                        'values': [
+                            SettingValue('Good'),
+                            SettingValue('Best'),
+                            SettingValue('Fast'),
+                        ]
                     }
                 ]
             }

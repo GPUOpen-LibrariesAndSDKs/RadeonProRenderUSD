@@ -42,7 +42,7 @@ public:
     HdRprApiAovBuilder& WithRifContext(rif::Context* context);
     HdRprApiAovBuilder& WithRprContextMetadata(RprUsdContextMetadata* metadata);
     HdRprApiAovBuilder& WithRenderResolution(float renderResolution);
-    HdRprApiAovBuilder& WithRawColorAov(std::shared_ptr<HdRprApiColorAov> rawColorAov);
+    HdRprApiAovBuilder& WithRawColorAov(std::shared_ptr<HdRprApiAov> rawColorAov);
     HdRprApiAovBuilder& WithWorldCoordinateAov(std::shared_ptr<HdRprApiAov> worldCoordinateAov);
     HdRprApiAovBuilder& WithBaseIdAov(std::shared_ptr<HdRprApiAov> baseIdAov);
     HdRprApiAovBuilder& WithAovDesc(HdRprAovDescriptor aovDesc);
@@ -61,7 +61,7 @@ private:
     std::optional<RprUsdContextMetadata*> rprContextMetadata;
     std::optional<rif::Context*> rifContext;
     std::optional<float> renderResolution;
-    std::optional<std::shared_ptr<HdRprApiColorAov>> rawColorAov;
+    std::optional<std::shared_ptr<HdRprApiAov>> rawColorAov;
     std::optional<std::shared_ptr<HdRprApiAov>> worldCoordinateAov;
     std::optional<std::shared_ptr<HdRprApiAov>> baseIdAov;
     std::optional<HdRprAovDescriptor> aovDesc;
@@ -213,20 +213,20 @@ public:
         }
     };
 
-    struct UpscaleParams {
-        bool enable;
+    struct UpscaleAndDenoiseParams {
+        bool enable = false;
 
-        enum class Mode {
+        enum class UpscalerMode {
             Good,
             Best,
             Fast
         };
 
-        Mode mode;
+        UpscalerMode mode = UpscalerMode::Fast;
     };
 
     void SetTonemap(TonemapParams const& params);
-    void SetUpscale(UpscaleParams const& params);
+    void SetUpscale(UpscaleAndDenoiseParams const& params);
 
 protected:
     void OnFormatChange(rif::Context* rifContext) override;

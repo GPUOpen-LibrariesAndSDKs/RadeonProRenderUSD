@@ -1319,7 +1319,7 @@ public:
                 // Reuse previously created RPR AOV
                 std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
                 // Update underlying format if needed
-                outRb.rprAov->Resize(rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat, GetRenderResolution());
+                outRb.rprAov->Resize(rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat, GetRenderResolutionScale());
             }
 
             if (!outRb.rprAov) return nullptr;
@@ -1394,21 +1394,30 @@ public:
         }
 
         bool clearAovs = false;
-        RenderSetting<bool> enableDenoise;
         RenderSetting<HdRprApiColorAov::TonemapParams> tonemap;
-        RenderSetting<HdRprApiColorAov::UpscaleParams> upscale;
+        RenderSetting<HdRprApiColorAov::UpscaleAndDenoiseParams> upscaleAndDenoise;
         RenderSetting<bool> instantaneousShutter;
         RenderSetting<TfToken> aspectRatioPolicy;
         {
             HdRprConfig* config;
             auto configInstanceLock = HdRprConfig::GetInstance(&config);
 
-            enableDenoise.isDirty = config->IsDirty(HdRprConfig::DirtyDenoise);
-            if (enableDenoise.isDirty) {
-                enableDenoise.value = config->GetEnableDenoising();
+            upscaleAndDenoise.isDirty = config->IsDirty(HdRprConfig::DirtyUpscaleAndDenoise);
+            if (upscaleAndDenoise.isDirty) {
+                upscaleAndDenoise.value.enable = config->GetEnableUpscalingAndDenoising();
 
                 m_denoiseMinIter = config->GetDenoiseMinIter();
                 m_denoiseIterStep = config->GetDenoiseIterStep();
+
+                TfToken mode = config->GetUpscalerMode();
+
+                if (mode == HdRprUpscalerModeTokens->Good) {
+                    upscaleAndDenoise.value.mode = HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Good;
+                } else if (mode == HdRprUpscalerModeTokens->Best) {
+                    upscaleAndDenoise.value.mode = HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Best;
+                } else if (mode == HdRprUpscalerModeTokens->Fast) {
+                    upscaleAndDenoise.value.mode = HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Fast;
+                }
             }
 
             tonemap.isDirty = config->IsDirty(HdRprConfig::DirtyTonemapping);
@@ -1418,22 +1427,6 @@ public:
                 tonemap.value.sensitivity = config->GetTonemapSensitivity();
                 tonemap.value.fstop = config->GetTonemapFstop();
                 tonemap.value.gamma = config->GetTonemapGamma();
-            }
-
-            upscale.isDirty = config->IsDirty(HdRprConfig::DirtyUpscaler);
-
-            if (upscale.isDirty) {
-                upscale.value.enable = config->GetEnableUpscaler();
-
-                TfToken mode = config->GetUpscalerMode();
-
-                if (mode == TfToken("Good")) {
-                    upscale.value.mode = HdRprApiColorAov::UpscaleParams::Mode::Good;
-                } else if (mode == TfToken("Best")) {
-                    upscale.value.mode = HdRprApiColorAov::UpscaleParams::Mode::Best;
-                } else if (mode == TfToken("Fast")) {
-                    upscale.value.mode = HdRprApiColorAov::UpscaleParams::Mode::Fast;
-                }
             }
 
             aspectRatioPolicy.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
@@ -1497,7 +1490,7 @@ public:
             config->ResetDirty();
         }
         UpdateCamera(aspectRatioPolicy, instantaneousShutter);
-        UpdateAovs(rprRenderParam, enableDenoise, tonemap, upscale, clearAovs);
+        UpdateAovs(rprRenderParam, upscaleAndDenoise, tonemap, clearAovs);
 
         m_dirtyFlags = ChangeTracker::Clean;
         if (m_hdCamera) {
@@ -1906,14 +1899,13 @@ public:
     }
 
     void UpdateAovs(HdRprRenderParam* rprRenderParam, 
-                    RenderSetting<bool> enableDenoise,
-                    RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, 
-                    RenderSetting<HdRprApiColorAov::UpscaleParams> upscale,
+                    RenderSetting<HdRprApiColorAov::UpscaleAndDenoiseParams> upscaleAndDenoise,
+                    RenderSetting<HdRprApiColorAov::TonemapParams> tonemap,
                     bool clearAovs
     ) {
-        UpdateDenoising(enableDenoise);
-
-        UpdateUpscaling(upscale);
+        if (upscaleAndDenoise.isDirty) {
+            UpdateUpscalingAndDenoising(upscaleAndDenoise);
+        }
 
         if (tonemap.isDirty) {
             m_colorAov->SetTonemap(tonemap.value);
@@ -1945,7 +1937,7 @@ public:
 
         if (m_dirtyFlags & ChangeTracker::DirtyViewport) {
             m_resolveData.ForAllAovs([this](ResolveData::AovEntry const& e) {
-                e.aov->Resize(m_viewportSize[0], m_viewportSize[1], e.aov->GetFormat(), GetRenderResolution());
+                e.aov->Resize(m_viewportSize[0], m_viewportSize[1], e.aov->GetFormat(), GetRenderResolutionScale());
             });
 
             // If AOV bindings are dirty then we already committed HdRprRenderBuffers, see SetAovBindings
@@ -1987,49 +1979,45 @@ public:
         }
     }
 
-    void UpdateUpscaling(RenderSetting<HdRprApiColorAov::UpscaleParams> upscale)
+    void UpdateUpscalingAndDenoising(RenderSetting<HdRprApiColorAov::UpscaleAndDenoiseParams> upscaleAndDenoise)
     {
-        if (!upscale.isDirty) {
-            return;
-        }
-
-        m_isUpscaleEnabled = upscale.value.enable;
-        m_colorAov->SetUpscale(upscale.value);
-        m_dirtyFlags |= ChangeTracker::DirtyViewport;
-    }
-
-    void UpdateDenoising(RenderSetting<bool> enableDenoise) {
         // Disable denoiser to prevent possible crashes due to incorrect AI models
-        if (!m_rifContext || m_rifContext->GetModelPath().empty()) {
+        if (!m_rifContext || m_rifContext->GetModelPath().empty() || !upscaleAndDenoise.isDirty) {
             return;
         }
 
-        if (!enableDenoise.isDirty ||
-            m_isDenoiseEnabled == enableDenoise.value) {
+        // Update upscale
+        m_colorAov->SetUpscale(upscaleAndDenoise.value);
+        m_dirtyFlags |= ChangeTracker::DirtyViewport;
+
+        // Update denoise
+        if (m_isDenoiseAndUpscaleEnabled == upscaleAndDenoise.value.enable) {
             return;
         }
 
-        m_isDenoiseEnabled = enableDenoise.value;
-        if (!m_isDenoiseEnabled) {
+        m_isDenoiseAndUpscaleEnabled = upscaleAndDenoise.value.enable;
+
+        if (!m_isDenoiseAndUpscaleEnabled) {
             m_colorAov->DeinitDenoise(m_rifContext.get());
             return;
         }
 
         rif::FilterType filterType = rif::FilterType::EawDenoise;
+
         if (m_rprContextMetadata.renderDeviceType == RprUsdRenderDeviceType::GPU) {
             filterType = rif::FilterType::AIDenoise;
         }
 
         if (filterType == rif::FilterType::EawDenoise) {
             m_colorAov->InitEAWDenoise(CreateAov(HdRprAovTokens->albedo),
-                                     CreateAov(HdAovTokens->normal),
-                                     CreateAov(HdRprGetCameraDepthAovName()),
-                                     CreateAov(HdAovTokens->primId),
-                                     CreateAov(HdRprAovTokens->worldCoordinate));
+                CreateAov(HdAovTokens->normal),
+                CreateAov(HdRprGetCameraDepthAovName()),
+                CreateAov(HdAovTokens->primId),
+                CreateAov(HdRprAovTokens->worldCoordinate));
         } else {
             m_colorAov->InitAIDenoise(CreateAov(HdRprAovTokens->albedo),
-                                    CreateAov(HdAovTokens->normal),
-                                    CreateAov(HdRprGetCameraDepthAovName()));
+                CreateAov(HdAovTokens->normal),
+                CreateAov(HdRprGetCameraDepthAovName()));
         }
     }
 
@@ -2177,7 +2165,7 @@ public:
 
         // In a batch session, we do denoise once at the end
         auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
-        if (m_isDenoiseEnabled) {
+        if (m_isDenoiseAndUpscaleEnabled) {
             m_colorAov->SetDenoise(false, rprApi, m_rifContext.get());
         }
 
@@ -2259,7 +2247,7 @@ public:
             }
         }
 
-        if (m_isDenoiseEnabled) {
+        if (m_isDenoiseAndUpscaleEnabled) {
             m_colorAov->SetDenoise(true, rprApi, m_rifContext.get());
         }
 
@@ -2359,7 +2347,7 @@ public:
 
             bool doDenoisedResolve = false;
             if (m_colorAov) {
-                if (m_isDenoiseEnabled) {
+                if (m_isDenoiseAndUpscaleEnabled) {
                     ++iteration;
                     if (iteration >= m_denoiseMinIter) {
                         int relativeIter = iteration - m_denoiseMinIter;
@@ -3329,12 +3317,12 @@ private:
                     .WithRprContext(m_rprContext.get())
                     .WithRprContextMetadata(&m_rprContextMetadata)
                     .WithRifContext(m_rifContext.get())
-                    .WithRenderResolution(GetRenderResolution());
+                    .WithRenderResolution(GetRenderResolutionScale());
 
                 std::function<void(HdRprApiAov*)> aovCustomDestructor;
 
                 if (aovName == HdAovTokens->color) {
-                    auto rawColorAov = std::static_pointer_cast<HdRprApiColorAov>(GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4));
+                    auto rawColorAov = GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4);
                     if (!rawColorAov) {
                         TF_RUNTIME_ERROR("Failed to create color AOV: can't create rawColor AOV");
                         return nullptr;
@@ -3413,7 +3401,7 @@ private:
                 m_aovRegistry[aovName] = aov;
                 m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
             } else {
-                aov->Resize(width, height, format, GetRenderResolution());
+                aov->Resize(width, height, format, GetRenderResolutionScale());
             }
         } catch (std::runtime_error const& e) {
             TF_RUNTIME_ERROR("Failed to create %s AOV: %s", aovName.GetText(), e.what());
@@ -3585,9 +3573,9 @@ private:
         }
     }
 
-    float GetRenderResolution() const
+    float GetRenderResolutionScale() const
     {
-        return m_isUpscaleEnabled ? 0.5f : 1.0f;
+        return m_isDenoiseAndUpscaleEnabled ? 0.5f : 1.0f;
     }
 
 private:
@@ -3717,11 +3705,9 @@ private:
     } m_resolveMode = kResolveAfterRender;
     bool m_isFirstSample = true;
 
-    bool m_isDenoiseEnabled = false;
+    bool m_isDenoiseAndUpscaleEnabled = false;
     int m_denoiseMinIter;
     int m_denoiseIterStep;
-
-    bool m_isUpscaleEnabled = false;
 
     GfVec2i m_viewportSize = GfVec2i(0);
     GfMatrix4d m_cameraProjectionMatrix = GfMatrix4d(1.f);
