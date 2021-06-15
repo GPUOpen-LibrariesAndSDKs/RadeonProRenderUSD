@@ -54,17 +54,17 @@ private:
     HdRprApiAovBuilder() = default;
 
     utils::optional<rpr_aov> type;
-	utils::optional<int> width;
-	utils::optional<int> height;
-	utils::optional<HdFormat> format;
-	utils::optional<rpr::Context*> rprContext;
-	utils::optional<RprUsdContextMetadata*> rprContextMetadata;
-	utils::optional<rif::Context*> rifContext;
-	utils::optional<float> renderResolutionScale;
-	utils::optional<std::shared_ptr<HdRprApiAov>> rawColorAov;
-	utils::optional<std::shared_ptr<HdRprApiAov>> worldCoordinateAov;
-	utils::optional<std::shared_ptr<HdRprApiAov>> baseIdAov;
-	utils::optional<HdRprAovDescriptor> aovDesc;
+    utils::optional<int> width;
+    utils::optional<int> height;
+    utils::optional<HdFormat> format;
+    utils::optional<rpr::Context*> rprContext;
+    utils::optional<RprUsdContextMetadata*> rprContextMetadata;
+    utils::optional<rif::Context*> rifContext;
+    utils::optional<float> renderResolutionScale;
+    utils::optional<std::shared_ptr<HdRprApiAov>> rawColorAov;
+    utils::optional<std::shared_ptr<HdRprApiAov>> worldCoordinateAov;
+    utils::optional<std::shared_ptr<HdRprApiAov>> baseIdAov;
+    utils::optional<HdRprAovDescriptor> aovDesc;
 };
 
 ///
