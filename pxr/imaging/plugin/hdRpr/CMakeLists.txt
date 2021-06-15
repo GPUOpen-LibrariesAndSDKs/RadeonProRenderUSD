@@ -102,6 +102,7 @@ pxr_plugin(hdRpr
         ${OPENEXR_LIBRARIES}
 
         ${OptLibs}
+        hdRprUtils
 
     INCLUDE_DIRS
         ${RIF_LOCATION_INCLUDE}

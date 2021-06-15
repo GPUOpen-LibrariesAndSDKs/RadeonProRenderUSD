@@ -101,7 +101,7 @@ ReadRifImage(rif_image image, void* dstBuffer, std::size_t dstBufferSize, std::i
     case MappingMode::AdditionalRowAndColumn:
         for (std::int32_t i = 0; i < height; i++) {
             const std::int32_t offset = i * rowSize;
-            std::memcpy(((std::byte*)dstBuffer) + offset, ((std::byte*)data) + offset + i * pixelSize, rowSize);
+            std::memcpy(((std::uint8_t*)dstBuffer) + offset, ((std::uint8_t*)data) + offset + i * pixelSize, rowSize);
         }
         break;
     }

@@ -20,7 +20,7 @@ limitations under the License.
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/imaging/hd/types.h"
 #include <list>
-#include <optional>
+#include <HdRprOptional.hpp>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -53,18 +53,18 @@ private:
     friend class HdRprApiAov;
     HdRprApiAovBuilder() = default;
 
-    std::optional<rpr_aov> type;
-    std::optional<int> width;
-    std::optional<int> height;
-    std::optional<HdFormat> format;
-    std::optional<rpr::Context*> rprContext;
-    std::optional<RprUsdContextMetadata*> rprContextMetadata;
-    std::optional<rif::Context*> rifContext;
-    std::optional<float> renderResolutionScale;
-    std::optional<std::shared_ptr<HdRprApiAov>> rawColorAov;
-    std::optional<std::shared_ptr<HdRprApiAov>> worldCoordinateAov;
-    std::optional<std::shared_ptr<HdRprApiAov>> baseIdAov;
-    std::optional<HdRprAovDescriptor> aovDesc;
+    utils::optional<rpr_aov> type;
+	utils::optional<int> width;
+	utils::optional<int> height;
+	utils::optional<HdFormat> format;
+	utils::optional<rpr::Context*> rprContext;
+	utils::optional<RprUsdContextMetadata*> rprContextMetadata;
+	utils::optional<rif::Context*> rifContext;
+	utils::optional<float> renderResolutionScale;
+	utils::optional<std::shared_ptr<HdRprApiAov>> rawColorAov;
+	utils::optional<std::shared_ptr<HdRprApiAov>> worldCoordinateAov;
+	utils::optional<std::shared_ptr<HdRprApiAov>> baseIdAov;
+	utils::optional<HdRprAovDescriptor> aovDesc;
 };
 
 ///
