@@ -347,6 +347,7 @@ HdRprApiAov::SetFilter(FilterType filter, bool enable)
     // Disable filter
     if (!enable) {
         m_filters.remove_if([filter](auto& entry) { return entry.first == filter; });
+        m_dirtyBits |= ChangeTracker::DirtySize;
         return;
     }
 
@@ -517,8 +518,6 @@ HdRprApiColorAov::SetDenoise(bool enable, HdRprApi const* rprApi, rif::Context* 
         SetFilter(FilterType::kFilterAIDenoise, false);
         SetFilter(FilterType::kFilterEAWDenoise, false);
     }
-
-    SetFilter(FilterType::kFilterResample, m_format != HdFormatFloat32Vec4);
 
     Update(rprApi, rifContext);
 }
