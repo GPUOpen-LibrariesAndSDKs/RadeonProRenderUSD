@@ -56,7 +56,7 @@ Provide USD in one of two ways:
 ##### MaterialX Component
 
 By default, MaterialX library will be compiled from the sources located under a MaterialX submodule `deps/MaterialX`.
-You can override this behavior by providing a complete build of MaterialX to cmake. Please note, on Linux for Houdini plugin, MaterialX should be compiled with `-D_GLIBCXX_USE_CXX11_ABI=0` definition as it is required by Houdini.
+You can override this behavior by providing a complete build of MaterialX to cmake. Please note, on Linux for Houdini plugin, MaterialX should be compiled with `-D_GLIBCXX_USE_CXX11_ABI=0` definition as it is required by Houdini. Currently supported version of MaterialX is v1.38.
 
 ##### Optional Components
 

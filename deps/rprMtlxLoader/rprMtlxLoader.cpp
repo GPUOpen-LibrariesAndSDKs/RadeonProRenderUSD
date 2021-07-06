@@ -45,7 +45,7 @@ struct Mtlx2Rpr {
     std::map<std::string, rpr_material_node_arithmetic_operation> arithmeticOps;
 
     Mtlx2Rpr() {
-        nodes["diffuse_brdf"] = {
+        nodes["oren_nayar_diffuse_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_DIFFUSE_BRDF, {
                 {"color", RPR_MATERIAL_INPUT_COLOR},
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
@@ -53,7 +53,7 @@ struct Mtlx2Rpr {
                 {"normal", RPR_MATERIAL_INPUT_NORMAL},
             }
         };
-        nodes["dielectric_brdf"] = {
+        nodes["dielectric_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_DIELECTRIC_BRDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
                 {"tint", RPR_MATERIAL_INPUT_TINT},
@@ -78,10 +78,10 @@ struct Mtlx2Rpr {
                 {"base", RPR_MATERIAL_INPUT_BASE},
             }
         };
-        nodes["dielectric_btdf"] = {
+        nodes["translucent_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_DIELECTRIC_BTDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
-                {"tint", RPR_MATERIAL_INPUT_COLOR},
+                {"color", RPR_MATERIAL_INPUT_COLOR},
                 {"ior", RPR_MATERIAL_INPUT_IOR},
                 {"roughness", RPR_MATERIAL_INPUT_ROUGHNESS},
                 {"normal", RPR_MATERIAL_INPUT_NORMAL},
@@ -90,7 +90,7 @@ struct Mtlx2Rpr {
                 {"interior", RPR_MATERIAL_INPUT_INTERIOR},
             }
         };
-        nodes["sheen_brdf"] = {
+        nodes["sheen_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_SHEEN_BRDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
                 {"color", RPR_MATERIAL_INPUT_COLOR},
@@ -99,7 +99,7 @@ struct Mtlx2Rpr {
                 {"base", RPR_MATERIAL_INPUT_BASE},
             }
         };
-        nodes["subsurface_brdf"] = {
+        nodes["subsurface_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_SUBSURFACE_BRDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
                 {"color", RPR_MATERIAL_INPUT_COLOR},
@@ -115,7 +115,7 @@ struct Mtlx2Rpr {
                 {"normal", RPR_MATERIAL_INPUT_NORMAL},
             }
         };
-        nodes["conductor_brdf"] = {
+        nodes["conductor_bsdf"] = {
             RPR_MATERIAL_NODE_MATX_CONDUCTOR_BRDF, {
                 {"weight", RPR_MATERIAL_INPUT_WEIGHT},
                 {"reflectivity", RPR_MATERIAL_INPUT_REFLECTIVITY},
@@ -648,7 +648,7 @@ bool StringStartsWith(std::string const& string, const char(&prefix)[N]) {
 
 mx::NodeGraphPtr GetNodeGraphImpl(mx::NodeDef* nodeDef) {
     static std::string universal("universal");
-    if (auto impl = nodeDef->getImplementation(mx::EMPTY_STRING, universal)) {
+    if (auto impl = nodeDef->getImplementation()) {
         return impl->asA<mx::NodeGraph>();
     }
     return nullptr;
@@ -1257,7 +1257,6 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
     // Check for nodes with special handling first
     //
     if (mtlxNode->getCategory() == "surface") {
-        auto surfaceDef = mtlxNode->getNodeDef();
         // The surface node has 3 inputs: bsdf, edf and opacity.
         // Right now we can not implement bsdf and edf blending and,
         // as a workaround, our surface node simply transfers bsdf node further along connections
@@ -1277,6 +1276,47 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
         };
 
         return std::make_unique<SurfaceNode>();
+    } else if (mtlxNode->getCategory() == "layer") {
+        struct LayerNode : public RprNode {
+            bool isTopSet = false;
+            bool isBaseSet = false;
+
+            rpr_material_node m_baseNode = nullptr;
+            LayerNode() : RprNode(nullptr, false) {}
+
+            rpr_status SetInput(mx::TypedElement* downstreamElement, mx::Element* upstreamElement, rpr_material_node upstreamRprNode, LoaderContext* context) override {
+                if (downstreamElement->getName() == "top") {
+                    rprNode = upstreamRprNode;
+                    isTopSet = true;
+                } else if (downstreamElement->getName() == "base") {
+                    m_baseNode = upstreamRprNode;
+                    isBaseSet = true;
+                } else {
+                    LOG(context, "Unsupported layer input: %s", downstreamElement->getName().c_str());
+                    return RPR_ERROR_UNSUPPORTED;
+                }
+
+                if (isBaseSet && isTopSet) {
+                    if (rprNode) {
+                        if (m_baseNode) {
+                            return rprMaterialNodeSetInputNByKey(rprNode, RPR_MATERIAL_INPUT_BASE, m_baseNode);
+                        } else {
+                            return RPR_ERROR_UNSUPPORTED;
+                        }
+                    } else {
+                        if (m_baseNode) {
+                            rprNode = m_baseNode;
+                        } else {
+                            return RPR_ERROR_UNSUPPORTED;
+                        }
+                    }
+                }
+
+                return RPR_SUCCESS;
+            }
+        };
+
+        return std::make_unique<LayerNode>();
     } else if (mtlxNode->getCategory() == "displacement") {
         return std::make_unique<DisplacementNode>(context);
     } else if (mtlxNode->getCategory() == "convert") {
@@ -1308,9 +1348,9 @@ Node::Ptr Node::Create(mx::Node* mtlxNode, LoaderContext* context) {
         // TODO: implement healthy man swizzle
 
         std::string channels;
-        if (auto channelsParam = mtlxNode->getActiveParameter("channels")) {
-            auto& valueString = channelsParam->getValueString();
-            if (channelsParam->getType() == "string" &&
+        if (auto channelsInput = mtlxNode->getActiveInput("channels")) {
+            auto& valueString = channelsInput->getValueString();
+            if (channelsInput->getType() == "string" &&
                 !valueString.empty()) {
                 channels = valueString;
             }
@@ -1749,9 +1789,8 @@ bool GetInputF(mx::TypedElement* downstreamElement, mx::ValueElement* upstreamEl
         dst[0] = dst[1] = dst[2] = value;
         dst[3] = 0.0f;
     } else if (
-        valueType == "vector2" ||
-        valueType == "color2") {
-        auto value = mx::fromValueString<mx::Color2>(valueString);
+        valueType == "vector2") {
+        auto value = mx::fromValueString<mx::Vector2>(valueString);
         dst[0] = value[0];
         dst[1] = value[1];
         dst[2] = dst[3] = 0.0f;
@@ -2135,38 +2174,22 @@ bool IsRenderableType(std::string const& mtlxTypeString) {
 // Returned boolean controls whether ForEachOutput should continue traversing
 template <typename F>
 void ForEachOutput(mx::ElementPtr const& element, F&& func) {
-    if (auto material = element->asA<mx::Material>()) {
-        for (auto& shaderRef : material->getShaderRefs()) {
-            if (auto nodeDef = shaderRef->getNodeDef()) {
-                if (IsSupportedTarget(nodeDef->getTarget())) {
-                    if (auto nodeGraph = GetNodeGraphImpl(nodeDef.get())) {
-                        for (auto& child : nodeGraph->getChildren()) {
-                            if (auto output = child->asA<mx::Output>()) {
-                                if (!func(output, shaderRef)) {
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } else if (auto nodeGraph = element->asA<mx::NodeGraph>()) {
+    if (auto nodeGraph = element->asA<mx::NodeGraph>()) {
         for (auto& child : nodeGraph->getChildren()) {
             if (auto output = child->asA<mx::Output>()) {
-                if (!func(output, nullptr)) {
+                if (!func(output)) {
                     return;
                 }
             }
         }
     } else if (auto output = element->asA<mx::Output>()) {
-        func(output, nullptr);
+        func(output);
     } else if (auto node = element->asA<mx::Node>()) {
         auto processShaderNode = [&func](mx::NodePtr const& shaderNode) {
             auto referenceOutput = std::make_shared<mx::Output>(shaderNode->getParent(), "out");
             referenceOutput->setNodeName(shaderNode->getName());
             referenceOutput->setType(shaderNode->getType());
-            return func(referenceOutput, nullptr);
+            return func(referenceOutput);
         };
 
         auto& nodeType = node->getType();
@@ -2190,19 +2213,6 @@ void ForEachOutput(mx::ElementPtr const& element, F&& func) {
             }
         }
     }
-}
-
-bool IsMaterialHasRenderableOutputs(mx::MaterialPtr const& material) {
-    bool hasRenderableOutput = false;
-    ForEachOutput(material,
-        [&hasRenderableOutput](mx::OutputPtr const& output, mx::ShaderRefPtr const&) {
-        if (IsRenderableType(output->getType())) {
-            hasRenderableOutput = true;
-        }
-        // Keep iterating untill we find a renderable output
-        return !hasRenderableOutput;
-    });
-    return hasRenderableOutput;
 }
 
 // Alternative to mx::Element::getChildrenOfType. This function avoids using std::vector.
@@ -2234,32 +2244,32 @@ void ForEachRenderableElement(mx::Document const* mtlxDocument, S&& shouldStop, 
                 }
             }
         );
-    });
+        });
 
-    ForEachChildrenOfType<mx::Material>(mtlxDocument, shouldStop,
-        [&func](auto const& material) {
-            if (IsMaterialHasRenderableOutputs(material)) {
-                func(material);
+    ForEachChildrenOfType<mx::Node>(mtlxDocument, shouldStop,
+        [&func](auto const& node) {
+            if (node->getType() == "material") {
+
             }
         }
     );
 
-    auto mtlxVersion = mtlxDocument->getVersionIntegers();
-    if (mtlxVersion.first >= 1 && mtlxVersion.second >= 38) {
-        // Iterate over all global shader nodes
-        //
-        ForEachChildrenOfType<mx::Node>(mtlxDocument, shouldStop,
-            [&func, &mtlxDocument](auto const& node) {
-                if (!node->hasSourceUri()) {
-                    if (auto typeDef = mtlxDocument->getTypeDef(node->getType())) {
-                        if (typeDef->getSemantic() == mx::SHADER_SEMANTIC) {
-                            func(node);
-                        }
+    // Iterate over all global shader nodes
+    //
+    ForEachChildrenOfType<mx::Node>(mtlxDocument, shouldStop,
+        [&func, &mtlxDocument](auto const& node) {
+            if (!node->hasSourceUri()) {
+                auto& type = node->getType();
+                if (type == "material") {
+                    func(node);
+                } else if (auto typeDef = mtlxDocument->getTypeDef(type)) {
+                    if (typeDef->getSemantic() == mx::SHADER_SEMANTIC) {
+                        func(node);
                     }
                 }
             }
-        );
-    }
+        }
+    );
 
     ForEachChildrenOfType<mx::NodeGraph>(mtlxDocument, shouldStop,
         [&func](auto const& nodeGraph) {
@@ -2309,17 +2319,15 @@ void TraverseNode(Node* node, F&& cb) {
 
 struct GraphNodesKey {
     mx::GraphElement const* nodeGraph;
-    mx::ShaderRef const* shaderRef;
 
     struct Hash {
         size_t operator()(GraphNodesKey const& key) const {
-            return GetHash(key.nodeGraph) ^ GetHash(key.shaderRef);
+            return GetHash(key.nodeGraph);
         }
     };
 
     bool operator==(GraphNodesKey const& rhs) const {
-        return nodeGraph == rhs.nodeGraph &&
-               shaderRef == rhs.shaderRef;
+        return nodeGraph == rhs.nodeGraph;
     }
 };
 struct GraphNodesValue {
@@ -2375,7 +2383,7 @@ RPRMtlxLoader::RenderableElements RPRMtlxLoader::GetRenderableElements(mx::Docum
             processedElements.insert(mtlxElement.get());
 
             bool elementOutputTypes[kOutputsTotal] = {};
-            ForEachOutput(mtlxElement, [&elementOutputTypes](mx::OutputPtr const& output, mx::ShaderRefPtr const&) {
+            ForEachOutput(mtlxElement, [&elementOutputTypes](mx::OutputPtr const& output) {
                 auto outputType = ToOutputType(output->getType());
                 if (outputType != kOutputNone) {
                     elementOutputTypes[outputType] = true;
@@ -2452,8 +2460,8 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
                 return;
             }
 
-            ForEachOutput(element, [this, outputType](mx::OutputPtr const& output, mx::ShaderRefPtr const& shaderRef) {
-                _Add(outputType, output, shaderRef);
+            ForEachOutput(element, [this, outputType](mx::OutputPtr const& output) {
+                _Add(outputType, output);
 
                 // Keep iterating until we find renderable element
                 return !Exists(outputType);
@@ -2462,7 +2470,7 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
 
         void Disable(RPRMtlxLoader::OutputType outputType) {
             _activeElementsBits |= 1u << outputType;
-            _elements[outputType] = {};
+            _outputs[outputType] = {};
         }
 
         bool IsEmpty() const {
@@ -2480,14 +2488,10 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
             return _activeElementsBits & (1u << outputType);
         }
 
-        struct Element {
-            mx::OutputPtr output;
-            mx::ShaderRefPtr shaderRef;
-        };
-        Element const& Get(RPRMtlxLoader::OutputType type) const { return _elements[type]; }
+        mx::OutputPtr const& Get(RPRMtlxLoader::OutputType type) const { return _outputs[type]; }
 
     private:
-        void _Add(RPRMtlxLoader::OutputType outputType, mx::OutputPtr const& output, mx::ShaderRefPtr const& shaderRef) {
+        void _Add(RPRMtlxLoader::OutputType outputType, mx::OutputPtr const& output) {
             // Validate output type
             //
             auto actualOutputType = ToOutputType(output->getType());
@@ -2503,14 +2507,14 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
 
                 uint8_t outputTypeBit = 1u << actualOutputType;
                 if ((_activeElementsBits & outputTypeBit) == 0) {
-                    _elements[actualOutputType] = {output, shaderRef};
+                    _outputs[actualOutputType] = output;
                     _activeElementsBits |= outputTypeBit;
                 }
             }
         }
 
     private:
-        Element _elements[RPRMtlxLoader::kOutputsTotal];
+        mx::OutputPtr _outputs[RPRMtlxLoader::kOutputsTotal];
 
         uint8_t _activeElementsBits = 0u;
         enum { kAllElementsBits = (1u << RPRMtlxLoader::kOutputsTotal) - 1 };
@@ -2561,25 +2565,13 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
     for (int i = 0; i < kOutputsTotal; ++i) {
         auto outputType = static_cast<OutputType>(i);
 
-        auto& element = renderableElements.Get(outputType);
-        if (!element.output) {
-            continue;
-        }
-
-        mx::ConstGraphElementPtr nodeGraph;
-        if (element.shaderRef) {
-            if (auto nodeDef = element.shaderRef->getNodeDef()) {
-                nodeGraph = GetNodeGraphImpl(nodeDef.get());
+        if (auto& output = renderableElements.Get(outputType)) {
+            if (auto nodeGraph = output->getParent()->asA<mx::GraphElement>()) {
+                GraphNodesKey graphNodesKey{nodeGraph.get()};
+                graphNodes[graphNodesKey].outputTypes.push_back(outputType);
             }
-        } else {
-            nodeGraph = element.output->getParent()->asA<mx::GraphElement>();
         }
-        if (!nodeGraph) {
-            continue;
-        }
-
-        GraphNodesKey graphNodesKey{nodeGraph.get(), element.shaderRef.get()};
-        graphNodes[graphNodesKey].outputTypes.push_back(outputType);
+        
     }
 
     // Create MtlxNodeGraphNode for each nodeGraph-shaderRef pair
@@ -2589,33 +2581,13 @@ RPRMtlxLoader::Result RPRMtlxLoader::Load(
     for (auto& entry : graphNodes) {
         std::vector<mx::OutputPtr> requiredOutputs;
         for (auto outputType : entry.second.outputTypes) {
-            requiredOutputs.push_back(renderableElements.Get(outputType).output);
+            requiredOutputs.push_back(renderableElements.Get(outputType));
         }
 
         try {
             auto nodeGraph = entry.first.nodeGraph->getSelf()->asA<mx::GraphElement>();
 
             entry.second.node = std::make_unique<MtlxNodeGraphNode>(nodeGraph, requiredOutputs, &ctx);
-
-            if (entry.first.shaderRef) {
-                ForEachChildrenOfType<mx::BindInput>(entry.first.shaderRef,
-                    []() { return false; },
-                    [&ctx, node=entry.second.node.get()](mx::BindInputPtr const& bindInput) {
-                        if (ctx.ConnectToGlobalOutput(bindInput.get(), node)) {
-                            return;
-                        }
-
-                        auto& valueStr = bindInput->getValueString();
-                        if (!valueStr.empty()) {
-                            auto& type = bindInput->getType();
-
-                            LOG(&ctx, "Bindinput %s: %s (%s)", bindInput->getName().c_str(), valueStr.c_str(), type.c_str());
-
-                            node->SetInput(bindInput.get(), bindInput.get(), &ctx);
-                        }
-                    }
-                );
-            }
         } catch (MtlxNodeGraphNode::NoOutputsError&) {
             continue;
         }
