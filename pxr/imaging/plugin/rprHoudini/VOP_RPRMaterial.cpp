@@ -653,6 +653,8 @@ static const char* GetUIName(RprUsdMaterialNodeInfo const* shaderInfo) {
 }
 
 VOP_RPRMaterialOperator* VOP_RPRMaterialOperator::Create(RprUsdMaterialNodeInfo const* shaderInfo) {
+    TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("Creating \"%s\" VOP node\n", shaderInfo->GetName());
+
     if (shaderInfo->GetName()) {
         if (std::strcmp("rpr_materialx_node", shaderInfo->GetName()) == 0) {
             return VOP_RPRMaterialOperator::_Create<VOP_MaterialX>(shaderInfo);

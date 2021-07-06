@@ -39,6 +39,21 @@ geometry_settings = [
                 'help': 'Whether to extract contour for a mesh or not'
             },
             {
+                'name': 'primvars:rpr:cryptomatteName',
+                'ui_name': 'Cryptomatte Name',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'help': 'String used to generate cryptomatte ID. If not specified, the path to a primitive used.'
+            },
+            {
+                'name': 'primvars:rpr:geomSamples',
+                'ui_name': 'Geometry Time Samples',
+                'defaultValue': 1,
+                'minValue': 1,
+                'maxValue': 1 ** 16,
+                'help': 'The number of sub-frame samples to compute when rendering deformation motion blur over the shutter open time. The default is 1 (sample only at the start of the shutter time), giving no deformation blur by default. If you want rapidly deforming geometry to blur properly, you must increase this value to 2 or more. Note that this value is limited by the number of sub-samples available in the USD file being rendered.'
+            },
+            {
                 'folder': 'Visibility Settings',
                 'settings': visibility_flag_settings
             }

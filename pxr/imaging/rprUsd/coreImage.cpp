@@ -39,13 +39,13 @@ rpr::ImageDesc GetRprImageDesc(rpr::ImageFormat format, uint32_t width, uint32_t
 }
 
 template <typename ComponentT, typename PixelConverterFunc>
-std::unique_ptr<uint8_t[]> _ConvertTexture(GlfUVTextureData* textureData, rpr::ImageFormat const& srcFormat, uint32_t dstNumComponents, PixelConverterFunc&& converter) {
-    uint8_t* src = textureData->GetRawBuffer();
+std::unique_ptr<uint8_t[]> _ConvertTexture(RprUsdTextureData* textureData, rpr::ImageFormat const& srcFormat, uint32_t dstNumComponents, PixelConverterFunc&& converter) {
+    uint8_t* src = textureData->GetData();
 
     size_t srcPixelStride = srcFormat.num_components * sizeof(ComponentT);
     size_t dstPixelStride = dstNumComponents * sizeof(ComponentT);
 
-    size_t numPixels = size_t(textureData->ResizedWidth()) * textureData->ResizedHeight();
+    size_t numPixels = size_t(textureData->GetWidth()) * textureData->GetHeight();
     auto dstData = std::make_unique<uint8_t[]>(numPixels * dstPixelStride);
     uint8_t* dst = dstData.get();
 
@@ -66,7 +66,7 @@ template <> struct WhiteColor<uint8_t> {
 };
 
 template <typename ComponentT>
-std::unique_ptr<uint8_t[]> ConvertTexture(GlfUVTextureData* textureData, rpr::ImageFormat const& format, uint32_t dstNumComponents) {
+std::unique_ptr<uint8_t[]> ConvertTexture(RprUsdTextureData* textureData, rpr::ImageFormat const& format, uint32_t dstNumComponents) {
     if (dstNumComponents < format.num_components) {
         // Trim excessive channels
         return _ConvertTexture<ComponentT>(textureData, format, dstNumComponents,
@@ -129,10 +129,10 @@ std::unique_ptr<uint8_t[]> ConvertTexture(GlfUVTextureData* textureData, rpr::Im
     return nullptr;
 }
 
-rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData, uint32_t numComponentsRequired) {
+rpr::Image* CreateRprImage(rpr::Context* context, RprUsdTextureData* textureData, uint32_t numComponentsRequired) {
     rpr::ImageFormat format = {};
 
-    auto imageMetadata = RprUsdGetGlfTextureMetadata(textureData);
+    auto imageMetadata = textureData->GetGLMetadata();
 
     switch (imageMetadata.glType) {
         case GL_UNSIGNED_BYTE:
@@ -163,9 +163,9 @@ rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData,
             TF_RUNTIME_ERROR("Unsupported pixel data GLformat: %#x", imageMetadata.glFormat);
             return nullptr;
     }
-    rpr::ImageDesc desc = GetRprImageDesc(format, textureData->ResizedWidth(), textureData->ResizedHeight());
+    rpr::ImageDesc desc = GetRprImageDesc(format, textureData->GetWidth(), textureData->GetHeight());
 
-    auto textureBuffer = textureData->GetRawBuffer();
+    auto textureBuffer = textureData->GetData();
 
     std::unique_ptr<uint8_t[]> convertedData;
     if (numComponentsRequired != 0 &&
@@ -181,7 +181,7 @@ rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData,
         if (convertedData) {
             textureBuffer = convertedData.get();
             format.num_components = numComponentsRequired;
-            desc = GetRprImageDesc(format, textureData->ResizedWidth(), textureData->ResizedHeight());
+            desc = GetRprImageDesc(format, textureData->GetWidth(), textureData->GetHeight());
         }
     }
 
@@ -198,12 +198,12 @@ rpr::Image* CreateRprImage(rpr::Context* context, GlfUVTextureData* textureData,
 } // namespace anonymous
 
 RprUsdCoreImage* RprUsdCoreImage::Create(rpr::Context* context, std::string const& path, uint32_t numComponentsRequired) {
-    auto textureData = GlfUVTextureData::New(path, INT_MAX, 0, 0, 0, 0);
-    if (!textureData || !textureData->Read(0, false)) {
+    auto textureData = RprUsdTextureData::New(path);
+    if (!textureData) {
         return nullptr;
     }
 
-    return Create(context, {{0, textureData.operator->()}}, numComponentsRequired);
+    return Create(context, {{0, textureData.get()}}, numComponentsRequired);
 }
 
 RprUsdCoreImage* RprUsdCoreImage::Create(rpr::Context* context, uint32_t width, uint32_t height, rpr::ImageFormat format, void const* data, rpr::Status* status) {

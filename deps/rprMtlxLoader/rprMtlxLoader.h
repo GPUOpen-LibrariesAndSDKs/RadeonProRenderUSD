@@ -13,7 +13,14 @@ public:
     void SetupStdlib(MaterialX::FilePathVec const& libraryNames, MaterialX::FileSearchPath const& searchPath);
     MaterialX::ConstDocumentPtr GetStdlib() const { return _stdlib; }
 
-    void SetLogging(bool enable) { _loggingEnabled = enable; }
+    enum class LogLevel : int {
+        None,
+        Error,
+        Warning,
+        Info,
+    };
+    void SetLogging(LogLevel level) { _logLevel = level; }
+
     void SetSceneDistanceUnit(std::string const& unit) { _sceneDistanceUnit = unit; }
 
     enum OutputType {
@@ -115,7 +122,7 @@ public:
 private:
     MaterialX::DocumentPtr _stdlib;
     MaterialX::FileSearchPath _stdSearchPath;
-    bool _loggingEnabled = false;
+    LogLevel _logLevel = LogLevel::Error;
     std::string _sceneDistanceUnit = "meter";
 };
 

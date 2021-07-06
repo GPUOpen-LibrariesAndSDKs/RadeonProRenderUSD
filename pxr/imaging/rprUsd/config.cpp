@@ -3,6 +3,7 @@
 #include "pxr/base/arch/fileSystem.h"
 #include "pxr/base/tf/tf.h"
 #include "pxr/base/tf/instantiateSingleton.h"
+#include "pxr/base/tf/envSetting.h"
 
 #include <json.hpp>
 using json = nlohmann::json;
@@ -19,6 +20,9 @@ using json = nlohmann::json;
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_ENV_SETTING(HDRPR_CACHE_PATH_OVERRIDE, "",
+	"Set this to override shaders cache path");
+
 namespace {
 
 bool ArchCreateDirectory(const char* path) {
@@ -26,6 +30,22 @@ bool ArchCreateDirectory(const char* path) {
     return CreateDirectory(path, NULL) == TRUE;
 #else
     return mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
+#endif
+}
+
+bool ArchDirectoryExists(const char* path) {
+#ifdef WIN32
+	DWORD ftyp = GetFileAttributesA(path);
+	if (ftyp == INVALID_FILE_ATTRIBUTES)
+		return false;  //something is wrong with your path!
+
+	if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
+		return true;   // this is a directory!
+
+	return false;    // this is not a directory!
+#else
+	throw std::runtime_error("ArchDirectoryExists not implemented for this platform");
+	return false;
 #endif
 }
 
@@ -60,6 +80,23 @@ std::string GetAppDataPath() {
 }
 
 std::string GetDefaultCacheDir(const char* cacheType) {
+    // Return HDRPR_CACHE_PATH_OVERRIDE if provided
+	auto overriddenCacheDir = TfGetEnvSetting(HDRPR_CACHE_PATH_OVERRIDE);
+	if (!overriddenCacheDir.empty()) {
+		overriddenCacheDir = overriddenCacheDir + ARCH_PATH_SEP + cacheType;
+
+		bool directoryExists = ArchDirectoryExists(overriddenCacheDir.c_str());
+		if (!directoryExists) {
+			bool succeeded = ArchCreateDirectory(overriddenCacheDir.c_str());
+			if (!succeeded)
+			{
+				TF_RUNTIME_ERROR("Can't create shader cache directory at: %s", overriddenCacheDir.c_str());
+			}
+		}
+
+		return overriddenCacheDir;
+	}
+    
     auto cacheDir = ArchGetEnv("RPR");
     if (cacheDir.empty()) {
         // Fallback to AppData

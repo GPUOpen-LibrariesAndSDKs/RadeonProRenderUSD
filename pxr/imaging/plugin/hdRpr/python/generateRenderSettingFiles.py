@@ -78,7 +78,7 @@ render_setting_categories = [
         'name': 'RenderMode',
         'settings': [
             {
-                'name': 'renderMode',
+                'name': 'coreRenderMode',
                 'ui_name': 'Render Mode',
                 'defaultValue': 'Global Illumination',
                 'values': [
@@ -101,13 +101,13 @@ render_setting_categories = [
                 'minValue': 0.0,
                 'maxValue': 100.0,
                 'houdini': {
-                    'hidewhen': 'renderMode != "AmbientOcclusion"'
+                    'hidewhen': 'coreRenderMode != "AmbientOcclusion"'
                 }
             },
             {
                 'folder': 'Contour Settings',
                 'houdini': {
-                    'hidewhen': 'renderMode != "Contour"'
+                    'hidewhen': 'coreRenderMode != "Contour"'
                 },
                 'settings': [
                     {
@@ -117,7 +117,7 @@ render_setting_categories = [
                         'minValue': 0.0,
                         'maxValue': 1.0,
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     },
                     {
@@ -126,7 +126,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use geometry normals for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     },
                     {
@@ -137,7 +137,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via normals',
                         'houdini': {
-                            'hidewhen': ['renderMode != "Contour"', 'contourUseNormal == 0']
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseNormal == 0']
                         }
                     },
                     {
@@ -147,7 +147,7 @@ render_setting_categories = [
                         'minValue': 0.0,
                         'maxValue': 180.0,
                         'houdini': {
-                            'hidewhen': ['renderMode != "Contour"', 'contourUseNormal == 0']
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseNormal == 0']
                         }
                     },
                     {
@@ -156,7 +156,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use primitive Id for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     },
                     {
@@ -167,7 +167,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via primitive Id',
                         'houdini': {
-                            'hidewhen': ['renderMode != "Contour"', 'contourUsePrimId == 0']
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUsePrimId == 0']
                         }
                     },
                     {
@@ -176,7 +176,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use material Id for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     },
                     {
@@ -187,7 +187,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via material Id',
                         'houdini': {
-                            'hidewhen': ['renderMode != "Contour"', 'contourUseMaterialId == 0']
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseMaterialId == 0']
                         }
                     },
                     {
@@ -204,7 +204,7 @@ render_setting_categories = [
                                 ' * cyan - material Id + normal\\n'
                                 ' * black - all',
                         'houdini': {
-                            'hidewhen': 'renderMode != "Contour"'
+                            'hidewhen': 'coreRenderMode != "Contour"'
                         }
                     }
                 ]
@@ -241,7 +241,7 @@ render_setting_categories = [
         'settings': [
             {
                 'name': 'enableDenoising',
-                'ui_name': 'Enable Denoising',
+                'ui_name': 'Enable AI Denoising',
                 'defaultValue': False,
                 'houdini': {
                     'custom_tags': [
@@ -283,7 +283,7 @@ render_setting_categories = [
         'settings': [
             {
                 'name': 'maxSamples',
-                'ui_name': 'Max Pixel Samples',
+                'ui_name': 'Max Samples',
                 'help': 'Maximum number of samples to render for each pixel.',
                 'defaultValue': 256,
                 'minValue': 1,
@@ -299,7 +299,7 @@ render_setting_categories = [
         'settings': [
             {
                 'name': 'minAdaptiveSamples',
-                'ui_name': 'Min Pixel Samples',
+                'ui_name': 'Min Samples',
                 'help': 'Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than \'Variance Threshold\'.',
                 'defaultValue': 64,
                 'minValue': 1,
@@ -307,7 +307,7 @@ render_setting_categories = [
             },
             {
                 'name': 'varianceThreshold',
-                'ui_name': 'Variance Threshold',
+                'ui_name': 'Noise Threshold',
                 'help': 'Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff.',
                 'defaultValue': 0.0,
                 'minValue': 0.0,
@@ -373,18 +373,18 @@ render_setting_categories = [
                 'name': 'raycastEpsilon',
                 'ui_name': 'Ray Cast Epsilon',
                 'help': 'Determines an offset used to move light rays away from the geometry for ray-surface intersection calculations.',
-                'defaultValue': 2e-5,
+                'defaultValue': 2e-3,
                 'minValue': 1e-6,
                 'maxValue': 1.0
             },
             {
                 'name': 'enableRadianceClamping',
-                'ui_name': 'Enable Clamp Radiance',
+                'ui_name': 'Clamp Fireflies',
                 'defaultValue': False,
             },
             {
                 'name': 'radianceClamping',
-                'ui_name': 'Clamp Radiance',
+                'ui_name': 'Max Radiance',
                 'help': 'Limits the intensity, or the maximum brightness, of samples in the scene. Greater clamp radiance values produce more brightness.',
                 'defaultValue': 0.0,
                 'minValue': 0.0,
@@ -439,7 +439,7 @@ render_setting_categories = [
             },
             {
                 'name': 'tonemapExposureTime',
-                'ui_name': 'Tone Mapping Exposure Time',
+                'ui_name': 'Film Exposure Time (sec)',
                 'help': 'Film exposure time',
                 'defaultValue': 0.125,
                 'minValue': 0.0,
@@ -450,7 +450,7 @@ render_setting_categories = [
             },
             {
                 'name': 'tonemapSensitivity',
-                'ui_name': 'Tone Mapping Sensitivity',
+                'ui_name': 'Film Sensitivity',
                 'help': 'Luminance of the scene (in candela per m^2)',
                 'defaultValue': 1.0,
                 'minValue': 0.0,
@@ -461,7 +461,7 @@ render_setting_categories = [
             },
             {
                 'name': 'tonemapFstop',
-                'ui_name': 'Tone Mapping Fstop',
+                'ui_name': 'Fstop',
                 'help': 'Aperture f-number',
                 'defaultValue': 1.0,
                 'minValue': 0.0,
@@ -498,7 +498,7 @@ render_setting_categories = [
         'settings': [
             {
                 'name': 'enableBeautyMotionBlur',
-                'ui_name': 'Enable Beaty Motion Blur',
+                'ui_name': 'Enable Beauty Motion Blur',
                 'defaultValue': True,
                 'help': 'If disabled, only velocity AOV will store information about movement on the scene. Required for motion blur that is generated in post-processing.',
                 'houdini': {
@@ -546,6 +546,47 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'Cryptomatte',
+        'settings': [
+            {
+                'name': 'cryptomatteOutputPath',
+                'ui_name': 'Cryptomatte Output Path',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'help': 'Controls where cryptomatte should be saved. Use \'Cryptomatte Output Mode\' to control when cryptomatte is saved.',
+                'houdini': {
+                    'type': 'file'
+                }
+            },
+            {
+                'name': 'cryptomatteOutputMode',
+                'ui_name': 'Cryptomatte Output Mode',
+                'defaultValue': 'Batch',
+                'values': [
+                    SettingValue('Batch'),
+                    SettingValue('Interactive')
+                ],
+                'help': 'Batch - save cryptomatte only in the batch rendering mode (USD Render ROP, husk). Interactive - same as the Batch but also save cryptomatte in the non-batch rendering mode. Cryptomatte always saved after \'Max Samples\' is reached.',
+                'houdini': {
+                    'hidewhen': 'cryptomatteOutputPath == ""',
+                }
+            },
+            {
+                'name': 'cryptomattePreviewLayer',
+                'ui_name': 'Cryptomatte Add Preview Layer',
+                'defaultValue': False,
+                'help': 'Whether to generate cryptomatte preview layer or not. Whether you need it depends on the software you are planning to use cryptomatte in. For example, Houdini\'s COP Cryptomatte requires it, Nuke, on contrary, does not.',
+                'houdini': {
+                    'hidewhen': 'cryptomatteOutputPath == ""',
+                }
+
+            }
+        ],
+        'houdini': {
+            'hidewhen': hidewhen_not_northstar
+        }
+    },
+    {
         'name': 'UsdNativeCamera',
         'settings': [
             {
@@ -573,6 +614,23 @@ render_setting_categories = [
             {
                 'name': 'rprExportUseImageCache',
                 'defaultValue': False
+            }
+        ]
+    },
+    {
+        'name': 'Session',
+        'settings': [
+            {
+                'name': 'renderMode',
+                'defaultValue': 'interactive',
+                'values': [
+                    SettingValue('batch'),
+                    SettingValue('interactive')
+                ]
+            },
+            {
+                'name': 'progressive',
+                'defaultValue': True
             }
         ]
     }
@@ -618,6 +676,8 @@ public:
     bool IsDirty(ChangeTracker dirtyFlag) const;
     void CleanDirtyFlag(ChangeTracker dirtyFlag);
     void ResetDirty();
+
+    void ResetRenderSettingsVersion();
 
 private:
     HdRprConfig() = default;
@@ -730,6 +790,10 @@ void HdRprConfig::CleanDirtyFlag(ChangeTracker dirtyFlag) {{
 
 void HdRprConfig::ResetDirty() {{
     m_dirtyFlags = Clean;
+}}
+
+void HdRprConfig::ResetRenderSettingsVersion() {{
+    m_lastRenderSettingsVersion = -1;
 }}
 
 HdRprConfig::PrefData::PrefData() {{

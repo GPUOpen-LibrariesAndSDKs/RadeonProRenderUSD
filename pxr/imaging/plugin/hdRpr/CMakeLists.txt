@@ -98,6 +98,7 @@ pxr_plugin(hdRpr
         cameraUtil
         rprUsd
         json
+        murmurhash
         ${RIF_LIBRARY}
         ${OPENEXR_LIBRARIES}
 
@@ -150,6 +151,10 @@ pxr_plugin(hdRpr
         ndrDiscoveryPlugin.cpp
         ndrParserPlugin.cpp
 )
+
+if(RPR_EXR_EXPORT_ENABLED)
+    target_compile_definitions(hdRpr PRIVATE -DRPR_EXR_EXPORT_ENABLED)
+endif()
 
 target_sources(hdRpr PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.h)

@@ -12,7 +12,6 @@ limitations under the License.
 ************************************************************************/
 
 #include "pxr/imaging/rprUsd/util.h"
-#include "pxr/imaging/glf/uvTextureData.h"
 #include "pxr/imaging/rprUsd/materialRegistry.h"
 #include "pxr/imaging/rprUsd/imageCache.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
@@ -41,8 +40,8 @@ TF_DEFINE_ENV_SETTING(RPRUSD_MATERIAL_NETWORK_SELECTOR, "rpr",
     "Material network selector to be used in hdRpr");
 TF_DEFINE_ENV_SETTING(RPRUSD_USE_RPRMTLXLOADER, true,
     "Whether to use RPRMtlxLoader or rprLoadMateriaX");
-TF_DEFINE_ENV_SETTING(RPRUSD_RPRMTLXLOADER_ENABLE_LOGGING, false,
-    "Enable logging of RPRMtlxLoader");
+TF_DEFINE_ENV_SETTING(RPRUSD_RPRMTLXLOADER_LOG_LEVEL, int(RPRMtlxLoader::LogLevel::Error),
+    "Set logging level of RPRMtlxLoader");
 
 RprUsdMaterialRegistry::RprUsdMaterialRegistry()
     : m_materialNetworkSelector(TfGetEnvSetting(RPRUSD_MATERIAL_NETWORK_SELECTOR)) {
@@ -61,13 +60,20 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
             TF_WARN("RPR environment variable is not set");
             return m_registeredNodes;
         }
+        TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("RPR: %s\n", RPR.c_str());
 
         if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
             MaterialX::FilePathVec libraryNames = {"libraries", "materials"};
             MaterialX::FileSearchPath searchPath = RPR;
             m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
             m_mtlxLoader->SetupStdlib(libraryNames, searchPath);
-            m_mtlxLoader->SetLogging(TfGetEnvSetting(RPRUSD_RPRMTLXLOADER_ENABLE_LOGGING));
+
+            auto logLevel = RPRMtlxLoader::LogLevel(TfGetEnvSetting(RPRUSD_RPRMTLXLOADER_LOG_LEVEL));
+            if (logLevel < RPRMtlxLoader::LogLevel::None ||
+                logLevel > RPRMtlxLoader::LogLevel::Info) {
+                logLevel = RPRMtlxLoader::LogLevel::Error;
+            }
+            m_mtlxLoader->SetLogging(logLevel);
         }
 
         auto rprMaterialsPath = TfAbsPath(TfNormPath(RPR + "/materials"));
@@ -78,6 +84,8 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
         }
 
         for (auto& file : materialFiles) {
+            TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("Processing material: \"%s\"\n", file.c_str());
+
             // UI Folder corresponds to subsections on UI
             // e.g. $RPR/Patterns/material.mtlx corresponds to Pattern UI folder
             auto uiFolder = file.substr(rprMaterialsPath.size() + 1);
@@ -124,7 +132,7 @@ void RprUsdMaterialRegistry::CommitResources(
         std::string path;
         uint32_t udimTileId;
 
-        GlfUVTextureDataRefPtr data;
+        RprUsdTextureDataRefPtr data;
 
         UniqueTextureInfo(std::string const& path, uint32_t udimTileId)
             : path(path), udimTileId(udimTileId), data(nullptr) {}
@@ -171,8 +179,7 @@ void RprUsdMaterialRegistry::CommitResources(
     WorkParallelForN(uniqueTextures.size(),
         [&uniqueTextures](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i) {
-                auto textureData = GlfUVTextureData::New(uniqueTextures[i].path, INT_MAX, 0, 0, 0, 0);
-                if (textureData && textureData->Read(0, false)) {
+                if (auto textureData = RprUsdTextureData::New(uniqueTextures[i].path)) {
                     uniqueTextures[i].data = textureData;
                 } else {
                     TF_RUNTIME_ERROR("Failed to load %s texture", uniqueTextures[i].path.c_str());
@@ -349,6 +356,7 @@ void ConvertLegacyHdMaterialNetwork(
 } // namespace anonymous
 
 RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
+    SdfPath const& materialId,
     HdSceneDelegate* sceneDelegate,
     HdMaterialNetworkMap const& legacyNetworkMap,
     rpr::Context* rprContext,
@@ -378,6 +386,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             VtValue const& surfaceOutput,
             VtValue const& displacementOutput,
             VtValue const& volumeOutput,
+            const char* cryptomatteName,
             int materialId) {
 
             auto getTerminalRprNode = [](VtValue const& terminalOutput) -> rpr::MaterialNode* {
@@ -401,10 +410,14 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             m_uvPrimvarName = TfToken(context.uvPrimvarName);
             m_displacementScale = std::move(context.displacementScale);
 
-            if (m_surfaceNode && materialId >= 0) {
-                // TODO: add C++ wrapper
-                auto apiHandle = rpr::GetRprObject(m_surfaceNode);
-                RPR_ERROR_CHECK(rprMaterialNodeSetID(apiHandle, rpr_uint(materialId)), "Failed to set material node id");
+            if (m_surfaceNode) {
+                if (materialId >= 0) {
+                    // TODO: add C++ wrapper
+                    auto apiHandle = rpr::GetRprObject(m_surfaceNode);
+                    RPR_ERROR_CHECK(rprMaterialNodeSetID(apiHandle, rpr_uint(materialId)), "Failed to set material node id");
+                }
+
+                RPR_ERROR_CHECK(m_surfaceNode->SetName(cryptomatteName), "Failed to set material name");
             }
 
             return m_volumeNode || m_surfaceNode || m_displacementNode;
@@ -516,7 +529,8 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     auto surfaceOutput = getTerminalOutput(HdMaterialTerminalTokens->surface);
     auto displacementOutput = getTerminalOutput(HdMaterialTerminalTokens->displacement);
 
-    int materialId = -1;
+    int materialRprId = -1;
+    std::string const* cryptomatteName = nullptr;
 
     auto surfaceTerminalIt = network.terminals.find(HdMaterialTerminalTokens->surface);
     if (surfaceTerminalIt != network.terminals.end()) {
@@ -531,13 +545,26 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
                 auto& value = idIt->second;
 
                 if (value.IsHolding<int>()) {
-                    materialId = value.UncheckedGet<int>();
+                    materialRprId = value.UncheckedGet<int>();
+                }
+            }
+
+            auto cryptomatteNameIt = parameters.find(RprUsdTokens->cryptomatteName);
+            if (cryptomatteNameIt != parameters.end()) {
+                auto& value = cryptomatteNameIt->second;
+
+                if (value.IsHolding<std::string>()) {
+                    cryptomatteName = &value.UncheckedGet<std::string>();
                 }
             }
         }
     }
 
-    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, materialId) ? out.release() : nullptr;
+    if (!cryptomatteName) {
+        cryptomatteName = &materialId.GetString();
+    }
+
+    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName->c_str(), materialRprId) ? out.release() : nullptr;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

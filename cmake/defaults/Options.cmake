@@ -78,3 +78,6 @@ set(PXR_LIB_PREFIX ${CMAKE_SHARED_LIBRARY_PREFIX}
 
 option(BUILD_SHARED_LIBS "Build shared libraries." ON)
 option(PXR_BUILD_MONOLITHIC "Build a monolithic library." OFF)
+
+option(MATERIALX_BUILD_PYTHON "Build the MaterialX Python package from C++ bindings. Requires Python 2.7 or greater." OFF)
+option(MATERIALX_INSTALL_PYTHON "Install the MaterialX Python package as a third-party library when the install target is built." OFF)

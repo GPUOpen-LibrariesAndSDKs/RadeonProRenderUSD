@@ -118,9 +118,6 @@ private:
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
     (percentDone) \
-    (renderMode) \
-    (batch) \
-    (progressive) \
     (RPR)
 );
 
@@ -157,8 +154,6 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
         SetRenderSetting(entry.first, entry.second);
     }
 
-    m_isBatch = GetRenderSetting(_tokens->renderMode) == _tokens->batch;
-    m_isProgressive = GetRenderSetting(_tokens->progressive).GetWithDefault(true);
 
     m_rprApi.reset(new HdRprApi(this));
     g_rprApi = m_rprApi.get();
@@ -189,6 +184,12 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
 }
 
 HdRprDelegate::~HdRprDelegate() {
+	// Render settings version reset is required for valid recreation of HdRprDelgate
+	// Config singleton persists in memory after delegate destruction, therefore version must be invalidated
+	HdRprConfig* config;
+	auto configInstanceLock = HdRprConfig::GetInstance(&config);
+	config->ResetRenderSettingsVersion();
+
     g_rprApi = nullptr;
 }
 

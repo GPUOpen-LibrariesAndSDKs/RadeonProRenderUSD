@@ -41,7 +41,7 @@ void HdRprMaterial::Sync(HdSceneDelegate* sceneDelegate,
         VtValue vtMat = sceneDelegate->GetMaterialResource(GetId());
         if (vtMat.IsHolding<HdMaterialNetworkMap>()) {
             auto& networkMap = vtMat.UncheckedGet<HdMaterialNetworkMap>();
-            m_rprMaterial = rprApi->CreateMaterial(sceneDelegate, networkMap);
+            m_rprMaterial = rprApi->CreateMaterial(GetId(), sceneDelegate, networkMap);
         }
 
         if (!m_rprMaterial) {
@@ -69,7 +69,7 @@ void HdRprMaterial::Sync(HdSceneDelegate* sceneDelegate,
                     networkMap.map[HdMaterialTerminalTokens->displacement] = network;
                     networkMap.terminals.push_back(mtlxNode.path);
 
-                    m_rprMaterial = rprApi->CreateMaterial(sceneDelegate, networkMap);
+                    m_rprMaterial = rprApi->CreateMaterial(GetId(), sceneDelegate, networkMap);
                 }
             }
         }
