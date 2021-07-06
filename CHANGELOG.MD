@@ -1,5 +1,44 @@
 # Change Log
 
+## Version 2.1
+### New Features:
+- Subsurface Scattering and Volume shaders now work in RPR 2.0.  This allows the rendering of organic materials, such as skin, which absorb light into their interior.
+- Deformation motion blur gives accurate motion blur to objects which are being deformed, for example, a flag flapping in the wind or a ball squashing.  Besides, motion blur export has been optimized, and a setting for disabling deformation motion blur has been added.
+- The new RPR Toon Shader has been added.  This enables cartoon style shading for a non-photorealistic look.  Toon shaders can be used in a “simple” mode for just setting a color or a gradient of different colors for shadow vs lit areas of the object.
+- Support for USD 21.05 has been added.
+- Cryptomatte AOVs can now be exported from Houdini.
+
+
+### Issues Fixed:
+- Overbright edges of objects with Uber shaders in metalness mode ― fixed.
+- Shaders with high roughness could have artifacts with reflection or refraction ― fixed.
+- Users can now override the environment light background color in Houdini.
+- The render’s “percent done” statistics could be incorrect if the minimum number of samples had not yet been reached ― fixed.
+- An issue with the visibility of distant lights not being respected has been fixed.
+- A crash was occurring on macOS in some cases when using the RPR Material Library for the first time ― fixed.
+- RPR Materials nodes were not present in Houdini on Linux ― fixed.
+- The speed of rendering via Houdini’s Husk utility with multiple render products has been increased.
+- .rpr export fixes:
+    - .rpr export now exports USD depth AOV correctly;
+    - An issue with creating temporary directories when exporting .rpr files has been fixed;
+    - The $OS variable can now be used in the output path to change the path based on the operating system.
+- Developer changes to hdRPR:
+    - The hdRPR render delegate can now override the kernel cache path with an environment variable;
+    - The batch or interactive render mode can now be switched on dynamically.
+- MaterialX fixes:
+    - Logging with the MaterialX loader has been improved;
+    - Support for the Tangent node has been added;
+    - Support for the View Direction node has been added;
+    - Support for the RPR Emissive node has been added;
+    - The displacement scale has been fixed;
+    - An issue with the use of the mix node to mix surface shaders has been fixed.
+
+### Known Issues:
+- In RPR 2.0, heterogenous volumes, smoke and fire simulations or VDB files are not yet supported.
+- Subsurface scattering and volume shader are currently disabled on macOS due to long compile times.
+- Some AOVs may have artifacts on AMD cards with drivers earlier than 21.6.1
+
+
 ## Version 2.0.27
 ### New Features:
 -   Support for AMD Radeon™ RX 6700 XT graphics cards has been added.
