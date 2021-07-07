@@ -1460,7 +1460,7 @@ public:
                 // Reuse previously created RPR AOV
                 std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
                 // Update underlying format if needed
-                outRb.rprAov->Resize(rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat);
+                outRb.rprAov->Resize(rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat, GetRenderResolutionScale());
             }
 
             if (!outRb.rprAov) return nullptr;
@@ -1535,20 +1535,30 @@ public:
         }
 
         bool clearAovs = false;
-        RenderSetting<bool> enableDenoise;
         RenderSetting<HdRprApiColorAov::TonemapParams> tonemap;
+        RenderSetting<HdRprApiColorAov::UpscaleAndDenoiseParams> upscaleAndDenoise;
         RenderSetting<bool> instantaneousShutter;
         RenderSetting<TfToken> aspectRatioPolicy;
         {
             HdRprConfig* config;
             auto configInstanceLock = HdRprConfig::GetInstance(&config);
 
-            enableDenoise.isDirty = config->IsDirty(HdRprConfig::DirtyDenoise);
-            if (enableDenoise.isDirty) {
-                enableDenoise.value = config->GetEnableDenoising();
+            upscaleAndDenoise.isDirty = config->IsDirty(HdRprConfig::DirtyUpscaleAndDenoise);
+            if (upscaleAndDenoise.isDirty) {
+                upscaleAndDenoise.value.enable = config->GetEnableUpscalingAndDenoising();
 
                 m_denoiseMinIter = config->GetDenoiseMinIter();
                 m_denoiseIterStep = config->GetDenoiseIterStep();
+
+                TfToken mode = config->GetUpscalerMode();
+
+                if (mode == HdRprUpscalerModeTokens->Good) {
+                    upscaleAndDenoise.value.mode = HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Good;
+                } else if (mode == HdRprUpscalerModeTokens->Best) {
+                    upscaleAndDenoise.value.mode = HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Best;
+                } else if (mode == HdRprUpscalerModeTokens->Fast) {
+                    upscaleAndDenoise.value.mode = HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Fast;
+                }
             }
 
             tonemap.isDirty = config->IsDirty(HdRprConfig::DirtyTonemapping);
@@ -1621,7 +1631,7 @@ public:
             config->ResetDirty();
         }
         UpdateCamera(aspectRatioPolicy, instantaneousShutter);
-        UpdateAovs(rprRenderParam, enableDenoise, tonemap, clearAovs);
+        UpdateAovs(rprRenderParam, upscaleAndDenoise, tonemap, clearAovs);
 
         m_dirtyFlags = ChangeTracker::Clean;
         if (m_hdCamera) {
@@ -2068,8 +2078,14 @@ public:
         return false;
     }
 
-    void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, bool clearAovs) {
-        UpdateDenoising(enableDenoise);
+    void UpdateAovs(HdRprRenderParam* rprRenderParam, 
+                    RenderSetting<HdRprApiColorAov::UpscaleAndDenoiseParams> upscaleAndDenoise,
+                    RenderSetting<HdRprApiColorAov::TonemapParams> tonemap,
+                    bool clearAovs
+    ) {
+        if (upscaleAndDenoise.isDirty) {
+            UpdateUpscalingAndDenoising(upscaleAndDenoise);
+        }
 
         if (tonemap.isDirty) {
             m_colorAov->SetTonemap(tonemap.value);
@@ -2101,7 +2117,7 @@ public:
 
         if (m_dirtyFlags & ChangeTracker::DirtyViewport) {
             m_resolveData.ForAllAovs([this](ResolveData::AovEntry const& e) {
-                e.aov->Resize(m_viewportSize[0], m_viewportSize[1], e.aov->GetFormat());
+                e.aov->Resize(m_viewportSize[0], m_viewportSize[1], e.aov->GetFormat(), GetRenderResolutionScale());
             });
 
             // If AOV bindings are dirty then we already committed HdRprRenderBuffers, see SetAovBindings
@@ -2143,38 +2159,45 @@ public:
         }
     }
 
-    void UpdateDenoising(RenderSetting<bool> enableDenoise) {
+    void UpdateUpscalingAndDenoising(RenderSetting<HdRprApiColorAov::UpscaleAndDenoiseParams> upscaleAndDenoise)
+    {
         // Disable denoiser to prevent possible crashes due to incorrect AI models
-        if (!m_rifContext || m_rifContext->GetModelPath().empty()) {
+        if (!m_rifContext || m_rifContext->GetModelPath().empty() || !upscaleAndDenoise.isDirty) {
             return;
         }
 
-        if (!enableDenoise.isDirty ||
-            m_isDenoiseEnabled == enableDenoise.value) {
+        // Update upscale
+        m_colorAov->SetUpscale(upscaleAndDenoise.value);
+        m_dirtyFlags |= ChangeTracker::DirtyViewport;
+
+        // Update denoise
+        if (m_isDenoiseAndUpscaleEnabled == upscaleAndDenoise.value.enable) {
             return;
         }
 
-        m_isDenoiseEnabled = enableDenoise.value;
-        if (!m_isDenoiseEnabled) {
+        m_isDenoiseAndUpscaleEnabled = upscaleAndDenoise.value.enable;
+
+        if (!m_isDenoiseAndUpscaleEnabled) {
             m_colorAov->DeinitDenoise(m_rifContext.get());
             return;
         }
 
         rif::FilterType filterType = rif::FilterType::EawDenoise;
+
         if (m_rprContextMetadata.renderDeviceType == RprUsdRenderDeviceType::GPU) {
             filterType = rif::FilterType::AIDenoise;
         }
 
         if (filterType == rif::FilterType::EawDenoise) {
             m_colorAov->InitEAWDenoise(CreateAov(HdRprAovTokens->albedo),
-                                     CreateAov(HdAovTokens->normal),
-                                     CreateAov(HdRprGetCameraDepthAovName()),
-                                     CreateAov(HdAovTokens->primId),
-                                     CreateAov(HdRprAovTokens->worldCoordinate));
+                CreateAov(HdAovTokens->normal),
+                CreateAov(HdRprGetCameraDepthAovName()),
+                CreateAov(HdAovTokens->primId),
+                CreateAov(HdRprAovTokens->worldCoordinate));
         } else {
             m_colorAov->InitAIDenoise(CreateAov(HdRprAovTokens->albedo),
-                                    CreateAov(HdAovTokens->normal),
-                                    CreateAov(HdRprGetCameraDepthAovName()));
+                CreateAov(HdAovTokens->normal),
+                CreateAov(HdRprGetCameraDepthAovName()));
         }
     }
 
@@ -2504,7 +2527,7 @@ public:
 
         // In a batch session, we do denoise once at the end
         auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
-        if (m_isDenoiseEnabled) {
+        if (m_isDenoiseAndUpscaleEnabled) {
             m_colorAov->SetDenoise(false, rprApi, m_rifContext.get());
         }
 
@@ -2586,7 +2609,7 @@ public:
             }
         }
 
-        if (m_isDenoiseEnabled) {
+        if (m_isDenoiseAndUpscaleEnabled) {
             m_colorAov->SetDenoise(true, rprApi, m_rifContext.get());
         }
 
@@ -2686,7 +2709,7 @@ public:
 
             bool doDenoisedResolve = false;
             if (m_colorAov) {
-                if (m_isDenoiseEnabled) {
+                if (m_isDenoiseAndUpscaleEnabled) {
                     ++iteration;
                     if (iteration >= m_denoiseMinIter) {
                         int relativeIter = iteration - m_denoiseMinIter;
@@ -3646,6 +3669,15 @@ private:
         try {
             if (!aov) {
                 HdRprApiAov* newAov = nullptr;
+                HdRprApiAovBuilder builder = HdRprApiAov::Builder()
+                    .WithType(rpr::Aov(aovDesc.id))
+                    .WithFormat(format)
+                    .WithSize(width, height)
+                    .WithRprContext(m_rprContext.get())
+                    .WithRprContextMetadata(&m_rprContextMetadata)
+                    .WithRifContext(m_rifContext.get())
+                    .WithRenderResolutionScale(GetRenderResolutionScale());
+
                 std::function<void(HdRprApiAov*)> aovCustomDestructor;
 
                 if (aovName == HdAovTokens->color) {
@@ -3655,12 +3687,14 @@ private:
                         return nullptr;
                     }
 
-                    auto colorAov = new HdRprApiColorAov(format, std::move(rawColorAov), m_rprContext.get(), m_rprContextMetadata);
-                    UpdateColorAlpha(colorAov);
-
-                    newAov = colorAov;
+                    newAov = builder
+                        .WithType(rpr::Aov::RPR_AOV_COLOR)
+                        .WithRawColorAov(std::move(rawColorAov))
+                        .Build();
+                    
+                    UpdateColorAlpha((HdRprApiColorAov*)newAov);
                 } else if (aovName == HdAovTokens->normal) {
-                    newAov = new HdRprApiNormalAov(width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = builder.Build();
                 } else if (aovName == HdAovTokens->depth) {
                     auto worldCoordinateAov = GetAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4);
                     if (!worldCoordinateAov) {
@@ -3668,9 +3702,12 @@ private:
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = builder
+                        .WithWorldCoordinateAov(std::move(worldCoordinateAov))
+                        .Build();
                 } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
-                    newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = builder.Build();
+                    
                     aovCustomDestructor = [this](HdRprApiAov* aov) {
                         // Each LPE AOV reserves RPR's LPE AOV id (RPR_AOV_LPE_0, ...)
                         // As soon as LPE AOV is released we want to return reserved id to the pool
@@ -3696,10 +3733,13 @@ private:
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiIdMaskAov(aovDesc, baseAov, width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = builder
+                        .WithBaseIdAov(baseAov)
+                        .WithAovDesc(aovDesc)
+                        .Build();
                 } else {
                     if (!aovDesc.computed) {
-                        newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                        newAov = builder.Build();
                     } else {
                         TF_CODING_ERROR("Failed to create %s AOV: unprocessed computed AOV", aovName.GetText());
                     }
@@ -3720,7 +3760,7 @@ private:
                 m_aovRegistry[aovName] = aov;
                 m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
             } else {
-                aov->Resize(width, height, format);
+                aov->Resize(width, height, format, GetRenderResolutionScale());
             }
         } catch (std::runtime_error const& e) {
             TF_RUNTIME_ERROR("Failed to create %s AOV: %s", aovName.GetText(), e.what());
@@ -3892,6 +3932,11 @@ private:
         }
     }
 
+    float GetRenderResolutionScale() const
+    {
+        return m_isDenoiseAndUpscaleEnabled ? 0.5f : 1.0f;
+    }
+
 private:
     HdRprDelegate* m_delegate;
 
@@ -4019,7 +4064,7 @@ private:
     } m_resolveMode = kResolveAfterRender;
     bool m_isFirstSample = true;
 
-    bool m_isDenoiseEnabled = false;
+    bool m_isDenoiseAndUpscaleEnabled = false;
     int m_denoiseMinIter;
     int m_denoiseIterStep;
 

@@ -66,6 +66,13 @@ public:
     void Resize(std::uint32_t width, std::uint32_t height) override;
 };
 
+class FilterUpscale final : public Filter
+{
+public:
+    explicit FilterUpscale(Context* rifContext);
+    ~FilterUpscale() override = default;
+};
+
 class FilterCustom final : public Filter {
 public:
     explicit FilterCustom(Context* rifContext, rif_image_filter_type type) : Filter(rifContext) {
@@ -164,6 +171,15 @@ void FilterResample::Resize(std::uint32_t width, std::uint32_t height) {
     Filter::Resize(width, height);
 }
 
+FilterUpscale::FilterUpscale(Context* rifContext) : Filter(rifContext)
+{
+    m_rifFilter = rifContext->CreateImageFilter(RIF_IMAGE_FILTER_AI_UPSCALE);
+
+    // Setup default parameters
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameterString(m_rifFilter, "modelPath", rifContext->GetModelPath().c_str()), "Failed to set filter \"modelPath\" parameter");
+    RIF_ERROR_CHECK_THROW(rifImageFilterSetParameter1u(m_rifFilter, "mode", RIF_AI_UPSCALE_MODE_FAST_2X), "Failed to set parameter of upscale filter");
+}
+
 } // namespace anonymous
 
 std::unique_ptr<Filter> Filter::Create(FilterType type, Context* rifContext, std::uint32_t width, std::uint32_t height) {
@@ -178,6 +194,8 @@ std::unique_ptr<Filter> Filter::Create(FilterType type, Context* rifContext, std
             return std::unique_ptr<FilterEaw>(new FilterEaw(rifContext, width, height));
         case FilterType::Resample:
             return std::unique_ptr<FilterResample>(new FilterResample(rifContext, width, height));
+        case FilterType::Upscale:
+            return std::unique_ptr<FilterUpscale>(new FilterUpscale(rifContext));
         default:
             return nullptr;
     }
