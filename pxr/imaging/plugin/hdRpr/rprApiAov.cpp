@@ -66,7 +66,7 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
     m_aov->AttachAs(rprAovType);
 
     // XXX (Hybrid): Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
-    if (rprContextMetadata.pluginType != kPluginHybrid) {
+    if (!RprUsdIsHybrid(rprContextMetadata.pluginType)) {
         m_resolved = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height);
     }
 }

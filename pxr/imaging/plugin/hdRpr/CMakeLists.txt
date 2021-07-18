@@ -185,9 +185,10 @@ install(
 }\")")
 
 if(WIN32)
-    set(RPR_BINARIES
-        ${RPR_BIN_LOCATION}/RadeonProRender64.dll
-        ${RPR_BIN_LOCATION}/RprLoadStore64.dll)
+    set(RPR_BINARIES ${RPR_BIN_LOCATION}/RadeonProRender64.dll)
+    if(RPR_LOADSTORE_LIBRARY)
+        list(APPEND RPR_BINARIES ${RPR_BIN_LOCATION}/RprLoadStore64.dll)
+    endif()
     install(
         FILES ${RPR_BINARIES} ${RPR_PLUGINS} ${RIF_BINARIES} ${OptBin}
         DESTINATION lib)

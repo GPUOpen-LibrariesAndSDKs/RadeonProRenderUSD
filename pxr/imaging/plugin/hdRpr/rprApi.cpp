@@ -57,7 +57,9 @@ using json = nlohmann::json;
 #include "notify/message.h"
 
 #include <RadeonProRender_Baikal.h>
+#ifdef RPR_LOADSTORE_AVAILABLE
 #include <RprLoadStore.h>
+#endif // RPR_LOADSTORE_AVAILABLE
 
 #ifdef RPR_EXR_EXPORT_ENABLED
 #include <MurmurHash3.h>
@@ -389,7 +391,7 @@ public:
 
         VtIntArray newNormalIndices;
         if (normalSamples.empty()) {
-            if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+            if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
                 // XXX (Hybrid): we need to generate geometry normals by ourself
                 VtVec3fArray normals;
                 normals.reserve(newVpf.size());
@@ -432,7 +434,7 @@ public:
 
         VtIntArray newUvIndices;
         if (uvSamples.empty()) {
-            if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+            if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
                 newUvIndices = newIndices;
                 VtVec2fArray uvs(pointSamples[0].size(), GfVec2f(0.0f));
                 uvSamples.push_back(uvs);
@@ -558,7 +560,7 @@ public:
             return;
         }
 
-        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             // Not supported
             return;
         }
@@ -584,7 +586,7 @@ public:
             return;
         }
 
-        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             // Not supported
             return;
         }
@@ -631,7 +633,7 @@ public:
 
     void SetCurveVisibility(rpr::Curve* curve, uint32_t visibilityMask) {
         LockGuard rprLock(m_rprContext->GetMutex());
-        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             // XXX (Hybrid): rprCurveSetVisibility not supported, emulate visibility using attach/detach
             if (visibilityMask) {
                 m_scene->Attach(curve);
@@ -677,7 +679,7 @@ public:
 
     void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask) {
         LockGuard rprLock(m_rprContext->GetMutex());
-        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             // XXX (Hybrid): rprShapeSetVisibility not supported, emulate visibility using attach/detach
             if (visibilityMask) {
                 m_scene->Attach(mesh);
@@ -908,7 +910,7 @@ public:
             return nullptr;
         }
 
-        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             if ((status = m_scene->SetEnvironmentLight(envLight->light.get())) == RPR_SUCCESS) {
                 envLight->state = HdRprApiEnvironmentLight::kAttachedAsEnvLight;
             }
@@ -1750,7 +1752,8 @@ public:
     }
 
     void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
-        if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
+        // TODO: check if HybridPro has render qualities
+        if ((!preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) && m_rprContextMetadata.pluginType == kPluginHybrid) {
             rpr_uint hybridRenderQuality = -1;
             if (m_currentRenderQuality == HdRprRenderQualityTokens->High) {
                 hybridRenderQuality = RPR_RENDER_QUALITY_HIGH;
@@ -1778,7 +1781,7 @@ public:
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
             m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
-        } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        } else if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             UpdateHybridSettings(preferences, force);
         }
 
@@ -2158,7 +2161,7 @@ public:
     }
 
     void IncrementFrameCount(bool isAdaptiveSamplingEnabled) {
-        if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             return;
         }
 
@@ -2679,7 +2682,7 @@ public:
     }
 
     void InteropRenderImpl(HdRprRenderThread* renderThread) {
-        if (m_rprContextMetadata.pluginType != RprUsdPluginType::kPluginHybrid) {
+        if (!RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             TF_CODING_ERROR("InteropRenderImpl should be called for Hybrid plugin only");
             return;
         }
@@ -2733,7 +2736,7 @@ public:
                 if (m_isBatch) {
                     BatchRenderImpl(renderThread);
                 } else {
-                    if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid &&
+                    if (RprUsdIsHybrid(m_rprContextMetadata.pluginType) &&
                         m_rprContextMetadata.interopInfo) {
                         InteropRenderImpl(renderThread);
                     } else {
@@ -2774,6 +2777,8 @@ Don't show this message again?
     }
 
     void ExportRpr() {
+#ifdef RPR_LOADSTORE_AVAILABLE
+
 #ifdef BUILD_AS_HOUDINI_PLUGIN
         if (HOM().isApprentice()) {
             fprintf(stderr, "Cannot export .rpr from Apprentice");
@@ -2978,6 +2983,9 @@ Don't show this message again?
         } catch (json::exception& e) {
             fprintf(stderr, "Failed to fill config file: %s\n", configFilename.c_str());
         }
+#else // !defined(RPR_LOADSTORE_AVAILABLE)
+        TF_RUNTIME_ERROR(".rpr export is not supported: hdRpr compiled without rprLoadStore library");
+#endif // RPR_LOADSTORE_AVAILABLE
     }
 
     void CommitResources() {
@@ -3093,11 +3101,11 @@ Don't show this message again?
     }
 
     bool IsVulkanInteropEnabled() const {
-        return m_rprContext && m_rprContextMetadata.pluginType == kPluginHybrid && m_rprContextMetadata.interopInfo;
+        return m_rprContext && RprUsdIsHybrid(m_rprContextMetadata.pluginType) && m_rprContextMetadata.interopInfo;
     }
 
     bool IsArbitraryShapedLightSupported() const {
-        return m_rprContextMetadata.pluginType != kPluginHybrid;
+        return !RprUsdIsHybrid(m_rprContextMetadata.pluginType);
     }
 
     bool IsSphereAndDiskLightSupported() const {
@@ -3135,6 +3143,8 @@ private:
             return kPluginTahoe;
         } else if (renderQuality == HdRprRenderQualityTokens->Northstar) {
             return kPluginNorthstar;
+        } else if (renderQuality == HdRprRenderQualityTokens->HybridPro) {
+            return kPluginHybridPro;
         } else {
             return kPluginHybrid;
         }
@@ -3231,12 +3241,14 @@ private:
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
-        if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid) {
+        // TODO: verify
+        if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_ENABLE_RELAXED_MATERIAL_CHECKS), 1u), "Failed to enable relaxed material checks");
         }
 
         uint32_t requiredYFlip = 0;
-        if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid && m_rprContextMetadata.interopInfo) {
+        // TODO: verify
+        if (RprUsdIsHybrid(m_rprContextMetadata.pluginType) && m_rprContextMetadata.interopInfo) {
             RPR_ERROR_CHECK_THROW(m_rprContext->GetFunctionPtr(
                 RPR_CONTEXT_FLUSH_FRAMEBUFFERS_FUNC_NAME, 
                 (void**)(&m_rprContextFlushFrameBuffers)
@@ -3358,7 +3370,7 @@ private:
     std::unique_ptr<RprUsdCoreImage> CreateConstantColorImage(float const* color) {
         std::array<float, 3> colorArray = {color[0], color[1], color[2]};
         rpr_image_format format = {3, RPR_COMPONENT_TYPE_FLOAT32};
-        rpr_uint imageSize = m_rprContextMetadata.pluginType == kPluginHybrid ? 64 : 1;
+        rpr_uint imageSize = RprUsdIsHybrid(m_rprContextMetadata.pluginType) ? 64 : 1;
         std::vector<std::array<float, 3>> imageData(imageSize * imageSize, colorArray);
 
         rpr::Status status;
