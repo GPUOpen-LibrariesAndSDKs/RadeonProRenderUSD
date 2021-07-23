@@ -314,7 +314,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         }
     } else {
         RPR_ERROR_CHECK(status, "Failed to create RPR context");
-		return nullptr;
+        return nullptr;
     }
 
     RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, config->GetTextureCacheDir().c_str()), "Failed to set texture cache path");
