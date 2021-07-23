@@ -13,7 +13,14 @@ public:
     void SetupStdlib(MaterialX::FilePathVec const& libraryNames, MaterialX::FileSearchPath const& searchPath);
     MaterialX::ConstDocumentPtr GetStdlib() const { return _stdlib; }
 
-    void SetLogging(bool enable) { _loggingEnabled = enable; }
+    enum class LogLevel : int {
+        None,
+        Error,
+        Warning,
+        Info,
+    };
+    void SetLogging(LogLevel level) { _logLevel = level; }
+
     void SetSceneDistanceUnit(std::string const& unit) { _sceneDistanceUnit = unit; }
 
     enum OutputType {
@@ -59,6 +66,11 @@ public:
             /// Possible values: "constant", "clamp", "periodic", "mirror"
             std::string uaddressmode;
             std::string vaddressmode;
+
+            /// Controls whether rpr_image creator should apply any colorspace conversions.
+            /// The most common example is applying gamma to rpr_image, where gamma value is taken from the file's metadata.
+            /// disableRprImageColorspace is true when mtlx loader generates its own conversion nodes.
+            bool disableRprImageColorspace;
 
             /// The target image texture node
             rpr_material_node rprNode;
@@ -110,7 +122,7 @@ public:
 private:
     MaterialX::DocumentPtr _stdlib;
     MaterialX::FileSearchPath _stdSearchPath;
-    bool _loggingEnabled = false;
+    LogLevel _logLevel = LogLevel::Error;
     std::string _sceneDistanceUnit = "meter";
 };
 

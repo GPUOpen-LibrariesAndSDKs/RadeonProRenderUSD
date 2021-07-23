@@ -72,6 +72,9 @@ PXR_NAMESPACE_OPEN_SCOPE
     (cryptomatteObj0) \
     (cryptomatteObj1) \
     (cryptomatteObj2) \
+    (materialIdMask) \
+    (objectIdMask) \
+    (objectGroupIdMask) \
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_AOV_TOKENS);
 
@@ -80,6 +83,9 @@ const rpr::Aov kAovNone = static_cast<rpr::Aov>(-1);
 enum ComputedAovs {
     kNdcDepth = 0,
     kColorAlpha,
+    kMaterialIdMask,
+    kObjectIdMask,
+    kObjectGroupIdMask,
     kComputedAovsCount
 };
 

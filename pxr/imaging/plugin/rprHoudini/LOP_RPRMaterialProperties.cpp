@@ -33,11 +33,14 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 static PRM_Name g_materialPath("materialPath", "Material Path");
 static PRM_Name g_id("id", "ID");
+static PRM_Name g_cryptomatteName("cryptomatteName", "Cryptomatte Name");
 
 static PRM_Template g_templateList[] = {
     PRM_Template(PRM_STRING_E, 1, &g_materialPath),
     PRM_Template(PRM_INT, 1, &g_id, nullptr, nullptr, nullptr, nullptr, nullptr, 1,
-        "some help"),
+        "The ID that corresponds to ID on materialId AOV."),
+    PRM_Template(PRM_STRING_E, 1, &g_cryptomatteName, nullptr, nullptr, nullptr, nullptr, nullptr, 1,
+        "String used to generate cryptomatte ID. If not specified, the path to a primitive used."),
     PRM_Template()
 };
 
@@ -70,15 +73,24 @@ OP_ERROR LOP_RPRMaterialProperties::cookMyLop(OP_Context &context) {
     evalString(materialPath, g_materialPath.getToken(), 0, context.getTime());
     HUSDmakeValidUsdPath(materialPath, true);
 
-    int id = evalInt(g_id.getToken(), 0, context.getTime());
-
     if (!materialPath.isstring()) {
         return error();
     }
     SdfPath materialSdfPath(HUSDgetSdfPath(materialPath));
 
+    int id = evalInt(g_id.getToken(), 0, context.getTime());
+
+    UT_String cryptomatteName;
+    evalString(cryptomatteName, g_cryptomatteName.getToken(), 0, context.getTime());
+
     HUSD_AutoWriteLock writelock(editableDataHandle());
     HUSD_AutoLayerLock layerlock(writelock);
+
+    auto data = writelock.data();
+    if (!data) {
+        // This might be the case when there are errors in the current graph
+        return error();
+    }
 
     UsdStageRefPtr stage = writelock.data()->stage();
 
@@ -97,6 +109,9 @@ OP_ERROR LOP_RPRMaterialProperties::cookMyLop(OP_Context &context) {
     UsdShadeShader surfaceSource = material.ComputeSurfaceSource(RprUsdTokens->rpr);
     if (surfaceSource) {
         surfaceSource.CreateInput(RprUsdTokens->id, SdfValueTypeNames->Int).Set(id);
+        surfaceSource.CreateInput(RprUsdTokens->cryptomatteName, SdfValueTypeNames->String).Set(VtValue(std::string(cryptomatteName)));
+    } else {
+        addWarning(LOP_MESSAGE, "Material has no surface source");
     }
 
     return error();

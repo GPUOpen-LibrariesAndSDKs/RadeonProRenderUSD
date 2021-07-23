@@ -94,16 +94,10 @@ public:
     void SetDrivers(HdDriverVector const& drivers) override;
 #endif // PXR_VERSION >= 2005
 
-    bool IsBatch() const { return m_isBatch; }
-    bool IsProgressive() const { return m_isProgressive; }
-
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
     static const TfTokenVector SUPPORTED_BPRIM_TYPES;
-
-    bool m_isBatch;
-    bool m_isProgressive;
 
     std::unique_ptr<HdRprApi> m_rprApi;
     std::unique_ptr<HdRprRenderParam> m_renderParam;

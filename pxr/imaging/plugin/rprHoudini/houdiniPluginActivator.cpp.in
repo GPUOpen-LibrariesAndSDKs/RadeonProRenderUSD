@@ -186,7 +186,7 @@ fs::path GetHoudiniUserPrefDir(const char* hver) {
     return {};
 }
 
-int ActivateHoudiniPlugin() {
+int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<const char*, const char*>> const& env) {
     auto houdiniUserPrefDir = GetHoudiniUserPrefDir("@HOUDINI_MAJOR_MINOR_VERSION@");
     if (houdiniUserPrefDir.empty()) {
         std::cout << "Can not determine HOUDINI_USER_PREF_DIR. Please check your environment and specify HOUDINI_USER_PREF_DIR" << std::endl;
@@ -200,28 +200,19 @@ int ActivateHoudiniPlugin() {
         return EXIT_FAILURE;
     }
 
-    auto rprPath = executablePath.parent_path().string();
-    std::replace(rprPath.begin(), rprPath.end(), '\\', '/');
-    std::cout << "RPR path: " << rprPath << std::endl;
+    auto package = executablePath.parent_path().lexically_normal().string();
+    std::replace(package.begin(), package.end(), '\\', '/');
+    std::cout << "Package path: " << package << std::endl;
 
     auto packagesDir = houdiniUserPrefDir / "packages";
     fs::create_directories(packagesDir);
 
-    auto packageJsonFilepath = packagesDir / "RPR_for_Houdini.json";
+    auto packageJsonFilepath = packagesDir / (pluginName + ".json");
     std::ofstream packageJson(packageJsonFilepath);
     if (!packageJson.is_open()) {
         std::cout << "Failed to open output file: " << packageJsonFilepath << std::endl;
         return EXIT_FAILURE;
     }
-
-    std::vector<std::pair<const char*, const char*>> env = {
-        {"RPR", ""},
-        {"HOUDINI_PATH", "/houdini"},
-        {"PYTHONPATH", "/lib/python"},
-#if defined(_WIN32) || defined(_WIN64)
-        {"PATH", "/lib"}
-#endif
-    };
 
     packageJson << '{';
     packageJson << '\"' << "env" << '\"';
@@ -232,7 +223,7 @@ int ActivateHoudiniPlugin() {
         packageJson << '\"' << it->first << '\"';
         packageJson << ':';
         packageJson << '\"';
-        packageJson << rprPath << it->second;
+        packageJson << package << it->second;
         packageJson << '\"';
         packageJson << '}';
         if (std::next(it) != env.end()) {
@@ -247,16 +238,6 @@ int ActivateHoudiniPlugin() {
         return EXIT_FAILURE;
     }
 
-    std::cout << "Successfully activated RPR plugin" << std::endl;
+    std::cout << "Successfully activated the plugin" << std::endl;
     return EXIT_SUCCESS;
-}
-
-int main() {
-    int exitCode = ActivateHoudiniPlugin();
-
-#if defined(_WIN32) || defined(_WIN64)
-    system("pause");
-#endif
-
-    return exitCode;
 }

@@ -61,6 +61,7 @@ target_sources(rprUsd PRIVATE
     materialNodes/rpr/baseNode.h
     materialNodes/rpr/baseNode.cpp
     materialNodes/rpr/nodeInfo.h
+    materialNodes/rpr/toonNode.cpp
     materialNodes/rpr/catcherNode.cpp
     materialNodes/rpr/displaceNode.cpp
     materialNodes/rpr/materialXNode.cpp

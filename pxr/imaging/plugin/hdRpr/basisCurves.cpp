@@ -24,8 +24,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id
                                    HDRPR_INSTANCER_ID_ARG_DECL)
-    : HdRprBaseRprim(id HDRPR_INSTANCER_ID_ARG)
-    , m_visibilityMask(kVisibleAll) {
+    : HdRprBaseRprim(id HDRPR_INSTANCER_ID_ARG) {
 
 }
 
@@ -137,7 +136,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
-        _sharedData.visible = sceneDelegate->GetVisible(id);
+        UpdateVisibility(sceneDelegate);
     }
 
     if (newCurve) {
@@ -224,12 +223,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (newCurve || ((*dirtyBits & HdChangeTracker::DirtyVisibility) || isVisibilityMaskDirty)) {
-            auto visibilityMask = m_visibilityMask;
-            if (!_sharedData.visible) {
-                // Override m_visibilityMask
-                visibilityMask = 0;
-            }
-            rprApi->SetCurveVisibility(m_rprCurve, visibilityMask);
+            rprApi->SetCurveVisibility(m_rprCurve, GetVisibilityMask());
         }
 
         if (newCurve || (*dirtyBits & HdChangeTracker::DirtyTransform)) {

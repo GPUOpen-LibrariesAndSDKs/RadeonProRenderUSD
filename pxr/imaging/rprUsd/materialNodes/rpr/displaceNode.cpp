@@ -20,7 +20,7 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PRIVATE_TOKENS(RprUsdRprDisplaceNodeTokens,
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (minscale)
     (maxscale)
     (in)
@@ -54,7 +54,7 @@ public:
     bool SetInput(
         TfToken const& inputId,
         VtValue const& value) override {
-        if (inputId == RprUsdRprDisplaceNodeTokens->minscale) {
+        if (inputId == _tokens->minscale) {
             if (value.IsHolding<float>()) {
                 m_displacementScale[0] = value.UncheckedGet<float>();
             } else {
@@ -62,7 +62,7 @@ public:
                 m_displacementScale[0] = 0.0f;
                 return false;
             }
-        } else if (inputId == RprUsdRprDisplaceNodeTokens->maxscale) {
+        } else if (inputId == _tokens->maxscale) {
             if (value.IsHolding<float>()) {
                 m_displacementScale[1] = value.UncheckedGet<float>();
             } else {
@@ -70,7 +70,7 @@ public:
                 m_displacementScale[1] = 1.0f;
                 return false;
             }
-        } else if (inputId == RprUsdRprDisplaceNodeTokens->in) {
+        } else if (inputId == _tokens->in) {
             if (value.IsHolding<std::shared_ptr<rpr::MaterialNode>>()) {
                 m_output = value;
             } else {
@@ -104,16 +104,16 @@ public:
         input.uiSoftMin = "0";
         input.uiSoftMax = "1";
 
-        input.name = "in";
+        input.name = _tokens->in;
         input.uiName = "Displacement";
         input.valueString = "0";
         nodeInfo.inputs.push_back(input);
 
-        input.name = "minscale";
+        input.name = _tokens->minscale;
         input.uiName = "Minimum Scale";
         nodeInfo.inputs.push_back(input);
 
-        input.name = "maxscale";
+        input.name = _tokens->maxscale;
         input.uiName = "Maximum Scale";
         input.valueString = "1";
         nodeInfo.inputs.push_back(input);

@@ -31,6 +31,16 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+#if PXR_VERSION >= 2105
+#define USD_LUX_TOKEN_SHAPING_IES_FILE UsdLuxTokens->inputsShapingIesFile
+#define USD_LUX_TOKEN_SHAPING_CONE_ANGLE UsdLuxTokens->inputsShapingConeAngle
+#define USD_LUX_TOKEN_SHAPING_CONE_SOFTNESS UsdLuxTokens->inputsShapingConeSoftness
+#else
+#define USD_LUX_TOKEN_SHAPING_IES_FILE UsdLuxTokens->shapingIesFile
+#define USD_LUX_TOKEN_SHAPING_CONE_ANGLE UsdLuxTokens->shapingConeAngle
+#define USD_LUX_TOKEN_SHAPING_CONE_SOFTNESS UsdLuxTokens->shapingConeSoftness
+#endif
+
 namespace {
 
 float GetDiskLightNormalization(GfMatrix4f const& transform, float radius) {
@@ -387,7 +397,11 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
     HdDirtyBits bits = *dirtyBits;
 
     if (bits & DirtyBits::DirtyTransform) {
+#if PXR_VERSION >= 2011
+        m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
+#else
         m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
+#endif
     }
 
     if (bits & DirtyParams) {
@@ -396,16 +410,12 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
 
         bool isVisible = sceneDelegate->GetVisible(id);
         if (!isVisible) {
-            // Invisible light does not produces any emission on a scene.
-            // So we simply keep light primitive empty in that case.
-            // We can do it in such a way because Hydra releases light object
-            // whenever it changed and creates it from scratch
             *dirtyBits = DirtyBits::Clean;
             return;
         }
 
         bool newLight = false;
-        auto iesFile = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->shapingIesFile);
+        auto iesFile = sceneDelegate->GetLightParamValue(id, USD_LUX_TOKEN_SHAPING_IES_FILE);
         if (iesFile.IsHolding<SdfAssetPath>()) {
             auto& path = iesFile.UncheckedGet<SdfAssetPath>();
             if (!path.GetResolvedPath().empty()) {
@@ -415,8 +425,8 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
                 }
             }
         } else {
-            auto coneAngle = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->shapingConeAngle);
-            auto coneSoftness = sceneDelegate->GetLightParamValue(id, UsdLuxTokens->shapingConeSoftness);
+            auto coneAngle = sceneDelegate->GetLightParamValue(id, USD_LUX_TOKEN_SHAPING_CONE_ANGLE);
+            auto coneSoftness = sceneDelegate->GetLightParamValue(id, USD_LUX_TOKEN_SHAPING_CONE_SOFTNESS);
             if (coneAngle.IsHolding<float>() && coneSoftness.IsHolding<float>()) {
                 if (auto light = rprApi->CreateSpotLight(coneAngle.UncheckedGet<float>(), coneSoftness.UncheckedGet<float>())) {
                     m_light = light;

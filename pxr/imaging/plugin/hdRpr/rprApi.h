@@ -71,8 +71,8 @@ public:
     HdRprApi(HdRprDelegate* delegate);
     ~HdRprApi();
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& pathTotexture, float intensity);
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity);
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& pathTotexture, float intensity, VtValue const& backgroundOverride);
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity, VtValue const& backgroundOverride);
     void SetTransform(HdRprApiEnvironmentLight* envLight, GfMatrix4f const& transform);
     void Release(HdRprApiEnvironmentLight* envLight);
 
@@ -109,12 +109,13 @@ public:
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform);
     void Release(HdRprApiVolume* volume);
 
-    RprUsdMaterial* CreateMaterial(HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork);
+    RprUsdMaterial* CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork);
     RprUsdMaterial* CreatePointsMaterial(VtVec3fArray const& colors);
     RprUsdMaterial* CreateDiffuseMaterial(GfVec3f const& color);
     void Release(RprUsdMaterial* material);
 
-    rpr::Shape* CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding);
+    rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndexes, VtVec3fArray const& normals, VtIntArray const& normalIndexes, VtVec2fArray const& uvs, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding);
+    rpr::Shape* CreateMesh(VtArray<VtVec3fArray> const& pointSamples, VtIntArray const& pointIndexes, VtArray<VtVec3fArray> const& normalSamples, VtIntArray const& normalIndexes, VtArray<VtVec2fArray> const& uvSamples, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding);
     rpr::Shape* CreateMeshInstance(rpr::Shape* prototypeMesh);
     void SetMeshRefineLevel(rpr::Shape* mesh, int level);
     void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation);
@@ -158,7 +159,7 @@ public:
     RenderStats GetRenderStats() const;
 
     void CommitResources();
-    void Resolve();
+    void Resolve(SdfPath const& aovId);
     void Render(HdRprRenderThread* renderThread);
     void AbortRender();
 

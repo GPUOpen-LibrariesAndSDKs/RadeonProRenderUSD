@@ -5,12 +5,16 @@ if(NOT MaterialX_FOUND)
     # If MaterialX was not explicitly provided, use the one from a submodule
     set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
     set(MATERIALX_PYTHON_LTO OFF)
-    set(MATERIALX_INSTALL_PYTHON OFF)
     set(MATERIALX_BUILD_RENDER OFF)
     set(MATERIALX_BUILD_GEN_GLSL OFF)
     set(MATERIALX_BUILD_GEN_OSL OFF)
     set(MATERIALX_BUILD_TESTS OFF)
-    add_subdirectory(MaterialX EXCLUDE_FROM_ALL) # EXCLUDE_FROM_ALL allows us to skip installation of mtlx static libraries
+
+    if(MATERIALX_BUILD_PYTHON AND MATERIALX_INSTALL_PYTHON)
+        add_subdirectory(MaterialX)
+    else()
+        add_subdirectory(MaterialX EXCLUDE_FROM_ALL) # EXCLUDE_FROM_ALL allows us to skip installation of mtlx static libraries
+    endif()
 
     install(
         FILES
@@ -69,5 +73,14 @@ if(HoudiniUSD_FOUND)
     # Currently we use it only in activateHoudiniPlugin utility
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ghc_filesystem)
 endif()
+
+# Murmurhash
+# ----------------------------------------------
+
+set(MURMURHASH_DIR ${CMAKE_CURRENT_SOURCE_DIR}/murmurhash/src)
+add_library(murmurhash STATIC
+    ${MURMURHASH_DIR}/MurmurHash3.h
+    ${MURMURHASH_DIR}/MurmurHash3.cpp)
+target_include_directories(murmurhash PUBLIC ${MURMURHASH_DIR})
 
 # ----------------------------------------------

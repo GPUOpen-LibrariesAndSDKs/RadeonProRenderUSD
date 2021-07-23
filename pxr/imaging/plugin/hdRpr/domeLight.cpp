@@ -26,6 +26,10 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    ((backgroundOverride, "rpr:backgroundOverride"))
+);
+
 static void removeFirstSlash(std::string& string) {
     // Don't need this for *nix/Mac
 #ifdef _WIN32
@@ -63,13 +67,11 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
 
         bool isVisible = sceneDelegate->GetVisible(id);
         if (!isVisible) {
-            // Invisible light does not produces any emission on a scene.
-            // So we simply keep light primitive empty in that case.
-            // We can do it in such a way because Hydra releases light object
-            // whenever it changed and creates it from scratch
             *dirtyBits = HdLight::Clean;
             return;
         }
+
+        VtValue const& backgroundOverride = sceneDelegate->GetLightParamValue(id, _tokens->backgroundOverride);
 
         float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
         float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
@@ -100,9 +102,9 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
                 color[2] *= temperatureColor[2];
             }
 
-            m_rprLight = rprApi->CreateEnvironmentLight(color, computedIntensity);
+            m_rprLight = rprApi->CreateEnvironmentLight(color, computedIntensity, backgroundOverride);
         } else {
-            m_rprLight = rprApi->CreateEnvironmentLight(texturePath, computedIntensity);
+            m_rprLight = rprApi->CreateEnvironmentLight(texturePath, computedIntensity, backgroundOverride);
         }
 
         if (m_rprLight) {

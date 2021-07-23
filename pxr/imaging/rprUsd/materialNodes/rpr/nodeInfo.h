@@ -15,8 +15,43 @@ limitations under the License.
 #define RPRUSD_MATERIAL_NODES_RPR_NODE_INFO_H
 
 #include "pxr/imaging/rprUsd/materialRegistry.h"
+#include "pxr/base/gf/vec2f.h"
+
+namespace std {
+
+PXR_NAMESPACE_USING_DIRECTIVE
+
+inline std::string to_string(GfVec2f const& v) {
+    return TfStringPrintf("%f,%f", v[0], v[1]);
+}
+
+inline std::string to_string(GfVec3f const& v) {
+    return TfStringPrintf("%f,%f,%f", v[0], v[1], v[2]);
+}
+
+inline std::string to_string(TfToken const& v) {
+    return v.GetString();
+}
+
+} // namespace std
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+template <typename T>
+struct ToRprUsdMaterialNodeInputType;
+
+#define DEFINE_TYPE_CONVERSION(c_type, material_type) \
+    template <> \
+    struct ToRprUsdMaterialNodeInputType<c_type> { \
+        static constexpr RprUsdMaterialNodeInput::Type value = RprUsdMaterialNodeInput::k##material_type; \
+    };
+
+DEFINE_TYPE_CONVERSION(bool, Boolean);
+DEFINE_TYPE_CONVERSION(int, Integer);
+DEFINE_TYPE_CONVERSION(float, Float);
+DEFINE_TYPE_CONVERSION(GfVec2f, Vector2);
+DEFINE_TYPE_CONVERSION(GfVec3f, Color3);
+DEFINE_TYPE_CONVERSION(TfToken, Token);
 
 struct RprUsd_RprNodeInput : public RprUsdMaterialNodeInput {
     RprUsd_RprNodeInput(RprUsdMaterialNodeInput::Type type) : RprUsdMaterialNodeInput(type) {}
@@ -29,9 +64,26 @@ struct RprUsd_RprNodeInput : public RprUsdMaterialNodeInput {
     const char* GetUIFolder() const override { return GetCStr(uiFolder); }
     const char* GetDocString() const override { return GetCStr(docString); }
     const char* GetValueString() const override { return GetCStr(valueString); }
-    std::vector<TfToken> const& GetTokenValues() const override { return m_tokenValues; }
+    std::vector<TfToken> const& GetTokenValues() const override { return tokenValues; }
 
-    std::string name;
+    template <typename T>
+    RprUsd_RprNodeInput(TfToken const& name, T defaultValue, RprUsdMaterialNodeInput::Type type = RprUsdMaterialNodeInput::kInvalid, const char* uiName = nullptr)
+        : RprUsdMaterialNodeInput(type != RprUsdMaterialNodeInput::kInvalid ? type : ToRprUsdMaterialNodeInputType<T>::value)
+        , name(name)
+        , uiSoftMin("0")
+        , uiSoftMax("1")
+        , value(VtValue(defaultValue))
+        , valueString(std::to_string(defaultValue)) {
+        if (!uiName) {
+            this->uiName = name.GetString();
+            this->uiName[0] = ::toupper(this->uiName[0]);
+        } else {
+            this->uiName = uiName;
+        }
+        
+    }
+
+    TfToken name;
     std::string uiName;
     std::string uiMin;
     std::string uiSoftMin;
@@ -39,8 +91,9 @@ struct RprUsd_RprNodeInput : public RprUsdMaterialNodeInput {
     std::string uiSoftMax;
     std::string uiFolder;
     std::string docString;
+    VtValue value;
     std::string valueString;
-    std::vector<TfToken> m_tokenValues;
+    std::vector<TfToken> tokenValues;
 };
 
 struct RprUsd_RprNodeOutput : public RprUsdMaterialNodeElement {

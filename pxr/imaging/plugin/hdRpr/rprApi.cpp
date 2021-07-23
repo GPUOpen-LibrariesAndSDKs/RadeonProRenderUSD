@@ -30,8 +30,6 @@ using json = nlohmann::json;
 #include "renderParam.h"
 
 #include "pxr/imaging/rprUsd/util.h"
-#include "pxr/imaging/glf/uvTextureData.h"
-
 #include "pxr/imaging/rprUsd/config.h"
 #include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/helpers.h"
@@ -52,12 +50,21 @@ using json = nlohmann::json;
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
+#include "pxr/base/tf/fileUtils.h"
 #include "pxr/base/tf/getenv.h"
+#include "pxr/base/work/loops.h"
 
 #include "notify/message.h"
 
 #include <RadeonProRender_Baikal.h>
 #include <RprLoadStore.h>
+
+#ifdef RPR_EXR_EXPORT_ENABLED
+#include <MurmurHash3.h>
+#include <ImfOutputFile.h>
+#include <ImfChannelList.h>
+#include <ImfStringAttribute.h>
+#endif // RPR_EXR_EXPORT_ENABLED
 
 #ifdef BUILD_AS_HOUDINI_PLUGIN
 #include <HOM/HOM_Module.h>
@@ -74,6 +81,12 @@ TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
     "Set this to override render quality coming from the render settings");
 
 namespace {
+
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    (batch)
+    (renderMode)
+    (progressive)
+);
 
 TfToken GetRenderQuality(HdRprConfig const& config) {
     std::string renderQualityOverride = TfGetEnvSetting(HDRPR_RENDER_QUALITY_OVERRIDE);
@@ -106,6 +119,67 @@ RprUsdRenderDeviceType ToRprUsd(TfToken const& configDeviceType) {
     } else {
         return RprUsdRenderDeviceType::Invalid;
     }
+}
+
+bool CreateIntermediateDirectories(std::string const& filePath) {
+    auto dir = TfGetPathName(filePath);
+    if (!dir.empty()) {
+        return TfMakeDirs(dir, -1, true);
+    }
+    return true;
+}
+
+template <typename T>
+void UnalignedRead(void const* src, size_t* offset, T* dst) {
+    std::memcpy(dst, (uint8_t const*)src + *offset, sizeof(T));
+    *offset += sizeof(T);
+}
+
+GfVec4f ColorizeId(uint32_t id) {
+    return {
+        (float)(id & 0xFF) / 0xFF,
+        (float)((id & 0xFF00) >> 8) / 0xFF,
+        (float)((id & 0xFF0000) >> 16) / 0xFF,
+        1.0f
+    };
+}
+
+template <typename T>
+std::unique_ptr<T[]> MergeSamples(VtArray<VtArray<T>>* samples, size_t requiredNumSamples, rpr_float const** rprData, size_t* rprDataSize) {
+    if (samples->empty()) {
+        *rprData = nullptr;
+        *rprDataSize = 0;
+        return nullptr;
+    }
+
+    if (samples->size() != requiredNumSamples) {
+        samples->resize(requiredNumSamples, [backElem=samples->back()](auto begin, auto end) {
+            for (auto it = begin; it != end; ++it) {
+                *it = backElem;
+            }
+        });
+    }
+
+    const size_t numSampleValues = samples->cdata()[0].size();
+    auto mergedSamples = std::make_unique<T[]>(requiredNumSamples * numSampleValues);
+
+    for (size_t i = 0; i < requiredNumSamples; ++i) {
+        size_t offset = i * numSampleValues;
+        VtArray<T> const& values = samples->cdata()[i];
+        std::copy(values.cbegin(), values.cend(), mergedSamples.get() + offset);
+
+        if (values.size() != numSampleValues) {
+            TF_RUNTIME_ERROR("Non-uniform size between samples: %zu vs %zu", samples->size(), numSampleValues);
+            *rprData = nullptr;
+            *rprDataSize = 0;
+            return nullptr;
+        }
+    }
+
+    *rprData = (rpr_float const*)mergedSamples.get();
+    *rprDataSize = requiredNumSamples * numSampleValues;
+
+    return mergedSamples;
 }
 
 } // namespace anonymous
@@ -242,6 +316,9 @@ struct HdRprApiEnvironmentLight {
     std::unique_ptr<rpr::EnvironmentLight> light;
     std::unique_ptr<RprUsdCoreImage> image;
 
+    std::unique_ptr<rpr::EnvironmentLight> backgroundOverrideLight;
+    std::unique_ptr<RprUsdCoreImage> backgroundOverrideImage;
+
     enum {
         kDetached,
         kAttachedAsLight,
@@ -294,33 +371,51 @@ public:
         }
     }
 
-    rpr::Shape* CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes,
-                           VtVec3fArray normals, const VtIntArray& normalIndexes,
-                           VtVec2fArray uvs, const VtIntArray& uvIndexes,
-                           const VtIntArray& vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
+    rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndices,
+                           VtVec3fArray const& normals, VtIntArray const& normalIndices,
+                           VtVec2fArray const& uvs, VtIntArray const& uvIndices,
+                           VtIntArray const& vpf, TfToken const& polygonWinding = HdTokens->rightHanded) {
+        VtArray<VtVec3fArray> pointSamples;
+        VtArray<VtVec3fArray> normalSamples;
+        VtArray<VtVec2fArray> uvSamples;
+
+        if (!points.empty()) pointSamples.push_back(points);
+        if (!normals.empty()) normalSamples.push_back(normals);
+        if (!uvs.empty()) uvSamples.push_back(uvs);
+
+        return CreateMesh(pointSamples, pointIndices, normalSamples, normalIndices, uvSamples, uvIndices, vpf, polygonWinding);
+    }
+
+    rpr::Shape* CreateMesh(VtArray<VtVec3fArray> pointSamples, VtIntArray const& pointIndices,
+                           VtArray<VtVec3fArray> normalSamples, VtIntArray const& normalIndices,
+                           VtArray<VtVec2fArray> uvSamples, VtIntArray const& uvIndices,
+                           VtIntArray const& vpf, TfToken const& polygonWinding) {
         if (!m_rprContext) {
             return nullptr;
         }
 
-        VtIntArray newIndexes, newVpf;
-        SplitPolygons(pointIndexes, vpf, newIndexes, newVpf);
-        ConvertIndices(&newIndexes, newVpf, polygonWinding);
+        VtIntArray newIndices, newVpf;
+        SplitPolygons(pointIndices, vpf, newIndices, newVpf);
+        ConvertIndices(&newIndices, newVpf, polygonWinding);
 
-        VtIntArray newNormalIndexes;
-        if (normals.empty()) {
+        VtIntArray newNormalIndices;
+        if (normalSamples.empty()) {
             if (m_rprContextMetadata.pluginType == kPluginHybrid) {
                 // XXX (Hybrid): we need to generate geometry normals by ourself
+                VtVec3fArray normals;
                 normals.reserve(newVpf.size());
-                newNormalIndexes.clear();
-                newNormalIndexes.reserve(newIndexes.size());
+                newNormalIndices.clear();
+                newNormalIndices.reserve(newIndices.size());
+
+                auto& points = pointSamples[0];
 
                 size_t indicesOffset = 0u;
                 for (auto numVerticesPerFace : newVpf) {
                     for (int i = 0; i < numVerticesPerFace; ++i) {
-                        newNormalIndexes.push_back(normals.size());
+                        newNormalIndices.push_back(normals.size());
                     }
 
-                    auto indices = &newIndexes[indicesOffset];
+                    auto indices = &newIndices[indicesOffset];
                     indicesOffset += numVerticesPerFace;
 
                     auto p0 = points[indices[0]];
@@ -334,52 +429,106 @@ public:
                     GfNormalize(&normal);
                     normals.push_back(normal);
                 }
+
+                normalSamples.push_back(normals);
             }
         } else {
-            if (!normalIndexes.empty()) {
-                SplitPolygons(normalIndexes, vpf, newNormalIndexes);
-                ConvertIndices(&newNormalIndexes, newVpf, polygonWinding);
+            if (!normalIndices.empty()) {
+                SplitPolygons(normalIndices, vpf, newNormalIndices);
+                ConvertIndices(&newNormalIndices, newVpf, polygonWinding);
             } else {
-                newNormalIndexes = newIndexes;
+                newNormalIndices = newIndices;
             }
         }
 
-        VtIntArray newUvIndexes;
-        if (uvs.empty()) {
+        VtIntArray newUvIndices;
+        if (uvSamples.empty()) {
             if (m_rprContextMetadata.pluginType == kPluginHybrid) {
-                newUvIndexes = newIndexes;
-                uvs = VtVec2fArray(points.size(), GfVec2f(0.0f));
+                newUvIndices = newIndices;
+                VtVec2fArray uvs(pointSamples[0].size(), GfVec2f(0.0f));
+                uvSamples.push_back(uvs);
             }
         } else {
-            if (!uvIndexes.empty()) {
-                SplitPolygons(uvIndexes, vpf, newUvIndexes);
-                ConvertIndices(&newUvIndexes, newVpf, polygonWinding);
+            if (!uvIndices.empty()) {
+                SplitPolygons(uvIndices, vpf, newUvIndices);
+                ConvertIndices(&newUvIndices, newVpf, polygonWinding);
             } else {
-                newUvIndexes = newIndexes;
+                newUvIndices = newIndices;
             }
         }
 
-        auto normalIndicesData = !newNormalIndexes.empty() ? newNormalIndexes.data() : newIndexes.data();
-        if (normals.empty()) {
+        auto normalIndicesData = !newNormalIndices.empty() ? newNormalIndices.data() : newIndices.data();
+        if (normalSamples.empty()) {
             normalIndicesData = nullptr;
         }
 
-        auto uvIndicesData = !newUvIndexes.empty() ? newUvIndexes.data() : uvIndexes.data();
-        if (uvs.empty()) {
+        auto uvIndicesData = !newUvIndices.empty() ? newUvIndices.data() : uvIndices.data();
+        if (uvSamples.empty()) {
             uvIndicesData = nullptr;
         }
+
+        rpr_float const* pointsData = nullptr;
+        rpr_float const* normalsData = nullptr;
+        rpr_float const* uvsData = nullptr;
+        size_t numPoints = 0;
+        size_t numNormals = 0;
+        size_t numUvs = 0;
+
+        std::vector<rpr_mesh_info> meshProperties(1, rpr_mesh_info(0));
+
+        std::unique_ptr<GfVec3f[]> mergedPoints;
+        std::unique_ptr<GfVec3f[]> mergedNormals;
+        std::unique_ptr<GfVec2f[]> mergedUvs;
+
+        size_t numMeshSamples = std::max(std::max(pointSamples.size(), normalSamples.size()), uvSamples.size());
+
+        // XXX (RPR): Only Northstar supports deformation motion blur. Use only the first sample for all other plugins.
+        if (m_rprContextMetadata.pluginType != kPluginNorthstar) {
+            numMeshSamples = 1;
+        }
+
+        if (numMeshSamples > 1) {
+            meshProperties[0] = (rpr_mesh_info)RPR_MESH_MOTION_DIMENSION;
+            meshProperties[1] = (rpr_mesh_info)numMeshSamples;
+            meshProperties[2] = (rpr_mesh_info)0;
+
+            mergedPoints = MergeSamples(&pointSamples, numMeshSamples, &pointsData, &numPoints);
+            mergedNormals = MergeSamples(&normalSamples, numMeshSamples, &normalsData, &numNormals);
+            mergedUvs = MergeSamples(&uvSamples, numMeshSamples, &uvsData, &numUvs);
+
+        } else {
+            if (pointSamples.empty()) {
+                return nullptr;
+            }
+            pointsData = (rpr_float const*)pointSamples[0].cdata();
+            numPoints = pointSamples[0].size();
+
+            if (!normalSamples.empty()) {
+                normalsData = (rpr_float const*)normalSamples[0].data();
+                numNormals = normalSamples[0].size();
+            }
+            
+            if (!uvSamples.empty()) {
+                uvsData = (rpr_float const*)uvSamples[0].data();
+                numUvs = uvSamples[0].size();
+            }
+        }
+
+        rpr_int texCoordStride = sizeof(GfVec2f);
+        rpr_int texCoordIdxStride = sizeof(rpr_int);
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
         rpr::Status status;
         auto mesh = m_rprContext->CreateShape(
-            (rpr_float const*)points.data(), points.size(), sizeof(GfVec3f),
-            (rpr_float const*)(normals.data()), normals.size(), sizeof(GfVec3f),
-            (rpr_float const*)(uvs.data()), uvs.size(), sizeof(GfVec2f),
-            newIndexes.data(), sizeof(rpr_int),
+            pointsData, numPoints, sizeof(GfVec3f),
+            normalsData, numNormals, sizeof(GfVec3f),
+            nullptr, 0, 0,
+            1, &uvsData, &numUvs, &texCoordStride,
+            newIndices.data(), sizeof(rpr_int),
             normalIndicesData, sizeof(rpr_int),
-            uvIndicesData, sizeof(rpr_int),
-            newVpf.data(), newVpf.size(), &status);
+            &uvIndicesData, &texCoordIdxStride,
+            newVpf.data(), newVpf.size(), meshProperties.data(), &status);
         if (!mesh) {
             RPR_ERROR_CHECK(status, "Failed to create mesh");
             return nullptr;
@@ -752,7 +901,7 @@ public:
         }
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<RprUsdCoreImage>&& image, float intensity) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<RprUsdCoreImage>&& image, float intensity, VtValue const& backgroundOverride) {
         // XXX (RPR): default environment light should be removed before creating a new one - RPR limitation
         RemoveDefaultLight();
 
@@ -785,6 +934,20 @@ public:
             return nullptr;
         }
 
+        if (backgroundOverride.IsHolding<GfVec3f>()) {
+            GfVec3f const& backgroundOverrideColor = backgroundOverride.UncheckedGet<GfVec3f>();
+            envLight->backgroundOverrideLight.reset(m_rprContext->CreateEnvironmentLight(&status));
+            envLight->backgroundOverrideImage = CreateConstantColorImage(backgroundOverrideColor.data());
+
+            if (!envLight->backgroundOverrideLight ||
+                !envLight->backgroundOverrideImage ||
+                RPR_ERROR_CHECK(envLight->backgroundOverrideLight->SetImage(envLight->backgroundOverrideImage->GetRootImage()), "Failed to set background override env light image", m_rprContext.get()) ||
+                RPR_ERROR_CHECK(envLight->light->SetEnvironmentLightOverride(RPR_ENVIRONMENT_LIGHT_OVERRIDE_BACKGROUND, envLight->backgroundOverrideLight.get()), "Failed to set env light background override")) {
+                envLight->backgroundOverrideLight = nullptr;
+                envLight->backgroundOverrideImage = nullptr;
+            }
+        }
+
         m_dirtyFlags |= ChangeTracker::DirtyScene;
         m_numLights++;
         return envLight;
@@ -814,7 +977,7 @@ public:
         }
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& path, float intensity) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& path, float intensity, VtValue const& backgroundOverride) {
         if (!m_rprContext || path.empty()) {
             return nullptr;
         }
@@ -826,29 +989,22 @@ public:
             return nullptr;
         }
 
-        return CreateEnvironmentLight(std::move(image), intensity);
+        return CreateEnvironmentLight(std::move(image), intensity, backgroundOverride);
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity, VtValue const& backgroundOverride) {
         if (!m_rprContext) {
             return nullptr;
         }
 
-        std::array<float, 3> backgroundColor = {color[0], color[1], color[2]};
-        rpr_image_format format = {3, RPR_COMPONENT_TYPE_FLOAT32};
-        rpr_uint imageSize = m_rprContextMetadata.pluginType == kPluginHybrid ? 64 : 1;
-        std::vector<std::array<float, 3>> imageData(imageSize * imageSize, backgroundColor);
-
         LockGuard rprLock(m_rprContext->GetMutex());
 
-        rpr::Status status;
-        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), imageSize, imageSize, format, imageData.data(), &status));
-        if (!image) {
-            RPR_ERROR_CHECK(status, "Failed to create image", m_rprContext.get());
+        auto backgroundImage = CreateConstantColorImage(color.data());
+        if (!backgroundImage) {
             return nullptr;
         }
 
-        return CreateEnvironmentLight(std::move(image), intensity);
+        return CreateEnvironmentLight(std::move(backgroundImage), intensity, backgroundOverride);
     }
 
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
@@ -994,13 +1150,13 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
-    RprUsdMaterial* CreateMaterial(HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
+    RprUsdMaterial* CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
         if (!m_rprContext) {
             return nullptr;
         }
 
         LockGuard rprLock(m_rprContext->GetMutex());
-        return RprUsdMaterialRegistry::GetInstance().CreateMaterial(sceneDelegate, materialNetwork, m_rprContext.get(), m_imageCache.get());
+        return RprUsdMaterialRegistry::GetInstance().CreateMaterial(materialId, sceneDelegate, materialNetwork, m_rprContext.get(), m_imageCache.get());
     }
 
     RprUsdMaterial* CreatePointsMaterial(VtVec3fArray const& colors) {
@@ -1475,15 +1631,15 @@ public:
 
     rpr_uint GetRprRenderMode(TfToken const& mode) {
         static std::map<TfToken, rpr_render_mode> s_mapping = {
-            {HdRprRenderModeTokens->GlobalIllumination, RPR_RENDER_MODE_GLOBAL_ILLUMINATION},
-            {HdRprRenderModeTokens->DirectIllumination, RPR_RENDER_MODE_DIRECT_ILLUMINATION},
-            {HdRprRenderModeTokens->Wireframe, RPR_RENDER_MODE_WIREFRAME},
-            {HdRprRenderModeTokens->MaterialIndex, RPR_RENDER_MODE_MATERIAL_INDEX},
-            {HdRprRenderModeTokens->Position, RPR_RENDER_MODE_POSITION},
-            {HdRprRenderModeTokens->Normal, RPR_RENDER_MODE_NORMAL},
-            {HdRprRenderModeTokens->Texcoord, RPR_RENDER_MODE_TEXCOORD},
-            {HdRprRenderModeTokens->AmbientOcclusion, RPR_RENDER_MODE_AMBIENT_OCCLUSION},
-            {HdRprRenderModeTokens->Diffuse, RPR_RENDER_MODE_DIFFUSE},
+            {HdRprCoreRenderModeTokens->GlobalIllumination, RPR_RENDER_MODE_GLOBAL_ILLUMINATION},
+            {HdRprCoreRenderModeTokens->DirectIllumination, RPR_RENDER_MODE_DIRECT_ILLUMINATION},
+            {HdRprCoreRenderModeTokens->Wireframe, RPR_RENDER_MODE_WIREFRAME},
+            {HdRprCoreRenderModeTokens->MaterialIndex, RPR_RENDER_MODE_MATERIAL_INDEX},
+            {HdRprCoreRenderModeTokens->Position, RPR_RENDER_MODE_POSITION},
+            {HdRprCoreRenderModeTokens->Normal, RPR_RENDER_MODE_NORMAL},
+            {HdRprCoreRenderModeTokens->Texcoord, RPR_RENDER_MODE_TEXCOORD},
+            {HdRprCoreRenderModeTokens->AmbientOcclusion, RPR_RENDER_MODE_AMBIENT_OCCLUSION},
+            {HdRprCoreRenderModeTokens->Diffuse, RPR_RENDER_MODE_DIFFUSE},
         };
 
         auto it = s_mapping.find(mode);
@@ -1497,10 +1653,10 @@ public:
         }
         m_dirtyFlags |= ChangeTracker::DirtyScene;
 
-        auto& renderMode = preferences.GetRenderMode();
+        auto& renderMode = preferences.GetCoreRenderMode();
 
         if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
-            if (renderMode == HdRprRenderModeTokens->Contour) {
+            if (renderMode == HdRprCoreRenderModeTokens->Contour) {
                 if (!m_contourAovs) {
                     m_contourAovs = std::make_unique<ContourRenderModeAovs>();
                     m_contourAovs->normal = CreateAov(HdAovTokens->normal);
@@ -1536,7 +1692,7 @@ public:
         }
 
         RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, GetRprRenderMode(renderMode)), "Failed to set render mode");
-        if (renderMode == HdRprRenderModeTokens->AmbientOcclusion) {
+        if (renderMode == HdRprCoreRenderModeTokens->AmbientOcclusion) {
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_AO_RAY_LENGTH, preferences.GetAoRadius()), "Failed to set ambient occlusion radius");
         }
     }
@@ -1631,6 +1787,17 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_RENDERING_COLOR_SPACE, preferences.GetOcioRenderingColorSpace().c_str()), "Faled to set OCIO rendering color space");
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyCryptomatte) || force) {
+#ifdef RPR_EXR_EXPORT_ENABLED
+                m_cryptomatteOutputPath = preferences.GetCryptomatteOutputPath();
+                m_cryptomattePreviewLayer = preferences.GetCryptomattePreviewLayer();
+#else
+                if (!preferences.GetCryptomatteOutputPath().empty()) {
+                    fprintf(stderr, "Cryptomatte export is not supported: hdRpr compiled without .exr support\n");
+                }
+#endif // RPR_EXR_EXPORT_ENABLED
+            }
         }
     }
 
@@ -1672,6 +1839,42 @@ public:
             m_isAlphaEnabled = preferences.GetEnableAlpha();
 
             UpdateColorAlpha(m_colorAov.get());
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtySession) || force) {
+            m_isProgressive = preferences.GetProgressive();
+            bool isBatch = preferences.GetRenderMode() == HdRprRenderModeTokens->batch;
+            if (m_isBatch != isBatch) {
+                m_isBatch = isBatch;
+                m_batchREM = isBatch ? std::make_unique<BatchRenderEventManager>() : nullptr;
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtySession) || preferences.IsDirty(HdRprConfig::DirtyCryptomatte) || force) {
+            if (!m_cryptomatteOutputPath.empty() &&
+                (m_isBatch || preferences.GetCryptomatteOutputMode() == HdRprCryptomatteOutputModeTokens->Interactive) &&
+                m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                if (!m_cryptomatteAovs) {
+                    auto cryptomatteAovs = std::make_unique<CryptomatteAovs>();
+                    cryptomatteAovs->obj.aov[0] = CreateAov(HdRprAovTokens->cryptomatteObj0);
+                    cryptomatteAovs->obj.aov[1] = CreateAov(HdRprAovTokens->cryptomatteObj1);
+                    cryptomatteAovs->obj.aov[2] = CreateAov(HdRprAovTokens->cryptomatteObj2);
+                    cryptomatteAovs->mat.aov[0] = CreateAov(HdRprAovTokens->cryptomatteMat0);
+                    cryptomatteAovs->mat.aov[1] = CreateAov(HdRprAovTokens->cryptomatteMat1);
+                    cryptomatteAovs->mat.aov[2] = CreateAov(HdRprAovTokens->cryptomatteMat2);
+                    for (int i = 0; i < 3; ++i) {
+                        if (!cryptomatteAovs->obj.aov[i] ||
+                            !cryptomatteAovs->mat.aov[i]) {
+                            cryptomatteAovs = nullptr;
+                            break;
+                        }
+                    }
+                    m_cryptomatteAovs = std::move(cryptomatteAovs);
+                }
+            } else {
+                m_cryptomatteAovs = nullptr;
+            }
         }
     }
 
@@ -1781,7 +1984,9 @@ public:
 
             float focusDistance = 1.0f;
             m_hdCamera->GetFocusDistance(&focusDistance);
-            RPR_ERROR_CHECK(m_camera->SetFocusDistance(focusDistance), "Failed to set camera focus distance");
+            if (focusDistance > 0.0f) {
+                RPR_ERROR_CHECK(m_camera->SetFocusDistance(focusDistance), "Failed to set camera focus distance");
+            }
 
             float fstop = 0.0f;
             m_hdCamera->GetFStop(&fstop);
@@ -2066,28 +2271,206 @@ public:
         return true;
     }
 
+    uint32_t cryptomatte_avoid_bad_float_hash(uint32_t hash) {
+        // from Cryptomatte Specification version 1.2.0
+        // This is for avoiding nan, inf, subnormals
+        // 
+        // if all exponent bits are 0 (subnormals, +zero, -zero) set exponent to 1
+        // if all exponent bits are 1 (NaNs, +inf, -inf) set exponent to 254
+        uint32_t exponent = hash >> 23 & 255; // extract exponent (8 bits)
+        if (exponent == 0 || exponent == 255) {
+            hash ^= 1 << 23; // toggle bit
+        }
+        return hash;
+    }
+    std::string cryptomatte_hash_name(const char* name, size_t size) {
+        uint32_t m3hash = 0;
+        MurmurHash3_x86_32(name, size, 0, &m3hash);
+        m3hash = cryptomatte_avoid_bad_float_hash(m3hash);
+        return TfStringPrintf("%08x", m3hash);
+    }
+    template <size_t size>
+    std::string cryptomatte_hash_name(char (&name)[size]) {
+        return cryptomatte_hash_name(name, size);
+    }
+    std::string cryptomatte_hash_name(std::string const& name) {
+        return cryptomatte_hash_name(name.c_str(), name.size());
+    }
+
+    void SaveCryptomatte() {
+#ifdef RPR_EXR_EXPORT_ENABLED
+        if (m_cryptomatteAovs &&
+            m_numSamples == m_maxSamples) {
+
+            std::string outputPath = m_cryptomatteOutputPath;
+            std::string filename = TfGetBaseName(outputPath);
+            if (filename.empty()) {
+                TF_WARN("Cryptomatte output path should be a path to .exr file");
+                outputPath = TfStringCatPaths(outputPath, "cryptomatte.exr");
+            } else if (!TfStringEndsWith(outputPath, ".exr")) {
+                TF_WARN("Cryptomatte output path should be a path to .exr file");
+                outputPath += ".exr";
+            }
+
+            if (!CreateIntermediateDirectories(outputPath)) {
+                fprintf(stderr, "Failed to save cryptomatte aov: cannot create intermediate directories - %s\n", outputPath.c_str());
+                return;
+            }
+
+            // Generate manifests
+            std::string objectManifestEncoded;
+            std::string materialManifestEncoded;
+
+            if (auto shapes = RprUsdGetListInfo<rpr_shape>(m_rprContext.get(), RPR_CONTEXT_LIST_CREATED_SHAPES)) {
+                json objectManifest;
+                json materialManifest;
+                for (size_t iShape = 0; iShape < shapes.size; ++iShape) {
+                    auto shape = RprUsdGetRprObject<rpr::Shape>(shapes.data[iShape]);
+                    if (auto name = RprUsdGetListInfo<char>(shape, RPR_SHAPE_NAME)) {
+                        objectManifest[name.data.get()] = cryptomatte_hash_name(name.data.get(), name.size - 1);
+                    }
+
+                    if (rpr_material_node rprMaterialNode = RprUsdGetInfo<rpr_material_node>(shape, RPR_SHAPE_MATERIAL)) {
+                        auto name = RprUsdGetListInfo<char>(
+                            [rprMaterialNode](size_t size, void* data, size_t* size_ret) {
+                                return rprMaterialNodeGetInfo(rprMaterialNode, RPR_MATERIAL_NODE_NAME, size, data, size_ret);
+                            }
+                        );
+                        if (name) {
+                            materialManifest[name.data.get()] = cryptomatte_hash_name(name.data.get(), name.size - 1);
+                        }
+                    }
+                }
+                objectManifestEncoded = objectManifest.dump();
+                materialManifestEncoded = materialManifest.dump();
+            }
+
+            try {
+                namespace exr = OPENEXR_IMF_NAMESPACE;
+                exr::FrameBuffer exrFb;
+                exr::Header exrHeader(m_viewportSize[0], m_viewportSize[1]);
+                exrHeader.compression() = exr::ZIPS_COMPRESSION;
+
+                const int kNumComponents = 4;
+                const char* kComponentNames[kNumComponents] = {".R", ".G", ".B", ".A"};
+
+                size_t linesize = m_viewportSize[0] * kNumComponents * sizeof(float);
+                size_t layersize = m_viewportSize[1] * linesize;
+                std::unique_ptr<char[]> flipBuffer;
+                if (m_isOutputFlipped) {
+                    flipBuffer = std::make_unique<char[]>(layersize);
+                }
+
+                std::vector<std::unique_ptr<char[]>> cryptomatteLayers;
+                std::vector<std::unique_ptr<GfVec4f[]>> previewLayers;
+
+                auto addCryptomatte = [&](const char* name, CryptomatteAov const& cryptomatte, std::string const& manifest) {
+                    std::string nameHash = cryptomatte_hash_name(name).substr(0, 7);
+                    std::string cryptoPrefix = "cryptomatte/" + nameHash + "/";
+                    exrHeader.insert(cryptoPrefix + "name", exr::StringAttribute(name));
+                    exrHeader.insert(cryptoPrefix + "hash", exr::StringAttribute("MurmurHash3_32"));
+                    exrHeader.insert(cryptoPrefix + "conversion", exr::StringAttribute("uint32_to_float32"));
+                    exrHeader.insert(cryptoPrefix + "manifest", exr::StringAttribute(manifest));
+
+                    auto addLayer = [&](const char* layerName, char* basePtr) {
+                        for (int iComponent = 0; iComponent < kNumComponents; ++iComponent) {
+                            std::string channelName = TfStringPrintf("%s%s", layerName, kComponentNames[iComponent]);
+                            exrHeader.channels().insert(channelName.c_str(), exr::Channel(exr::FLOAT));
+
+                            char* dataPtr = &basePtr[iComponent * sizeof(float)];
+                            size_t xStride = kNumComponents * sizeof(float);
+                            size_t yStride = xStride * m_viewportSize[0];
+                            exrFb.insert(channelName.c_str(), exr::Slice(exr::FLOAT, dataPtr, xStride, yStride));
+                        }
+                    };
+
+                    for (int i = 0; i < 3; ++i) {
+                        auto rprLayer = cryptomatte.aov[i]->GetResolvedFb();
+                        cryptomatteLayers.push_back(std::make_unique<char[]>(layersize));
+                        if (!rprLayer->GetData(cryptomatteLayers.back().get(), layersize)) {
+                            throw std::runtime_error("failed to get RPR fb data");
+                        }
+
+                        if (m_isOutputFlipped) {
+                            for (int y = 0; y < m_viewportSize[1]; ++y) {
+                                void* src = &cryptomatteLayers.back()[y * linesize];
+                                void* dst = &flipBuffer[(m_viewportSize[1] - y - 1) * linesize];
+                                std::memcpy(dst, src, linesize);
+                            }
+                            std::swap(flipBuffer, cryptomatteLayers.back());
+                        }
+
+                        std::string layerName = TfStringPrintf("%s0%d", name, i);
+                        addLayer(layerName.c_str(), cryptomatteLayers.back().get());
+                    }
+
+                    if (m_cryptomattePreviewLayer) {
+                        size_t numPixels = m_viewportSize[0] * m_viewportSize[1];
+                        previewLayers.push_back(std::make_unique<GfVec4f[]>(numPixels));
+                        std::memset(previewLayers.back().get(), 0, numPixels * sizeof(GfVec4f));
+
+                        size_t channelOffset = cryptomatteLayers.size() - 3;
+
+                        GfVec4f* previewLayer = previewLayers.back().get();
+                        WorkParallelForN(numPixels,
+                            [&](size_t begin, size_t end) {
+                                for (size_t iChannel = 0; iChannel < 3; ++iChannel) {
+                                    auto channelData = cryptomatteLayers[channelOffset + iChannel].get();
+                                    for (size_t iPixel = begin; iPixel < end; ++iPixel) {
+                                        size_t offset = iPixel * kNumComponents * sizeof(float);
+
+                                        uint32_t id;
+                                        float contrib;
+                                        UnalignedRead(channelData, &offset, &id);
+                                        UnalignedRead(channelData, &offset, &contrib);
+                                        GfVec4f color = ColorizeId(id) * contrib;
+
+                                        UnalignedRead(channelData, &offset, &id);
+                                        UnalignedRead(channelData, &offset, &contrib);
+                                        color += ColorizeId(id) * contrib;
+
+                                        previewLayer[iPixel] += color;
+                                    }
+                                }
+                            }
+                        );
+
+                        addLayer(name, (char*)previewLayer);
+                    }
+                };
+
+                addCryptomatte("CryptoObject", m_cryptomatteAovs->obj, objectManifestEncoded);
+                addCryptomatte("CryptoMaterial", m_cryptomatteAovs->mat, materialManifestEncoded);
+
+                ArchUnlinkFile(outputPath.c_str());
+                exr::OutputFile exrFile(outputPath.c_str(), exrHeader);
+                exrFile.setFrameBuffer(exrFb);
+                exrFile.writePixels(m_viewportSize[1]);
+            } catch (std::exception& e) {
+                fprintf(stderr, "Failed to save cryptomatte: %s", e.what());
+            }
+        }
+#endif // RPR_EXR_EXPORT_ENABLED
+    }
+
     void BatchRenderImpl(HdRprRenderThread* renderThread) {
         if (!CommonRenderImplPrologue()) {
             return;
         }
 
-        if (!m_batchREM) {
-            m_batchREM = std::make_unique<BatchRenderEventManager>();
-        }
         auto renderScope = m_batchREM->EnterRenderScope();
 
         EnableRenderUpdateCallback(BatchRenderUpdateCallback);
 
-        // In a batch session, we disable resolving of all samples except the first and last.
-        // Also, if the user will keep progressive mode on, we support snapshoting (resolving intermediate renders)
-
-        // User might decide to completely disable progress updates to maximize performance.
-        // In this case, snapshoting is not available.
-        const bool isProgressive = m_delegate->IsProgressive();
-
         // Also, we try to maximize the number of samples rendered with one rprContextRender call.
         bool isMaximizingContextIterations = false;
-        if (isProgressive) {
+
+        // In a batch session, we disable resolving of all samples except the first and last.
+        // Also, if the user will keep progressive mode on, we support snapshoting (resolving intermediate renders)
+        //
+        // User might decide to completely disable progress updates to maximize performance.
+        // In this case, snapshoting is not available.
+        if (m_isProgressive) {
             // We can keep the ability to log progress and do snapshots
             // while maximizing RPR_CONTEXT_ITERATIONS, only if RUC is supported.
             if (m_isRenderUpdateCallbackEnabled) {
@@ -2197,7 +2580,7 @@ public:
                 }
             }
 
-            if (isAdaptiveSamplingEnabled &&
+            if (isAdaptiveSamplingEnabled && m_numSamples >= m_minSamples && 
                 RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                 m_activePixels = -1;
             }
@@ -2327,7 +2710,7 @@ public:
                 ResolveFramebuffers();
             }
 
-            if (IsAdaptiveSamplingEnabled() &&
+            if (IsAdaptiveSamplingEnabled() && m_numSamples >= m_minSamples &&
                 RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                 m_activePixels = -1;
             }
@@ -2391,7 +2774,7 @@ public:
 
         if (m_state == kStateRender) {
             try {
-                if (m_delegate->IsBatch()) {
+                if (m_isBatch) {
                     BatchRenderImpl(renderThread);
                 } else {
                     if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid &&
@@ -2401,6 +2784,7 @@ public:
                         RenderImpl(renderThread);
                     }
                 }
+                SaveCryptomatte();
             } catch (std::runtime_error const& e) {
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
             }
@@ -2440,6 +2824,10 @@ Don't show this message again?
             return;
         }
 #endif // BUILD_AS_HOUDINI_PLUGIN
+
+        if (!CreateIntermediateDirectories(m_rprSceneExportPath)) {
+            fprintf(stderr, "Failed to create .rpr export output directory\n");
+        }
 
         uint32_t currentYFlip;
         if (m_isOutputFlipped) {
@@ -2579,15 +2967,16 @@ Don't show this message again?
                     if (aovDesc->id == kColorAlpha) {
                         aovDesc = &HdRprAovRegistry::GetInstance().GetAovDesc(RPR_AOV_COLOR, false);
                     } else if (aovDesc->id == kNdcDepth) {
-                        // RprsRender does not support it...yet?
-                        continue;
+                        // XXX: RprsRender does not support it but for the users, it is more expected if we map it to the linear depth instead of ignoring it at all
+                        aovDesc = &HdRprAovRegistry::GetInstance().GetAovDesc(RPR_AOV_DEPTH, false);
                     } else {
                         fprintf(stderr, "Unprocessed computed AOV: %u\n", aovDesc->id);
                         continue;
                     }
                 }
 
-                if (TF_VERIFY(aovDesc->id < kNumRprsAovNames) &&
+                if (TF_VERIFY(aovDesc->id != kAovNone) &&
+                    TF_VERIFY(aovDesc->id < kNumRprsAovNames) &&
                     TF_VERIFY(!aovDesc->computed)) {
                     auto aovName = kRprsAovNames[aovDesc->id];
                     if (aovDesc->id >= RPR_AOV_LPE_0 && aovDesc->id <= RPR_AOV_LPE_8) {
@@ -2643,7 +3032,7 @@ Don't show this message again?
         RprUsdMaterialRegistry::GetInstance().CommitResources(m_imageCache.get());
     }
 
-    void Resolve() {
+    void Resolve(SdfPath const& aovId) {
         // hdRpr's rendering is implemented asynchronously - rprContextRender spins in the background thread.
         //
         // Resolve works differently depending on the current rendering session type:
@@ -2652,9 +3041,8 @@ Don't show this message again?
         //   * In an interactive session, it simply does nothing because we always resolve
         //      data to HdRenderBuffer as fast as possible. It might change in the future though.
         //
-        if (m_batchREM) {
-            m_batchREM->OnResolveRequest();
-            m_batchREM->WaitUntilNextRenderEvent();
+        if (m_isBatch) {
+            m_batchREM->WaitForResolve(aovId);
         }
     }
 
@@ -2888,6 +3276,10 @@ private:
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
         }
 
+        if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid) {
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_ENABLE_RELAXED_MATERIAL_CHECKS), 1u), "Failed to enable relaxed material checks");
+        }
+
         uint32_t requiredYFlip = 0;
         if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid && m_rprContextMetadata.interopInfo) {
             RPR_ERROR_CHECK_THROW(m_rprContext->GetFunctionPtr(
@@ -2986,7 +3378,7 @@ private:
     void AddDefaultLight() {
         if (!m_defaultLightObject) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
-            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f);
+            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f, VtValue());
 
             if (RprUsdIsLeakCheckEnabled()) {
                 m_defaultLightObject->light->SetName("defaultLight");
@@ -3006,6 +3398,22 @@ private:
             // Do not count default light object
             m_numLights++;
         }
+    }
+
+    std::unique_ptr<RprUsdCoreImage> CreateConstantColorImage(float const* color) {
+        std::array<float, 3> colorArray = {color[0], color[1], color[2]};
+        rpr_image_format format = {3, RPR_COMPONENT_TYPE_FLOAT32};
+        rpr_uint imageSize = m_rprContextMetadata.pluginType == kPluginHybrid ? 64 : 1;
+        std::vector<std::array<float, 3>> imageData(imageSize * imageSize, colorArray);
+
+        rpr::Status status;
+        auto image = std::unique_ptr<RprUsdCoreImage>(RprUsdCoreImage::Create(m_rprContext.get(), imageSize, imageSize, format, imageData.data(), &status));
+        if (!image) {
+            RPR_ERROR_CHECK(status, "Failed to create const color image", m_rprContext.get());
+            return nullptr;
+        }
+
+        return image;
     }
 
     void SplitPolygons(const VtIntArray& indexes, const VtIntArray& vpf, VtIntArray& out_newIndexes, VtIntArray& out_newVpf) {
@@ -3260,7 +3668,7 @@ private:
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiDepthAov(format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
                     newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                     aovCustomDestructor = [this](HdRprApiAov* aov) {
@@ -3270,6 +3678,25 @@ private:
                         m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
                         delete aov;
                     };
+                } else if (aovName == HdRprAovTokens->materialIdMask ||
+                           aovName == HdRprAovTokens->objectIdMask ||
+                           aovName == HdRprAovTokens->objectGroupIdMask) {
+                    TfToken baseAovName;
+                    if (aovName == HdRprAovTokens->materialIdMask) {
+                        baseAovName = HdRprAovTokens->materialId;
+                    } else if (aovName == HdRprAovTokens->objectIdMask) {
+                        baseAovName = HdAovTokens->primId;
+                    } else if (aovName == HdRprAovTokens->objectGroupIdMask) {
+                        baseAovName = HdRprAovTokens->objectGroupId;
+                    }
+
+                    auto baseAov = GetAov(baseAovName, width, height, HdFormatInt32);
+                    if (!baseAov) {
+                        TF_RUNTIME_ERROR("Failed to create %s AOV: cant create %s AOV", aovName.GetText(), baseAovName.GetText());
+                        return nullptr;
+                    }
+
+                    newAov = new HdRprApiIdMaskAov(aovDesc, baseAov, width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else {
                     if (!aovDesc.computed) {
                         newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
@@ -3335,16 +3762,16 @@ private:
             return false;
         }
 
-        auto textureData = GlfUVTextureData::New(path, INT_MAX, 0, 0, 0, 0);
-        if (textureData && textureData->Read(0, false)) {
+        auto textureData = RprUsdTextureData::New(path);
+        if (textureData) {
             rif_image_desc imageDesc = {};
-            imageDesc.image_width = textureData->ResizedWidth();
-            imageDesc.image_height = textureData->ResizedHeight();
+            imageDesc.image_width = textureData->GetWidth();
+            imageDesc.image_height = textureData->GetHeight();
             imageDesc.image_depth = 1;
             imageDesc.image_row_pitch = 0;
             imageDesc.image_slice_pitch = 0;
 
-            auto textureMetadata = RprUsdGetGlfTextureMetadata(&(*textureData));
+            auto textureMetadata = textureData->GetGLMetadata();
 
             uint8_t bytesPerComponent;
             if (textureMetadata.glType == GL_UNSIGNED_BYTE) {
@@ -3379,7 +3806,7 @@ private:
                 return false;
             }
             size_t imageSize = bytesPerComponent * imageDesc.num_components * imageDesc.image_width * imageDesc.image_height;
-            std::memcpy(mappedData, textureData->GetRawBuffer(), imageSize);
+            std::memcpy(mappedData, textureData->GetData(), imageSize);
             RIF_ERROR_CHECK(rifImageUnmap(rifImage->GetHandle(), mappedData), "Failed to unmap rif image");
 
             auto colorRb = static_cast<HdRprRenderBuffer*>(colorOutputRb->aovBinding->renderBuffer);
@@ -3518,32 +3945,37 @@ private:
 
     class BatchRenderEventManager {
     public:
-        void WaitUntilNextRenderEvent() {
+        void WaitForResolve(SdfPath const& aovId) {
+            if (m_signalingAovId.IsEmpty()) {
+                m_signalingAovId = aovId;
+            } else if (m_signalingAovId != aovId) {
+                // When there is more than one bound aov,
+                // we want to avoid blocking resolve for each of them separately.
+                // Instead, block only on the first one only.
+                return;
+            }
+
+            m_isResolveRequested.store(true);
             std::unique_lock<std::mutex> lock(m_renderEventMutex);
             m_renderEventCV.wait(lock, [this]() -> bool { return !m_isRenderInProgress || !m_isResolveRequested; });
         }
 
         class RenderScopeGuard {
         public:
-            RenderScopeGuard(std::atomic<bool>* isRenderInProgress, std::condition_variable* renderEventCV)
-                : m_isRenderInProgress(isRenderInProgress), m_renderEventCV(renderEventCV) {
-                m_isRenderInProgress->store(true);
-                m_renderEventCV->notify_one();
+            RenderScopeGuard(BatchRenderEventManager* rem) : m_rem(rem) {
+                m_rem->m_signalingAovId = SdfPath::EmptyPath();
+                m_rem->m_isRenderInProgress.store(true);
+                m_rem->m_renderEventCV.notify_one();
             }
             ~RenderScopeGuard() {
-                m_isRenderInProgress->store(false);
-                m_renderEventCV->notify_one();
+                m_rem->m_isRenderInProgress.store(false);
+                m_rem->m_renderEventCV.notify_one();
             }
 
         private:
-            std::atomic<bool>* m_isRenderInProgress;
-            std::condition_variable* m_renderEventCV;
+            BatchRenderEventManager* m_rem;
         };
-        RenderScopeGuard EnterRenderScope() { return RenderScopeGuard(&m_isRenderInProgress, &m_renderEventCV); }
-
-        void OnResolveRequest() {
-            m_isResolveRequested.store(true);
-        }
+        RenderScopeGuard EnterRenderScope() { return RenderScopeGuard(this); }
 
         bool IsResolveRequested() const {
             return m_isResolveRequested;
@@ -3559,8 +3991,11 @@ private:
         std::condition_variable m_renderEventCV;
         std::atomic<bool> m_isRenderInProgress{false};
         std::atomic<bool> m_isResolveRequested{false};
+        SdfPath m_signalingAovId;
     };
     std::unique_ptr<BatchRenderEventManager> m_batchREM;
+    std::atomic<bool> m_isBatch{false};
+    bool m_isProgressive;
 
     struct ResolveData {
         struct AovEntry {
@@ -3634,6 +4069,17 @@ private:
     bool m_rprExportAsSingleFile;
     bool m_rprExportUseImageCache;
 
+    std::string m_cryptomatteOutputPath;
+    bool m_cryptomattePreviewLayer;
+    struct CryptomatteAov {
+        std::shared_ptr<HdRprApiAov> aov[3];
+    };
+    struct CryptomatteAovs {
+        CryptomatteAov mat;
+        CryptomatteAov obj;
+    };
+    std::unique_ptr<CryptomatteAovs> m_cryptomatteAovs;
+
     std::condition_variable* m_presentedConditionVariable = nullptr;
     bool* m_presentedCondition = nullptr;
     rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
@@ -3647,9 +4093,14 @@ HdRprApi::~HdRprApi() {
     delete m_impl;
 }
 
-rpr::Shape* HdRprApi::CreateMesh(const VtVec3fArray& points, const VtIntArray& pointIndexes, const VtVec3fArray& normals, const VtIntArray& normalIndexes, const VtVec2fArray& uv, const VtIntArray& uvIndexes, const VtIntArray& vpf, TfToken const& polygonWinding) {
+rpr::Shape* HdRprApi::CreateMesh(VtArray<VtVec3fArray> const& pointSamples, VtIntArray const& pointIndexes, VtArray<VtVec3fArray> const& normalSamples, VtIntArray const& normalIndexes, VtArray<VtVec2fArray> const& uvSamples, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uv, uvIndexes, vpf, polygonWinding);
+    return m_impl->CreateMesh(pointSamples, pointIndexes, normalSamples, normalIndexes, uvSamples, uvIndexes, vpf, polygonWinding);
+}
+
+rpr::Shape* HdRprApi::CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndexes, VtVec3fArray const& normals, VtIntArray const& normalIndexes, VtVec2fArray const& uvs, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding) {
+    m_impl->InitIfNeeded();
+    return m_impl->CreateMesh(points, pointIndexes, normals, normalIndexes, uvs, uvIndexes, vpf, polygonWinding);
 }
 
 rpr::Curve* HdRprApi::CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
@@ -3661,14 +4112,14 @@ rpr::Shape* HdRprApi::CreateMeshInstance(rpr::Shape* prototypeMesh) {
     return m_impl->CreateMeshInstance(prototypeMesh);
 }
 
-HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(GfVec3f color, float intensity) {
+HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(GfVec3f color, float intensity, VtValue const& backgroundOverride) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateEnvironmentLight(color, intensity);
+    return m_impl->CreateEnvironmentLight(color, intensity, backgroundOverride);
 }
 
-HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(const std::string& prthTotexture, float intensity) {
+HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(const std::string& prthTotexture, float intensity, VtValue const& backgroundOverride) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateEnvironmentLight(prthTotexture, intensity);
+    return m_impl->CreateEnvironmentLight(prthTotexture, intensity, backgroundOverride);
 }
 
 void HdRprApi::SetTransform(HdRprApiEnvironmentLight* envLight, GfMatrix4f const& transform) {
@@ -3758,9 +4209,9 @@ HdRprApiVolume* HdRprApi::CreateVolume(
         gridSize, voxelSize, gridBBLow, materialParams);
 }
 
-RprUsdMaterial* HdRprApi::CreateMaterial(HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
+RprUsdMaterial* HdRprApi::CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateMaterial(sceneDelegate, materialNetwork);
+    return m_impl->CreateMaterial(materialId, sceneDelegate, materialNetwork);
 }
 
 RprUsdMaterial* HdRprApi::CreatePointsMaterial(VtVec3fArray const& colors) {
@@ -3881,8 +4332,8 @@ void HdRprApi::CommitResources() {
     m_impl->CommitResources();
 }
 
-void HdRprApi::Resolve() {
-    m_impl->Resolve();
+void HdRprApi::Resolve(SdfPath const& aovId) {
+    m_impl->Resolve(aovId);
 }
 
 void HdRprApi::Render(HdRprRenderThread* renderThread) {

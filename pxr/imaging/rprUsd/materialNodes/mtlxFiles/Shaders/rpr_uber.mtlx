@@ -40,7 +40,7 @@
       <input name="uber_coating_thickness" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Thickness" uifolder="Coating" doc=""/>
       <input name="uber_coating_transmission_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Transmission Color" uifolder="Coating" doc=""/>
 
-      <input name="uber_sheen" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Sheen" uifolder="Sheen" doc=""/>
+      <input name="uber_sheen" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Sheen" uifolder="Sheen" doc=""/>
       <input name="uber_sheen_tint" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Tint" uifolder="Sheen" doc=""/>
       <input name="uber_sheen_weight" type="float" value="0.0" uimin="0.0" uisoftmax="1.0" uiname="Weight" uifolder="Sheen" doc=""/>
 

@@ -72,17 +72,17 @@ public:
         nodeInfo.uiFolder = "Shaders";
 
         RprUsd_RprNodeInput surfaceInput(RprUsdMaterialNodeElement::kSurfaceShader);
-        surfaceInput.name = "surface";
+        surfaceInput.name = HdMaterialTerminalTokens->surface;
         surfaceInput.uiName = "Surface Shader";
         nodeInfo.inputs.push_back(surfaceInput);
 
         RprUsd_RprNodeInput displacementInput(RprUsdMaterialNodeElement::kDisplacementShader);
-        displacementInput.name = "displacement";
+        displacementInput.name = HdMaterialTerminalTokens->displacement;
         displacementInput.uiName = "Displacement Shader";
         nodeInfo.inputs.push_back(displacementInput);
 
         RprUsd_RprNodeInput volumeInput(RprUsdMaterialNodeElement::kVolumeShader);
-        volumeInput.name = "volume";
+        volumeInput.name = HdMaterialTerminalTokens->volume;
         volumeInput.uiName = "Volume Shader";
         nodeInfo.inputs.push_back(volumeInput);
 
