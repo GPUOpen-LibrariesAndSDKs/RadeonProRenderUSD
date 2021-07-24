@@ -111,16 +111,6 @@ GfVec4f ToVec4(GfVec3f const& vec, float w) {
     return GfVec4f(vec[0], vec[1], vec[2], w);
 }
 
-RprUsdRenderDeviceType ToRprUsd(TfToken const& configDeviceType) {
-    if (configDeviceType == HdRprRenderDeviceTokens->CPU) {
-        return RprUsdRenderDeviceType::CPU;
-    } else if (configDeviceType == HdRprRenderDeviceTokens->GPU) {
-        return RprUsdRenderDeviceType::GPU;
-    } else {
-        return RprUsdRenderDeviceType::Invalid;
-    }
-}
-
 bool CreateIntermediateDirectories(std::string const& filePath) {
     auto dir = TfGetPathName(filePath);
     if (!dir.empty()) {
@@ -1573,26 +1563,10 @@ public:
 
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 m_currentRenderQuality = GetRenderQuality(*config);
-            }
 
-            if (config->IsDirty(HdRprConfig::DirtyDevice) ||
-                config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
-                bool restartRequired = false;
-                if (config->IsDirty(HdRprConfig::DirtyDevice)) {
-                    if (m_rprContextMetadata.renderDeviceType != ToRprUsd(config->GetRenderDevice())) {
-                        restartRequired = true;
-                    }
-                }
-
-                if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
-                    auto newPlugin = GetPluginType(m_currentRenderQuality);
-                    auto activePlugin = m_rprContextMetadata.pluginType;
-                    if (newPlugin != activePlugin) {
-                        restartRequired = true;
-                    }
-                }
-
-                m_state = restartRequired ? kStateRestartRequired : kStateRender;
+                auto newPlugin = GetPluginType(m_currentRenderQuality);
+                auto activePlugin = m_rprContextMetadata.pluginType;
+                m_state = (newPlugin != activePlugin) ? kStateRestartRequired : kStateRender;
             }
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
@@ -2161,7 +2135,7 @@ public:
         }
 
         rif::FilterType filterType = rif::FilterType::EawDenoise;
-        if (m_rprContextMetadata.renderDeviceType == RprUsdRenderDeviceType::GPU) {
+        if (RprUsdIsGpuUsed(m_rprContextMetadata)) {
             filterType = rif::FilterType::AIDenoise;
         }
 
@@ -3267,7 +3241,6 @@ private:
             config->Sync(m_delegate);
 
             m_currentRenderQuality = GetRenderQuality(*config);
-            m_rprContextMetadata.renderDeviceType = ToRprUsd(config->GetRenderDevice());
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);

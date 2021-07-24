@@ -120,7 +120,7 @@ void SetupRprTracing() {
     }
 }
 
-const rpr::CreationFlags kGpuIndexToCreationFlag[] = {
+const rpr::CreationFlags kGpuCreationFlags[] = {
     RPR_CREATION_FLAGS_ENABLE_GPU0,
     RPR_CREATION_FLAGS_ENABLE_GPU1,
     RPR_CREATION_FLAGS_ENABLE_GPU2,
@@ -138,7 +138,7 @@ const rpr::CreationFlags kGpuIndexToCreationFlag[] = {
     RPR_CREATION_FLAGS_ENABLE_GPU14,
     RPR_CREATION_FLAGS_ENABLE_GPU15,
 };
-const int kMaxNumGpus = sizeof(kGpuIndexToCreationFlag) / sizeof(kGpuIndexToCreationFlag[0]);
+const int kMaxNumGpus = sizeof(kGpuCreationFlags) / sizeof(kGpuCreationFlags[0]);
 
 const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
 #ifdef WIN32
@@ -331,7 +331,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
     rpr::CreationFlags creationFlags;
     for (int gpuIndex : devicesConfiguration.gpus) {
         if (gpuIndex >= 0 && gpuIndex < kMaxNumGpus) {
-            creationFlags |= kGpuIndexToCreationFlag[gpuIndex];
+            creationFlags |= kGpuCreationFlags[gpuIndex];
         }
     }
     if (devicesConfiguration.numCpuThreads > 0) {
@@ -387,12 +387,13 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
             delete context;
             return nullptr;
         }
+
+        RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, textureCachePath.c_str()), "Failed to set texture cache path");
+
+        metadata->creationFlags = creationFlags;
     } else {
         RPR_ERROR_CHECK(status, "Failed to create RPR context");
-        return nullptr;
     }
-
-    RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, textureCachePath.c_str()), "Failed to set texture cache path");
 
     return context;
 }
@@ -432,6 +433,15 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
 
 bool RprUsdIsTracingEnabled() {
     return TfGetEnvSetting(RPRUSD_ENABLE_TRACING);
+}
+
+bool RprUsdIsGpuUsed(RprUsdContextMetadata const& contextMetadata) {
+    for (auto gpuCreationFlag : kGpuCreationFlags) {
+        if (contextMetadata.creationFlags & gpuCreationFlag) {
+            return true;
+        }
+    }
+    return false;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
