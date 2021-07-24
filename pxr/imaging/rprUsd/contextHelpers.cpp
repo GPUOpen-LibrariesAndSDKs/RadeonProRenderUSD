@@ -11,6 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
+#include <json.hpp>
+using json = nlohmann::json;
+
 #include "pxr/imaging/rprUsd/contextHelpers.h"
 #include "pxr/imaging/rprUsd/contextMetadata.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
@@ -30,9 +33,6 @@ limitations under the License.
 #include <RadeonProRender_Baikal.h>
 #include <vulkan/vulkan.h>
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
-
-#include <json.hpp>
-using json = nlohmann::json;
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>

@@ -16,7 +16,7 @@ from . import _rprUsd as RprUsd
 try:
     from hutil.Qt import QtCore, QtGui, QtWidgets
 except:
-    from .qt import QtCore, QtGui, QtWidgets
+    from pxr.Usdviewq.qt import QtCore, QtGui, QtWidgets
 
 # from rpr import RprUsd
 
@@ -168,8 +168,10 @@ class _Configuration:
             with open(file, 'w') as f:
                 serialized_data = [config.serialize() for config in self.plugin_configurations]
                 json.dump(serialized_data, f)
+                return True
         except IOError as e:
             self.context.show_error('Failed to save device configuration', e.msg)
+        return False
 
     @staticmethod
     def default(context):
@@ -309,7 +311,7 @@ class _PluginConfigurationWidget(BorderWidget):
 
 
 class _DevicesConfigurationDialog(QtWidgets.QDialog):
-    def __init__(self, configuration):
+    def __init__(self, configuration, show_restart_warning):
         super(_DevicesConfigurationDialog, self).__init__()
 
         self.configuration = configuration
@@ -330,11 +332,14 @@ class _DevicesConfigurationDialog(QtWidgets.QDialog):
             self.main_layout.addWidget(widget)
             self.plugin_configuration_widgets.append(widget)
 
-        self.restart_warning_label = QtWidgets.QLabel(self)
-        self.restart_warning_label.setText('Changes to a device will not take effect until the RPR renderer restarts.')
-        self.restart_warning_label.setStyleSheet('color: rgb(255,204,0)')
-        self.restart_warning_label.hide()
-        self.main_layout.addWidget(self.restart_warning_label)
+        if show_restart_warning:
+            self.restart_warning_label = QtWidgets.QLabel(self)
+            self.restart_warning_label.setText('Changes to a device will not take effect until the RPR renderer restarts.')
+            self.restart_warning_label.setStyleSheet('color: rgb(255,204,0)')
+            self.restart_warning_label.hide()
+            self.main_layout.addWidget(self.restart_warning_label)
+        else:
+            self.restart_warning_label = None
 
         self.button_box = QtWidgets.QDialogButtonBox(self)
         self.save_button = self.button_box.addButton("Save", QtWidgets.QDialogButtonBox.AcceptRole)
@@ -359,12 +364,15 @@ class _DevicesConfigurationDialog(QtWidgets.QDialog):
         is_save_enabled = all([widget.is_complete for widget in self.plugin_configuration_widgets]) and \
                           self.initial_configuration != self.configuration
         self.save_button.setEnabled(is_save_enabled)
-        if is_save_enabled:
-            self.restart_warning_label.show()
-        else:
-            self.restart_warning_label.hide()
 
-def open_window(parent=None, parent_flags=QtCore.Qt.Widget):
+        if self.restart_warning_label:
+            if is_save_enabled:
+                self.restart_warning_label.show()
+            else:
+                self.restart_warning_label.hide()
+
+
+def open_window(parent=None, parent_flags=QtCore.Qt.Widget, show_restart_warning=True):
     _setup_devices_info()
 
     class Context:
@@ -383,8 +391,10 @@ def open_window(parent=None, parent_flags=QtCore.Qt.Widget):
     configuration_filepath = RprUsd.Config.GetDeviceConfigurationFilepath()
     configuration = _Configuration.load(Context(parent, parent_flags), configuration_filepath)
 
-    dialog = _DevicesConfigurationDialog(configuration)
+    dialog = _DevicesConfigurationDialog(configuration, show_restart_warning)
     dialog.exec_()
 
     if dialog.should_update_configuration:
-        configuration.save(configuration_filepath)
+        return configuration.save(configuration_filepath)
+
+    return False

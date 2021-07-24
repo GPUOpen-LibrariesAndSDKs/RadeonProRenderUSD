@@ -12,7 +12,7 @@
 from pxr import Tf
 from pxr.Plug import Registry
 from pxr.Usdviewq.plugin import PluginContainer
-from pxr.Usdviewq.qt import QtWidgets
+from pxr.Usdviewq.qt import QtWidgets, QtCore
 
 from ctypes import cdll, c_void_p, c_char_p, cast
 from ctypes.util import find_library
@@ -63,13 +63,6 @@ def reemitStage(usdviewApi):
     usdviewApi._UsdviewApi__appController._reopenStage()
     usdviewApi._UsdviewApi__appController._rendererPluginChanged('HdRprPlugin')
 
-def setRenderDevice(usdviewApi, renderDeviceId):
-    rprPath = getRprPath()
-    if rprPath is not None:
-        lib = cdll.LoadLibrary(rprPath)
-        lib.HdRprSetRenderDevice(renderDeviceId)
-        reemitStage(usdviewApi)
-
 def setRenderQuality(usdviewApi, quality):
     rprPath = getRprPath()
     if rprPath is not None:
@@ -100,10 +93,9 @@ def setRenderQuality(usdviewApi, quality):
         if getPluginName(quality) != getPluginName(currentQuality):
             reemitStage(usdviewApi)
 
-def SetRenderDeviceCPU(usdviewApi):
-    setRenderDevice(usdviewApi, b'CPU')
-def SetRenderDeviceGPU(usdviewApi):
-    setRenderDevice(usdviewApi, b'GPU')
+def ChooseRenderDevice(usdviewApi):
+    if RprUsd.devicesConfiguration.open_window(usdviewApi._UsdviewApi__appController._mainWindow, QtCore.Qt.Window, show_restart_warning=False):
+        reemitStage(usdviewApi)
 
 def SetRenderLowQuality(usdviewApi):
     setRenderQuality(usdviewApi, b'Low')
@@ -119,14 +111,10 @@ def SetRenderNorthstarQuality(usdviewApi):
 class RprPluginContainer(PluginContainer):
 
     def registerPlugins(self, plugRegistry, usdviewApi):
-        self.rDeviceCpu = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderDeviceCPU",
-            "CPU",
-            SetRenderDeviceCPU)
-        self.rDeviceGpu = plugRegistry.registerCommandPlugin(
-            "RprPluginContainer.renderDeviceGPU",
-            "GPU",
-            SetRenderDeviceGPU)
+        self.chooseRenderDevice = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.chooseRenderDevice",
+            "Render Device",
+            ChooseRenderDevice)
 
         self.setRenderLowQuality = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.setRenderLowQuality",
@@ -176,9 +164,7 @@ class RprPluginContainer(PluginContainer):
 
         rprMenu = plugUIBuilder.findOrCreateMenu("RPR")
 
-        renderDeviceSubMenu = rprMenu.findOrCreateSubmenu("Render Device")
-        renderDeviceSubMenu.addItem(self.rDeviceCpu)
-        renderDeviceSubMenu.addItem(self.rDeviceGpu)
+        rprMenu.addItem(self.chooseRenderDevice)
 
         renderQualityMenu = rprMenu.findOrCreateSubmenu("Render Quality")
         renderQualityMenu.addItem(self.setRenderLowQuality)
