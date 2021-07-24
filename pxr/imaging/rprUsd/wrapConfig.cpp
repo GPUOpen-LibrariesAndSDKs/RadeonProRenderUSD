@@ -48,5 +48,6 @@ void wrapConfig() {
         CONFIG_GETTER(IsRestartWarningEnabled)
         CONFIG_GETTER(GetTextureCacheDir)
         CONFIG_GETTER(GetKernelCacheDir)
+        CONFIG_GETTER(GetDeviceConfigurationFilepath)
     ;
 }

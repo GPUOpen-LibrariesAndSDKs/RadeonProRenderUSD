@@ -1,4 +1,5 @@
 from . import _rprUsd
+from . import devicesConfiguration
 from pxr import Tf
 Tf.PrepareModule(_rprUsd, locals())
 del Tf

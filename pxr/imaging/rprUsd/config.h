@@ -48,6 +48,9 @@ public:
     RPRUSD_API
     void SetKernelCacheDir(std::string const&);
 
+    RPRUSD_API
+    std::string GetDeviceConfigurationFilepath() const;
+
 private:
     RprUsdConfig();
     friend class TfSingleton<RprUsdConfig>;
