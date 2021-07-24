@@ -113,7 +113,7 @@ class RprPluginContainer(PluginContainer):
     def registerPlugins(self, plugRegistry, usdviewApi):
         self.chooseRenderDevice = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.chooseRenderDevice",
-            "Render Device",
+            "Render Devices",
             ChooseRenderDevice)
 
         self.setRenderLowQuality = plugRegistry.registerCommandPlugin(

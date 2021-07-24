@@ -320,7 +320,7 @@ class _DevicesConfigurationDialog(QtWidgets.QDialog):
         if self.configuration.context.parent:
             self.setParent(self.configuration.context.parent, self.configuration.context.parent_flags)
         self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        self.setWindowTitle('RPR Devices')
+        self.setWindowTitle('RPR Render Devices')
 
         self.main_layout = QtWidgets.QVBoxLayout(self)
         self.main_layout.setSizeConstraint(QtWidgets.QLayout.SetFixedSize)
@@ -334,7 +334,7 @@ class _DevicesConfigurationDialog(QtWidgets.QDialog):
 
         if show_restart_warning:
             self.restart_warning_label = QtWidgets.QLabel(self)
-            self.restart_warning_label.setText('Changes to a device will not take effect until the RPR renderer restarts.')
+            self.restart_warning_label.setText('Changes will not take effect until the RPR renderer restarts.')
             self.restart_warning_label.setStyleSheet('color: rgb(255,204,0)')
             self.restart_warning_label.hide()
             self.main_layout.addWidget(self.restart_warning_label)
