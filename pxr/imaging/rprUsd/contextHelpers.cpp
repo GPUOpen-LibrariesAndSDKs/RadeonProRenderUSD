@@ -43,6 +43,7 @@ using json = nlohmann::json;
 #endif // __APPLE__
 
 #include <fstream>
+#include <thread>
 #include <map>
 
 #define PRINT_CONTEXT_CREATION_DEBUG_INFO(format, ...) \
@@ -328,7 +329,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         contextProperties.push_back((rpr_context_properties)propertyValue);
     };
 
-    rpr::CreationFlags creationFlags;
+    rpr::CreationFlags creationFlags = 0;
     for (int gpuIndex : devicesConfiguration.gpus) {
         if (gpuIndex >= 0 && gpuIndex < kMaxNumGpus) {
             creationFlags |= kGpuCreationFlags[gpuIndex];
