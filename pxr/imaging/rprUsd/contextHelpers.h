@@ -42,6 +42,10 @@ struct RprUsdDevicesInfo {
         bool operator==(GPU const& rhs) { return index == rhs.index && name == rhs.name; }
     };
     std::vector<GPU> gpus;
+
+    bool IsValid() const {
+        return cpu.numThreads > 0 || !gpus.empty();
+    }
 };
 
 RPRUSD_API

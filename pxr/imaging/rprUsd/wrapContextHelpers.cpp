@@ -49,6 +49,7 @@ void wrapContextHelpers() {
         ;
 
     class_<RprUsdDevicesInfo>("DevicesInfo")
+        .add_property("isValid", +[](RprUsdDevicesInfo* thisPtr) { return thisPtr->IsValid(); })
         .add_property("cpu", +[](RprUsdDevicesInfo* thisPtr) { return thisPtr->cpu; })
         .add_property("gpus", +[](RprUsdDevicesInfo* thisPtr) { return Tf_PySequenceToListConverter<decltype(RprUsdDevicesInfo::gpus)>{}(thisPtr->gpus); })
         ;

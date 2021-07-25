@@ -26,7 +26,12 @@ def _setup_devices_info():
     if _devices_info == None:
         _devices_info = dict()
         for plugin_type in RprUsd.PluginType.allValues[1:]:
-            _devices_info[plugin_type] = RprUsd.GetDevicesInfo(plugin_type)
+            try:
+                devices_info = RprUsd.GetDevicesInfo(plugin_type)
+                if devices_info.isValid:
+                    _devices_info[plugin_type] = devices_info
+            except:
+                pass
 
 
 class _GpuConfiguration:
@@ -175,8 +180,10 @@ class _Configuration:
 
     @staticmethod
     def default(context):
-        default_order = [RprUsd.kPluginNorthstar, RprUsd.kPluginTahoe, RprUsd.kPluginHybrid]
-        plugin_configurations = [_PluginConfiguration.default(plugin_type, _devices_info[plugin_type]) for plugin_type in default_order]
+        plugin_configurations = list()
+        for plugin_type in [RprUsd.kPluginNorthstar, RprUsd.kPluginTahoe, RprUsd.kPluginHybrid]:
+            if plugin_type in _devices_info:
+                plugin_configurations.append(_PluginConfiguration.default(plugin_type, _devices_info[plugin_type]))
         return _Configuration(context=context, plugin_configurations=plugin_configurations)
 
     def __eq__(self, other):

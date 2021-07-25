@@ -230,9 +230,12 @@ struct DevicesConfiguration {
 };
 
 DevicesConfiguration LoadDevicesConfiguration(RprUsdPluginType pluginType, std::string const& deviceConfigurationFilepath) {
-    DevicesConfiguration ret = {};
-
     RprUsdDevicesInfo devicesInfo = RprUsdGetDevicesInfo(pluginType);
+    if (!devicesInfo.IsValid()) {
+        return {};
+    }
+
+    DevicesConfiguration ret = {};
 
     auto isLoaded = [&]() {
         try {
@@ -339,6 +342,11 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         creationFlags |= RPR_CREATION_FLAGS_ENABLE_CPU;
         appendContextProperty(RPR_CONTEXT_CPU_THREAD_LIMIT, (void*)(size_t)devicesConfiguration.numCpuThreads);
     }
+
+    if (creationFlags == 0) {
+        return nullptr;
+    }
+
 #if __APPLE__
     if ((creationFlags & RPR_CREATION_FLAGS_ENABLE_CPU) == 0) {
         creationFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
@@ -400,7 +408,10 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 }
 
 RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
-    RprUsdDevicesInfo ret = {};
+    rpr_int pluginID = GetPluginID(pluginType);
+    if (pluginID == -1) {
+        return {};
+    }
 
     std::string cachePath;
     {
@@ -409,7 +420,8 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
         cachePath = config->GetKernelCacheDir();
     }
 
-    rpr_int pluginID = GetPluginID(pluginType);
+    RprUsdDevicesInfo ret = {};
+
     if (pluginType == kPluginHybrid) {
         ret.cpu.numThreads = 0;
 
