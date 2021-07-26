@@ -303,7 +303,6 @@ private:
 
 struct HdRprApiVolume {
     std::unique_ptr<rpr::HeteroVolume> heteroVolume;
-    std::unique_ptr<rpr::MaterialNode> volumeMaterial;
     std::unique_ptr<rpr::Grid> albedoGrid;
     std::unique_ptr<rpr::Grid> densityGrid;
     std::unique_ptr<rpr::Grid> emissionGrid;
@@ -1245,7 +1244,7 @@ public:
     HdRprApiVolume* CreateVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
                                  VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
                                  VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
-                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, HdRprApi::VolumeMaterialParameters const& materialParams) {
+                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -1312,31 +1311,6 @@ public:
             return nullptr;
         }
 
-        HdRprApi::VolumeMaterialParameters defaultVolumeMaterialParams;
-        if (defaultVolumeMaterialParams.transmissionColor != materialParams.transmissionColor ||
-            defaultVolumeMaterialParams.scatteringColor != materialParams.scatteringColor ||
-            defaultVolumeMaterialParams.emissionColor != materialParams.emissionColor ||
-            defaultVolumeMaterialParams.density != materialParams.density ||
-            defaultVolumeMaterialParams.anisotropy != materialParams.anisotropy ||
-            defaultVolumeMaterialParams.multipleScattering != materialParams.multipleScattering) {
-            rprApiVolume->volumeMaterial.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_VOLUME, &status));
-            if (rprApiVolume->volumeMaterial) {
-                auto scat = materialParams.scatteringColor * materialParams.density;
-                auto abs = (GfVec3f(1) - materialParams.transmissionColor) * materialParams.density;
-                auto emiss = materialParams.emissionColor * materialParams.density;
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_SCATTERING, scat[0], scat[1], scat[2], 1.0f);
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_ABSORBTION, abs[0], abs[1], abs[2], 1.0f);
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_EMISSION, emiss[0], emiss[1], emiss[2], 1.0f);
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_G, materialParams.anisotropy);
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_MULTISCATTER, static_cast<uint32_t>(materialParams.multipleScattering));
-            } else {
-                RPR_ERROR_CHECK(status, "Failed to create volume material");
-            }
-        }
-
-        if (rprApiVolume->volumeMaterial) {
-            RPR_ERROR_CHECK(rprApiVolume->cubeMesh->SetVolumeMaterial(rprApiVolume->volumeMaterial.get()), "Failed to set volume material");
-        }
         rprApiVolume->cubeMeshMaterial->AttachTo(rprApiVolume->cubeMesh.get(), false);
 
         rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
@@ -4200,13 +4174,13 @@ HdRprApiVolume* HdRprApi::CreateVolume(
     VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
     VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
     VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
-    const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, VolumeMaterialParameters const& materialParams) {
+    const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
     m_impl->InitIfNeeded();
     return m_impl->CreateVolume(
         densityCoords, densityValues, densityLUT, densityScale,
         albedoCoords, albedoValues, albedoLUT, albedoScale,
         emissionCoords, emissionValues, emissionLUT, emissionScale,
-        gridSize, voxelSize, gridBBLow, materialParams);
+        gridSize, voxelSize, gridBBLow);
 }
 
 RprUsdMaterial* HdRprApi::CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
