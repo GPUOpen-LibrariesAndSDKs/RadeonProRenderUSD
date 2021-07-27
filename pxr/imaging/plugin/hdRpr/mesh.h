@@ -51,13 +51,6 @@ protected:
     void _InitRepr(TfToken const& reprName, HdDirtyBits* dirtyBits) override;
 
 private:
-    template <typename T>
-    bool GetPrimvarData(TfToken const& name,
-                        HdSceneDelegate* sceneDelegate,
-                        std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
-                        VtArray<T>& out_data,
-                        VtIntArray& out_indices);
-
     RprUsdMaterial const* GetFallbackMaterial(
         HdSceneDelegate* sceneDelegate,
         HdRprApi* rprApi,
@@ -74,7 +67,7 @@ private:
 
     HdMeshTopology m_topology;
     HdGeomSubsets m_geomSubsets;
-    VtVec3fArray m_points;
+    VtArray<VtVec3fArray> m_pointSamples;
     VtIntArray m_faceVertexCounts;
     VtIntArray m_faceVertexIndices;
     bool m_enableSubdiv = false;
@@ -82,13 +75,13 @@ private:
     Hd_VertexAdjacency m_adjacency;
     bool m_adjacencyValid = false;
 
-    VtVec3fArray m_normals;
+    VtArray<VtVec3fArray> m_normalSamples;
     VtIntArray m_normalIndices;
     bool m_normalsValid = false;
     bool m_authoredNormals = false;
     bool m_smoothNormals = false;
 
-    VtVec2fArray m_uvs;
+    VtArray<VtVec2fArray> m_uvSamples;
     VtIntArray m_uvIndices;
 
     HdDisplayStyle m_displayStyle;
@@ -96,6 +89,8 @@ private:
 
     int m_id = -1;
     bool m_ignoreContour;
+    std::string m_cryptomatteName;
+    size_t m_numGeometrySamples = 1;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -74,4 +74,13 @@ if(HoudiniUSD_FOUND)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ghc_filesystem)
 endif()
 
+# Murmurhash
+# ----------------------------------------------
+
+set(MURMURHASH_DIR ${CMAKE_CURRENT_SOURCE_DIR}/murmurhash/src)
+add_library(murmurhash STATIC
+    ${MURMURHASH_DIR}/MurmurHash3.h
+    ${MURMURHASH_DIR}/MurmurHash3.cpp)
+target_include_directories(murmurhash PUBLIC ${MURMURHASH_DIR})
+
 # ----------------------------------------------

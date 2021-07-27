@@ -73,43 +73,6 @@ void HdRprMesh::_InitRepr(TfToken const& reprName,
     // No-op
 }
 
-template <typename T>
-bool HdRprMesh::GetPrimvarData(TfToken const& name,
-                               HdSceneDelegate* sceneDelegate,
-                               std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
-                               VtArray<T>& out_data,
-                               VtIntArray& out_indices) {
-    out_data.clear();
-    out_indices.clear();
-
-    for (auto& primvarDescsEntry : primvarDescsPerInterpolation) {
-        for (auto& pv : primvarDescsEntry.second) {
-            if (pv.name == name) {
-                auto value = GetPrimvar(sceneDelegate, name);
-                if (value.IsHolding<VtArray<T>>()) {
-                    out_data = value.UncheckedGet<VtArray<T>>();
-                    if (primvarDescsEntry.first == HdInterpolationFaceVarying) {
-                        out_indices.reserve(m_faceVertexIndices.size());
-                        for (int i = 0; i < m_faceVertexIndices.size(); ++i) {
-                            out_indices.push_back(i);
-                        }
-                    } else if (primvarDescsEntry.first == HdInterpolationConstant) {
-                        out_indices = VtIntArray(m_faceVertexIndices.size(), 0);
-                    }
-                    return true;
-                }
-
-                TF_RUNTIME_ERROR("Failed to load %s primvar data: unexpected underlying type - %s", name.GetText(), value.GetTypeName().c_str());
-                return false;
-            }
-        }
-    }
-
-    return false;
-}
-template bool HdRprMesh::GetPrimvarData<GfVec2f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector> const&, VtArray<GfVec2f>&, VtIntArray&);
-template bool HdRprMesh::GetPrimvarData<GfVec3f>(TfToken const&, HdSceneDelegate*, std::map<HdInterpolation, HdPrimvarDescriptorVector> const&, VtArray<GfVec3f>&, VtIntArray&);
-
 RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
     HdSceneDelegate* sceneDelegate,
     HdRprApi* rprApi,
@@ -140,10 +103,7 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
         }
 
         m_fallbackMaterial = rprApi->CreateDiffuseMaterial(color);
-
-        if (RprUsdIsLeakCheckEnabled()) {
-            rprApi->SetName(m_fallbackMaterial, GetId().GetText());
-        }
+        rprApi->SetName(m_fallbackMaterial, GetId().GetText());
     }
 
     return m_fallbackMaterial;
@@ -166,6 +126,56 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     bool newMesh = false;
 
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation;
+
+    bool isRefineLevelDirty = false;
+    if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) {
+        m_displayStyle = sceneDelegate->GetDisplayStyle(id);
+        if (m_refineLevel != m_displayStyle.refineLevel) {
+            isRefineLevelDirty = true;
+            m_refineLevel = m_displayStyle.refineLevel;
+        }
+    }
+
+    bool isIgnoreContourDirty = false;
+    bool isVisibilityMaskDirty = false;
+    bool isIdDirty = false;
+    if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
+        HdRprGeometrySettings geomSettings = {};
+        geomSettings.visibilityMask = kVisibleAll;
+        HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
+        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation, &geomSettings);
+
+        if (m_refineLevel != geomSettings.subdivisionLevel) {
+            m_refineLevel = geomSettings.subdivisionLevel;
+            isRefineLevelDirty = true;
+        }
+
+        if (m_visibilityMask != geomSettings.visibilityMask) {
+            m_visibilityMask = geomSettings.visibilityMask;
+            isVisibilityMaskDirty = true;
+        }
+
+        if (m_id != geomSettings.id) {
+            m_id = geomSettings.id;
+            isIdDirty = true;
+        }
+
+        if (m_ignoreContour != geomSettings.ignoreContour) {
+            m_ignoreContour = geomSettings.ignoreContour;
+            isIgnoreContourDirty = true;
+        }
+
+        if (m_cryptomatteName != geomSettings.cryptomatteName) {
+            m_cryptomatteName = geomSettings.cryptomatteName;
+        }
+
+        if (m_numGeometrySamples != geomSettings.numGeometrySamples) {
+            m_numGeometrySamples = geomSettings.numGeometrySamples;
+            *dirtyBits |= HdChangeTracker::DirtyPoints | HdChangeTracker::DirtyNormals;
+        }
+    }
+
     bool pointsIsComputed = false;
     auto extComputationDescs = sceneDelegate->GetExtComputationPrimvarDescriptors(id, HdInterpolationVertex);
     for (auto& desc : extComputationDescs) {
@@ -174,15 +184,47 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, desc.name)) {
+            m_pointSamples.clear();
+
+#if PXR_VERSION >= 2105
+            HdExtComputationUtils::SampledValueStore<2> valueStore;
+            HdExtComputationUtils::SampleComputedPrimvarValues({desc}, sceneDelegate, m_numGeometrySamples, &valueStore);
+            auto pointValueIt = valueStore.find(desc.name);
+            if (pointValueIt != valueStore.end()) {
+                auto& sampleValues = pointValueIt->second.values;
+                VtArray<VtVec3fArray> newPointSamples;
+                newPointSamples.reserve(sampleValues.size());
+                for (auto& sampleValue : sampleValues) {
+                    if (sampleValue.IsHolding<VtVec3fArray>()) {
+                        newPointSamples.push_back(sampleValue.UncheckedGet<VtVec3fArray>());
+                    } else {
+                        newPointSamples.clear();
+                        break;
+                    }
+                }
+
+                if (!newPointSamples.empty()) {
+                    m_pointSamples = std::move(newPointSamples);
+                    m_normalsValid = false;
+                    pointsIsComputed = true;
+
+                    newMesh = true;
+                }
+            }
+#else // PXR_VERSION < 2105
+            if (m_numGeometrySamples != 1) {
+                TF_WARN("UsdSkel deformation motion blur is supported only in USD 21.05+ (current version %d.%d)", PXR_MINOR_VERSION, PXR_PATCH_VERSION);
+            }
             auto valueStore = HdExtComputationUtils::GetComputedPrimvarValues({desc}, sceneDelegate);
             auto pointValueIt = valueStore.find(desc.name);
             if (pointValueIt != valueStore.end()) {
-                m_points = pointValueIt->second.Get<VtVec3fArray>();
+                m_pointSamples = {pointValueIt->second.Get<VtVec3fArray>()};
                 m_normalsValid = false;
                 pointsIsComputed = true;
 
                 newMesh = true;
             }
+#endif // PXR_VERSION >= 2105
         }
 
         break;
@@ -190,10 +232,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     if (!pointsIsComputed &&
         HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->points)) {
-        VtValue pointsValue = sceneDelegate->Get(id, HdTokens->points);
-        m_points = pointsValue.Get<VtVec3fArray>();
-        m_normalsValid = false;
+        if (!HdRprSamplePrimvar(id, HdTokens->points, sceneDelegate, m_numGeometrySamples, &m_pointSamples)) {
+            m_pointSamples.clear();
+        }
 
+        m_normalsValid = false;
         newMesh = true;
     }
 
@@ -282,11 +325,16 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         newMesh = true;
     }
 
-    std::map<HdInterpolation, HdPrimvarDescriptorVector> primvarDescsPerInterpolation;
-
     if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->normals)) {
         HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-        m_authoredNormals = GetPrimvarData(HdTokens->normals, sceneDelegate, primvarDescsPerInterpolation, m_normals, m_normalIndices);
+        HdInterpolation interpolation;
+        m_authoredNormals = HdRprSamplePrimvar(id, HdTokens->normals, sceneDelegate, primvarDescsPerInterpolation, m_numGeometrySamples, &m_normalSamples, &interpolation);
+        if (m_authoredNormals) {
+            HdRprGetPrimvarIndices(interpolation, m_faceVertexIndices, &m_normalIndices);
+        } else {
+            m_normalSamples.clear();
+            m_normalIndices.clear();
+        }
 
         newMesh = true;
     }
@@ -326,7 +374,14 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, *uvPrimvarName)) {
             HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-            GetPrimvarData(*uvPrimvarName, sceneDelegate, primvarDescsPerInterpolation, m_uvs, m_uvIndices);
+
+            HdInterpolation interpolation;
+            if (HdRprSamplePrimvar(id, *uvPrimvarName, sceneDelegate, primvarDescsPerInterpolation, m_numGeometrySamples, &m_uvSamples, &interpolation)) {
+                HdRprGetPrimvarIndices(interpolation, m_faceVertexIndices, &m_uvIndices);
+            } else {
+                m_uvSamples.clear();
+                m_uvIndices.clear();
+            }
 
             newMesh = true;
         }
@@ -338,47 +393,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     ////////////////////////////////////////////////////////////////////////
     // 2. Resolve drawstyles
-
-    bool isRefineLevelDirty = false;
-    if (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) {
-        m_displayStyle = sceneDelegate->GetDisplayStyle(id);
-        if (m_refineLevel != m_displayStyle.refineLevel) {
-            isRefineLevelDirty = true;
-            m_refineLevel = m_displayStyle.refineLevel;
-        }
-    }
-
-    bool isIgnoreContourDirty = false;
-    bool isVisibilityMaskDirty = false;
-    bool isIdDirty = false;
-    if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
-        HdRprGeometrySettings geomSettings = {};
-        geomSettings.visibilityMask = kVisibleAll;
-        HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
-        HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation, &geomSettings);
-
-        if (m_refineLevel != geomSettings.subdivisionLevel) {
-            m_refineLevel = geomSettings.subdivisionLevel;
-            isRefineLevelDirty = true;
-        }
-
-        if (m_visibilityMask != geomSettings.visibilityMask) {
-            m_visibilityMask = geomSettings.visibilityMask;
-            isVisibilityMaskDirty = true;
-        }
-
-        if (m_id != geomSettings.id) {
-            m_id = geomSettings.id;
-            isIdDirty = true;
-        }
-
-        if (m_ignoreContour != geomSettings.ignoreContour) {
-            m_ignoreContour = geomSettings.ignoreContour;
-            isIgnoreContourDirty = true;
-        }
-    }
-
-    isIdDirty |= *dirtyBits & HdChangeTracker::DirtyPrimID;
 
     m_smoothNormals = !m_displayStyle.flatShadingEnabled;
     // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
@@ -394,7 +408,10 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (!m_normalsValid) {
-            m_normals = Hd_SmoothNormals::ComputeSmoothNormals(&m_adjacency, m_points.size(), m_points.cdata());
+            m_normalSamples.clear();
+            for (auto& points : m_pointSamples) {
+                m_normalSamples.push_back(Hd_SmoothNormals::ComputeSmoothNormals(&m_adjacency, points.size(), points.cdata()));
+            }
             m_normalsValid = true;
 
             newMesh = true;
@@ -423,7 +440,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_rprMeshes.clear();
 
         if (m_geomSubsets.empty()) {
-            if (auto rprMesh = rprApi->CreateMesh(m_points, m_faceVertexIndices, m_normals, m_normalIndices, m_uvs, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
+            if (auto rprMesh = rprApi->CreateMesh(m_pointSamples, m_faceVertexIndices, m_normalSamples, m_normalIndices, m_uvSamples, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
                 m_rprMeshes.push_back(rprMesh);
             }
         } else {
@@ -449,24 +466,24 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     continue;
                 }
 
-                VtVec3fArray subsetPoints;
-                VtVec3fArray subsetNormals;
-                VtVec2fArray subsetUv;
+                VtArray<VtVec3fArray> subsetPointSamples(m_pointSamples.size());
+                VtArray<VtVec3fArray> subsetNormalSamples(m_normalSamples.size());
+                VtArray<VtVec2fArray> subsetUvSamples(m_uvSamples.size());
                 VtIntArray subsetNormalIndices;
                 VtIntArray subsetUvIndices;
                 VtIntArray subsetIndexes;
                 VtIntArray subsetVertexPerFace;
                 subsetVertexPerFace.reserve(subset.indices.size());
 
-                vertexIndexRemapping.reserve(m_points.size());
-                std::fill(vertexIndexRemapping.begin(), vertexIndexRemapping.begin() + m_points.size(), -1);
+                vertexIndexRemapping.reserve(m_pointSamples.front().size());
+                std::fill(vertexIndexRemapping.begin(), vertexIndexRemapping.begin() + m_pointSamples.front().size(), -1);
                 if (!m_normalIndices.empty()) {
-                    normalIndexRemapping.reserve(m_normals.size());
-                    std::fill(normalIndexRemapping.begin(), normalIndexRemapping.begin() + m_normals.size(), -1);
+                    normalIndexRemapping.reserve(m_normalSamples.front().size());
+                    std::fill(normalIndexRemapping.begin(), normalIndexRemapping.begin() + m_normalSamples.front().size(), -1);
                 }
                 if (!m_uvIndices.empty()) {
-                    uvIndexRemapping.reserve(m_uvs.size());
-                    std::fill(uvIndexRemapping.begin(), uvIndexRemapping.begin() + m_uvs.size(), -1);
+                    uvIndexRemapping.reserve(m_uvSamples.front().size());
+                    std::fill(uvIndexRemapping.begin(), uvIndexRemapping.begin() + m_uvSamples.front().size(), -1);
                 }
 
                 for (auto faceIndex : subset.indices) {
@@ -481,44 +498,54 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                         bool newPoint = subsetPointIndex == -1;
                         if (newPoint) {
-                            subsetPointIndex = static_cast<int>(subsetPoints.size());
+                            subsetPointIndex = static_cast<int>(subsetPointSamples.front().size());
                             vertexIndexRemapping[pointIndex] = subsetPointIndex;
 
-                            subsetPoints.push_back(m_points[pointIndex]);
+                            for (int sampleIndex = 0; sampleIndex < m_pointSamples.size(); ++sampleIndex) {
+                                subsetPointSamples[sampleIndex].push_back(m_pointSamples[sampleIndex][pointIndex]);
+                            }
                         }
                         subsetIndexes.push_back(subsetPointIndex);
 
-                        if (!m_normals.empty()) {
+                        if (!m_normalSamples.empty()) {
                             if (m_normalIndices.empty()) {
                                 if (newPoint) {
-                                    subsetNormals.push_back(m_normals[pointIndex]);
+                                    for (int sampleIndex = 0; sampleIndex < m_normalSamples.size(); ++sampleIndex) {
+                                        subsetNormalSamples[sampleIndex].push_back(m_normalSamples[sampleIndex][pointIndex]);
+                                    }
                                 }
                             } else {
                                 const int normalIndex = m_normalIndices[faceIndexesOffset + i];
                                 int subsetNormalIndex = normalIndexRemapping[normalIndex];
                                 if (subsetNormalIndex == -1) {
-                                    subsetNormalIndex = static_cast<int>(subsetNormals.size());
+                                    subsetNormalIndex = static_cast<int>(subsetNormalSamples.front().size());
                                     normalIndexRemapping[normalIndex] = subsetNormalIndex;
 
-                                    subsetNormals.push_back(m_normals[normalIndex]);
+                                    for (int sampleIndex = 0; sampleIndex < m_normalSamples.size(); ++sampleIndex) {
+                                        subsetNormalSamples[sampleIndex].push_back(m_normalSamples[sampleIndex][normalIndex]);
+                                    }
                                 }
                                 subsetNormalIndices.push_back(subsetNormalIndex);
                             }
                         }
 
-                        if (!m_uvs.empty()) {
+                        if (!m_uvSamples.empty()) {
                             if (m_uvIndices.empty()) {
                                 if (newPoint) {
-                                    subsetUv.push_back(m_uvs[pointIndex]);
+                                    for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
+                                        subsetUvSamples[sampleIndex].push_back(m_uvSamples[sampleIndex][pointIndex]);
+                                    }
                                 }
                             } else {
                                 const int uvIndex = m_uvIndices[faceIndexesOffset + i];
                                 int subsetuvIndex = uvIndexRemapping[uvIndex];
                                 if (subsetuvIndex == -1) {
-                                    subsetuvIndex = static_cast<int>(subsetUv.size());
+                                    subsetuvIndex = static_cast<int>(subsetUvSamples.front().size());
                                     uvIndexRemapping[uvIndex] = subsetuvIndex;
 
-                                    subsetUv.push_back(m_uvs[uvIndex]);
+                                    for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
+                                        subsetUvSamples[sampleIndex].push_back(m_uvSamples[sampleIndex][uvIndex]);
+                                    }
                                 }
                                 subsetUvIndices.push_back(subsetuvIndex);
                             }
@@ -526,7 +553,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                     }
                 }
 
-                if (auto rprMesh = rprApi->CreateMesh(subsetPoints, subsetIndexes, subsetNormals, subsetNormalIndices, subsetUv, subsetUvIndices, subsetVertexPerFace, m_topology.GetOrientation())) {
+                if (auto rprMesh = rprApi->CreateMesh(subsetPointSamples, subsetIndexes, subsetNormalSamples, subsetNormalIndices, subsetUvSamples, subsetUvIndices, subsetVertexPerFace, m_topology.GetOrientation())) {
                     m_rprMeshes.push_back(rprMesh);
                     ++it;
                 } else {
@@ -537,11 +564,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     if (!m_rprMeshes.empty()) {
-        if (newMesh && RprUsdIsLeakCheckEnabled()) {
-            auto name = id.GetText();
-            for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetName(rprMesh, name);
-            }
+        auto name = m_cryptomatteName.empty() ? id.GetText() : m_cryptomatteName.c_str();
+        for (auto& rprMesh : m_rprMeshes) {
+            rprApi->SetName(rprMesh, name);
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtySubdivTags)) {

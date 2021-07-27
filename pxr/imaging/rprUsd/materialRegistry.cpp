@@ -356,6 +356,7 @@ void ConvertLegacyHdMaterialNetwork(
 } // namespace anonymous
 
 RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
+    SdfPath const& materialId,
     HdSceneDelegate* sceneDelegate,
     HdMaterialNetworkMap const& legacyNetworkMap,
     rpr::Context* rprContext,
@@ -385,6 +386,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             VtValue const& surfaceOutput,
             VtValue const& displacementOutput,
             VtValue const& volumeOutput,
+            const char* cryptomatteName,
             int materialId) {
 
             auto getTerminalRprNode = [](VtValue const& terminalOutput) -> rpr::MaterialNode* {
@@ -408,10 +410,14 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             m_uvPrimvarName = TfToken(context.uvPrimvarName);
             m_displacementScale = std::move(context.displacementScale);
 
-            if (m_surfaceNode && materialId >= 0) {
-                // TODO: add C++ wrapper
-                auto apiHandle = rpr::GetRprObject(m_surfaceNode);
-                RPR_ERROR_CHECK(rprMaterialNodeSetID(apiHandle, rpr_uint(materialId)), "Failed to set material node id");
+            if (m_surfaceNode) {
+                if (materialId >= 0) {
+                    // TODO: add C++ wrapper
+                    auto apiHandle = rpr::GetRprObject(m_surfaceNode);
+                    RPR_ERROR_CHECK(rprMaterialNodeSetID(apiHandle, rpr_uint(materialId)), "Failed to set material node id");
+                }
+
+                RPR_ERROR_CHECK(m_surfaceNode->SetName(cryptomatteName), "Failed to set material name");
             }
 
             return m_volumeNode || m_surfaceNode || m_displacementNode;
@@ -523,7 +529,8 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     auto surfaceOutput = getTerminalOutput(HdMaterialTerminalTokens->surface);
     auto displacementOutput = getTerminalOutput(HdMaterialTerminalTokens->displacement);
 
-    int materialId = -1;
+    int materialRprId = -1;
+    std::string const* cryptomatteName = nullptr;
 
     auto surfaceTerminalIt = network.terminals.find(HdMaterialTerminalTokens->surface);
     if (surfaceTerminalIt != network.terminals.end()) {
@@ -538,13 +545,26 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
                 auto& value = idIt->second;
 
                 if (value.IsHolding<int>()) {
-                    materialId = value.UncheckedGet<int>();
+                    materialRprId = value.UncheckedGet<int>();
+                }
+            }
+
+            auto cryptomatteNameIt = parameters.find(RprUsdTokens->cryptomatteName);
+            if (cryptomatteNameIt != parameters.end()) {
+                auto& value = cryptomatteNameIt->second;
+
+                if (value.IsHolding<std::string>()) {
+                    cryptomatteName = &value.UncheckedGet<std::string>();
                 }
             }
         }
     }
 
-    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, materialId) ? out.release() : nullptr;
+    if (!cryptomatteName) {
+        cryptomatteName = &materialId.GetString();
+    }
+
+    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName->c_str(), materialRprId) ? out.release() : nullptr;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

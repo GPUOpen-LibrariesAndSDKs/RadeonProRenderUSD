@@ -21,15 +21,16 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    (color)
     (roughness)
     (normal)
-    (shadowColor)
+    (shadowTint)
     (midLevel)
     (midLevelMix)
-    (midColor)
+    (midTint)
     (highlightLevel)
     (highlightLevelMix)
-    (highlightColor)
+    (highlightTint)
     (interpolationMode)
     (Linear)
     (None)
@@ -76,19 +77,19 @@ public:
     bool SetInput(
         TfToken const& id,
         VtValue const& value) override {
-        if (id == _tokens->shadowColor) {
+        if (id == _tokens->shadowTint) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_SHADOW);
         } else if (id == _tokens->midLevel) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION1);
         } else if (id == _tokens->midLevelMix) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE1);
-        } else if (id == _tokens->midColor) {
+        } else if (id == _tokens->midTint) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_MID);
         } else if (id == _tokens->highlightLevel) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION2);
         } else if (id == _tokens->highlightLevelMix) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE2);
-        } else if (id == _tokens->highlightColor) {
+        } else if (id == _tokens->highlightTint) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_HIGHLIGHT);
         } else if (id == _tokens->interpolationMode) {
             if (value.IsHolding<int>()) {
@@ -98,9 +99,16 @@ public:
             }
             TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `Token`", id.GetText(), value.GetTypeName().c_str());
             return false;
+        } else if (id == _tokens->color) {
+            return ProcessInput<GfVec3f>(id, value, m_toonClosureNode, RPR_MATERIAL_INPUT_COLOR);
         } else if (id == _tokens->roughness) {
             return ProcessInput<float>(id, value, m_toonClosureNode, RPR_MATERIAL_INPUT_ROUGHNESS);
         } else if (id == _tokens->normal) {
+            if (value.IsHolding<GfVec3f>() &&
+                value.UncheckedGet<GfVec3f>() == GfVec3f(0.0f)) {
+                return m_toonClosureNode->SetInput(RPR_MATERIAL_INPUT_NORMAL, (rpr::MaterialNode*)nullptr) == RPR_SUCCESS;
+            }
+
             return ProcessInput<GfVec3f>(id, value, m_toonClosureNode, RPR_MATERIAL_INPUT_NORMAL);
         }
 
@@ -121,14 +129,14 @@ public:
         nodeInfo.uiName = "RPR Toon";
         nodeInfo.uiFolder = "Shaders";
 
-        nodeInfo.inputs.emplace_back(_tokens->shadowColor, GfVec3f(0.0f));
-
+        nodeInfo.inputs.emplace_back(_tokens->color, GfVec3f(1.0f));
+        nodeInfo.inputs.emplace_back(_tokens->shadowTint, GfVec3f(0.0f));
         nodeInfo.inputs.emplace_back(_tokens->midLevel, 0.5f);
         nodeInfo.inputs.emplace_back(_tokens->midLevelMix, 0.05f);
-        nodeInfo.inputs.emplace_back(_tokens->midColor, GfVec3f(0.4f));
+        nodeInfo.inputs.emplace_back(_tokens->midTint, GfVec3f(0.4f));
         nodeInfo.inputs.emplace_back(_tokens->highlightLevel, 0.8f);
         nodeInfo.inputs.emplace_back(_tokens->highlightLevelMix, 0.05f);
-        nodeInfo.inputs.emplace_back(_tokens->highlightColor, GfVec3f(0.8f));
+        nodeInfo.inputs.emplace_back(_tokens->highlightTint, GfVec3f(0.8f));
 
         RprUsd_RprNodeInput interpolationModeInput(_tokens->interpolationMode, _tokens->None);
         interpolationModeInput.value = VtValue(0);

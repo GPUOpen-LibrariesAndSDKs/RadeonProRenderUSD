@@ -397,7 +397,11 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
     HdDirtyBits bits = *dirtyBits;
 
     if (bits & DirtyBits::DirtyTransform) {
+#if PXR_VERSION >= 2011
+        m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
+#else
         m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
+#endif
     }
 
     if (bits & DirtyParams) {

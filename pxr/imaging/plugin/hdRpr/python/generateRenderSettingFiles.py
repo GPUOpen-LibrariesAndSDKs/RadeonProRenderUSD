@@ -556,6 +556,47 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'Cryptomatte',
+        'settings': [
+            {
+                'name': 'cryptomatteOutputPath',
+                'ui_name': 'Cryptomatte Output Path',
+                'defaultValue': '',
+                'c_type': 'std::string',
+                'help': 'Controls where cryptomatte should be saved. Use \'Cryptomatte Output Mode\' to control when cryptomatte is saved.',
+                'houdini': {
+                    'type': 'file'
+                }
+            },
+            {
+                'name': 'cryptomatteOutputMode',
+                'ui_name': 'Cryptomatte Output Mode',
+                'defaultValue': 'Batch',
+                'values': [
+                    SettingValue('Batch'),
+                    SettingValue('Interactive')
+                ],
+                'help': 'Batch - save cryptomatte only in the batch rendering mode (USD Render ROP, husk). Interactive - same as the Batch but also save cryptomatte in the non-batch rendering mode. Cryptomatte always saved after \'Max Samples\' is reached.',
+                'houdini': {
+                    'hidewhen': 'cryptomatteOutputPath == ""',
+                }
+            },
+            {
+                'name': 'cryptomattePreviewLayer',
+                'ui_name': 'Cryptomatte Add Preview Layer',
+                'defaultValue': False,
+                'help': 'Whether to generate cryptomatte preview layer or not. Whether you need it depends on the software you are planning to use cryptomatte in. For example, Houdini\'s COP Cryptomatte requires it, Nuke, on contrary, does not.',
+                'houdini': {
+                    'hidewhen': 'cryptomatteOutputPath == ""',
+                }
+
+            }
+        ],
+        'houdini': {
+            'hidewhen': hidewhen_not_northstar
+        }
+    },
+    {
         'name': 'UsdNativeCamera',
         'settings': [
             {
