@@ -15,6 +15,9 @@ limitations under the License.
 #define PXR_IMAGING_RPR_USD_CONTEXT_METADATA_H
 
 #include "pxr/pxr.h"
+#include "pxr/imaging/rprUsd/api.h"
+
+#include <RadeonProRender.hpp>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -26,18 +29,15 @@ enum RprUsdPluginType {
     kPluginsCount
 };
 
-enum class RprUsdRenderDeviceType {
-    Invalid,
-    CPU,
-    GPU,
-};
-
 struct RprUsdContextMetadata {
     RprUsdPluginType pluginType = kPluginInvalid;
-    RprUsdRenderDeviceType renderDeviceType = RprUsdRenderDeviceType::Invalid;
     bool isGlInteropEnabled = false;
     void* interopInfo = nullptr;
+    rpr::CreationFlags creationFlags = 0;
 };
+
+RPRUSD_API
+bool RprUsdIsGpuUsed(RprUsdContextMetadata const& contextMetadata);
 
 PXR_NAMESPACE_CLOSE_SCOPE
 

@@ -113,8 +113,6 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
 extern "C" {
 
-HDRPR_API void HdRprSetRenderDevice(const char* renderDevice);
-
 HDRPR_API void HdRprSetRenderQuality(const char* quality);
 
 // Returned pointer should be released by the caller with HdRprFree

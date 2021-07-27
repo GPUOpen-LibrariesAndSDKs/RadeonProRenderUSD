@@ -426,12 +426,6 @@ void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-void HdRprSetRenderDevice(const char* renderDevice) {
-    PXR_INTERNAL_NS::HdRprConfig* config;
-    auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);
-    config->SetRenderDevice(PXR_INTERNAL_NS::TfToken(renderDevice));
-}
-
 void HdRprSetRenderQuality(const char* quality) {
     PXR_INTERNAL_NS::HdRprConfig* config;
     auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);

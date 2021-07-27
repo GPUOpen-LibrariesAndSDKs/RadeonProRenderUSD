@@ -38,6 +38,11 @@
 
             </subMenu>
 
+            <scriptItem id="rpr_devices">
+                <label>Render Devices</label>
+                <scriptCode><![CDATA[__import__('houRpr.devices').devices.open_configuration_window()]]></scriptCode>
+            </scriptItem>
+
             <separatorItem />
 
             <scriptItem id="rpr_import_material">
