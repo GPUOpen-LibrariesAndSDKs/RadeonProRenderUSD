@@ -1752,8 +1752,7 @@ public:
     }
 
     void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
-        // TODO: check if HybridPro has render qualities
-        if ((!preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) && m_rprContextMetadata.pluginType == kPluginHybrid) {
+        if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
             rpr_uint hybridRenderQuality = -1;
             if (m_currentRenderQuality == HdRprRenderQualityTokens->High) {
                 hybridRenderQuality = RPR_RENDER_QUALITY_HIGH;
@@ -1781,7 +1780,7 @@ public:
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
             m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
-        } else if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
+        } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             UpdateHybridSettings(preferences, force);
         }
 
