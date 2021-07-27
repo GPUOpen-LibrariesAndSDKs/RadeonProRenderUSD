@@ -70,7 +70,19 @@ set(PXR_THREAD_LIBS "${CMAKE_THREAD_LIBS_INIT}")
 
 if(HoudiniUSD_FOUND)
     set(HOUDINI_ROOT "$ENV{HFS}" CACHE PATH "Houdini installation dir")
-    find_package(Houdini REQUIRED CONFIG PATHS ${HOUDINI_ROOT}/toolkit/cmake)
+    set(HOUDINI_CONFIG_DIR ${HOUDINI_ROOT}/toolkit/cmake)
+    if(APPLE)
+        file(COPY
+                ${HOUDINI_ROOT}/toolkit/cmake/HoudiniConfigVersion.cmake
+            DESTINATION
+                ${CMAKE_CURRENT_BINARY_DIR})
+        file(READ ${HOUDINI_ROOT}/toolkit/cmake/HoudiniConfig.cmake HOUDINI_CONFIG)
+        string(REPLACE "_houdini_use_framework TRUE" "_houdini_use_framework FALSE" HOUDINI_CONFIG "${HOUDINI_CONFIG}")
+        string(REPLACE "\${CMAKE_CURRENT_LIST_DIR}" "\${HOUDINI_ROOT}/toolkit/cmake" HOUDINI_CONFIG "${HOUDINI_CONFIG}")
+        file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/HoudiniConfig.cmake "${HOUDINI_CONFIG}")
+        set(HOUDINI_CONFIG_DIR ${CMAKE_CURRENT_BINARY_DIR})
+    endif()
+    find_package(Houdini REQUIRED CONFIG PATHS ${HOUDINI_CONFIG_DIR})
 
     set(OPENEXR_LOCATION ${Houdini_USD_INCLUDE_DIR})
     set(OPENEXR_LIB_LOCATION ${Houdini_LIB_DIR})
