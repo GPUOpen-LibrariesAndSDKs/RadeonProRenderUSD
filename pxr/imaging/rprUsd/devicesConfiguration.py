@@ -217,18 +217,14 @@ class _DeviceWidget(BorderWidget):
         self.cpu_config = cpu_config
         self.gpu_config = gpu_config
 
-        self.main_layout = QtWidgets.QHBoxLayout(self)
-        self.main_layout.setContentsMargins(
-            self.main_layout.contentsMargins().left() // 2,
-            self.main_layout.contentsMargins().top() // 4,
-            self.main_layout.contentsMargins().right() // 2,
-            self.main_layout.contentsMargins().bottom() // 4)
-
-        self.device_name_label = QtWidgets.QLabel(self)
-        self.main_layout.addWidget(self.device_name_label)
-
         if gpu_config:
+            self.device_name_label = QtWidgets.QLabel(self)
             self.device_name_label.setText('GPU "{}"'.format(gpu_config.gpu_info.name))
+
+            self.main_layout = QtWidgets.QHBoxLayout(self)
+            self.main_layout.addWidget(self.device_name_label)
+
+            self.main_layout.addStretch()
 
             self.is_enabled_check_box = QtWidgets.QCheckBox(self)
             self.is_enabled_check_box.setChecked(gpu_config.is_enabled)
@@ -236,21 +232,66 @@ class _DeviceWidget(BorderWidget):
             self.main_layout.addWidget(self.is_enabled_check_box)
 
         elif cpu_config:
-            self.num_threads_spin_box = QtWidgets.QSpinBox(self)
+            self.name_container_widget = QtWidgets.QWidget(self)
+            self.name_container_layout = QtWidgets.QHBoxLayout(self.name_container_widget)
+            self.name_container_layout.setContentsMargins(0, 0, 0, 0)
+
+            self.name_label = QtWidgets.QLabel(self.name_container_widget)
+            self.name_label.setText('CPU')
+            self.name_container_layout.addWidget(self.name_label)
+
+            self.name_container_layout.addStretch()
+
+            is_cpu_enabled = cpu_config.num_active_threads > 0
+
+            self.is_enabled_check_box = QtWidgets.QCheckBox(self.name_container_widget)
+            self.is_enabled_check_box.setChecked(is_cpu_enabled)
+            self.is_enabled_check_box.stateChanged.connect(self.on_cpu_enabled_update)
+            self.name_container_layout.addWidget(self.is_enabled_check_box)
+
+            self.num_threads_container_widget = QtWidgets.QWidget(self)
+            self.num_threads_container_layout = QtWidgets.QHBoxLayout(self.num_threads_container_widget)
+            self.num_threads_container_layout.setContentsMargins(0, 0, 0, 0)
+
+            self.num_threads_label = QtWidgets.QLabel(self.num_threads_container_widget)
+            self.num_threads_label.setText('Number of Threads')
+            self.num_threads_container_layout.addWidget(self.num_threads_label)
+
+            self.num_threads_container_layout.addStretch()
+
+            self.num_threads_spin_box = QtWidgets.QSpinBox(self.num_threads_container_widget)
             self.num_threads_spin_box.setValue(cpu_config.num_active_threads)
-            self.num_threads_spin_box.setRange(0, cpu_config.cpu_info.numThreads)
-            self.num_threads_spin_box.valueChanged.connect(self.on_cpu_update)
-            self.main_layout.addWidget(self.num_threads_spin_box)
+            self.num_threads_spin_box.setRange(1, cpu_config.cpu_info.numThreads)
+            self.num_threads_spin_box.valueChanged.connect(self.on_cpu_num_threads_update)
+            if not is_cpu_enabled:
+                self.num_threads_container_widget.hide()
+            self.num_threads_container_layout.addWidget(self.num_threads_spin_box)
 
-            self.device_name_label.setText('CPU Threads')
+            self.main_layout = QtWidgets.QVBoxLayout(self)
+            self.main_layout.addWidget(self.name_container_widget)
+            self.main_layout.addWidget(self.num_threads_container_widget)
 
-        self.setLayout(self.main_layout)
+        self.main_layout.setContentsMargins(
+            self.main_layout.contentsMargins().left() // 2,
+            self.main_layout.contentsMargins().top() // 4,
+            self.main_layout.contentsMargins().right() // 2,
+            self.main_layout.contentsMargins().bottom() // 4)
 
     def on_gpu_update(self, is_enabled):
         self.gpu_config.is_enabled = bool(is_enabled)
         self.on_change.emit()
 
-    def on_cpu_update(self, num_threads):
+    def on_cpu_enabled_update(self, is_enabled):
+        if is_enabled:
+            self.cpu_config.num_active_threads = self.cpu_config.cpu_info.numThreads
+            self.num_threads_spin_box.setValue(self.cpu_config.num_active_threads)
+            self.num_threads_container_widget.show()
+        else:
+            self.cpu_config.num_active_threads = 0
+            self.num_threads_container_widget.hide()
+        self.on_change.emit()
+
+    def on_cpu_num_threads_update(self, num_threads):
         self.cpu_config.num_active_threads = num_threads
         self.on_change.emit()
 
