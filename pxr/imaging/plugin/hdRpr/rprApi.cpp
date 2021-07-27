@@ -1961,8 +1961,6 @@ public:
 
             apertureOffset[0] /= apertureSize[0];
             apertureOffset[1] /= apertureSize[1];
-
-            apertureOffset[1] *= aspectRatio;
         } else {
             bool isOrthographic = round(m_cameraProjectionMatrix[3][3]) == 1.0;
             if (isOrthographic) {
