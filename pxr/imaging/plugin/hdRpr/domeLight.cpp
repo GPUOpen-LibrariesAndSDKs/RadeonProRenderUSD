@@ -55,9 +55,9 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
 
     if (bits & HdLight::DirtyTransform) {
 #if PXR_VERSION >= 2011
-      m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
+        m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
 #else
-      m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
+        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
 #endif
         m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(1.0f, 1.0f, -1.0f));
     }
