@@ -30,8 +30,6 @@ over "GLOBAL" (
 ) {
 }
 
-# TODO: how to define UI properties (min, max, etc)? Check SdfMetadata plugin
-
 class "RprRendererSettingsAPI" (
     inherits = </APISchemaBase>
     customData = {
@@ -57,16 +55,16 @@ class "RprRendererSettingsAPI" (
     uniform float rpr:ambientOcclusion:radius = 1.0 (
         displayName = "Ambient Occlusion"
         displayGroup = "Render Mode"
-        minValue = 0.0
-        maxValue = 100.0
+        rprMinValue = 0.0
+        rprMaxValue = 100.0
     )
 
     # northstar only
     uniform float rpr:contour:antialiasing = 1.0 (
         displayName = "Antialiasing"
         displayGroup = "Contour Render Mode"
-        minValue = 0.0
-        maxValue = 1.0
+        rprMinValue = 0.0
+        rprMaxValue = 1.0
     )
     uniform bool rpr:contour:useNormal = true (
         displayName = "Use Normal"
@@ -77,14 +75,14 @@ class "RprRendererSettingsAPI" (
         displayName = "Linewidth Normal"
         displayGroup = "Contour Render Mode"
         doc = "Linewidth of edges detected via normals."
-        minValue = 0.0
-        maxValue = 100.0
+        rprMinValue = 0.0
+        rprMaxValue = 100.0
     )
     uniform float rpr:contour:normalThreshold = 45.0 (
         displayName = "Normal Threshold"
         displayGroup = "Contour Render Mode"
-        minValue = 0.0
-        maxValue = 180.0
+        rprMinValue = 0.0
+        rprMaxValue = 180.0
     )
     uniform bool rpr:contour:usePrimId = true (
         displayName = "Use Primitive Id"
@@ -95,8 +93,8 @@ class "RprRendererSettingsAPI" (
         displayName = "Linewidth Primitive Id"
         displayGroup = "Contour Render Mode"
         doc = "Linewidth of edges detected via Primitive Id."
-        minValue = 0.0
-        maxValue = 100.0
+        rprMinValue = 0.0
+        rprMaxValue = 100.0
     )
     uniform bool rpr:contour:useMaterialId = true (
         displayName = "Use Material Id"
@@ -107,8 +105,8 @@ class "RprRendererSettingsAPI" (
         displayName = "Linewidth Material Id"
         displayGroup = "Contour Render Mode"
         doc = "Linewidth of edges detected via Material Id."
-        minValue = 0.0
-        maxValue = 100.0
+        rprMinValue = 0.0
+        rprMaxValue = 100.0
     )
     uniform bool rpr:contour:debug = false (
         displayName = "Debug"
@@ -133,12 +131,12 @@ class "RprRendererSettingsAPI" (
     uniform int rpr:denoising:minIter = 4 (
         displayGroup = "Denoise"
         displayName = "Min Iteration"
-        minValue = 1
+        rprMinValue = 1
     )
     uniform int rpr:denoising:iterStep = 32 (
         displayGroup = "Denoise"
         displayName = "Iteration Step"
-        minValue = 1
+        rprMinValue = 1
     )
 
     # not for low
@@ -146,7 +144,7 @@ class "RprRendererSettingsAPI" (
         displayGroup = "Samples"
         displayName = "Max Samples"
         doc = "Maximum number of samples to render for each pixel."
-        minValue = 1
+        rprMinValue = 1
     )
 
     # tahoe and northstar only
@@ -154,14 +152,14 @@ class "RprRendererSettingsAPI" (
         displayGroup = "Adaptive Sampling"
         displayName = "Min Samples"
         doc = "Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than 'Variance Threshold'."
-        minValue = 1
+        rprMinValue = 1
     )
     uniform float rpr:adaptiveSampling:noiseTreshold = 0.0 (
         displayGroup = "Adaptive Sampling"
         displayName = "Noise Threshold"
         doc = "Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff."
-        minValue = 0.0
-        maxValue = 1.0
+        rprMinValue = 0.0
+        rprMaxValue = 1.0
     )
 
     # not for hybrid
@@ -169,57 +167,57 @@ class "RprRendererSettingsAPI" (
         displayName = "Max Ray Depth"
         displayGroup = "Quality"
         doc = "The number of times that a ray bounces off various surfaces before being terminated."
-        minValue = 1
-        maxValue = 50
+        rprMinValue = 1
+        rprMaxValue = 50
     )
     uniform int rpr:quality:rayDepthDiffuse = 3 (
         displayName = "Diffuse Ray Depth"
         displayGroup = "Quality"
         doc = "The maximum number of times that a light ray can be bounced off diffuse surfaces."
-        minValue = 0
-        maxValue = 50
+        rprMinValue = 0
+        rprMaxValue = 50
     )
     uniform int rpr:quality:rayDepthGlossy = 3 (
         displayName = "Glossy Ray Depth"
         displayGroup = "Quality"
         doc = "The maximum number of ray bounces from specular surfaces."
-        minValue = 0
-        maxValue = 50
+        rprMinValue = 0
+        rprMaxValue = 50
     )
     uniform int rpr:quality:rayDepthRefraction = 3 (
         displayName = "Refraction Ray Depth"
         displayGroup = "Quality"
         doc = "The maximum number of times that a light ray can be refracted, and is designated for clear transparent materials, such as glass."
-        minValue = 0
-        maxValue = 50
+        rprMinValue = 0
+        rprMaxValue = 50
     )
     uniform int rpr:quality:rayDepthGlossyRefraction = 3 (
         displayName = "Glossy Refraction Ray Depth"
         displayGroup = "Quality"
         doc = "The Glossy Refraction Ray Depth parameter is similar to the Refraction Ray Depth. The difference is that it is aimed to work with matte refractive materials, such as semi-frosted glass."
-        minValue = 0
-        maxValue = 50
+        rprMinValue = 0
+        rprMaxValue = 50
     )
     uniform int rpr:quality:rayDepthShadow = 3 (
         displayName = "Shadow Ray Depth"
         displayGroup = "Quality"
         doc = "Controls the accuracy of shadows cast by transparent objects. It defines the maximum number of surfaces that a light ray can encounter on its way causing these surfaces to cast shadows."
-        minValue = 0
-        maxValue = 50
+        rprMinValue = 0
+        rprMaxValue = 50
     )
     uniform float rpr:quality:raycastEpsilon = 0.002 (
         displayName = "Ray Cast Epsilon"
         displayGroup = "Quality"
         doc = "Determines an offset used to move light rays away from the geometry for ray-surface intersection calculations."
-        minValue = 0.000001
-        maxValue = 1.0
+        rprMinValue = 0.000001
+        rprMaxValue = 1.0
     )
     uniform float rpr:quality:radianceClamping = 0.0 (
         displayGroup = "Quality"
         displayName = "Max Radiance"
         doc = "Limits the intensity, or the maximum brightness, of samples in the scene. Greater clamp radiance values produce more brightness. Set to 0.0 ot disable clamping."
-        minValue = 0.0
-        maxValue = 1000000
+        rprMinValue = 0.0
+        rprMaxValue = 1000000
     )
 
     # not for hybrid
@@ -227,16 +225,16 @@ class "RprRendererSettingsAPI" (
         displayName = "Max Ray Depth"
         displayGroup = "Interactive Quality"
         doc = "Controls value of 'Max Ray Depth' in interactive mode."
-        minValue = 1
-        maxValue = 50
+        rprMinValue = 1
+        rprMaxValue = 50
     )
     # northstar only
     uniform int rpr:quality:interactive:resolutionDownscale = 3 (
         displayName = "Resolution Downscale"
         displayGroup = "Interactive Quality"
         doc = "Controls how much rendering resolution is downscaled in interactive mode. Formula: resolution / (2 ^ downscale). E.g. downscale==2 will give you 4 times smaller rendering resolution."
-        minValue = 0
-        maxValue = 10
+        rprMinValue = 0
+        rprMaxValue = 10
     )
     # tahoe only
     uniform bool rpr:quality:interactive:enableDownscale = true (
@@ -253,29 +251,29 @@ class "RprRendererSettingsAPI" (
     uniform float rpr:tonemapping:exposureTime = 0.125 (
         displayName = "Film Exposure Time (sec)"
         displayGroup = "Tonemapping"
-        minValue = 0.0
-        maxValue = 10.0
+        rprMinValue = 0.0
+        rprMaxValue = 10.0
     )
     uniform float rpr:tonemapping:sensitivity = 1.0 (
         displayName = "Film Exposure Time (sec)"
         displayGroup = "Tonemapping"
         doc = "Luminance of the scene (in candela per m^2)."
-        minValue = 0.0
-        maxValue = 10.0
+        rprMinValue = 0.0
+        rprMaxValue = 10.0
     )
     uniform float rpr:tonemapping:fstop = 1.0 (
         displayName = "Fstop"
         displayGroup = "Tonemapping"
         doc = "Aperture f-number."
-        minValue = 0.0
-        maxValue = 100.0
+        rprMinValue = 0.0
+        rprMaxValue = 100.0
     )
     uniform float rpr:tonemapping:gamma = 1.0 (
         displayName = "Gamma"
         displayGroup = "Tonemapping"
         doc = "Gamma correction value."
-        minValue = 0.0
-        maxValue = 5.0
+        rprMinValue = 0.0
+        rprMaxValue = 5.0
     )
 
     uniform bool rpr:alpha = true (

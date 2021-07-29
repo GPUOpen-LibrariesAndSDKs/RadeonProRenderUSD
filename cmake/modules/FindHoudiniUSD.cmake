@@ -185,7 +185,7 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
     if(NOT USD_SCHEMA_GENERATOR)
         find_program(USD_SCHEMA_GENERATOR
             NAMES
-                usdGenSchema.py usdGenSchema
+                usdGenSchema.py
             PATHS
                 ${HOUDINI_BIN}
             REQUIRED

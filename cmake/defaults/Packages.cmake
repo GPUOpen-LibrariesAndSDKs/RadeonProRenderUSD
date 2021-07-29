@@ -58,19 +58,12 @@ if(NOT HoudiniUSD_FOUND)
     list(APPEND CMAKE_PREFIX_PATH ${pxr_DIR})
 
     find_program(USD_SCHEMA_GENERATOR
-        NAMES usdGenSchema
+        NAMES usdGenSchema.py
         PATHS ${pxr_DIR}/bin
+        REQUIRED
         NO_DEFAULT_PATH)
-
-    if(NOT USD_SCHEMA_GENERATOR)
-        find_program(USD_SCHEMA_GENERATOR
-            NAMES usdGenSchema.py
-            PATHS ${pxr_DIR}/bin
-            REQUIRED
-            NO_DEFAULT_PATH)
-        list(PREPEND USD_SCHEMA_GENERATOR python)
-        set(USD_SCHEMA_GENERATOR ${USD_SCHEMA_GENERATOR} CACHE STRING "" FORCE)
-    endif()
+    list(PREPEND USD_SCHEMA_GENERATOR python)
+    set(USD_SCHEMA_GENERATOR ${USD_SCHEMA_GENERATOR} CACHE STRING "" FORCE)
 endif()
 
 if(NOT USD_SCHEMA_GENERATOR)
