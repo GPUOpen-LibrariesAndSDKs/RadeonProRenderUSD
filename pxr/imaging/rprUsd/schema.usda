@@ -44,38 +44,299 @@ class "RprRendererSettingsAPI" (
 {
     uniform token rpr:renderQuality = "Northstar" (
         allowedTokens = ["Low", "Medium", "High", "Full", "Northstar"]
-        customData = {
-            string apiName = "renderQuality"
-        }
         displayName = "Render Quality"
-        doc = ""
     )
 
+    uniform token rpr:renderMode = "Global Illumination" (
+        allowedTokens = ["Global Illumination", "Direct Illumination", "Wireframe", "Material Index", "Position", "Normal", "Texcoord", "Ambient Occlusion", "Diffuse", "Contour"]
+        displayName = "Render Mode"
+        displayGroup = "Render Mode"
+    )
+
+    # tahoe only
+    uniform float rpr:ambientOcclusion:radius = 1.0 (
+        displayName = "Ambient Occlusion"
+        displayGroup = "Render Mode"
+        minValue = 0.0
+        maxValue = 100.0
+    )
+
+    # northstar only
+    uniform float rpr:contour:antialiasing = 1.0 (
+        displayName = "Antialiasing"
+        displayGroup = "Contour Render Mode"
+        minValue = 0.0
+        maxValue = 1.0
+    )
+    uniform bool rpr:contour:useNormal = true (
+        displayName = "Use Normal"
+        displayGroup = "Contour Render Mode"
+        doc = "Whether to use geometry normals for edge detection or not"
+    )
+    uniform float rpr:contour:linewidthNormal = 1.0 (
+        displayName = "Linewidth Normal"
+        displayGroup = "Contour Render Mode"
+        doc = "Linewidth of edges detected via normals."
+        minValue = 0.0
+        maxValue = 100.0
+    )
+    uniform float rpr:contour:normalThreshold = 45.0 (
+        displayName = "Normal Threshold"
+        displayGroup = "Contour Render Mode"
+        minValue = 0.0
+        maxValue = 180.0
+    )
+    uniform bool rpr:contour:usePrimId = true (
+        displayName = "Use Primitive Id"
+        displayGroup = "Contour Render Mode"
+        doc = "Whether to use primitive Id for edge detection or not."
+    )
+    uniform float rpr:contour:linewidthPrimId = 1.0 (
+        displayName = "Linewidth Primitive Id"
+        displayGroup = "Contour Render Mode"
+        doc = "Linewidth of edges detected via Primitive Id."
+        minValue = 0.0
+        maxValue = 100.0
+    )
+    uniform bool rpr:contour:useMaterialId = true (
+        displayName = "Use Material Id"
+        displayGroup = "Contour Render Mode"
+        doc = "Whether to use material Id for edge detection or not."
+    )
+    uniform float rpr:contour:linewidthMaterialId = 1.0 (
+        displayName = "Linewidth Material Id"
+        displayGroup = "Contour Render Mode"
+        doc = "Linewidth of edges detected via Material Id."
+        minValue = 0.0
+        maxValue = 100.0
+    )
+    uniform bool rpr:contour:debug = false (
+        displayName = "Debug"
+        displayGroup = "Contour Render Mode"
+        doc = """ Whether to show colored outlines according to used features or not.
+                  Colors legend:
+                   * red - primitive Id
+                   * green - material Id
+                   * blue - normal
+                   * yellow - primitive Id + material Id
+                   * magenta - primitive Id + normal
+                   * cyan - material Id + normal
+                   * black - all
+              """
+    )
+
+    # not for < High
     uniform bool rpr:denoising = false (
-        customData = {
-            string apiName = "denoising"
-        }
         displayGroup = "Denoise"
-        displayName = "AI Denoise"
-        doc = ""
+        displayName = "Enable AI Denoise"
+    )
+    uniform int rpr:denoising:minIter = 4 (
+        displayGroup = "Denoise"
+        displayName = "Min Iteration"
+        minValue = 1
+    )
+    uniform int rpr:denoising:iterStep = 32 (
+        displayGroup = "Denoise"
+        displayName = "Iteration Step"
+        minValue = 1
     )
 
+    # not for low
     uniform int rpr:maxSamples = 256 (
-        customData = {
-            string apiName = "maxSamples"
-        }
         displayGroup = "Samples"
         displayName = "Max Samples"
         doc = "Maximum number of samples to render for each pixel."
+        minValue = 1
     )
 
-    uniform float rpr:radianceClamping = 0.0 (
-        customData = {
-            string apiName = "radianceClamping"
-        }
+    # tahoe and northstar only
+    uniform int rpr:adaptiveSampling:minSamples = 64 (
+        displayGroup = "Adaptive Sampling"
+        displayName = "Min Samples"
+        doc = "Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than 'Variance Threshold'."
+        minValue = 1
+    )
+    uniform float rpr:adaptiveSampling:noiseTreshold = 0.0 (
+        displayGroup = "Adaptive Sampling"
+        displayName = "Noise Threshold"
+        doc = "Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff."
+        minValue = 0.0
+        maxValue = 1.0
+    )
+
+    # not for hybrid
+    uniform int rpr:quality:rayDepth = 3 (
+        displayName = "Max Ray Depth"
+        displayGroup = "Quality"
+        doc = "The number of times that a ray bounces off various surfaces before being terminated."
+        minValue = 1
+        maxValue = 50
+    )
+    uniform int rpr:quality:rayDepthDiffuse = 3 (
+        displayName = "Diffuse Ray Depth"
+        displayGroup = "Quality"
+        doc = "The maximum number of times that a light ray can be bounced off diffuse surfaces."
+        minValue = 0
+        maxValue = 50
+    )
+    uniform int rpr:quality:rayDepthGlossy = 3 (
+        displayName = "Glossy Ray Depth"
+        displayGroup = "Quality"
+        doc = "The maximum number of ray bounces from specular surfaces."
+        minValue = 0
+        maxValue = 50
+    )
+    uniform int rpr:quality:rayDepthRefraction = 3 (
+        displayName = "Refraction Ray Depth"
+        displayGroup = "Quality"
+        doc = "The maximum number of times that a light ray can be refracted, and is designated for clear transparent materials, such as glass."
+        minValue = 0
+        maxValue = 50
+    )
+    uniform int rpr:quality:rayDepthGlossyRefraction = 3 (
+        displayName = "Glossy Refraction Ray Depth"
+        displayGroup = "Quality"
+        doc = "The Glossy Refraction Ray Depth parameter is similar to the Refraction Ray Depth. The difference is that it is aimed to work with matte refractive materials, such as semi-frosted glass."
+        minValue = 0
+        maxValue = 50
+    )
+    uniform int rpr:quality:rayDepthShadow = 3 (
+        displayName = "Shadow Ray Depth"
+        displayGroup = "Quality"
+        doc = "Controls the accuracy of shadows cast by transparent objects. It defines the maximum number of surfaces that a light ray can encounter on its way causing these surfaces to cast shadows."
+        minValue = 0
+        maxValue = 50
+    )
+    uniform float rpr:quality:raycastEpsilon = 0.002 (
+        displayName = "Ray Cast Epsilon"
+        displayGroup = "Quality"
+        doc = "Determines an offset used to move light rays away from the geometry for ray-surface intersection calculations."
+        minValue = 0.000001
+        maxValue = 1.0
+    )
+    uniform float rpr:quality:radianceClamping = 0.0 (
         displayGroup = "Quality"
         displayName = "Max Radiance"
         doc = "Limits the intensity, or the maximum brightness, of samples in the scene. Greater clamp radiance values produce more brightness. Set to 0.0 ot disable clamping."
+        minValue = 0.0
+        maxValue = 1000000
+    )
+
+    # not for hybrid
+    uniform int rpr:quality:interactive:rayDepth = 2 (
+        displayName = "Max Ray Depth"
+        displayGroup = "Interactive Quality"
+        doc = "Controls value of 'Max Ray Depth' in interactive mode."
+        minValue = 1
+        maxValue = 50
+    )
+    # northstar only
+    uniform int rpr:quality:interactive:resolutionDownscale = 3 (
+        displayName = "Resolution Downscale"
+        displayGroup = "Interactive Quality"
+        doc = "Controls how much rendering resolution is downscaled in interactive mode. Formula: resolution / (2 ^ downscale). E.g. downscale==2 will give you 4 times smaller rendering resolution."
+        minValue = 0
+        maxValue = 10
+    )
+    # tahoe only
+    uniform bool rpr:quality:interactive:enableDownscale = true (
+        displayName = "Enable Downscale"
+        displayGroup = "Interactive Quality"
+        doc = "Controls whether in interactive mode resolution should be downscaled or no."
+    )
+
+    uniform bool rpr:tonemapping = true (
+        displayName = "Enable Tonemapping"
+        displayGroup = "Tonemapping"
+        doc = "Enable linear photographic tone mapping filter. More info in RIF documentation."
+    )
+    uniform float rpr:tonemapping:exposureTime = 0.125 (
+        displayName = "Film Exposure Time (sec)"
+        displayGroup = "Tonemapping"
+        minValue = 0.0
+        maxValue = 10.0
+    )
+    uniform float rpr:tonemapping:sensitivity = 1.0 (
+        displayName = "Film Exposure Time (sec)"
+        displayGroup = "Tonemapping"
+        doc = "Luminance of the scene (in candela per m^2)."
+        minValue = 0.0
+        maxValue = 10.0
+    )
+    uniform float rpr:tonemapping:fstop = 1.0 (
+        displayName = "Fstop"
+        displayGroup = "Tonemapping"
+        doc = "Aperture f-number."
+        minValue = 0.0
+        maxValue = 100.0
+    )
+    uniform float rpr:tonemapping:gamma = 1.0 (
+        displayName = "Gamma"
+        displayGroup = "Tonemapping"
+        doc = "Gamma correction value."
+        minValue = 0.0
+        maxValue = 5.0
+    )
+
+    uniform bool rpr:alpha = true (
+        displayName = "Enable Color Alpha"
+        displayGroup = "Alpha"
+        doc = "Gamma correction value."
+    )
+
+    # Northstar only
+    uniform bool rpr:beautyMotionBlur = true (
+        displayName = "Enable Beauty Motion Blur"
+        displayGroup = "Motion Blur"
+        doc = "If disabled, only velocity AOV will store information about movement on the scene. Required for motion blur that is generated in post-processing."
+    )
+
+    # Northstar only
+    uniform string rpr:ocio:configPath = "" (
+        displayName = "Config Path"
+        displayGroup = "OpenColorIO"
+        doc = "The file path of the OpenColorIO config file to be used. Overrides any value specified in OCIO environment variable."
+    )
+    uniform string rpr:ocio:renderingColorSpace = "" (
+        displayName = "Rendering Color Space"
+        displayGroup = "OpenColorIO"
+    )
+
+    # Not for Hybrid
+    uniform bool rpr:uniformSeed = true (
+        displayName = "Use Uniform Seed"
+        displayGroup = "Seed"
+    )
+
+    # Northstar only
+    uniform string rpr:cryptomatte:outputPath = "" (
+        displayName = "Output Path"
+        displayGroup = "Cryptomatte"
+        doc = "Controls where cryptomatte should be saved. Use 'Cryptomatte Output Mode' to control when cryptomatte is saved."
+    )
+    uniform token rpr:cryptomatte:outputMode = "Batch" (
+        allowedTokens = ["Batch", "Interactive"]
+        displayName = "Output Mode"
+        displayGroup = "Cryptomatte"
+        doc = "Batch - save cryptomatte only in the batch rendering mode (USD Render ROP, husk). Interactive - same as the Batch but also save cryptomatte in the non-batch rendering mode. Cryptomatte always saved after 'Max Samples' is reached."
+    )
+    uniform bool rpr:cryptomatte:previewLayer = false (
+        displayName = "Add Preview Layer"
+        displayGroup = "Cryptomatte"
+        doc = "Whether to generate cryptomatte preview layer or not. Whether you need it depends on the software you are planning to use cryptomatte in. For example, Houdini's COP Cryptomatte requires it, Nuke, on contrary, does not."
+    )
+
+    uniform string rpr:export:path = "" (
+        displayName = "Path"
+        displayGroup = "Export .rpr"
+    )
+    uniform bool rpr:export:asSingleFile = false (
+        displayName = "As Single File"
+        displayGroup = "Export .rpr"
+    )
+    uniform bool rpr:export:useImageCache = false (
+        displayName = "Use Image Cache"
+        displayGroup = "Export .rpr"
     )
 }
 
