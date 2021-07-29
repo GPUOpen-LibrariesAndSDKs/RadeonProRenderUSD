@@ -175,4 +175,22 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
     endif(APPLE)
     # By default Boost links libraries implicitly for the user via pragma's, we do not want this
     target_compile_definitions(tf INTERFACE -DHBOOST_ALL_NO_LIB)
+
+    if(APPLE)
+        set(HOUDINI_BIN ${HOUDINI_ROOT}/Resources/bin)
+    else()
+        set(HOUDINI_BIN ${HOUDINI_ROOT}/bin)
+    endif()
+
+    if(NOT USD_SCHEMA_GENERATOR)
+        find_program(USD_SCHEMA_GENERATOR
+            NAMES
+                usdGenSchema.py usdGenSchema
+            PATHS
+                ${HOUDINI_BIN}
+            REQUIRED
+            NO_DEFAULT_PATH)
+        list(PREPEND USD_SCHEMA_GENERATOR ${HOUDINI_BIN}/hython)
+        set(USD_SCHEMA_GENERATOR ${USD_SCHEMA_GENERATOR} CACHE STRING "" FORCE)
+    endif()
 endif()
