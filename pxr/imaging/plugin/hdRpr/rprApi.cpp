@@ -2446,9 +2446,10 @@ public:
         }
 
         // Though if adaptive sampling is enabled in a batch session we first render m_minSamples samples
-        // and after that render 1 sample at a time because we want to query the current amount of
+        // and after that, if needed, render 1 sample at a time because we want to check the current amount of
         // active pixels as often as possible
         const bool isAdaptiveSamplingEnabled = IsAdaptiveSamplingEnabled();
+        const bool isActivePixelCountCheckRequired = isAdaptiveSamplingEnabled && m_rprContextMetadata.pluginType == kPluginTahoe;
 
         // In a batch session, we do denoise once at the end
         auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
@@ -2500,7 +2501,7 @@ public:
                 // When singlesampled AOVs already rendered, we can fire up rendering of as many samples as possible
                 if (m_numSamples == 1) {
                     // Render as many samples as possible per Render call
-                    if (isAdaptiveSamplingEnabled) {
+                    if (isActivePixelCountCheckRequired) {
                         m_numSamplesPerIter = m_minSamples - m_numSamples;
                     } else {
                         m_numSamplesPerIter = m_maxSamples - m_numSamples;
@@ -2512,7 +2513,7 @@ public:
                     }
                 } else {
                     // When adaptive sampling is enabled, after reaching m_minSamples we want query RPR_CONTEXT_ACTIVE_PIXEL_COUNT each sample
-                    if (isAdaptiveSamplingEnabled && m_numSamples == m_minSamples) {
+                    if (isActivePixelCountCheckRequired && m_numSamples == m_minSamples) {
                         m_numSamplesPerIter = 1;
                         isMaximizingContextIterations = false;
                     }
@@ -2528,7 +2529,7 @@ public:
                 }
             }
 
-            if (isAdaptiveSamplingEnabled && m_numSamples >= m_minSamples && 
+            if (isActivePixelCountCheckRequired && m_numSamples >= m_minSamples &&
                 RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                 m_activePixels = -1;
             }

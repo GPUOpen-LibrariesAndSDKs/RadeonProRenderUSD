@@ -275,7 +275,7 @@ render_setting_categories = [
     {
         'name': 'AdaptiveSampling',
         'houdini': {
-            'hidewhen': hidewhen_not_tahoe
+            'hidewhen': hidewhen_hybrid
         },
         'settings': [
             {
