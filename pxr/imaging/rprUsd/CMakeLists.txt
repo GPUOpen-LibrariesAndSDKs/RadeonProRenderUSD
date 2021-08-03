@@ -43,9 +43,11 @@ pxr_library(rprUsd
     PYMODULE_CPPFILES
         module.cpp
         wrapConfig.cpp
+        wrapContextHelpers.cpp
 
     PYMODULE_FILES
         __init__.py
+        devicesConfiguration.py
 )
 
 if(HoudiniUSD_FOUND)

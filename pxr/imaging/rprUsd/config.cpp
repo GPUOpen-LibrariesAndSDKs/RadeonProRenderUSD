@@ -243,4 +243,9 @@ std::string RprUsdConfig::GetKernelCacheDir() const {
     return ret;
 }
 
+std::string RprUsdConfig::GetDeviceConfigurationFilepath() const {
+    std::string configCacheDir = GetDefaultCacheDir("config");
+    return configCacheDir + ARCH_PATH_SEP + "devicesConfig.txt";
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE

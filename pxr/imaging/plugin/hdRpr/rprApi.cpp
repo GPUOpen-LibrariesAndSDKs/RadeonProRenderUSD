@@ -111,16 +111,6 @@ GfVec4f ToVec4(GfVec3f const& vec, float w) {
     return GfVec4f(vec[0], vec[1], vec[2], w);
 }
 
-RprUsdRenderDeviceType ToRprUsd(TfToken const& configDeviceType) {
-    if (configDeviceType == HdRprRenderDeviceTokens->CPU) {
-        return RprUsdRenderDeviceType::CPU;
-    } else if (configDeviceType == HdRprRenderDeviceTokens->GPU) {
-        return RprUsdRenderDeviceType::GPU;
-    } else {
-        return RprUsdRenderDeviceType::Invalid;
-    }
-}
-
 bool CreateIntermediateDirectories(std::string const& filePath) {
     auto dir = TfGetPathName(filePath);
     if (!dir.empty()) {
@@ -1557,26 +1547,10 @@ public:
 
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 m_currentRenderQuality = GetRenderQuality(*config);
-            }
 
-            if (config->IsDirty(HdRprConfig::DirtyDevice) ||
-                config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
-                bool restartRequired = false;
-                if (config->IsDirty(HdRprConfig::DirtyDevice)) {
-                    if (m_rprContextMetadata.renderDeviceType != ToRprUsd(config->GetRenderDevice())) {
-                        restartRequired = true;
-                    }
-                }
-
-                if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
-                    auto newPlugin = GetPluginType(m_currentRenderQuality);
-                    auto activePlugin = m_rprContextMetadata.pluginType;
-                    if (newPlugin != activePlugin) {
-                        restartRequired = true;
-                    }
-                }
-
-                m_state = restartRequired ? kStateRestartRequired : kStateRender;
+                auto newPlugin = GetPluginType(m_currentRenderQuality);
+                auto activePlugin = m_rprContextMetadata.pluginType;
+                m_state = (newPlugin != activePlugin) ? kStateRestartRequired : kStateRender;
             }
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
@@ -2157,8 +2131,7 @@ public:
         }
 
         rif::FilterType filterType = rif::FilterType::EawDenoise;
-
-        if (m_rprContextMetadata.renderDeviceType == RprUsdRenderDeviceType::GPU) {
+        if (RprUsdIsGpuUsed(m_rprContextMetadata)) {
             filterType = rif::FilterType::AIDenoise;
         }
 
@@ -2495,9 +2468,10 @@ public:
         }
 
         // Though if adaptive sampling is enabled in a batch session we first render m_minSamples samples
-        // and after that render 1 sample at a time because we want to query the current amount of
+        // and after that, if needed, render 1 sample at a time because we want to check the current amount of
         // active pixels as often as possible
         const bool isAdaptiveSamplingEnabled = IsAdaptiveSamplingEnabled();
+        const bool isActivePixelCountCheckRequired = isAdaptiveSamplingEnabled && m_rprContextMetadata.pluginType == kPluginTahoe;
 
         // In a batch session, we do denoise once at the end
         auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
@@ -2549,7 +2523,7 @@ public:
                 // When singlesampled AOVs already rendered, we can fire up rendering of as many samples as possible
                 if (m_numSamples == 1) {
                     // Render as many samples as possible per Render call
-                    if (isAdaptiveSamplingEnabled) {
+                    if (isActivePixelCountCheckRequired) {
                         m_numSamplesPerIter = m_minSamples - m_numSamples;
                     } else {
                         m_numSamplesPerIter = m_maxSamples - m_numSamples;
@@ -2561,7 +2535,7 @@ public:
                     }
                 } else {
                     // When adaptive sampling is enabled, after reaching m_minSamples we want query RPR_CONTEXT_ACTIVE_PIXEL_COUNT each sample
-                    if (isAdaptiveSamplingEnabled && m_numSamples == m_minSamples) {
+                    if (isActivePixelCountCheckRequired && m_numSamples == m_minSamples) {
                         m_numSamplesPerIter = 1;
                         isMaximizingContextIterations = false;
                     }
@@ -2577,7 +2551,7 @@ public:
                 }
             }
 
-            if (isAdaptiveSamplingEnabled && m_numSamples >= m_minSamples && 
+            if (isActivePixelCountCheckRequired && m_numSamples >= m_minSamples &&
                 RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                 m_activePixels = -1;
             }
@@ -3264,7 +3238,6 @@ private:
             config->Sync(m_delegate);
 
             m_currentRenderQuality = GetRenderQuality(*config);
-            m_rprContextMetadata.renderDeviceType = ToRprUsd(config->GetRenderDevice());
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);

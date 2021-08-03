@@ -9,15 +9,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # 
-from . import _rprUsd
-from . import devicesConfiguration
-from pxr import Tf
-Tf.PrepareModule(_rprUsd, locals())
-del Tf
+import hou
+from hutil.Qt import QtCore
+from rpr import RprUsd
 
-try:
-    from . import __DOC
-    __DOC.Execute(locals())
-    del __DOC
-except Exception:
-    pass
+def open_configuration_window():
+    RprUsd.devicesConfiguration.open_window(hou.ui.mainQtWindow(), QtCore.Qt.Window)
