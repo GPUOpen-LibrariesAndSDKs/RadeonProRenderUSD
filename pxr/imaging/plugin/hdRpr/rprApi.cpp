@@ -1897,13 +1897,18 @@ public:
         float focalLength;
 
         GfVec2f apertureSize;
+        GfVec2f apertureOffset(0.0f);
         HdRprCamera::Projection projection;
         if (m_hdCamera->GetFocalLength(&focalLength) &&
             m_hdCamera->GetApertureSize(&apertureSize) &&
+            m_hdCamera->GetApertureOffset(&apertureOffset) &&
             m_hdCamera->GetProjection(&projection)) {
             ApplyAspectRatioPolicy(m_viewportSize, aspectRatioPolicy.value, apertureSize);
             sensorWidth = apertureSize[0];
             sensorHeight = apertureSize[1];
+
+            apertureOffset[0] /= apertureSize[0];
+            apertureOffset[1] /= apertureSize[1];
         } else {
             bool isOrthographic = round(m_cameraProjectionMatrix[3][3]) == 1.0;
             if (isOrthographic) {
@@ -1922,6 +1927,8 @@ public:
                 focalLength = m_cameraProjectionMatrix[1][1] / (2.0 * aspectRatio);
             }
         }
+
+        RPR_ERROR_CHECK(m_camera->SetLensShift(apertureOffset[0], apertureOffset[1]), "Failed to set camera lens shift");
 
         if (projection == HdRprCamera::Orthographic) {
             RPR_ERROR_CHECK(m_camera->SetMode(RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
