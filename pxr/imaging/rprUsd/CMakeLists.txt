@@ -11,8 +11,10 @@ pxr_library(rprUsd
         hd
         glf
         sdf
+        sdr
         arch
         work
+        hdMtlx
         cpprpr
         json
 
@@ -58,22 +60,25 @@ target_sources(rprUsd PRIVATE
     materialNodes/materialNode.h
     materialNodes/usdNode.h
     materialNodes/usdNode.cpp
-    materialNodes/mtlxNode.h
-    materialNodes/mtlxNode.cpp
     materialNodes/rpr/baseNode.h
     materialNodes/rpr/baseNode.cpp
     materialNodes/rpr/nodeInfo.h
     materialNodes/rpr/toonNode.cpp
     materialNodes/rpr/catcherNode.cpp
     materialNodes/rpr/displaceNode.cpp
-    materialNodes/rpr/materialXNode.cpp
     materialNodes/rpr/arithmeticNode.h
     materialNodes/rpr/arithmeticNode.cpp
     materialNodes/rpr/combineShadersNode.cpp
     materialNodes/houdiniPrincipledShaderNode.h
     materialNodes/houdiniPrincipledShaderNode.cpp)
+if(NOT RPR_DISABLE_CUSTOM_MATERIALX_LOADER)
+    target_sources(rprUsd PRIVATE
+        materialNodes/mtlxNode.h
+        materialNodes/mtlxNode.cpp
+        materialNodes/rpr/materialXNode.cpp)
+    add_subdirectory(materialNodes/mtlxFiles)
+endif()
 
-add_subdirectory(materialNodes/mtlxFiles)
 
 GroupSources(rprUsd)
 

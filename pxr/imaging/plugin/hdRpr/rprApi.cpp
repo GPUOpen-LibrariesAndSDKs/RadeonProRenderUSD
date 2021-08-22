@@ -3025,6 +3025,10 @@ Don't show this message again?
         }
 
         if (m_isAbortingEnabled) {
+            if (m_rprContextMetadata.pluginType == kPluginHybridPro) {
+                return;
+            }
+
             RPR_ERROR_CHECK(m_rprContext->AbortRender(), "Failed to abort render");
         } else {
             // In case aborting is disabled, we postpone abort until it's enabled

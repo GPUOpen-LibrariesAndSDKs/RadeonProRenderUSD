@@ -75,7 +75,7 @@ public:
     void CommitResources(HdChangeTracker* tracker) override;
 
     TfToken GetMaterialBindingPurpose() const override { return HdTokens->full; }
-    TfToken GetMaterialNetworkSelector() const override;
+    TfTokenVector GetMaterialRenderContexts() const override;
 
     HdAovDescriptor GetDefaultAovDescriptor(TfToken const& name) const override;
 

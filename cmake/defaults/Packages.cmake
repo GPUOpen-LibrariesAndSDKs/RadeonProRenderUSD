@@ -98,6 +98,9 @@ if (NOT PXR_MALLOC_LIBRARY)
 endif()
 
 find_package(MaterialX QUIET)
+if(MaterialX_FOUND)
+    set(RPR_DISABLE_CUSTOM_MATERIALX_LOADER ON)
+endif()
 
 if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
     find_package(Vulkan REQUIRED)
