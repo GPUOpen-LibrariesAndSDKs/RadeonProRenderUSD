@@ -88,7 +88,7 @@ if(HoudiniUSD_FOUND)
     set(OPENEXR_LIB_LOCATION ${Houdini_LIB_DIR})
 else()
     # We are using python to generate source files
-    find_package(PythonInterp 2.7 REQUIRED)
+    find_package(PythonInterp 2.7)
 endif()
 
 if (NOT PXR_MALLOC_LIBRARY)
