@@ -876,6 +876,10 @@ public:
     }
 
     RprUsdMaterial* CreateGeometryLightMaterial(GfVec3f const& emissionColor) {
+        if (!m_rprContext) {
+            return nullptr;
+        }
+
         LockGuard rprLock(m_rprContext->GetMutex());
 
         auto material = HdRprApiRawMaterial::Create(m_rprContext.get(), RPR_MATERIAL_NODE_EMISSIVE, {
@@ -2807,7 +2811,7 @@ Don't show this message again?
 
         auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
         auto rprSceneHandle = rpr::GetRprObject(m_scene.get());
-        if (RPR_ERROR_CHECK(rprsExport(m_rprSceneExportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, rprsFlags), "Failed to export .rpr file")) {
+        if (RPR_ERROR_CHECK(rprsExport(m_rprSceneExportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, rprsFlags, nullptr), "Failed to export .rpr file")) {
             return;
         }
 

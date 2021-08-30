@@ -384,11 +384,6 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
         &hdTextureNodes,
         &textureMap);
 
-    // Add Hydra parameters for each of the Texture nodes
-    /*_UpdateTextureNodes(hdNetwork, terminalNodePath, hdTextureNodes,
-        &mxHdInfo.textureMap, &mxHdInfo.primvarMap,
-        &mxHdInfo.defaultTexcoordName);*/
-
     std::string mtlxString = mx::writeToXmlString(mtlxDoc, nullptr);
 
     rpr::Status status;
@@ -399,37 +394,40 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     }
 
     rpr_material_node matxNodeHandle = rpr::GetRprObject(matxNode.get());
+	// TODO: use rprMaterialXSetFileAsBuffer when supported
     /*status = rprMaterialXSetFileAsBuffer(matxNodeHandle, mtlxString.c_str(), mtlxString.size());
     if (status != RPR_SUCCESS) {
         RPR_ERROR_CHECK(status, "Failed to set matx node file from buffer");
         return nullptr;
     }*/
 
+	// For now, as we have only rprMaterialXSetFile working, create a temporary file
     {
-        std::string temporaryFilePath;
-        int fd = ArchMakeTmpFile("tmpMaterial", &temporaryFilePath);
-        if (fd != -1) {
-            FILE* fout = ArchFdOpen(fd, "w");
-            fwrite(mtlxString.c_str(), 1, mtlxString.size(), fout);
-            fclose(fout);
+		std::string temporaryFilePath = ArchMakeTmpFileName("tmpMaterial", ".mtlx");
 
-            status = rprMaterialXSetFile(matxNodeHandle, temporaryFilePath.c_str());
-            if (status != RPR_SUCCESS) {
-                RPR_ERROR_CHECK(status, "Failed to set matx node file");
-                return nullptr;
-            }
-        } else {
-            return nullptr;
-        }
+		FILE* fout = fopen(temporaryFilePath.c_str(), "w");
+		if (!fout) {
+			return nullptr;
+		}
+
+		fwrite(mtlxString.c_str(), 1, mtlxString.size(), fout);
+		fclose(fout);
+
+		status = rprMaterialXSetFile(matxNodeHandle, temporaryFilePath.c_str());
+		if (status != RPR_SUCCESS) {
+			RPR_ERROR_CHECK(status, "Failed to set matx node file");
+			ArchUnlinkFile(temporaryFilePath.c_str());
+			return nullptr;
+		}
     }
 
     struct RprUsdMaterial_RprApiMaterialX : public RprUsdMaterial {
-        std::unique_ptr<rpr::MaterialNode> retainedNode;
+        std::unique_ptr<rpr::MaterialNode> m_retainedNode;
 
         RprUsdMaterial_RprApiMaterialX(std::unique_ptr<rpr::MaterialNode> retainedNode)
-            : retainedNode(std::move(retainedNode)) {
+            : m_retainedNode(std::move(retainedNode)) {
             // TODO: fill m_uvPrimvarName
-            m_surfaceNode = retainedNode.get();
+            m_surfaceNode = m_retainedNode.get();
         }
     };
 
