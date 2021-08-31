@@ -24,6 +24,8 @@ limitations under the License.
 #include "pxr/base/tf/pathUtils.h"
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/work/loops.h"
+#include "pxr/base/plug/plugin.h"
+#include "pxr/base/plug/thisPlugin.h"
 
 #include "materialNodes/usdNode.h"
 #include "materialNodes/houdiniPrincipledShaderNode.h"
@@ -52,19 +54,19 @@ RprUsdMaterialRegistry::~RprUsdMaterialRegistry() = default;
 
 std::vector<RprUsdMaterialNodeDesc> const&
 RprUsdMaterialRegistry::GetRegisteredNodes() {
-    if (m_mtlxDefsDirty) {
-        m_mtlxDefsDirty = false;
+	if (m_mtlxDefsDirty) {
+		m_mtlxDefsDirty = false;
 
-        auto RPR = TfGetenv("RPR");
-        if (RPR.empty()) {
-            TF_WARN("RPR environment variable is not set");
-            return m_registeredNodes;
-        }
-        TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("RPR: %s\n", RPR.c_str());
+		std::string mtlxResources = PlugFindPluginResource(PLUG_THIS_PLUGIN, "mtlx");
+		if (mtlxResources.empty()) {
+			TF_RUNTIME_ERROR("Missing mtlx resources");
+			return m_registeredNodes;
+		}
+        TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("mtlx resources: %s\n", mtlxResources.c_str());
 
         if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
             MaterialX::FilePathVec libraryNames = {"libraries", "materials"};
-            MaterialX::FileSearchPath searchPath = RPR;
+            MaterialX::FileSearchPath searchPath = mtlxResources;
             m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
             m_mtlxLoader->SetupStdlib(libraryNames, searchPath);
 
@@ -76,7 +78,7 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
             m_mtlxLoader->SetLogging(logLevel);
         }
 
-        auto rprMaterialsPath = TfAbsPath(TfNormPath(RPR + "/materials"));
+        auto rprMaterialsPath = TfAbsPath(TfNormPath(mtlxResources + "/materials"));
 
         auto materialFiles = TfGlob(TfNormPath(rprMaterialsPath + "/*/*.mtlx"), ARCH_GLOB_DEFAULT | ARCH_GLOB_NOSORT);
         if (materialFiles.empty()) {

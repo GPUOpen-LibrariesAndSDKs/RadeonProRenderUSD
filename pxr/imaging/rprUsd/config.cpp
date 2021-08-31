@@ -4,6 +4,8 @@
 #include "pxr/base/tf/tf.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/envSetting.h"
+#include "pxr/base/plug/plugin.h"
+#include "pxr/base/plug/thisPlugin.h"
 
 #include <json.hpp>
 using json = nlohmann::json;
@@ -97,7 +99,8 @@ std::string GetDefaultCacheDir(const char* cacheType) {
 		return overriddenCacheDir;
 	}
     
-    auto cacheDir = ArchGetEnv("RPR");
+	PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
+    auto cacheDir = plugin->GetResourcePath();
     if (cacheDir.empty()) {
         // Fallback to AppData
         cacheDir = GetAppDataPath() + (ARCH_PATH_SEP "hdRpr");

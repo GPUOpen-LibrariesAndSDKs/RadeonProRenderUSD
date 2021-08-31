@@ -2,6 +2,11 @@ if(NOT TARGET Houdini)
     return()
 endif()
 
+if(PXR_VERSION GREATER_EQUAL 2102)
+    message(STATUS "Skipping glfRatImage plugin. Hio implementation is required.")
+    return()
+endif()
+
 set(PXR_PREFIX pxr/imaging)
 set(PXR_PACKAGE glfRatImage)
 

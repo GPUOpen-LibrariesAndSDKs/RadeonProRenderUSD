@@ -128,6 +128,12 @@ if(HoudiniUSD_FOUND)
 endif()
 
 if(HoudiniUSD_FOUND AND NOT TARGET hd)
+    set(version_file ${Houdini_USD_INCLUDE_DIR}/pxr/pxr.h)
+    file(STRINGS "${version_file}" PXR_VERSION
+         REGEX "^#define[\t ]+PXR_VERSION[\t ]+.*")
+    string(REGEX REPLACE "^.*PXR_VERSION[\t ]+([0-9]*).*$" "\\1"
+           PXR_VERSION "${PXR_VERSION}")
+
     # Generic creation of the usd targets. This is not meant to be perfect. The
     # criteria is "does it work for our use". Also, these names match the ones
     # of the USD distribution so we can use either without many conditions.
@@ -182,15 +188,14 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
         set(HOUDINI_BIN ${HOUDINI_ROOT}/bin)
     endif()
 
-    if(NOT USD_SCHEMA_GENERATOR)
-        find_program(USD_SCHEMA_GENERATOR
-            NAMES
-                usdGenSchema.py
-            PATHS
-                ${HOUDINI_BIN}
-            REQUIRED
-            NO_DEFAULT_PATH)
+    find_program(USD_SCHEMA_GENERATOR
+        NAMES
+            usdGenSchema.py usdGenSchema
+        PATHS
+            ${HOUDINI_BIN}
+        REQUIRED
+        NO_DEFAULT_PATH)
+    if(USD_SCHEMA_GENERATOR)
         list(PREPEND USD_SCHEMA_GENERATOR ${HOUDINI_BIN}/hython)
-        set(USD_SCHEMA_GENERATOR ${USD_SCHEMA_GENERATOR} CACHE STRING "" FORCE)
     endif()
 endif()

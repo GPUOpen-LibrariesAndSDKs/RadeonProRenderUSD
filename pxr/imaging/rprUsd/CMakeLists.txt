@@ -61,11 +61,14 @@ pxr_library(rprUsd
         tf
         vt
         hd
+        hio
         usd
         glf
         sdf
         arch
+        plug
         work
+        garch
         cpprpr
         json
 
