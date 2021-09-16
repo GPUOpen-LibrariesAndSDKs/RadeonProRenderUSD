@@ -3216,6 +3216,8 @@ private:
     }
 
     void InitRpr() {
+        bool flipRequestedByRenderSetting = false;
+
         {
             HdRprConfig* config;
             auto configInstanceLock = HdRprConfig::GetInstance(&config);
@@ -3223,6 +3225,7 @@ private:
             config->Sync(m_delegate);
 
             m_currentRenderQuality = GetRenderQuality(*config);
+            flipRequestedByRenderSetting = config->GetForceVerticalFlip();
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
@@ -3236,7 +3239,8 @@ private:
         }
 
         uint32_t requiredYFlip = 0;
-        if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid && m_rprContextMetadata.interopInfo) {
+        bool flipRequestedByInteropHybrid = m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid && m_rprContextMetadata.interopInfo;
+        if (flipRequestedByInteropHybrid || flipRequestedByRenderSetting) {
             RPR_ERROR_CHECK_THROW(m_rprContext->GetFunctionPtr(
                 RPR_CONTEXT_FLUSH_FRAMEBUFFERS_FUNC_NAME, 
                 (void**)(&m_rprContextFlushFrameBuffers)

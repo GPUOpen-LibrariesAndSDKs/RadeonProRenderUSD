@@ -614,6 +614,15 @@ render_setting_categories = [
                 'defaultValue': True
             }
         ]
+    },
+    {
+        'name': 'ImageTransformation',
+        'settings': [
+            {
+                'name': 'forceVerticalFlip',
+                'defaultValue': False
+            }
+        ]
     }
 ]
 
