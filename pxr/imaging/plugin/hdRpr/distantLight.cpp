@@ -42,7 +42,11 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
     auto& id = GetId();
 
     if (bits & HdLight::DirtyTransform) {
+#if PXR_VERSION >= 2011
+        m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
+#else
         m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
+#endif
     }
 
     bool newLight = false;
