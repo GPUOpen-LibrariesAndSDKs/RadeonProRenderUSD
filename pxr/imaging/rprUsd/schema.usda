@@ -25,6 +25,15 @@ over "GLOBAL" (
             dictionary rpr = {
                 string doc = """."""
             }
+            dictionary rprMinValue = {
+                string doc = """RPR specific Sdf metadata"""
+            }
+            dictionary rprMaxValue = {
+                string doc = """RPR specific Sdf metadata"""
+            }
+            dictionary rprHidden = {
+                string doc = """RPR specific Sdf metadata"""
+            }
         }
     }
 ) {
@@ -43,18 +52,19 @@ class "RprRendererSettingsAPI" (
     uniform token rpr:renderQuality = "Northstar" (
         allowedTokens = ["Low", "Medium", "High", "Full", "Northstar"]
         displayName = "Render Quality"
+        displayGroup = "General"
     )
 
     uniform token rpr:renderMode = "Global Illumination" (
         allowedTokens = ["Global Illumination", "Direct Illumination", "Wireframe", "Material Index", "Position", "Normal", "Texcoord", "Ambient Occlusion", "Diffuse", "Contour"]
         displayName = "Render Mode"
-        displayGroup = "Render Mode"
+        displayGroup = "General|Render Mode"
     )
 
     # tahoe only
     uniform float rpr:ambientOcclusion:radius = 1.0 (
-        displayName = "Ambient Occlusion"
-        displayGroup = "Render Mode"
+        displayName = "Ambient Occlusion Radius"
+        displayGroup = "General|Render Mode"
         rprMinValue = 0.0
         rprMaxValue = 100.0
     )
@@ -62,55 +72,55 @@ class "RprRendererSettingsAPI" (
     # northstar only
     uniform float rpr:contour:antialiasing = 1.0 (
         displayName = "Antialiasing"
-        displayGroup = "Contour Render Mode"
+        displayGroup = "General|Render Mode|Contour"
         rprMinValue = 0.0
         rprMaxValue = 1.0
     )
     uniform bool rpr:contour:useNormal = true (
         displayName = "Use Normal"
-        displayGroup = "Contour Render Mode"
+        displayGroup = "General|Render Mode|Contour"
         doc = "Whether to use geometry normals for edge detection or not"
     )
     uniform float rpr:contour:linewidthNormal = 1.0 (
         displayName = "Linewidth Normal"
-        displayGroup = "Contour Render Mode"
+        displayGroup = "General|Render Mode|Contour"
         doc = "Linewidth of edges detected via normals."
         rprMinValue = 0.0
         rprMaxValue = 100.0
     )
     uniform float rpr:contour:normalThreshold = 45.0 (
         displayName = "Normal Threshold"
-        displayGroup = "Contour Render Mode"
+        displayGroup = "General|Render Mode|Contour"
         rprMinValue = 0.0
         rprMaxValue = 180.0
     )
     uniform bool rpr:contour:usePrimId = true (
         displayName = "Use Primitive Id"
-        displayGroup = "Contour Render Mode"
+        displayGroup = "General|Render Mode|Contour"
         doc = "Whether to use primitive Id for edge detection or not."
     )
     uniform float rpr:contour:linewidthPrimId = 1.0 (
         displayName = "Linewidth Primitive Id"
-        displayGroup = "Contour Render Mode"
+        displayGroup = "General|Render Mode|Contour"
         doc = "Linewidth of edges detected via Primitive Id."
         rprMinValue = 0.0
         rprMaxValue = 100.0
     )
     uniform bool rpr:contour:useMaterialId = true (
         displayName = "Use Material Id"
-        displayGroup = "Contour Render Mode"
+        displayGroup = "General|Render Mode|Contour"
         doc = "Whether to use material Id for edge detection or not."
     )
     uniform float rpr:contour:linewidthMaterialId = 1.0 (
         displayName = "Linewidth Material Id"
-        displayGroup = "Contour Render Mode"
+        displayGroup = "General|Render Mode|Contour"
         doc = "Linewidth of edges detected via Material Id."
         rprMinValue = 0.0
         rprMaxValue = 100.0
     )
     uniform bool rpr:contour:debug = false (
         displayName = "Debug"
-        displayGroup = "Contour Render Mode"
+        displayGroup = "General|Render Mode|Contour"
         doc = """ Whether to show colored outlines according to used features or not.
                   Colors legend:
                    * red - primitive Id
@@ -123,25 +133,44 @@ class "RprRendererSettingsAPI" (
               """
     )
 
+    uniform bool rpr:alpha = true (
+        displayName = "Enable Color Alpha"
+        displayGroup = "General"
+        doc = ""
+    )
+
+    # Northstar only
+    uniform bool rpr:beautyMotionBlur = true (
+        displayName = "Enable Beauty Motion Blur"
+        displayGroup = "General"
+        doc = "If disabled, only velocity AOV will store information about movement on the scene. Required for motion blur that is generated in post-processing."
+    )
+
+    # Not for Hybrid
+    uniform bool rpr:uniformSeed = true (
+        displayName = "Use Uniform Seed"
+        displayGroup = "General"
+    )
+
     # not for < High
     uniform bool rpr:denoising = false (
-        displayGroup = "Denoise"
+        displayGroup = "Postprocessing|Denoise"
         displayName = "Enable AI Denoise"
     )
     uniform int rpr:denoising:minIter = 4 (
-        displayGroup = "Denoise"
+        displayGroup = "Postprocessing|Denoise"
         displayName = "Min Iteration"
         rprMinValue = 1
     )
     uniform int rpr:denoising:iterStep = 32 (
-        displayGroup = "Denoise"
+        displayGroup = "Postprocessing|Denoise"
         displayName = "Iteration Step"
         rprMinValue = 1
     )
 
     # not for low
     uniform int rpr:maxSamples = 256 (
-        displayGroup = "Samples"
+        displayGroup = "Sampling"
         displayName = "Max Samples"
         doc = "Maximum number of samples to render for each pixel."
         rprMinValue = 1
@@ -149,13 +178,13 @@ class "RprRendererSettingsAPI" (
 
     # tahoe and northstar only
     uniform int rpr:adaptiveSampling:minSamples = 64 (
-        displayGroup = "Adaptive Sampling"
+        displayGroup = "Sampling"
         displayName = "Min Samples"
         doc = "Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than 'Variance Threshold'."
         rprMinValue = 1
     )
     uniform float rpr:adaptiveSampling:noiseTreshold = 0.0 (
-        displayGroup = "Adaptive Sampling"
+        displayGroup = "Sampling"
         displayName = "Noise Threshold"
         doc = "Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff."
         rprMinValue = 0.0
@@ -223,7 +252,7 @@ class "RprRendererSettingsAPI" (
     # not for hybrid
     uniform int rpr:quality:interactive:rayDepth = 2 (
         displayName = "Max Ray Depth"
-        displayGroup = "Interactive Quality"
+        displayGroup = "Quality|Interactive"
         doc = "Controls value of 'Max Ray Depth' in interactive mode."
         rprMinValue = 1
         rprMaxValue = 50
@@ -231,7 +260,7 @@ class "RprRendererSettingsAPI" (
     # northstar only
     uniform int rpr:quality:interactive:resolutionDownscale = 3 (
         displayName = "Resolution Downscale"
-        displayGroup = "Interactive Quality"
+        displayGroup = "Quality|Interactive"
         doc = "Controls how much rendering resolution is downscaled in interactive mode. Formula: resolution / (2 ^ downscale). E.g. downscale==2 will give you 4 times smaller rendering resolution."
         rprMinValue = 0
         rprMaxValue = 10
@@ -239,102 +268,86 @@ class "RprRendererSettingsAPI" (
     # tahoe only
     uniform bool rpr:quality:interactive:enableDownscale = true (
         displayName = "Enable Downscale"
-        displayGroup = "Interactive Quality"
+        displayGroup = "Quality|Interactive"
         doc = "Controls whether in interactive mode resolution should be downscaled or no."
     )
 
-    uniform bool rpr:tonemapping = true (
+    uniform bool rpr:tonemapping = false (
         displayName = "Enable Tonemapping"
-        displayGroup = "Tonemapping"
+        displayGroup = "Postprocessing|Tonemapping"
         doc = "Enable linear photographic tone mapping filter. More info in RIF documentation."
     )
     uniform float rpr:tonemapping:exposureTime = 0.125 (
         displayName = "Film Exposure Time (sec)"
-        displayGroup = "Tonemapping"
+        displayGroup = "Postprocessing|Tonemapping"
         rprMinValue = 0.0
         rprMaxValue = 10.0
     )
     uniform float rpr:tonemapping:sensitivity = 1.0 (
         displayName = "Film Exposure Time (sec)"
-        displayGroup = "Tonemapping"
+        displayGroup = "Postprocessing|Tonemapping"
         doc = "Luminance of the scene (in candela per m^2)."
         rprMinValue = 0.0
         rprMaxValue = 10.0
     )
     uniform float rpr:tonemapping:fstop = 1.0 (
         displayName = "Fstop"
-        displayGroup = "Tonemapping"
+        displayGroup = "Postprocessing|Tonemapping"
         doc = "Aperture f-number."
         rprMinValue = 0.0
         rprMaxValue = 100.0
     )
     uniform float rpr:tonemapping:gamma = 1.0 (
         displayName = "Gamma"
-        displayGroup = "Tonemapping"
+        displayGroup = "Postprocessing|Tonemapping"
         doc = "Gamma correction value."
         rprMinValue = 0.0
         rprMaxValue = 5.0
     )
 
-    uniform bool rpr:alpha = true (
-        displayName = "Enable Color Alpha"
-        displayGroup = "Alpha"
-        doc = "Gamma correction value."
-    )
-
     # Northstar only
-    uniform bool rpr:beautyMotionBlur = true (
-        displayName = "Enable Beauty Motion Blur"
-        displayGroup = "Motion Blur"
-        doc = "If disabled, only velocity AOV will store information about movement on the scene. Required for motion blur that is generated in post-processing."
-    )
-
-    # Northstar only
-    uniform string rpr:ocio:configPath = "" (
+    uniform asset rpr:ocio:configPath = "" (
         displayName = "Config Path"
-        displayGroup = "OpenColorIO"
+        displayGroup = "General|OpenColorIO"
         doc = "The file path of the OpenColorIO config file to be used. Overrides any value specified in OCIO environment variable."
     )
     uniform string rpr:ocio:renderingColorSpace = "" (
         displayName = "Rendering Color Space"
-        displayGroup = "OpenColorIO"
-    )
-
-    # Not for Hybrid
-    uniform bool rpr:uniformSeed = true (
-        displayName = "Use Uniform Seed"
-        displayGroup = "Seed"
+        displayGroup = "General|OpenColorIO"
     )
 
     # Northstar only
-    uniform string rpr:cryptomatte:outputPath = "" (
+    uniform asset rpr:cryptomatte:outputPath = "" (
         displayName = "Output Path"
-        displayGroup = "Cryptomatte"
+        displayGroup = "General|Cryptomatte"
         doc = "Controls where cryptomatte should be saved. Use 'Cryptomatte Output Mode' to control when cryptomatte is saved."
     )
     uniform token rpr:cryptomatte:outputMode = "Batch" (
         allowedTokens = ["Batch", "Interactive"]
         displayName = "Output Mode"
-        displayGroup = "Cryptomatte"
+        displayGroup = "General|Cryptomatte"
         doc = "Batch - save cryptomatte only in the batch rendering mode (USD Render ROP, husk). Interactive - same as the Batch but also save cryptomatte in the non-batch rendering mode. Cryptomatte always saved after 'Max Samples' is reached."
     )
     uniform bool rpr:cryptomatte:previewLayer = false (
         displayName = "Add Preview Layer"
-        displayGroup = "Cryptomatte"
+        displayGroup = "General|Cryptomatte"
         doc = "Whether to generate cryptomatte preview layer or not. Whether you need it depends on the software you are planning to use cryptomatte in. For example, Houdini's COP Cryptomatte requires it, Nuke, on contrary, does not."
     )
 
-    uniform string rpr:export:path = "" (
+    uniform asset rpr:export:path = "" (
         displayName = "Path"
         displayGroup = "Export .rpr"
+        rprHidden = 1
     )
     uniform bool rpr:export:asSingleFile = false (
         displayName = "As Single File"
         displayGroup = "Export .rpr"
+        rprHidden = 1
     )
     uniform bool rpr:export:useImageCache = false (
         displayName = "Use Image Cache"
         displayGroup = "Export .rpr"
+        rprHidden = 1
     )
 }
 

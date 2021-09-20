@@ -13,9 +13,10 @@
                         "type": "float",
                         "default": 1e38
                     },
-                    "rprQuality": {
+                    "rprHidden": {
                         "appliesTo": "attributes",
-                        "type": "token"
+                        "type": "int",
+                        "default": 0
                     }
                 }
             }, 
