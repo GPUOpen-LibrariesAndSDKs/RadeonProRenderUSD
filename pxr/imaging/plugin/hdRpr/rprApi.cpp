@@ -2847,7 +2847,7 @@ Don't show this message again?
 
         auto rprContextHandle = rpr::GetRprObject(m_rprContext.get());
         auto rprSceneHandle = rpr::GetRprObject(m_scene.get());
-        if (RPR_ERROR_CHECK(rprsExport(m_rprSceneExportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, rprsFlags), "Failed to export .rpr file")) {
+        if (RPR_ERROR_CHECK(rprsExport(m_rprSceneExportPath.c_str(), rprContextHandle, rprSceneHandle, 0, nullptr, nullptr, 0, nullptr, nullptr, rprsFlags, nullptr), "Failed to export .rpr file")) {
             return;
         }
 
