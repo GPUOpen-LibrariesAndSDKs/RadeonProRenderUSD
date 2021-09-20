@@ -215,25 +215,6 @@ render_setting_categories = [
         }
     },
     {
-        'name': 'Device',
-        'houdini': {
-            'hidewhen': hidewhen_hybrid
-        },
-        'settings': [
-            {
-                'name': 'renderDevice',
-                'ui_name': 'Render Device',
-                'help': 'Restart required.',
-                'defaultValue': 'GPU',
-                'values': [
-                    SettingValue('CPU'),
-                    SettingValue('GPU'),
-                    # SettingValue('CPU+GPU')
-                ]
-            }
-        ]
-    },
-    {
         'name': 'Denoise',
         'houdini': {
             'hidewhen': lambda settings: hidewhen_render_quality('<', 'High', settings)
@@ -294,7 +275,7 @@ render_setting_categories = [
     {
         'name': 'AdaptiveSampling',
         'houdini': {
-            'hidewhen': hidewhen_not_tahoe
+            'hidewhen': hidewhen_hybrid
         },
         'settings': [
             {

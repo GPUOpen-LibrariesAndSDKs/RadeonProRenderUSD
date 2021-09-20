@@ -111,16 +111,6 @@ GfVec4f ToVec4(GfVec3f const& vec, float w) {
     return GfVec4f(vec[0], vec[1], vec[2], w);
 }
 
-RprUsdRenderDeviceType ToRprUsd(TfToken const& configDeviceType) {
-    if (configDeviceType == HdRprRenderDeviceTokens->CPU) {
-        return RprUsdRenderDeviceType::CPU;
-    } else if (configDeviceType == HdRprRenderDeviceTokens->GPU) {
-        return RprUsdRenderDeviceType::GPU;
-    } else {
-        return RprUsdRenderDeviceType::Invalid;
-    }
-}
-
 bool CreateIntermediateDirectories(std::string const& filePath) {
     auto dir = TfGetPathName(filePath);
     if (!dir.empty()) {
@@ -303,7 +293,6 @@ private:
 
 struct HdRprApiVolume {
     std::unique_ptr<rpr::HeteroVolume> heteroVolume;
-    std::unique_ptr<rpr::MaterialNode> volumeMaterial;
     std::unique_ptr<rpr::Grid> albedoGrid;
     std::unique_ptr<rpr::Grid> densityGrid;
     std::unique_ptr<rpr::Grid> emissionGrid;
@@ -1245,7 +1234,7 @@ public:
     HdRprApiVolume* CreateVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
                                  VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
                                  VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
-                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, HdRprApi::VolumeMaterialParameters const& materialParams) {
+                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -1312,31 +1301,6 @@ public:
             return nullptr;
         }
 
-        HdRprApi::VolumeMaterialParameters defaultVolumeMaterialParams;
-        if (defaultVolumeMaterialParams.transmissionColor != materialParams.transmissionColor ||
-            defaultVolumeMaterialParams.scatteringColor != materialParams.scatteringColor ||
-            defaultVolumeMaterialParams.emissionColor != materialParams.emissionColor ||
-            defaultVolumeMaterialParams.density != materialParams.density ||
-            defaultVolumeMaterialParams.anisotropy != materialParams.anisotropy ||
-            defaultVolumeMaterialParams.multipleScattering != materialParams.multipleScattering) {
-            rprApiVolume->volumeMaterial.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_VOLUME, &status));
-            if (rprApiVolume->volumeMaterial) {
-                auto scat = materialParams.scatteringColor * materialParams.density;
-                auto abs = (GfVec3f(1) - materialParams.transmissionColor) * materialParams.density;
-                auto emiss = materialParams.emissionColor * materialParams.density;
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_SCATTERING, scat[0], scat[1], scat[2], 1.0f);
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_ABSORBTION, abs[0], abs[1], abs[2], 1.0f);
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_EMISSION, emiss[0], emiss[1], emiss[2], 1.0f);
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_G, materialParams.anisotropy);
-                rprApiVolume->volumeMaterial->SetInput(RPR_MATERIAL_INPUT_MULTISCATTER, static_cast<uint32_t>(materialParams.multipleScattering));
-            } else {
-                RPR_ERROR_CHECK(status, "Failed to create volume material");
-            }
-        }
-
-        if (rprApiVolume->volumeMaterial) {
-            RPR_ERROR_CHECK(rprApiVolume->cubeMesh->SetVolumeMaterial(rprApiVolume->volumeMaterial.get()), "Failed to set volume material");
-        }
         rprApiVolume->cubeMeshMaterial->AttachTo(rprApiVolume->cubeMesh.get(), false);
 
         rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
@@ -1573,26 +1537,10 @@ public:
 
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 m_currentRenderQuality = GetRenderQuality(*config);
-            }
 
-            if (config->IsDirty(HdRprConfig::DirtyDevice) ||
-                config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
-                bool restartRequired = false;
-                if (config->IsDirty(HdRprConfig::DirtyDevice)) {
-                    if (m_rprContextMetadata.renderDeviceType != ToRprUsd(config->GetRenderDevice())) {
-                        restartRequired = true;
-                    }
-                }
-
-                if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
-                    auto newPlugin = GetPluginType(m_currentRenderQuality);
-                    auto activePlugin = m_rprContextMetadata.pluginType;
-                    if (newPlugin != activePlugin) {
-                        restartRequired = true;
-                    }
-                }
-
-                m_state = restartRequired ? kStateRestartRequired : kStateRender;
+                auto newPlugin = GetPluginType(m_currentRenderQuality);
+                auto activePlugin = m_rprContextMetadata.pluginType;
+                m_state = (newPlugin != activePlugin) ? kStateRestartRequired : kStateRender;
             }
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
@@ -1949,13 +1897,18 @@ public:
         float focalLength;
 
         GfVec2f apertureSize;
+        GfVec2f apertureOffset(0.0f);
         HdRprCamera::Projection projection;
         if (m_hdCamera->GetFocalLength(&focalLength) &&
             m_hdCamera->GetApertureSize(&apertureSize) &&
+            m_hdCamera->GetApertureOffset(&apertureOffset) &&
             m_hdCamera->GetProjection(&projection)) {
             ApplyAspectRatioPolicy(m_viewportSize, aspectRatioPolicy.value, apertureSize);
             sensorWidth = apertureSize[0];
             sensorHeight = apertureSize[1];
+
+            apertureOffset[0] /= apertureSize[0];
+            apertureOffset[1] /= apertureSize[1];
         } else {
             bool isOrthographic = round(m_cameraProjectionMatrix[3][3]) == 1.0;
             if (isOrthographic) {
@@ -1974,6 +1927,8 @@ public:
                 focalLength = m_cameraProjectionMatrix[1][1] / (2.0 * aspectRatio);
             }
         }
+
+        RPR_ERROR_CHECK(m_camera->SetLensShift(apertureOffset[0], apertureOffset[1]), "Failed to set camera lens shift");
 
         if (projection == HdRprCamera::Orthographic) {
             RPR_ERROR_CHECK(m_camera->SetMode(RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
@@ -2161,7 +2116,7 @@ public:
         }
 
         rif::FilterType filterType = rif::FilterType::EawDenoise;
-        if (m_rprContextMetadata.renderDeviceType == RprUsdRenderDeviceType::GPU) {
+        if (RprUsdIsGpuUsed(m_rprContextMetadata)) {
             filterType = rif::FilterType::AIDenoise;
         }
 
@@ -2498,9 +2453,10 @@ public:
         }
 
         // Though if adaptive sampling is enabled in a batch session we first render m_minSamples samples
-        // and after that render 1 sample at a time because we want to query the current amount of
+        // and after that, if needed, render 1 sample at a time because we want to check the current amount of
         // active pixels as often as possible
         const bool isAdaptiveSamplingEnabled = IsAdaptiveSamplingEnabled();
+        const bool isActivePixelCountCheckRequired = isAdaptiveSamplingEnabled && m_rprContextMetadata.pluginType == kPluginTahoe;
 
         // In a batch session, we do denoise once at the end
         auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
@@ -2552,7 +2508,7 @@ public:
                 // When singlesampled AOVs already rendered, we can fire up rendering of as many samples as possible
                 if (m_numSamples == 1) {
                     // Render as many samples as possible per Render call
-                    if (isAdaptiveSamplingEnabled) {
+                    if (isActivePixelCountCheckRequired) {
                         m_numSamplesPerIter = m_minSamples - m_numSamples;
                     } else {
                         m_numSamplesPerIter = m_maxSamples - m_numSamples;
@@ -2564,7 +2520,7 @@ public:
                     }
                 } else {
                     // When adaptive sampling is enabled, after reaching m_minSamples we want query RPR_CONTEXT_ACTIVE_PIXEL_COUNT each sample
-                    if (isAdaptiveSamplingEnabled && m_numSamples == m_minSamples) {
+                    if (isActivePixelCountCheckRequired && m_numSamples == m_minSamples) {
                         m_numSamplesPerIter = 1;
                         isMaximizingContextIterations = false;
                     }
@@ -2580,7 +2536,7 @@ public:
                 }
             }
 
-            if (isAdaptiveSamplingEnabled && m_numSamples >= m_minSamples && 
+            if (isActivePixelCountCheckRequired && m_numSamples >= m_minSamples &&
                 RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
                 m_activePixels = -1;
             }
@@ -3267,7 +3223,6 @@ private:
             config->Sync(m_delegate);
 
             m_currentRenderQuality = GetRenderQuality(*config);
-            m_rprContextMetadata.renderDeviceType = ToRprUsd(config->GetRenderDevice());
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
@@ -4200,13 +4155,13 @@ HdRprApiVolume* HdRprApi::CreateVolume(
     VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
     VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
     VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
-    const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, VolumeMaterialParameters const& materialParams) {
+    const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
     m_impl->InitIfNeeded();
     return m_impl->CreateVolume(
         densityCoords, densityValues, densityLUT, densityScale,
         albedoCoords, albedoValues, albedoLUT, albedoScale,
         emissionCoords, emissionValues, emissionLUT, emissionScale,
-        gridSize, voxelSize, gridBBLow, materialParams);
+        gridSize, voxelSize, gridBBLow);
 }
 
 RprUsdMaterial* HdRprApi::CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {

@@ -94,18 +94,10 @@ public:
     RprUsdMaterial* CreateGeometryLightMaterial(GfVec3f const& emissionColor);
     void ReleaseGeometryLightMaterial(RprUsdMaterial* material);
 
-    struct VolumeMaterialParameters {
-        GfVec3f scatteringColor = GfVec3f(1.0f);
-        GfVec3f transmissionColor = GfVec3f(1.0f);
-        GfVec3f emissionColor = GfVec3f(1.0f);
-        float density = 1.0f;
-        float anisotropy = 0.0f;
-        bool multipleScattering = false;
-    };
     HdRprApiVolume* CreateVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
                                  VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
                                  VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
-                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow, VolumeMaterialParameters const& materialParams);
+                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow);
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform);
     void Release(HdRprApiVolume* volume);
 

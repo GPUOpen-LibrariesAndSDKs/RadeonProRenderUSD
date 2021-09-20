@@ -54,13 +54,6 @@ TF_DEFINE_PRIVATE_TOKENS(
 
 /*
 
-Volume Parameters:
-- scatteringColor - vec3f - vec3(1) - scattering color.
-- transmissionColor - vec3f - vec3(1) - transmission color.
-- emissionColor - vec3f - vec3(1) - emissive color.
-- anisotropy - float - 0.0 - forward or back scattering.
-- multipleScattering - bool - false - whether to apply multiple scatter calculations.
-
 Common Field Parameters:
 - normalize - bool - false - whether fieldValue should be normalized
 - scale - float - 1.0 - scale to be applied to value before lookup table. `fieldColor = LUT(scale * fieldValue)`
@@ -80,26 +73,13 @@ namespace {
 
 const int kLookupTableGranularityLevel = 64;
 const float defaultDensity = 100.f; // RPR take density value of 100 as fully opaque
-GfVec3f defaultColor = GfVec3f(0.18f);
+GfVec3f defaultColor = GfVec3f(1.0f);
 GfVec3f defaultEmission = GfVec3f(0.0f); // Default to no emission
-
-HdRprApi::VolumeMaterialParameters ParseVolumeMaterialParameters(HdSceneDelegate* sceneDelegate, SdfPath const& volumeId) {
-    HdRprApi::VolumeMaterialParameters params;
-    auto value = sceneDelegate->Get(volumeId, HdRprVolumeTokens->scatteringColor);
-    auto t = value.GetTypeName();
-    params.scatteringColor = sceneDelegate->Get(volumeId, HdRprVolumeTokens->scatteringColor).GetWithDefault(params.scatteringColor);
-    params.transmissionColor = sceneDelegate->Get(volumeId, HdRprVolumeTokens->transmissionColor).GetWithDefault(params.transmissionColor);
-    params.emissionColor = sceneDelegate->Get(volumeId, HdRprVolumeTokens->emissionColor).GetWithDefault(params.emissionColor);
-    params.density = sceneDelegate->Get(volumeId, HdRprVolumeTokens->density).GetWithDefault(params.density);
-    params.anisotropy = sceneDelegate->Get(volumeId, HdRprVolumeTokens->anisotropy).GetWithDefault(params.anisotropy);
-    params.multipleScattering = sceneDelegate->Get(volumeId, HdRprVolumeTokens->multipleScattering).GetWithDefault(params.multipleScattering);
-    return params;
-}
 
 struct GridParameters {
     bool normalize = false;
-    float bias = 0.0f;
-    float gain = 1.0f;
+    GfVec3f bias = GfVec3f(0.0f);
+    GfVec3f gain = GfVec3f(1.0f);
     float scale = 1.0f;
     VtVec3fArray ramp;
 
@@ -121,6 +101,18 @@ bool ParseGridParameter(TfToken const& name, HdSceneDelegate* sceneDelegate, Sdf
         return true;
     }
     return false;
+}
+
+bool ParseGridParameter(TfToken const& name, HdSceneDelegate* sceneDelegate, SdfPath const& fieldId, GfVec3f* param) {
+    auto value = sceneDelegate->Get(fieldId, name);
+    if (value.IsHolding<GfVec3f>()) {
+        *param = value.UncheckedGet<GfVec3f>();
+    } else if (value.IsHolding<float>()) {
+        *param = GfVec3f(value.UncheckedGet<float>());
+    } else {
+        return false;
+    }
+    return true;
 }
 
 GridParameters ParseGridParameters(HdSceneDelegate* sceneDelegate, SdfPath const& fieldId) {
@@ -151,6 +143,46 @@ BlackbodyMode ParseGridBlackbodyMode(HdSceneDelegate* sceneDelegate, SdfPath con
     }
 
     return BlackbodyMode::kAuto;
+}
+
+template <typename T>
+T HdRprResampleRawTimeSamples(
+    float u,
+    size_t numSamples,
+    const float *us,
+    const T *vs) {
+    if (numSamples == 0) {
+        TF_CODING_ERROR("HdResample: Zero samples provided");
+        return T();
+    }
+
+    size_t i = 0;
+    for (; i < numSamples; ++i) {
+        if (us[i] == u) {
+            // Fast path for exact parameter match.
+            return vs[i];
+        }
+        if (us[i] > u) {
+            break;
+        }
+    }
+    if (i == 0) {
+        // u is before the first sample.
+        return vs[0];
+    } else if (i == numSamples) {
+        // u is after the last sample.
+        return vs[numSamples - 1];
+    } else if (us[i] == us[i - 1]) {
+        // Neighboring samples have identical parameter.
+        // Arbitrarily choose a sample.
+        TF_WARN("HdResampleRawTimeSamples: overlapping samples at %f; "
+            "using first sample", us[i]);
+        return vs[i - 1];
+    } else {
+        // Linear blend of neighboring samples.
+        float alpha = (us[i - 1] - u) / (us[i] - us[i - 1]);
+        return HdResampleNeighbors(alpha, vs[i - 1], vs[i]);
+    }
 }
 
 struct GridInfo {
@@ -242,7 +274,7 @@ void ParseOpenvdbMetadata(GridInfo* grid) {
                         ramp.reserve(kLookupTableGranularityLevel);
                         for (int i = 0; i < kLookupTableGranularityLevel; ++i) {
                             float t = static_cast<float>(i) / (kLookupTableGranularityLevel - 1);
-                            ramp.push_back(HdResampleRawTimeSamples(t, parameters.size(), parameters.data(), colors.data()));
+                            ramp.push_back(HdRprResampleRawTimeSamples(t, parameters.size(), parameters.data(), colors.data()));
                         }
                         grid->params.authoredParamsMask |= GridParameters::kRampAuthored;
                     }
@@ -404,9 +436,10 @@ void HdRprVolume::Sync(
                     targetInfo->filepath = assetPath.GetAssetPath();
                 }
 
+                targetInfo->params = ParseGridParameters(sceneDelegate, desc.fieldId);
+
                 targetInfo->vdbGrid = getVdbGrid(desc.fieldId, targetInfo->filepath);
                 if (targetInfo->vdbGrid) {
-                    targetInfo->params = ParseGridParameters(sceneDelegate, desc.fieldId);
                     ParseOpenvdbMetadata(targetInfo);
 
                     // Subscribe for field updates, more info in renderParam.h
@@ -528,25 +561,24 @@ void HdRprVolume::Sync(
         }
 
         for (auto& value : densityGridInfo.params.ramp) {
-            value = value * densityGridInfo.params.gain + GfVec3f(densityGridInfo.params.bias);
+            value = GfCompMult(value, densityGridInfo.params.gain) + densityGridInfo.params.bias;
         }
         for (auto& value : emissionGridInfo.params.ramp) {
-            value = value * emissionGridInfo.params.gain + GfVec3f(emissionGridInfo.params.bias);
+            value = GfCompMult(value, emissionGridInfo.params.gain) + emissionGridInfo.params.bias;
         }
         for (auto& value : albedoGridInfo.params.ramp) {
-            value = value * albedoGridInfo.params.gain + GfVec3f(albedoGridInfo.params.bias);
+            value = GfCompMult(value, albedoGridInfo.params.gain) + albedoGridInfo.params.bias;
         }
 
         openvdb::Vec3d gridMin = gridTransform.indexToWorld(activeVoxelsBB.min());
         GfVec3f gridBBLow((float)(gridMin.x() - voxelSize[0] / 2), (float)(gridMin.y() - voxelSize[1] / 2), (float)(gridMin.z() - voxelSize[2] / 2));
         GfVec3f voxelSizeGf(voxelSize.x(), voxelSize.y(), voxelSize.z());
 
-        auto volumeMaterialParams = ParseVolumeMaterialParameters(sceneDelegate, id);
         m_rprVolume = rprApi->CreateVolume(
             densityGridData.coords, densityGridData.values, densityGridInfo.params.ramp, densityGridInfo.params.scale,
             albedoGridData.coords, albedoGridData.values, albedoGridInfo.params.ramp, albedoGridInfo.params.scale, 
             emissionGridData.coords, emissionGridData.values, emissionGridInfo.params.ramp, emissionGridInfo.params.scale,
-            GfVec3i(activeVoxelsBBSize.asPointer()), voxelSizeGf, gridBBLow, volumeMaterialParams);
+            GfVec3i(activeVoxelsBBSize.asPointer()), voxelSizeGf, gridBBLow);
         newVolume = m_rprVolume != nullptr;
     }
 
