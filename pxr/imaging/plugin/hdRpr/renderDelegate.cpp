@@ -154,7 +154,6 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
         SetRenderSetting(entry.first, entry.second);
     }
 
-
     m_rprApi.reset(new HdRprApi(this));
     g_rprApi = m_rprApi.get();
 
@@ -429,7 +428,7 @@ PXR_NAMESPACE_CLOSE_SCOPE
 void HdRprSetRenderQuality(const char* quality) {
     PXR_INTERNAL_NS::HdRprConfig* config;
     auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);
-    config->SetRenderQuality(PXR_INTERNAL_NS::TfToken(quality));
+    config->SetCoreRenderQuality(PXR_INTERNAL_NS::TfToken(quality));
 }
 
 char* HdRprGetRenderQuality() {

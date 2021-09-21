@@ -28,9 +28,9 @@ def get_render_setting(render_setting_categories, category_name, name):
 
 def hidewhen_render_quality(operator, quality, render_setting_categories=None):
     if operator in ('==', '!='):
-        return 'renderQuality {} "{}"'.format(operator, quality)
+        return '{} {} "{}"'.format(houdini_parm_name('core:renderQuality'), operator, quality)
     elif operator == '<':
-        render_quality = get_render_setting(render_setting_categories, 'RenderQuality', 'renderQuality')
+        render_quality = get_render_setting(render_setting_categories, 'RenderQuality', 'core:renderQuality')
         values = render_quality['values']
 
         hidewhen = []
@@ -52,15 +52,19 @@ def hidewhen_not_northstar(render_setting_categories):
 def hidewhen_not_tahoe(render_setting_categories):
     return hidewhen_render_quality('!=', 'Full', render_setting_categories)
 
-HYBRID_IS_AVAILABLE_PY_CONDITION = 'platform.system() != "Darwin"'
-NORTHSTAR_ENABLED_PY_CONDITION = 'hou.pwd().parm("renderQuality").evalAsString() == "Northstar"'
+def houdini_parm_name(name):
+    import hou
+    return hou.encode('rpr:' + name)
+
+HYBRID_IS_AVAILABLE_PY_CONDITION = lambda: 'platform.system() != "Darwin"'
+NORTHSTAR_ENABLED_PY_CONDITION = lambda: 'hou.pwd().parm("{}").evalAsString() == "Northstar"'.format(houdini_parm_name('core:renderQuality'))
 
 render_setting_categories = [
     {
         'name': 'RenderQuality',
         'settings': [
             {
-                'name': 'renderQuality',
+                'name': 'core:renderQuality',
                 'ui_name': 'Render Quality',
                 'help': 'Render restart might be required',
                 'defaultValue': 'Northstar',
@@ -78,7 +82,7 @@ render_setting_categories = [
         'name': 'RenderMode',
         'settings': [
             {
-                'name': 'coreRenderMode',
+                'name': 'core:renderMode',
                 'ui_name': 'Render Mode',
                 'defaultValue': 'Global Illumination',
                 'values': [
@@ -95,7 +99,7 @@ render_setting_categories = [
                 ]
             },
             {
-                'name': 'aoRadius',
+                'name': 'ambientOcclusion:radius',
                 'ui_name': 'Ambient Occlusion Radius',
                 'defaultValue': 1.0,
                 'minValue': 0.0,
@@ -111,7 +115,7 @@ render_setting_categories = [
                 },
                 'settings': [
                     {
-                        'name': 'contourAntialiasing',
+                        'name': 'contour:antialiasing',
                         'ui_name': 'Antialiasing',
                         'defaultValue': 1.0,
                         'minValue': 0.0,
@@ -121,7 +125,7 @@ render_setting_categories = [
                         }
                     },
                     {
-                        'name': 'contourUseNormal',
+                        'name': 'contour:useNormal',
                         'ui_name': 'Use Normal',
                         'defaultValue': True,
                         'help': 'Whether to use geometry normals for edge detection or not',
@@ -130,7 +134,7 @@ render_setting_categories = [
                         }
                     },
                     {
-                        'name': 'contourLinewidthNormal',
+                        'name': 'contour:linewidthNormal',
                         'ui_name': 'Linewidth Normal',
                         'defaultValue': 1.0,
                         'minValue': 0.0,
@@ -141,7 +145,7 @@ render_setting_categories = [
                         }
                     },
                     {
-                        'name': 'contourNormalThreshold',
+                        'name': 'contour:normalThreshold',
                         'ui_name': 'Normal Threshold',
                         'defaultValue': 45.0,
                         'minValue': 0.0,
@@ -151,7 +155,7 @@ render_setting_categories = [
                         }
                     },
                     {
-                        'name': 'contourUsePrimId',
+                        'name': 'contour:usePrimId',
                         'ui_name': 'Use Primitive Id',
                         'defaultValue': True,
                         'help': 'Whether to use primitive Id for edge detection or not',
@@ -160,7 +164,7 @@ render_setting_categories = [
                         }
                     },
                     {
-                        'name': 'contourLinewidthPrimId',
+                        'name': 'contour:linewidthPrimId',
                         'ui_name': 'Linewidth Primitive Id',
                         'defaultValue': 1.0,
                         'minValue': 0.0,
@@ -171,7 +175,7 @@ render_setting_categories = [
                         }
                     },
                     {
-                        'name': 'contourUseMaterialId',
+                        'name': 'contour:useMaterialId',
                         'ui_name': 'Use Material Id',
                         'defaultValue': True,
                         'help': 'Whether to use material Id for edge detection or not',
@@ -180,7 +184,7 @@ render_setting_categories = [
                         }
                     },
                     {
-                        'name': 'contourLinewidthMaterialId',
+                        'name': 'contour:linewidthMaterialId',
                         'ui_name': 'Linewidth Material Id',
                         'defaultValue': 1.0,
                         'minValue': 0.0,
@@ -191,7 +195,7 @@ render_setting_categories = [
                         }
                     },
                     {
-                        'name': 'contourDebug',
+                        'name': 'contour:debug',
                         'ui_name': 'Debug',
                         'defaultValue': False,
                         'help': 'Whether to show colored outlines according to used features or not.\\n'
@@ -221,7 +225,7 @@ render_setting_categories = [
         },
         'settings': [
             {
-                'name': 'enableDenoising',
+                'name': 'denoising:enable',
                 'ui_name': 'Enable AI Denoising',
                 'defaultValue': False,
                 'houdini': {
@@ -233,11 +237,11 @@ render_setting_categories = [
             {
                 'folder': 'Denoise Settings',
                 'houdini': {
-                    'hidewhen': 'enableDenoising == 0'
+                    'hidewhen': 'denoising:enable == 0'
                 },
                 'settings': [
                     {
-                        'name': 'denoiseMinIter',
+                        'name': 'denoising:minIter',
                         'ui_name': 'Denoise Min Iteration',
                         'defaultValue': 4,
                         'minValue': 1,
@@ -245,7 +249,7 @@ render_setting_categories = [
                         'help': 'The first iteration on which denoising should be applied.'
                     },
                     {
-                        'name': 'denoiseIterStep',
+                        'name': 'denoising:iterStep',
                         'ui_name': 'Denoise Iteration Step',
                         'defaultValue': 32,
                         'minValue': 1,
@@ -279,7 +283,7 @@ render_setting_categories = [
         },
         'settings': [
             {
-                'name': 'minAdaptiveSamples',
+                'name': 'adaptiveSampling:minSamples',
                 'ui_name': 'Min Samples',
                 'help': 'Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than \'Variance Threshold\'.',
                 'defaultValue': 64,
@@ -287,7 +291,7 @@ render_setting_categories = [
                 'maxValue': 2 ** 16
             },
             {
-                'name': 'varianceThreshold',
+                'name': 'adaptiveSampling:noiseTreshold',
                 'ui_name': 'Noise Threshold',
                 'help': 'Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff.',
                 'defaultValue': 0.0,
@@ -303,7 +307,7 @@ render_setting_categories = [
         },
         'settings': [
             {
-                'name': 'maxRayDepth',
+                'name': 'quality:rayDepth',
                 'ui_name': 'Max Ray Depth',
                 'help': 'The number of times that a ray bounces off various surfaces before being terminated.',
                 'defaultValue': 8,
@@ -311,7 +315,7 @@ render_setting_categories = [
                 'maxValue': 50
             },
             {
-                'name': 'maxRayDepthDiffuse',
+                'name': 'quality:rayDepthDiffuse',
                 'ui_name': 'Diffuse Ray Depth',
                 'help': 'The maximum number of times that a light ray can be bounced off diffuse surfaces.',
                 'defaultValue': 3,
@@ -319,7 +323,7 @@ render_setting_categories = [
                 'maxValue': 50
             },
             {
-                'name': 'maxRayDepthGlossy',
+                'name': 'quality:rayDepthGlossy',
                 'ui_name': 'Glossy Ray Depth',
                 'help': 'The maximum number of ray bounces from specular surfaces.',
                 'defaultValue': 3,
@@ -327,7 +331,7 @@ render_setting_categories = [
                 'maxValue': 50
             },
             {
-                'name': 'maxRayDepthRefraction',
+                'name': 'quality:rayDepthRefraction',
                 'ui_name': 'Refraction Ray Depth',
                 'help': 'The maximum number of times that a light ray can be refracted, and is designated for clear transparent materials, such as glass.',
                 'defaultValue': 3,
@@ -335,7 +339,7 @@ render_setting_categories = [
                 'maxValue': 50
             },
             {
-                'name': 'maxRayDepthGlossyRefraction',
+                'name': 'quality:rayDepthGlossyRefraction',
                 'ui_name': 'Glossy Refraction Ray Depth',
                 'help': 'The Glossy Refraction Ray Depth parameter is similar to the Refraction Ray Depth. The difference is that it is aimed to work with matte refractive materials, such as semi-frosted glass.',
                 'defaultValue': 3,
@@ -343,7 +347,7 @@ render_setting_categories = [
                 'maxValue': 50
             },
             {
-                'name': 'maxRayDepthShadow',
+                'name': 'quality:rayDepthShadow',
                 'ui_name': 'Shadow Ray Depth',
                 'help': 'Controls the accuracy of shadows cast by transparent objects. It defines the maximum number of surfaces that a light ray can encounter on its way causing these surfaces to cast shadows.',
                 'defaultValue': 2,
@@ -351,7 +355,7 @@ render_setting_categories = [
                 'maxValue': 50
             },
             {
-                'name': 'raycastEpsilon',
+                'name': 'quality:raycastEpsilon',
                 'ui_name': 'Ray Cast Epsilon',
                 'help': 'Determines an offset used to move light rays away from the geometry for ray-surface intersection calculations.',
                 'defaultValue': 2e-3,
@@ -359,12 +363,7 @@ render_setting_categories = [
                 'maxValue': 1.0
             },
             {
-                'name': 'enableRadianceClamping',
-                'ui_name': 'Clamp Fireflies',
-                'defaultValue': False,
-            },
-            {
-                'name': 'radianceClamping',
+                'name': 'quality:radianceClamping',
                 'ui_name': 'Max Radiance',
                 'help': 'Limits the intensity, or the maximum brightness, of samples in the scene. Greater clamp radiance values produce more brightness.',
                 'defaultValue': 0.0,
@@ -377,7 +376,7 @@ render_setting_categories = [
         'name': 'InteractiveQuality',
         'settings': [
             {
-                'name': 'interactiveMaxRayDepth',
+                'name': 'quality:interactive:rayDepth',
                 'ui_name': 'Interactive Max Ray Depth',
                 'help': 'Controls value of \'Max Ray Depth\' in interactive mode.',
                 'defaultValue': 2,
@@ -388,7 +387,7 @@ render_setting_categories = [
                 }
             },
             {
-                'name': 'interactiveResolutionDownscale',
+                'name': 'quality:interactive:downscale:resolution',
                 'ui_name': 'Interactive Resolution Downscale',
                 'help': 'Controls how much rendering resolution is downscaled in interactive mode. Formula: resolution / (2 ^ downscale). E.g. downscale==2 will give you 4 times smaller rendering resolution.',
                 'defaultValue': 3,
@@ -399,7 +398,7 @@ render_setting_categories = [
                 }
             },
             {
-                'name': 'interactiveEnableDownscale',
+                'name': 'quality:interactive:downscale:enable',
                 'ui_name': 'Downscale Resolution When Interactive',
                 'help': 'Controls whether in interactive mode resolution should be downscaled or no.',
                 'defaultValue': True,
@@ -413,53 +412,53 @@ render_setting_categories = [
         'name': 'Tonemapping',
         'settings': [
             {
-                'name': 'enableTonemap',
+                'name': 'tonemapping:enable',
                 'ui_name': 'Enable Tone Mapping',
                 'help': 'Enable linear photographic tone mapping filter. More info in RIF documentation',
                 'defaultValue': False
             },
             {
-                'name': 'tonemapExposureTime',
+                'name': 'tonemapping:exposureTime',
                 'ui_name': 'Film Exposure Time (sec)',
                 'help': 'Film exposure time',
                 'defaultValue': 0.125,
                 'minValue': 0.0,
                 'maxValue': 10.0,
                 'houdini': {
-                    'hidewhen': 'enableTonemap == 0'
+                    'hidewhen': 'tonemapping:enable == 0'
                 }
             },
             {
-                'name': 'tonemapSensitivity',
+                'name': 'tonemapping:sensitivity',
                 'ui_name': 'Film Sensitivity',
                 'help': 'Luminance of the scene (in candela per m^2)',
                 'defaultValue': 1.0,
                 'minValue': 0.0,
                 'maxValue': 10.0,
                 'houdini': {
-                    'hidewhen': 'enableTonemap == 0'
+                    'hidewhen': 'tonemapping:enable == 0'
                 }
             },
             {
-                'name': 'tonemapFstop',
+                'name': 'tonemapping:fstop',
                 'ui_name': 'Fstop',
                 'help': 'Aperture f-number',
                 'defaultValue': 1.0,
                 'minValue': 0.0,
                 'maxValue': 100.0,
                 'houdini': {
-                    'hidewhen': 'enableTonemap == 0'
+                    'hidewhen': 'tonemapping:enable == 0'
                 }
             },
             {
-                'name': 'tonemapGamma',
+                'name': 'tonemapping:gamma',
                 'ui_name': 'Tone Mapping Gamma',
                 'help': 'Gamma correction value',
                 'defaultValue': 1.0,
                 'minValue': 0.0,
                 'maxValue': 5.0,
                 'houdini': {
-                    'hidewhen': 'enableTonemap == 0'
+                    'hidewhen': 'tonemapping:enable == 0'
                 }
             }
         ]
@@ -468,7 +467,7 @@ render_setting_categories = [
         'name': 'Alpha',
         'settings': [
             {
-                'name': 'enableAlpha',
+                'name': 'alpha:enable',
                 'ui_name': 'Enable Color Alpha',
                 'defaultValue': True
             }
@@ -478,7 +477,7 @@ render_setting_categories = [
         'name': 'MotionBlur',
         'settings': [
             {
-                'name': 'enableBeautyMotionBlur',
+                'name': 'beautyMotionBlur:enable',
                 'ui_name': 'Enable Beauty Motion Blur',
                 'defaultValue': True,
                 'help': 'If disabled, only velocity AOV will store information about movement on the scene. Required for motion blur that is generated in post-processing.',
@@ -492,7 +491,7 @@ render_setting_categories = [
         'name': 'OCIO',
         'settings': [
             {
-                'name': 'ocioConfigPath',
+                'name': 'ocio:configPath',
                 'ui_name': 'OpenColorIO Config Path',
                 'defaultValue': '',
                 'c_type': 'std::string',
@@ -503,7 +502,7 @@ render_setting_categories = [
                 }
             },
             {
-                'name': 'ocioRenderingColorSpace',
+                'name': 'ocio:renderingColorSpace',
                 'ui_name': 'OpenColorIO Rendering Color Space',
                 'defaultValue': '',
                 'c_type': 'std::string',
@@ -530,7 +529,7 @@ render_setting_categories = [
         'name': 'Cryptomatte',
         'settings': [
             {
-                'name': 'cryptomatteOutputPath',
+                'name': 'cryptomatte:outputPath',
                 'ui_name': 'Cryptomatte Output Path',
                 'defaultValue': '',
                 'c_type': 'std::string',
@@ -540,7 +539,7 @@ render_setting_categories = [
                 }
             },
             {
-                'name': 'cryptomatteOutputMode',
+                'name': 'cryptomatte:outputMode',
                 'ui_name': 'Cryptomatte Output Mode',
                 'defaultValue': 'Batch',
                 'values': [
@@ -553,7 +552,7 @@ render_setting_categories = [
                 }
             },
             {
-                'name': 'cryptomattePreviewLayer',
+                'name': 'cryptomatte:previewLayer',
                 'ui_name': 'Cryptomatte Add Preview Layer',
                 'defaultValue': False,
                 'help': 'Whether to generate cryptomatte preview layer or not. Whether you need it depends on the software you are planning to use cryptomatte in. For example, Houdini\'s COP Cryptomatte requires it, Nuke, on contrary, does not.',
@@ -584,16 +583,16 @@ render_setting_categories = [
         'name': 'RprExport',
         'settings': [
             {
-                'name': 'rprExportPath',
+                'name': 'export:path',
                 'defaultValue': '',
                 'c_type': 'std::string'
             },
             {
-                'name': 'rprExportAsSingleFile',
+                'name': 'export:asSingleFile',
                 'defaultValue': False
             },
             {
-                'name': 'rprExportUseImageCache',
+                'name': 'export:useImageCache',
                 'defaultValue': False
             }
         ]
@@ -820,9 +819,13 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
         def process_setting(setting):
             name = setting['name']
-            rs_tokens_declaration.append('    ({}) \\\n'.format(name))
 
-            name_title = camel_case_capitalize(name)
+            first, *others = name.split(':')
+            c_name = ''.join([first[0].lower() + first[1:], *map(camel_case_capitalize, others)])
+
+            rs_tokens_declaration.append('    (({}, "rpr:{}")) \\\n'.format(c_name, name))
+
+            name_title = camel_case_capitalize(c_name)
 
             default_value = setting['defaultValue']
 
@@ -850,15 +853,15 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 c_type_str = type_str
                 default_value = next(value for value in setting['values'] if value == default_value)
 
-            rs_get_set_method_declarations.append('    void Set{}({} {});\n'.format(name_title, c_type_str, name))
-            rs_get_set_method_declarations.append('    {} const& Get{}() const {{ return m_prefData.{}; }}\n\n'.format(type_str, name_title, name))
+            rs_get_set_method_declarations.append('    void Set{}({} {});\n'.format(name_title, c_type_str, c_name))
+            rs_get_set_method_declarations.append('    {} const& Get{}() const {{ return m_prefData.{}; }}\n\n'.format(type_str, name_title, c_name))
 
-            rs_variables_declaration.append('        {} {};\n'.format(type_str, name))
+            rs_variables_declaration.append('        {} {};\n'.format(type_str, c_name))
 
             if isinstance(default_value, bool):
-                rs_sync.append('        Set{name_title}(getBoolSetting(HdRprRenderSettingsTokens->{name}, k{name_title}Default));\n'.format(name_title=name_title, name=name))
+                rs_sync.append('        Set{name_title}(getBoolSetting(HdRprRenderSettingsTokens->{c_name}, k{name_title}Default));\n'.format(name_title=name_title, c_name=c_name))
             else:
-                rs_sync.append('        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{name}, k{name_title}Default));\n'.format(name_title=name_title, name=name))
+                rs_sync.append('        Set{name_title}(renderDelegate->GetRenderSetting(HdRprRenderSettingsTokens->{c_name}, k{name_title}Default));\n'.format(name_title=name_title, c_name=c_name))
 
             if 'values' in setting:
                 rs_range_definitions.append('#define k{name_title}Default {value_tokens_name}->{value}'.format(name_title=name_title, value_tokens_name=value_tokens_name, value=default_value.get_key()))
@@ -873,38 +876,38 @@ PXR_NAMESPACE_CLOSE_SCOPE
                 rs_validate_values.append('           ')
             if 'minValue' in setting:
                 rs_range_definitions.append('const {type} k{name_title}Min = {type}({value});\n'.format(type=type_str, name_title=name_title, value=setting['minValue']))
-                set_validation += '    if ({name} < k{name_title}Min) {{ return; }}\n'.format(name=name, name_title=name_title)
-                rs_validate_values.append('&& {name} < k{name_title}Min'.format(name=name, name_title=name_title))
+                set_validation += '    if ({c_name} < k{name_title}Min) {{ return; }}\n'.format(c_name=c_name, name_title=name_title)
+                rs_validate_values.append('&& {c_name} < k{name_title}Min'.format(c_name=c_name, name_title=name_title))
             if 'maxValue' in setting:
                 rs_range_definitions.append('const {type} k{name_title}Max = {type}({value});\n'.format(type=type_str, name_title=name_title, value=setting['maxValue']))
-                set_validation += '    if ({name} > k{name_title}Max) {{ return; }}\n'.format(name=name, name_title=name_title)
-                rs_validate_values.append('&& {name} > k{name_title}Max'.format(name=name, name_title=name_title))
+                set_validation += '    if ({c_name} > k{name_title}Max) {{ return; }}\n'.format(c_name=c_name, name_title=name_title)
+                rs_validate_values.append('&& {c_name} > k{name_title}Max'.format(c_name=c_name, name_title=name_title))
             if 'minValue' in setting or 'maxValue' in setting:
                 rs_validate_values.append('\n')
             rs_range_definitions.append('\n')
 
             if 'values' in setting:
                 value_range = value_tokens_name + '->allTokens'
-                set_validation += '    if (std::find({range}.begin(), {range}.end(), {name}) == {range}.end()) return;\n'.format(range=value_range, name=name)
+                set_validation += '    if (std::find({range}.begin(), {range}.end(), {c_name}) == {range}.end()) return;\n'.format(range=value_range, c_name=c_name)
 
             if 'ui_name' in setting:
-                rs_list_initialization.append('    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], name, name_title))
+                rs_list_initialization.append('    settingDescs.push_back({{"{}", HdRprRenderSettingsTokens->{}, VtValue(k{}Default)}});\n'.format(setting['ui_name'], c_name, name_title))
 
             if disabled_category:
-                rs_get_set_method_definitions.append('void HdRprConfig::Set{name_title}({c_type} {name}) {{ /* Platform no-op */ }}'.format(name_title=name_title, c_type=c_type_str, name=name))
+                rs_get_set_method_definitions.append('void HdRprConfig::Set{name_title}({c_type} {c_name}) {{ /* Platform no-op */ }}'.format(name_title=name_title, c_type=c_type_str, c_name=c_name))
             else:
                 rs_get_set_method_definitions.append((
 '''
-void HdRprConfig::Set{name_title}({c_type} {name}) {{
+void HdRprConfig::Set{name_title}({c_type} {c_name}) {{
 {set_validation}
-    if (m_prefData.{name} != {name}) {{
-        m_prefData.{name} = {name};
+    if (m_prefData.{c_name} != {c_name}) {{
+        m_prefData.{c_name} = {c_name};
         m_dirtyFlags |= {dirty_flag};
     }}
 }}
-''').format(name_title=name_title, c_type=c_type_str, name=name, dirty_flag=dirty_flag, set_validation=set_validation))
+''').format(name_title=name_title, c_type=c_type_str, c_name=c_name, dirty_flag=dirty_flag, set_validation=set_validation))
 
-            rs_set_default_values.append('    {name} = k{name_title}Default;\n'.format(name=name, name_title=name_title))
+            rs_set_default_values.append('    {c_name} = k{name_title}Default;\n'.format(c_name=c_name, name_title=name_title))
 
         for setting in category['settings']:
             if 'folder' in setting:

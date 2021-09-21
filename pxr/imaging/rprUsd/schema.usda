@@ -49,13 +49,13 @@ class "RprRendererSettingsAPI" (
     doc = "Defines render settings for AMD Radeon Pro Renderer"
 )
 {
-    uniform token rpr:renderQuality = "Northstar" (
+    uniform token rpr:core:renderQuality = "Northstar" (
         allowedTokens = ["Low", "Medium", "High", "Full", "Northstar"]
         displayName = "Render Quality"
         displayGroup = "General"
     )
 
-    uniform token rpr:renderMode = "Global Illumination" (
+    uniform token rpr:core:renderMode = "Global Illumination" (
         allowedTokens = ["Global Illumination", "Direct Illumination", "Wireframe", "Material Index", "Position", "Normal", "Texcoord", "Ambient Occlusion", "Diffuse", "Contour"]
         displayName = "Render Mode"
         displayGroup = "General|Render Mode"
@@ -133,14 +133,14 @@ class "RprRendererSettingsAPI" (
               """
     )
 
-    uniform bool rpr:alpha = true (
+    uniform bool rpr:alpha:enable = true (
         displayName = "Enable Color Alpha"
         displayGroup = "General"
         doc = ""
     )
 
     # Northstar only
-    uniform bool rpr:beautyMotionBlur = true (
+    uniform bool rpr:beautyMotionBlur:enable = true (
         displayName = "Enable Beauty Motion Blur"
         displayGroup = "General"
         doc = "If disabled, only velocity AOV will store information about movement on the scene. Required for motion blur that is generated in post-processing."
@@ -153,7 +153,7 @@ class "RprRendererSettingsAPI" (
     )
 
     # not for < High
-    uniform bool rpr:denoising = false (
+    uniform bool rpr:denoising:enable = false (
         displayGroup = "Postprocessing|Denoise"
         displayName = "Enable AI Denoise"
     )
@@ -272,7 +272,7 @@ class "RprRendererSettingsAPI" (
         doc = "Controls whether in interactive mode resolution should be downscaled or no."
     )
 
-    uniform bool rpr:tonemapping = false (
+    uniform bool rpr:tonemapping:enable = false (
         displayName = "Enable Tonemapping"
         displayGroup = "Postprocessing|Tonemapping"
         doc = "Enable linear photographic tone mapping filter. More info in RIF documentation."

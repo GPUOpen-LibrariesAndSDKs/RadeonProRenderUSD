@@ -79,7 +79,7 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
 
     def CreateHoudiniParam(name, label, htype, default, values=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None):
         param = 'parm {\n'
-        param += '    name "{}"\n'.format(_get_valid_houdini_param_name(name))
+        param += '    name "{}"\n'.format(name)
         param += '    label "{}"\n'.format(label)
         param += '    type {}\n'.format(htype)
         if size: param += '    size {}\n'.format(size)
@@ -105,9 +105,9 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
 
         return param
 
-    name = setting['name']
-
-    control_param_name = _get_valid_houdini_param_name(name + '_control')
+    setting_name = 'rpr:' + setting['name']
+    name = _get_valid_houdini_param_name(setting_name)
+    control_param_name = _get_valid_houdini_param_name(setting_name + '_control')
 
     render_param_values = None
     default_value = setting['defaultValue']
@@ -144,7 +144,7 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
                 expression = 'menu_values.extend([\\"{}\\", \\"{}\\"])'.format(value.get_key(), value.get_ui_name())
 
                 if value.enable_py_condition:
-                    enable_condition = value.enable_py_condition.replace('"', '\\"')
+                    enable_condition = value.enable_py_condition().replace('"', '\\"')
                     expression = 'if {}: {}'.format(enable_condition, expression)
 
                 render_param_values += '[ "{}" ]\n'.format(expression)
