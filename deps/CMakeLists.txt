@@ -52,7 +52,7 @@ add_library(cpprpr STATIC
     ${RPR_CPP_WRAPPER_LOCATION}/RadeonProRenderCpp.cpp
     ${RPR_CPP_WRAPPER_LOCATION}/tinyxml2.cpp)
 if(NOT RPR_DISABLE_CUSTOM_MATERIALX_LOADER)
-    target_sources(cpprpr
+    target_sources(cpprpr PRIVATE
         ${RPRMTLXLOADER_LOCATION}/rprMtlxLoader.h
         ${RPRMTLXLOADER_LOCATION}/rprMtlxLoader.cpp)
     target_link_libraries(cpprpr PUBLIC MaterialXCore MaterialXFormat)

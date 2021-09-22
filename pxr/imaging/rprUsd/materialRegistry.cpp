@@ -20,7 +20,6 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/error.h"
 #include "pxr/base/plug/registry.h"
 #include "pxr/base/plug/plugin.h"
-#include "pxr/base/arch/fileSystem.h"
 #include "pxr/base/arch/vsnprintf.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/staticTokens.h"
@@ -32,11 +31,10 @@ limitations under the License.
 #include "pxr/usd/usd/schemaBase.h"
 
 #include "materialNodes/usdNode.h"
+#include "materialNodes/rprApiMtlxNode.h"
 #include "materialNodes/houdiniPrincipledShaderNode.h"
 
 #include "pxr/imaging/hdMtlx/hdMtlx.h"
-
-#include <RadeonProRender_MaterialX.h>
 
 #include <MaterialXCore/Document.h>
 #include <MaterialXFormat/Util.h>
@@ -385,53 +383,21 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
         &textureMap);
 
     std::string mtlxString = mx::writeToXmlString(mtlxDoc, nullptr);
+	rpr::MaterialNode* mtlxNode = RprUsd_CreateRprMtlxFromString(mtlxString, context);
+	if (!mtlxNode) {
+		return nullptr;
+	}
 
-    rpr::Status status;
-    std::unique_ptr<rpr::MaterialNode> matxNode(context.rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_MATX, &status));
-    if (!matxNode) {
-        RPR_ERROR_CHECK(status, "Failed to create matx node");
-        return nullptr;
-    }
+	struct RprUsdMaterial_RprApiMtlx : public RprUsdMaterial {
+		RprUsdMaterial_RprApiMtlx(rpr::MaterialNode* retainedNode)
+			: m_retainedNode(retainedNode) {
+			// TODO: fill m_uvPrimvarName
+			m_surfaceNode = m_retainedNode.get();
+		}
 
-    rpr_material_node matxNodeHandle = rpr::GetRprObject(matxNode.get());
-    // TODO: use rprMaterialXSetFileAsBuffer when supported
-    /*status = rprMaterialXSetFileAsBuffer(matxNodeHandle, mtlxString.c_str(), mtlxString.size());
-    if (status != RPR_SUCCESS) {
-        RPR_ERROR_CHECK(status, "Failed to set matx node file from buffer");
-        return nullptr;
-    }*/
-
-    // For now, as we have only rprMaterialXSetFile working, create a temporary file
-    {
-        std::string temporaryFilePath = ArchMakeTmpFileName("tmpMaterial", ".mtlx");
-
-        FILE* fout = fopen(temporaryFilePath.c_str(), "w");
-        if (!fout) {
-            return nullptr;
-        }
-
-        fwrite(mtlxString.c_str(), 1, mtlxString.size(), fout);
-        fclose(fout);
-
-        status = rprMaterialXSetFile(matxNodeHandle, temporaryFilePath.c_str());
-        if (status != RPR_SUCCESS) {
-            RPR_ERROR_CHECK(status, "Failed to set matx node file");
-            ArchUnlinkFile(temporaryFilePath.c_str());
-            return nullptr;
-        }
-    }
-
-    struct RprUsdMaterial_RprApiMaterialX : public RprUsdMaterial {
-        std::unique_ptr<rpr::MaterialNode> m_retainedNode;
-
-        RprUsdMaterial_RprApiMaterialX(std::unique_ptr<rpr::MaterialNode> retainedNode)
-            : m_retainedNode(std::move(retainedNode)) {
-            // TODO: fill m_uvPrimvarName
-            m_surfaceNode = m_retainedNode.get();
-        }
-    };
-
-    return new RprUsdMaterial_RprApiMaterialX(std::move(matxNode));
+		std::unique_ptr<rpr::MaterialNode> m_retainedNode;
+	};
+	return new RprUsdMaterial_RprApiMtlx(mtlxNode);
 }
 
 } // namespace anonymous
@@ -464,7 +430,6 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             return usdShadeMtlxMaterial;
         }
     }
-    
 
     // The simple wrapper to retain material nodes that are used to build terminal outputs
     struct RprUsdGraphBasedMaterial : public RprUsdMaterial {
