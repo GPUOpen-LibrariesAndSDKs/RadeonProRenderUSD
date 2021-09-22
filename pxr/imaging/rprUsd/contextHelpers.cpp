@@ -398,10 +398,10 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
             return nullptr;
         }
 
-		if (metadata->pluginType == kPluginHybridPro) {
-			std::string pluginName = "Hybrid";
-			status = rprContextSetInternalParameterBuffer(rpr::GetRprObject(context), pluginID, "plugin.name", pluginName.c_str(), pluginName.size() + 1);
-		}
+        if (metadata->pluginType == kPluginHybridPro) {
+            std::string pluginName = "Hybrid";
+            status = rprContextSetInternalParameterBuffer(rpr::GetRprObject(context), pluginID, "plugin.name", pluginName.c_str(), pluginName.size() + 1);
+        }
 
         RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, textureCachePath.c_str()), "Failed to set texture cache path");
 
