@@ -12,7 +12,10 @@ pxr_library(rprUsd
         glf
         sdf
         sdr
+        hio
+        plug
         arch
+        garch
         work
         hdMtlx
         cpprpr

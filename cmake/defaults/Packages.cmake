@@ -97,7 +97,10 @@ if (NOT PXR_MALLOC_LIBRARY)
     endif()
 endif()
 
-find_package(MaterialX QUIET)
+if(NOT MaterialX_FOUND)
+    find_package(MaterialX QUIET)
+endif()
+
 if(MaterialX_FOUND)
     set(RPR_DISABLE_CUSTOM_MATERIALX_LOADER ON)
 endif()
