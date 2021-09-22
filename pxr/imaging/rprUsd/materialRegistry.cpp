@@ -531,42 +531,13 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     auto surfaceOutput = getTerminalOutput(HdMaterialTerminalTokens->surface);
     auto displacementOutput = getTerminalOutput(HdMaterialTerminalTokens->displacement);
 
-    int materialRprId = -1;
-    std::string const* cryptomatteName = nullptr;
-
-    auto surfaceTerminalIt = network.terminals.find(HdMaterialTerminalTokens->surface);
-    if (surfaceTerminalIt != network.terminals.end()) {
-        auto& surfaceNodePath = surfaceTerminalIt->second.upstreamNode;
-
-        auto surfaceNodeIt = network.nodes.find(surfaceNodePath);
-        if (surfaceNodeIt != network.nodes.end()) {
-            auto& parameters = surfaceNodeIt->second.parameters;
-
-            auto idIt = parameters.find(RprUsdTokens->id);
-            if (idIt != parameters.end()) {
-                auto& value = idIt->second;
-
-                if (value.IsHolding<int>()) {
-                    materialRprId = value.UncheckedGet<int>();
-                }
-            }
-
-            auto cryptomatteNameIt = parameters.find(RprUsdTokens->cryptomatteName);
-            if (cryptomatteNameIt != parameters.end()) {
-                auto& value = cryptomatteNameIt->second;
-
-                if (value.IsHolding<std::string>()) {
-                    cryptomatteName = &value.UncheckedGet<std::string>();
-                }
-            }
-        }
+    int materialRprId = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialId).GetWithDefault(-1);
+    std::string cryptomatteName = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialAssetName).GetWithDefault(std::string{});
+    if (cryptomatteName.empty()) {
+        cryptomatteName = materialId.GetString();
     }
 
-    if (!cryptomatteName) {
-        cryptomatteName = &materialId.GetString();
-    }
-
-    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName->c_str(), materialRprId) ? out.release() : nullptr;
+    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId) ? out.release() : nullptr;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

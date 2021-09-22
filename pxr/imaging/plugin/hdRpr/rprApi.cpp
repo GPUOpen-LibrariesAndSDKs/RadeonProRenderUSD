@@ -82,12 +82,6 @@ TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
 
 namespace {
 
-TF_DEFINE_PRIVATE_TOKENS(_tokens,
-    (batch)
-    (renderMode)
-    (progressive)
-);
-
 TfToken GetRenderQuality(HdRprConfig const& config) {
     std::string renderQualityOverride = TfGetEnvSetting(HDRPR_RENDER_QUALITY_OVERRIDE);
 
@@ -890,7 +884,7 @@ public:
         }
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<RprUsdCoreImage>&& image, float intensity, VtValue const& backgroundOverride) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(std::unique_ptr<RprUsdCoreImage>&& image, float intensity, HdRprApi::BackgroundOverride const& backgroundOverride) {
         // XXX (RPR): default environment light should be removed before creating a new one - RPR limitation
         RemoveDefaultLight();
 
@@ -923,10 +917,9 @@ public:
             return nullptr;
         }
 
-        if (backgroundOverride.IsHolding<GfVec3f>()) {
-            GfVec3f const& backgroundOverrideColor = backgroundOverride.UncheckedGet<GfVec3f>();
+        if (backgroundOverride.enable) {
             envLight->backgroundOverrideLight.reset(m_rprContext->CreateEnvironmentLight(&status));
-            envLight->backgroundOverrideImage = CreateConstantColorImage(backgroundOverrideColor.data());
+            envLight->backgroundOverrideImage = CreateConstantColorImage(backgroundOverride.color.data());
 
             if (!envLight->backgroundOverrideLight ||
                 !envLight->backgroundOverrideImage ||
@@ -966,7 +959,7 @@ public:
         }
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& path, float intensity, VtValue const& backgroundOverride) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(const std::string& path, float intensity, HdRprApi::BackgroundOverride const& backgroundOverride) {
         if (!m_rprContext || path.empty()) {
             return nullptr;
         }
@@ -981,7 +974,7 @@ public:
         return CreateEnvironmentLight(std::move(image), intensity, backgroundOverride);
     }
 
-    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity, VtValue const& backgroundOverride) {
+    HdRprApiEnvironmentLight* CreateEnvironmentLight(GfVec3f color, float intensity, HdRprApi::BackgroundOverride const& backgroundOverride) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -3333,7 +3326,7 @@ private:
     void AddDefaultLight() {
         if (!m_defaultLightObject) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
-            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f, VtValue());
+            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f, HdRprApi::BackgroundOverride{});
 
             if (RprUsdIsLeakCheckEnabled()) {
                 m_defaultLightObject->light->SetName("defaultLight");
@@ -4067,12 +4060,12 @@ rpr::Shape* HdRprApi::CreateMeshInstance(rpr::Shape* prototypeMesh) {
     return m_impl->CreateMeshInstance(prototypeMesh);
 }
 
-HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(GfVec3f color, float intensity, VtValue const& backgroundOverride) {
+HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(GfVec3f color, float intensity, BackgroundOverride const& backgroundOverride) {
     m_impl->InitIfNeeded();
     return m_impl->CreateEnvironmentLight(color, intensity, backgroundOverride);
 }
 
-HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(const std::string& prthTotexture, float intensity, VtValue const& backgroundOverride) {
+HdRprApiEnvironmentLight* HdRprApi::CreateEnvironmentLight(const std::string& prthTotexture, float intensity, BackgroundOverride const& backgroundOverride) {
     m_impl->InitIfNeeded();
     return m_impl->CreateEnvironmentLight(prthTotexture, intensity, backgroundOverride);
 }

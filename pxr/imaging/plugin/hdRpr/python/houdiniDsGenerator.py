@@ -97,7 +97,7 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
             for condition in disablewhen_conditions:
                 param += '{{ {} }} '.format(condition)
             param += '"\n'
-        if valid_range:                    
+        if valid_range:
             param += '    range {{ {}! {} }}\n'.format(valid_range[0], valid_range[1])
         if help_msg:
             param += '    help "{}"\n'.format(help_msg)
@@ -105,7 +105,10 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
 
         return param
 
-    setting_name = 'rpr:' + setting['name']
+    setting_name = setting['name']
+    if not setting_name.startswith('rpr:') and not setting_name.startswith('primvars:'):
+        setting_name = 'rpr:' + setting_name
+
     name = _get_valid_houdini_param_name(setting_name)
     control_param_name = _get_valid_houdini_param_name(setting_name + '_control')
 

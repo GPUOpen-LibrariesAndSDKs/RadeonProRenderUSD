@@ -16,6 +16,7 @@ limitations under the License.
 #include "rprApi.h"
 
 #include "pxr/imaging/rprUsd/debugCodes.h"
+#include "pxr/imaging/rprUsd/tokens.h"
 
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/imaging/hd/light.h"
@@ -25,10 +26,6 @@ limitations under the License.
 #include "pxr/base/gf/matrix4d.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-
-TF_DEFINE_PRIVATE_TOKENS(_tokens,
-    ((backgroundOverride, "rpr:backgroundOverride"))
-);
 
 static void removeFirstSlash(std::string& string) {
     // Don't need this for *nix/Mac
@@ -75,7 +72,9 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
             return;
         }
 
-        VtValue const& backgroundOverride = sceneDelegate->GetLightParamValue(id, _tokens->backgroundOverride);
+        HdRprApi::BackgroundOverride backgroundOverride;
+        backgroundOverride.enable = sceneDelegate->GetLightParamValue(id, RprUsdTokens->rprBackgroundOverrideEnable).Get<bool>();
+        backgroundOverride.color = sceneDelegate->GetLightParamValue(id, RprUsdTokens->rprBackgroundOverrideColor).Get<GfVec3f>();
 
         float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
         float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();

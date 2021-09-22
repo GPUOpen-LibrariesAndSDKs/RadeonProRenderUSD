@@ -12,7 +12,7 @@
 
 visibility_flag_settings = [
     {
-        'name': 'primvars:rpr:visibilityPrimary',
+        'name': 'primvars:rpr:object:visibility:camera',
         'ui_name': 'Camera Visibility',
         'defaultValue': True,
         'help': 'Used to show or hide an object from the camera.\\n' \
@@ -21,7 +21,7 @@ visibility_flag_settings = [
                 'be visible in reflections, etc.'
     },
     {
-        'name': 'primvars:rpr:visibilityShadow',
+        'name': 'primvars:rpr:object:visibility:shadow',
         'ui_name': 'Shadow Visibility',
         'defaultValue': True,
         'help': 'Shadow visibility controls whether to show or to hide shadows cast by ' \
@@ -30,7 +30,7 @@ visibility_flag_settings = [
                 'that darken other objects in the scene or create unwanted effects.'
     },
     {
-        'name': 'primvars:rpr:visibilityReflection',
+        'name': 'primvars:rpr:object:visibility:reflection',
         'ui_name': 'Reflection Visibility',
         'defaultValue': True,
         'help': 'Reflection visibility makes an object visible or invisible in reflections on ' \
@@ -38,12 +38,12 @@ visibility_flag_settings = [
                 'its shadows (including reflected shadows) visible.'
     },
     {
-        'name': 'primvars:rpr:visibilityGlossyReflection',
+        'name': 'primvars:rpr:object:visibility:glossyReflection',
         'ui_name': 'Glossy Reflection Visibility',
         'defaultValue': True
     },
     {
-        'name': 'primvars:rpr:visibilityRefraction',
+        'name': 'primvars:rpr:object:visibility:refraction',
         'ui_name': 'Refraction Visibility',
         'defaultValue': True,
         'help': 'Refraction visibility makes an object visible or invisible when seen through ' \
@@ -51,24 +51,24 @@ visibility_flag_settings = [
                 'shadows (including refracted shadows) visible.'
     },
     {
-        'name': 'primvars:rpr:visibilityGlossyRefraction',
+        'name': 'primvars:rpr:object:visibility:glossyRefraction',
         'ui_name': 'Glossy Refraction Visibility',
         'defaultValue': True
     },
     {
-        'name': 'primvars:rpr:visibilityDiffuse',
+        'name': 'primvars:rpr:object:visibility:diffuse',
         'ui_name': 'Diffuse Visibility',
         'defaultValue': True,
         'help': 'Diffuse visibility affects indirect diffuse rays and makes an object visible ' \
                 'or invisible in reflections on diffuse surfaces.'
     },
     {
-        'name': 'primvars:rpr:visibilityTransparent',
+        'name': 'primvars:rpr:object:visibility:transparent',
         'ui_name': 'Transparent Visibility',
         'defaultValue': True
     },
     {
-        'name': 'primvars:rpr:visibilityLight',
+        'name': 'primvars:rpr:object:visibility:light',
         'ui_name': 'Light Visibility',
         'defaultValue': True
     }

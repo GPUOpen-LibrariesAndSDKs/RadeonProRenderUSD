@@ -14,14 +14,6 @@ over "GLOBAL" (
         string libraryPath       = "."
         string libraryPrefix     = "RprUsd"
         dictionary libraryTokens = {
-            dictionary cryptomatteName = {
-                string doc = """."""
-                string value = "rpr:cryptomatteName"
-            }
-            dictionary id = {
-                string doc = """."""
-                string value = "rpr:id"
-            }
             dictionary rpr = {
                 string doc = """."""
             }
@@ -493,14 +485,14 @@ class "RprMeshSettingsAPI" (
     customData = {
         string className = "MeshSettingsAPI"
         token apiSchemaType = "singleApply"
-        token[] apiSchemaAutoApplyTo = ["Mesh"]
+        token[] apiSchemaAutoApplyTo = ["Gprim"]
     }
     inherits = </RprObjectSettingsAPI>
 )
 {
     uniform int primvars:rpr:mesh:subdivisionLevel = 0 (
         customData = {
-            string apiName = "meshSubdivisionLevel"
+            string apiName = "subdivisionLevel"
         }
         displayGroup = "Subdivision"
         displayName = "Subdivision Level"
@@ -509,7 +501,7 @@ class "RprMeshSettingsAPI" (
 
     uniform int primvars:rpr:mesh:ignoreContour = 0 (
         customData = {
-            string apiName = "meshIgnoreContour"
+            string apiName = "ignoreContour"
         }
         displayGroup = "Contour"
         displayName = "Ignore Contour"
@@ -528,7 +520,7 @@ class "RprMaterialSettingsAPI" (
 {
     uniform int rpr:material:id = 0 (
         customData = {
-            string apiName = "materialId"
+            string apiName = "id"
         }
         displayGroup = "Material"
         displayName = "ID"
@@ -537,7 +529,7 @@ class "RprMaterialSettingsAPI" (
 
     uniform string rpr:material:assetName = "" (
         customData = {
-            string apiName = "materialAssetName"
+            string apiName = "assetName"
         }
         displayGroup = "Material"
         displayName = "Asset Name"
@@ -549,34 +541,55 @@ class "RprDomeLightSettingsAPI" (
     customData = {
         string className = "DomeLightSettingsAPI"
         token apiSchemaType = "singleApply"
+        token[] apiSchemaAutoApplyTo = ["DomeLight"]
     }
     inherits = </APISchemaBase>
 )
 {
-    uniform bool rpr:domeLight:backgroundOverride = false (
+    uniform bool rpr:backgroundOverride:enable = false (
         customData = {
             string apiName = "domeLightBackgroundOverride"
         }
-        displayGroup = "DomeLight"
+        displayGroup = "RPR"
         displayName = "Background Override"
-        doc = "Whether to override background. Either backgroundColorOverride or backgroundTextureOverride must be set."
+        doc = "Whether to override background."
     )
 
-    uniform color3f rpr:domeLight:backgroundColorOverride = (1, 1, 1) (
+    uniform color3f rpr:backgroundOverride:color = (1, 1, 1) (
         customData = {
-            string apiName = "domeLightBackgroundColorOverride"
+            string apiName = "backgroundOverrideColor"
         }
-        displayGroup = "DomeLight"
-        displayName = "Background Color Override"
+        displayGroup = "RPR"
+        displayName = "Background Override Color"
         doc = "Color that overrides background"
     )
 
-    asset rpr:domeLight:backgroundTextureOverride = "" (
+    # TODO: implement it when needed
+    # uniform asset rpr:backgroundOverride:texture = "" (
+    #     customData = {
+    #         string apiName = "backgroundOverrideTexture"
+    #     }
+    #     displayGroup = "RPR"
+    #     displayName = "Background Override Texture"
+    #     doc = "Texture that overrides background"
+    # )
+}
+
+class "RprCameraSettingsAPI" (
+    customData = {
+        string className = "CameraSettingsAPI"
+        token apiSchemaType = "singleApply"
+        token[] apiSchemaAutoApplyTo = ["Camera"]
+    }
+    inherits = </APISchemaBase>
+)
+{
+    uint rpr:camera:blades = 16 (
         customData = {
-            string apiName = "domeLightBackgroundTextureOverride"
+            string apiName = "apertureBlades"
         }
-        displayGroup = "DomeLight"
-        displayName = "Background Texture Override"
-        doc = "Path to a texture that overrides background"
+        displayGroup = "Aperture"
+        displayName = "Aperture Blades"
+        doc = ""
     )
 }
