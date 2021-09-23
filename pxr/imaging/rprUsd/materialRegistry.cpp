@@ -54,14 +54,14 @@ RprUsdMaterialRegistry::~RprUsdMaterialRegistry() = default;
 
 std::vector<RprUsdMaterialNodeDesc> const&
 RprUsdMaterialRegistry::GetRegisteredNodes() {
-	if (m_mtlxDefsDirty) {
-		m_mtlxDefsDirty = false;
+    if (m_mtlxDefsDirty) {
+        m_mtlxDefsDirty = false;
 
-		std::string mtlxResources = PlugFindPluginResource(PLUG_THIS_PLUGIN, "mtlx");
-		if (mtlxResources.empty()) {
-			TF_RUNTIME_ERROR("Missing mtlx resources");
-			return m_registeredNodes;
-		}
+        std::string mtlxResources = PlugFindPluginResource(PLUG_THIS_PLUGIN, "mtlx");
+        if (mtlxResources.empty()) {
+            TF_RUNTIME_ERROR("Missing mtlx resources");
+            return m_registeredNodes;
+        }
         TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("mtlx resources: %s\n", mtlxResources.c_str());
 
         if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
