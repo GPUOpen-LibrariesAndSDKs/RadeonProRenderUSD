@@ -619,7 +619,7 @@ render_setting_categories = [
         'name': 'ImageTransformation',
         'settings': [
             {
-                'name': 'forceVerticalFlip',
+                'name': 'flipVertical',
                 'defaultValue': False
             }
         ]
@@ -668,7 +668,6 @@ public:
     void CleanDirtyFlag(ChangeTracker dirtyFlag);
     void ResetDirty();
 
-    void ResetRenderSettingsVersion();
 private:
 
     struct PrefData {{
@@ -771,10 +770,6 @@ void HdRprConfig::CleanDirtyFlag(ChangeTracker dirtyFlag) {{
 
 void HdRprConfig::ResetDirty() {{
     m_dirtyFlags = Clean;
-}}
-
-void HdRprConfig::ResetRenderSettingsVersion() {{
-    m_lastRenderSettingsVersion = -1;
 }}
 
 HdRprConfig::PrefData::PrefData() {{
