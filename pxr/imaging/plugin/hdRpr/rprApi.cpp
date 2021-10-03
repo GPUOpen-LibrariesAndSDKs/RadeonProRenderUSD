@@ -346,7 +346,7 @@ public:
 
             {
                 HdRprConfig* config;
-                auto configInstanceLock = HdRprConfig::GetInstance(&config);
+                auto configInstanceLock = m_delegate->LockConfigInstance(&config);
                 UpdateSettings(*config, true);
             }
 
@@ -1505,7 +1505,7 @@ public:
         RenderSetting<TfToken> aspectRatioPolicy;
         {
             HdRprConfig* config;
-            auto configInstanceLock = HdRprConfig::GetInstance(&config);
+            auto configInstanceLock = m_delegate->LockConfigInstance(&config);
 
             enableDenoise.isDirty = config->IsDirty(HdRprConfig::DirtyDenoise);
             if (enableDenoise.isDirty) {
@@ -2958,7 +2958,7 @@ Don't show this message again?
 
             if (m_contourAovs) {
                 HdRprConfig* rprConfig;
-                auto configInstanceLock = HdRprConfig::GetInstance(&rprConfig);
+                auto configInstanceLock = m_delegate->LockConfigInstance(&rprConfig);
 
                 json contour;
                 contour["object.id"] = int(rprConfig->GetContourUsePrimId());
@@ -3070,7 +3070,7 @@ Don't show this message again?
         }
 
         HdRprConfig* config;
-        auto configInstanceLock = HdRprConfig::GetInstance(&config);
+        auto configInstanceLock = m_delegate->LockConfigInstance(&config);
         return config->IsDirty(HdRprConfig::DirtyAll);
     }
 
@@ -3220,7 +3220,7 @@ private:
 
         {
             HdRprConfig* config;
-            auto configInstanceLock = HdRprConfig::GetInstance(&config);
+            auto configInstanceLock = m_delegate->LockConfigInstance(&config);
             // Force sync to catch up the latest render quality and render device
             config->Sync(m_delegate);
 
