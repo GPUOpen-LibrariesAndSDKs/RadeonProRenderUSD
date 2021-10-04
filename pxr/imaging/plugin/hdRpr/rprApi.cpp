@@ -346,7 +346,7 @@ public:
 
             {
                 HdRprConfig* config;
-                auto configInstanceLock = HdRprConfig::GetInstance(&config);
+                auto configInstanceLock = m_delegate->LockConfigInstance(&config);
                 UpdateSettings(*config, true);
             }
 
@@ -1505,7 +1505,7 @@ public:
         RenderSetting<TfToken> aspectRatioPolicy;
         {
             HdRprConfig* config;
-            auto configInstanceLock = HdRprConfig::GetInstance(&config);
+            auto configInstanceLock = m_delegate->LockConfigInstance(&config);
 
             enableDenoise.isDirty = config->IsDirty(HdRprConfig::DirtyDenoise);
             if (enableDenoise.isDirty) {
@@ -2958,7 +2958,7 @@ Don't show this message again?
 
             if (m_contourAovs) {
                 HdRprConfig* rprConfig;
-                auto configInstanceLock = HdRprConfig::GetInstance(&rprConfig);
+                auto configInstanceLock = m_delegate->LockConfigInstance(&rprConfig);
 
                 json contour;
                 contour["object.id"] = int(rprConfig->GetContourUsePrimId());
@@ -3070,7 +3070,7 @@ Don't show this message again?
         }
 
         HdRprConfig* config;
-        auto configInstanceLock = HdRprConfig::GetInstance(&config);
+        auto configInstanceLock = m_delegate->LockConfigInstance(&config);
         return config->IsDirty(HdRprConfig::DirtyAll);
     }
 
@@ -3216,13 +3216,16 @@ private:
     }
 
     void InitRpr() {
+        bool flipRequestedByRenderSetting = false;
+
         {
             HdRprConfig* config;
-            auto configInstanceLock = HdRprConfig::GetInstance(&config);
+            auto configInstanceLock = m_delegate->LockConfigInstance(&config);
             // Force sync to catch up the latest render quality and render device
             config->Sync(m_delegate);
 
             m_currentRenderQuality = GetRenderQuality(*config);
+            flipRequestedByRenderSetting = config->GetFlipVertical();
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
@@ -3236,7 +3239,8 @@ private:
         }
 
         uint32_t requiredYFlip = 0;
-        if (m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid && m_rprContextMetadata.interopInfo) {
+        bool flipRequestedByInteropHybrid = m_rprContextMetadata.pluginType == RprUsdPluginType::kPluginHybrid && m_rprContextMetadata.interopInfo;
+        if (flipRequestedByInteropHybrid || flipRequestedByRenderSetting) {
             RPR_ERROR_CHECK_THROW(m_rprContext->GetFunctionPtr(
                 RPR_CONTEXT_FLUSH_FRAMEBUFFERS_FUNC_NAME, 
                 (void**)(&m_rprContextFlushFrameBuffers)

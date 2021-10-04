@@ -614,6 +614,15 @@ render_setting_categories = [
                 'defaultValue': True
             }
         ]
+    },
+    {
+        'name': 'ImageTransformation',
+        'settings': [
+            {
+                'name': 'flipVertical',
+                'defaultValue': False
+            }
+        ]
     }
 ]
 
@@ -638,6 +647,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprConfig {{
 public:
+    HdRprConfig() = default;
+
     enum ChangeTracker {{
         Clean = 0,
         DirtyAll = ~0u,
@@ -646,7 +657,6 @@ public:
     }};
 
     static HdRenderSettingDescriptorList GetRenderSettingDescriptors();
-    static std::unique_lock<std::mutex> GetInstance(HdRprConfig** instance);
 
     void Sync(HdRenderDelegate* renderDelegate);
 
@@ -658,10 +668,7 @@ public:
     void CleanDirtyFlag(ChangeTracker dirtyFlag);
     void ResetDirty();
 
-    void ResetRenderSettingsVersion();
-
 private:
-    HdRprConfig() = default;
 
     struct PrefData {{
         bool enableInteractive;
@@ -711,14 +718,6 @@ HdRenderSettingDescriptorList HdRprConfig::GetRenderSettingDescriptors() {{
     HdRenderSettingDescriptorList settingDescs;
 {rs_list_initialization}
     return settingDescs;
-}}
-
-
-std::unique_lock<std::mutex> HdRprConfig::GetInstance(HdRprConfig** instancePtr) {{
-    static std::mutex instanceMutex;
-    static HdRprConfig instance;
-    *instancePtr = &instance;
-    return std::unique_lock<std::mutex>(instanceMutex);
 }}
 
 void HdRprConfig::Sync(HdRenderDelegate* renderDelegate) {{
@@ -771,10 +770,6 @@ void HdRprConfig::CleanDirtyFlag(ChangeTracker dirtyFlag) {{
 
 void HdRprConfig::ResetDirty() {{
     m_dirtyFlags = Clean;
-}}
-
-void HdRprConfig::ResetRenderSettingsVersion() {{
-    m_lastRenderSettingsVersion = -1;
 }}
 
 HdRprConfig::PrefData::PrefData() {{

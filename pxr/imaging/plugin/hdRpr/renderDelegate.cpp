@@ -149,6 +149,8 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
     HdPrimTypeTokens->renderBuffer
 };
 
+HdRprDelegate* HdRprDelegate::m_lastCreatedInstance = nullptr;
+
 HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
     for (auto& entry : renderSettings) {
         SetRenderSetting(entry.first, entry.second);
@@ -181,16 +183,13 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
             });
         TfDiagnosticMgr::GetInstance().AddDelegate(m_diagnosticMgrDelegate.get());
     }
+
+    m_lastCreatedInstance = this;
 }
 
 HdRprDelegate::~HdRprDelegate() {
-	// Render settings version reset is required for valid recreation of HdRprDelgate
-	// Config singleton persists in memory after delegate destruction, therefore version must be invalidated
-	HdRprConfig* config;
-	auto configInstanceLock = HdRprConfig::GetInstance(&config);
-	config->ResetRenderSettingsVersion();
-
     g_rprApi = nullptr;
+    m_lastCreatedInstance = nullptr;
 }
 
 HdRenderParam* HdRprDelegate::GetRenderParam() const {
@@ -428,7 +427,7 @@ PXR_NAMESPACE_CLOSE_SCOPE
 
 void HdRprSetRenderQuality(const char* quality) {
     PXR_INTERNAL_NS::HdRprConfig* config;
-    auto configInstanceLock = PXR_INTERNAL_NS::HdRprConfig::GetInstance(&config);
+    auto configInstanceLock = PXR_INTERNAL_NS::HdRprDelegate::GetLastCreatedInstance()->LockConfigInstance(&config);
     config->SetRenderQuality(PXR_INTERNAL_NS::TfToken(quality));
 }
 
