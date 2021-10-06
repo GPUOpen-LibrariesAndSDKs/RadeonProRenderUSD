@@ -61,8 +61,9 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
     bool stopRender = false;
     {
         HdRprConfig* config;
-        auto configInstanceLock = HdRprConfig::GetInstance(&config);
-        config->Sync(GetRenderIndex()->GetRenderDelegate());
+        auto renderDelegate = reinterpret_cast<HdRprDelegate*>(GetRenderIndex()->GetRenderDelegate());
+        auto configInstanceLock = renderDelegate->LockConfigInstance(&config);
+        config->Sync(renderDelegate);
         if (config->IsDirty(HdRprConfig::DirtyAll)) {
             stopRender = true;
         }
