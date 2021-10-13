@@ -539,6 +539,7 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
             // Rebuild renderable elements cache
             //
             m_renderableElements = {};
+#ifdef USE_CUSTOM_MATERIALX_LOADER
             if (auto mtlxLoader = RprUsdMaterialRegistry::GetInstance().GetMtlxLoader()) {
                 try {
                     auto mtlxDoc = MaterialX::createDocument();
@@ -549,6 +550,7 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
                     // no-op
                 }
             }
+#endif
 
             // Hide everything but file parm when a file is not specified
             //

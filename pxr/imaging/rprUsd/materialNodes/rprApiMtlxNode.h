@@ -11,39 +11,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#ifndef PXR_IMAGING_RPR_USD_CONTEXT_METADATA_H
-#define PXR_IMAGING_RPR_USD_CONTEXT_METADATA_H
+#ifndef RPRUSD_MATERIAL_NODES_RPR_API_MTLX_NODE_H
+#define RPRUSD_MATERIAL_NODES_RPR_API_MTLX_NODE_H
 
 #include "pxr/pxr.h"
-#include "pxr/imaging/rprUsd/api.h"
 
-#include <RadeonProRender.hpp>
+#include <string>
+
+namespace rpr { class MaterialNode; }
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-enum RprUsdPluginType {
-    kPluginInvalid = -1,
-    kPluginTahoe,
-    kPluginNorthstar,
-    kPluginHybrid,
-    kPluginHybridPro,
-    kPluginsCount
-};
+struct RprUsd_MaterialBuilderContext;
 
-struct RprUsdContextMetadata {
-    RprUsdPluginType pluginType = kPluginInvalid;
-    bool isGlInteropEnabled = false;
-    void* interopInfo = nullptr;
-    rpr::CreationFlags creationFlags = 0;
-};
-
-RPRUSD_API
-bool RprUsdIsGpuUsed(RprUsdContextMetadata const& contextMetadata);
-
-inline bool RprUsdIsHybrid(RprUsdPluginType pluginType) {
-    return pluginType == kPluginHybrid || pluginType == kPluginHybridPro;
-}
+rpr::MaterialNode* RprUsd_CreateRprMtlxFromString(std::string const& mtlxString, RprUsd_MaterialBuilderContext const& context);
+rpr::MaterialNode* RprUsd_CreateRprMtlxFromFile(std::string const& mtlxFile, RprUsd_MaterialBuilderContext const& context);
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-#endif // PXR_IMAGING_RPR_USD_CONTEXT_METADATA_H
+#endif // RPRUSD_MATERIAL_NODES_RPR_API_MTLX_NODE_H

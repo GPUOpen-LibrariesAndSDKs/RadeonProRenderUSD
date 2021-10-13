@@ -118,7 +118,8 @@ private:
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
     (percentDone) \
-    (RPR)
+    (RPR) \
+    (mtlx)
 );
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES = {
@@ -202,8 +203,8 @@ void HdRprDelegate::CommitResources(HdChangeTracker* tracker) {
     m_rprApi->CommitResources();
 }
 
-TfToken HdRprDelegate::GetMaterialNetworkSelector() const {
-    return RprUsdMaterialRegistry::GetInstance().GetMaterialNetworkSelector();
+TfTokenVector HdRprDelegate::GetMaterialRenderContexts() const {
+    return {RprUsdMaterialRegistry::GetInstance().GetMaterialNetworkSelector(), _tokens->mtlx};
 }
 
 TfTokenVector const& HdRprDelegate::GetSupportedRprimTypes() const {

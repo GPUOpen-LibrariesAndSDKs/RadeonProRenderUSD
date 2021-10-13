@@ -88,7 +88,7 @@ if(HoudiniUSD_FOUND)
     set(OPENEXR_LIB_LOCATION ${Houdini_LIB_DIR})
 else()
     # We are using python to generate source files
-    find_package(PythonInterp 2.7 REQUIRED)
+    find_package(PythonInterp 2.7)
 endif()
 
 if (NOT PXR_MALLOC_LIBRARY)
@@ -97,7 +97,13 @@ if (NOT PXR_MALLOC_LIBRARY)
     endif()
 endif()
 
-find_package(MaterialX QUIET)
+if(NOT MaterialX_FOUND)
+    find_package(MaterialX QUIET)
+endif()
+
+if(MaterialX_FOUND)
+    set(RPR_DISABLE_CUSTOM_MATERIALX_LOADER ON)
+endif()
 
 if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
     find_package(Vulkan REQUIRED)

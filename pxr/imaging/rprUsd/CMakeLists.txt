@@ -11,10 +11,17 @@ pxr_library(rprUsd
         hd
         glf
         sdf
+        sdr
+        hio
+        plug
         arch
+        garch
         work
+        hdMtlx
         cpprpr
         json
+        MaterialXCore
+        MaterialXFormat
 
     PUBLIC_CLASSES
         util
@@ -60,6 +67,8 @@ target_sources(rprUsd PRIVATE
     materialNodes/usdNode.cpp
     materialNodes/mtlxNode.h
     materialNodes/mtlxNode.cpp
+    materialNodes/rprApiMtlxNode.h
+    materialNodes/rprApiMtlxNode.cpp
     materialNodes/rpr/baseNode.h
     materialNodes/rpr/baseNode.cpp
     materialNodes/rpr/nodeInfo.h
