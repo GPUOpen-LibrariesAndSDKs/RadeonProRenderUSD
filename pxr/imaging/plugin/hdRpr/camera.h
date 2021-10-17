@@ -49,7 +49,7 @@ public:
     bool GetClippingRange(GfRange1f* value) const;
     bool GetProjection(Projection* value) const;
     HdTimeSampleArray<GfMatrix4d, 2> const& GetTransformSamples() const { return m_transform; }
-    int GetApertureBlades() const { return m_apertureBlades; }
+    uint32_t GetApertureBlades() const { return m_apertureBlades; }
 
     HdDirtyBits GetDirtyBits() const { return m_rprDirtyBits; }
     void CleanDirtyBits() const { m_rprDirtyBits = HdCamera::Clean; }
@@ -62,7 +62,7 @@ private:
     float m_focalLength;
     float m_fStop;
     float m_focusDistance;
-    int m_apertureBlades;
+    uint32_t m_apertureBlades;
     double m_shutterOpen;
     double m_shutterClose;
     GfRange1f m_clippingRange;

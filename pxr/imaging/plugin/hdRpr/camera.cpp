@@ -110,7 +110,7 @@ void HdRprCamera::Sync(HdSceneDelegate* sceneDelegate,
         }
 #endif
 
-        EvalCameraParam(&m_apertureBlades, RprUsdTokens->rprCameraBlades, sceneDelegate, id, 16);
+        EvalCameraParam(&m_apertureBlades, RprUsdTokens->rprCameraBlades, sceneDelegate, id, 16u);
     }
 
     if (*dirtyBits & HdCamera::DirtyViewMatrix) {

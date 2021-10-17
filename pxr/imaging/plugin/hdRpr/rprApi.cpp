@@ -1947,7 +1947,7 @@ public:
             bool dofEnabled = fstop != 0.0f && fstop != std::numeric_limits<float>::max();
 
             if (dofEnabled) {
-                int apertureBlades = m_hdCamera->GetApertureBlades();
+                uint32_t apertureBlades = m_hdCamera->GetApertureBlades();
                 if (apertureBlades < 4 || apertureBlades > 32) {
                     apertureBlades = 16;
                 }
