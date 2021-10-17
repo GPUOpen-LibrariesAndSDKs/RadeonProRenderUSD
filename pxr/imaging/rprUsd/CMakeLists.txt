@@ -109,6 +109,9 @@ pxr_library(rprUsd
         materialNodes/rpr/materialXNode.h
         ${RPRUSD_SCHEMA_PUBLIC_HEADERS}
 
+    CPPFILES
+        hdMtlxFixed.cpp
+
     PYTHON_CPPFILES
         moduleDeps.cpp
 

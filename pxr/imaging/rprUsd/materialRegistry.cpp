@@ -49,6 +49,15 @@ namespace mx = MaterialX;
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+mx::DocumentPtr
+HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
+    HdMaterialNetwork2 const& hdNetwork,
+    HdMaterialNode2 const& hdMaterialXNode,
+    SdfPath const& materialPath,
+    mx::DocumentPtr const& libraries,
+    std::set<SdfPath>* hdTextureNodes,
+    mx::StringMap* mxHdTextureMap);
+
 TF_INSTANTIATE_SINGLETON(RprUsdMaterialRegistry);
 
 TF_DEFINE_ENV_SETTING(RPRUSD_MATERIAL_NETWORK_SELECTOR, "rpr",
@@ -375,13 +384,19 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
 
     MaterialX::StringMap textureMap;
     std::set<SdfPath> hdTextureNodes;
-    mx::DocumentPtr mtlxDoc = HdMtlxCreateMtlxDocumentFromHdNetwork(
-        *context.hdMaterialNetwork,
-        terminalNode,
-        materialPath,
-        stdLibraries,
-        &hdTextureNodes,
-        &textureMap);
+    mx::DocumentPtr mtlxDoc;
+    try {
+        mtlxDoc = HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
+            *context.hdMaterialNetwork,
+            terminalNode,
+            materialPath,
+            stdLibraries,
+            &hdTextureNodes,
+            &textureMap);
+    } catch (MaterialX::Exception& e) {
+        TF_RUNTIME_ERROR("Failed to convert HdNetwork to MaterialX document: %s", e.what());
+        return nullptr;
+    }
 
     std::string mtlxString = mx::writeToXmlString(mtlxDoc, nullptr);
 	rpr::MaterialNode* mtlxNode = RprUsd_CreateRprMtlxFromString(mtlxString, context);
