@@ -18,21 +18,34 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/material.h"
 #include "pxr/imaging/rprUsd/tokens.h"
 #include "pxr/imaging/rprUsd/error.h"
+#include "pxr/base/plug/registry.h"
+#include "pxr/base/plug/plugin.h"
+#include "pxr/base/plug/thisPlugin.h"
+#include "pxr/base/arch/vsnprintf.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/staticTokens.h"
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/pathUtils.h"
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/work/loops.h"
-#include "pxr/base/plug/plugin.h"
-#include "pxr/base/plug/thisPlugin.h"
+#include "pxr/usd/sdr/registry.h"
+#include "pxr/usd/usd/schemaBase.h"
 
 #include "materialNodes/usdNode.h"
+#include "materialNodes/rprApiMtlxNode.h"
 #include "materialNodes/houdiniPrincipledShaderNode.h"
 
+#include "pxr/imaging/hdMtlx/hdMtlx.h"
+
+#include <MaterialXCore/Document.h>
+#include <MaterialXFormat/Util.h>
+namespace mx = MaterialX;
+
+#ifdef USE_CUSTOM_MATERIALX_LOADER
 #include "materialNodes/mtlxNode.h"
 #include <MaterialXFormat/XmlIo.h>
 #include <rprMtlxLoader.h>
+#endif
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -40,10 +53,15 @@ TF_INSTANTIATE_SINGLETON(RprUsdMaterialRegistry);
 
 TF_DEFINE_ENV_SETTING(RPRUSD_MATERIAL_NETWORK_SELECTOR, "rpr",
     "Material network selector to be used in hdRpr");
+
+#ifdef USE_CUSTOM_MATERIALX_LOADER
 TF_DEFINE_ENV_SETTING(RPRUSD_USE_RPRMTLXLOADER, true,
     "Whether to use RPRMtlxLoader or rprLoadMateriaX");
 TF_DEFINE_ENV_SETTING(RPRUSD_RPRMTLXLOADER_LOG_LEVEL, int(RPRMtlxLoader::LogLevel::Error),
     "Set logging level of RPRMtlxLoader");
+#endif // USE_CUSTOM_MATERIALX_LOADER
+
+TF_DEFINE_PRIVATE_TOKENS(_tokens, (mtlx));
 
 RprUsdMaterialRegistry::RprUsdMaterialRegistry()
     : m_materialNetworkSelector(TfGetEnvSetting(RPRUSD_MATERIAL_NETWORK_SELECTOR)) {
@@ -54,6 +72,7 @@ RprUsdMaterialRegistry::~RprUsdMaterialRegistry() = default;
 
 std::vector<RprUsdMaterialNodeDesc> const&
 RprUsdMaterialRegistry::GetRegisteredNodes() {
+#ifdef USE_CUSTOM_MATERIALX_LOADER
     if (m_mtlxDefsDirty) {
         m_mtlxDefsDirty = false;
 
@@ -117,6 +136,7 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
             }
         }
     }
+#endif // USE_CUSTOM_MATERIALX_LOADER
 
     return m_registeredNodes;
 }
@@ -309,50 +329,76 @@ void DumpMaterialNetwork(HdMaterialNetworkMap const& networkMap) {
     }
 }
 
-void ConvertLegacyHdMaterialNetwork(
-    HdMaterialNetworkMap const& hdNetworkMap,
-    RprUsd_MaterialNetwork *result) {
-
-    for (auto& entry : hdNetworkMap.map) {
-        auto& terminalName = entry.first;
-        auto& hdNetwork = entry.second;
-
-        // Transfer over individual nodes
-        for (auto& node : hdNetwork.nodes) {
-            // Check if this node is a terminal
-            auto termIt = std::find(hdNetworkMap.terminals.begin(), hdNetworkMap.terminals.end(), node.path);
-            if (termIt != hdNetworkMap.terminals.end()) {
-                result->terminals.emplace(
-                    terminalName,
-                    RprUsd_MaterialNetwork::Connection{node.path, terminalName});
-            }
-
-            if (result->nodes.count(node.path)) {
-                continue;
-            }
-
-            auto& newNode = result->nodes[node.path];
-            newNode.nodeTypeId = node.identifier;
-            newNode.parameters = node.parameters;
-        }
-
-        // Transfer relationships to inputConnections on receiving/downstream nodes.
-        for (HdMaterialRelationship const& rel : hdNetwork.relationships) {
-            // outputId (in hdMaterial terms) is the input of the receiving node
-            auto const& iter = result->nodes.find(rel.outputId);
-            // skip connection if the destination node doesn't exist
-            if (iter == result->nodes.end()) {
-                continue;
-            }
-            auto &connection = iter->second.inputConnections[rel.outputName];
-            connection.upstreamNode = rel.inputId;
-            connection.upstreamOutputName = rel.inputName;
-        }
-
-        // Currently unused
-        // Transfer primvars:
-        //result->primvars.insert(hdNetwork.primvars.begin(), hdNetwork.primvars.end());
+RprUsdMaterial* CreateMaterialXFromUsdShade(
+    SdfPath const& materialPath,
+    RprUsd_MaterialBuilderContext const& context,
+    std::string* materialXStdlibPath) {
+    auto terminalIt = context.hdMaterialNetwork->terminals.find(HdMaterialTerminalTokens->surface);
+    if (terminalIt == context.hdMaterialNetwork->terminals.end()) {
+        return nullptr;
     }
+    HdMaterialConnection2 const& nodeConnection = terminalIt->second;
+
+    SdfPath const& nodePath = nodeConnection.upstreamNode;
+    auto nodeIt = context.hdMaterialNetwork->nodes.find(nodePath);
+    if (nodeIt == context.hdMaterialNetwork->nodes.end()) {
+        return nullptr;
+    }
+
+    HdMaterialNode2 const& terminalNode = nodeIt->second;
+
+    SdrRegistry &sdrRegistry = SdrRegistry::GetInstance();
+    SdrShaderNodeConstPtr const mtlxSdrNode = sdrRegistry.GetShaderNodeByIdentifierAndType(terminalNode.nodeTypeId, _tokens->mtlx);
+
+    if (!mtlxSdrNode) {
+        return nullptr;
+    }
+
+    if (materialXStdlibPath->empty()) {
+        const TfType schemaBaseType = TfType::Find<UsdSchemaBase>();
+        PlugPluginPtr usdPlugin = PlugRegistry::GetInstance().GetPluginForType(schemaBaseType);
+        if (usdPlugin) {
+            std::string usdLibPath = usdPlugin->GetPath();
+            std::string usdDir = TfNormPath(TfGetPathName(usdLibPath) + "..");
+            *materialXStdlibPath = usdDir;
+        }
+    }
+    
+    mx::DocumentPtr stdLibraries = mx::createDocument();
+
+    if (!materialXStdlibPath->empty()) {
+        mx::FilePathVec libraryFolders = {"libraries"};
+        mx::FileSearchPath searchPath;
+        searchPath.append(mx::FilePath(*materialXStdlibPath));
+        mx::loadLibraries(libraryFolders, searchPath, stdLibraries);
+    }
+
+    MaterialX::StringMap textureMap;
+    std::set<SdfPath> hdTextureNodes;
+    mx::DocumentPtr mtlxDoc = HdMtlxCreateMtlxDocumentFromHdNetwork(
+        *context.hdMaterialNetwork,
+        terminalNode,
+        materialPath,
+        stdLibraries,
+        &hdTextureNodes,
+        &textureMap);
+
+    std::string mtlxString = mx::writeToXmlString(mtlxDoc, nullptr);
+	rpr::MaterialNode* mtlxNode = RprUsd_CreateRprMtlxFromString(mtlxString, context);
+	if (!mtlxNode) {
+		return nullptr;
+	}
+
+	struct RprUsdMaterial_RprApiMtlx : public RprUsdMaterial {
+		RprUsdMaterial_RprApiMtlx(rpr::MaterialNode* retainedNode)
+			: m_retainedNode(retainedNode) {
+			// TODO: fill m_uvPrimvarName
+			m_surfaceNode = m_retainedNode.get();
+		}
+
+		std::unique_ptr<rpr::MaterialNode> m_retainedNode;
+	};
+	return new RprUsdMaterial_RprApiMtlx(mtlxNode);
 }
 
 } // namespace anonymous
@@ -368,17 +414,23 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
         DumpMaterialNetwork(legacyNetworkMap);
     }
 
-    // HdMaterialNetworkMap is deprecated,
-    // convert HdMaterialNetwork over to the new description
-    // so we do not have to redo all the code when new description comes in Hd
-    RprUsd_MaterialNetwork network;
-    ConvertLegacyHdMaterialNetwork(legacyNetworkMap, &network);
+    bool isVolume = false;
+    HdMaterialNetwork2 network;
+    HdMaterialNetwork2ConvertFromHdMaterialNetworkMap(legacyNetworkMap, &network, &isVolume);
 
     RprUsd_MaterialBuilderContext context = {};
     context.hdMaterialNetwork = &network;
     context.rprContext = rprContext;
     context.imageCache = imageCache;
+#ifdef USE_CUSTOM_MATERIALX_LOADER
     context.mtlxLoader = m_mtlxLoader.get();
+#endif // USE_CUSTOM_MATERIALX_LOADER
+
+    if (!isVolume) {
+        if (auto usdShadeMtlxMaterial = CreateMaterialXFromUsdShade(materialId, context, &m_materialXStdlibPath)) {
+            return usdShadeMtlxMaterial;
+        }
+    }
 
     // The simple wrapper to retain material nodes that are used to build terminal outputs
     struct RprUsdGraphBasedMaterial : public RprUsdMaterial {
@@ -472,9 +524,9 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     }
 
     std::set<SdfPath> visited;
-    std::function<VtValue(RprUsd_MaterialNetwork::Connection const&)> getNodeOutput =
+    std::function<VtValue(HdMaterialConnection2 const&)> getNodeOutput =
         [&materialNodes, &network, &getNodeOutput, &visited]
-        (RprUsd_MaterialNetwork::Connection const& nodeConnection) -> VtValue {
+        (HdMaterialConnection2 const& nodeConnection) -> VtValue {
         auto& nodePath = nodeConnection.upstreamNode;
 
         auto nodeIt = network.nodes.find(nodePath);
@@ -493,7 +545,14 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
                 visited.insert(nodePath);
 
                 for (auto& inputConnection : node.inputConnections) {
-                    auto& connection = inputConnection.second;
+                    auto& connections = inputConnection.second;
+                    if (connections.size() != 1) {
+                        if (connections.size() > 1) {
+                            TF_RUNTIME_ERROR("Connected array elements are not supported. Please report this.");
+                        }
+                        continue;
+                    }
+                    HdMaterialConnection2 const& connection = connections[0];
 
                     auto nodeOutput = getNodeOutput(connection);
                     if (!nodeOutput.IsEmpty()) {
@@ -513,7 +572,14 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             if (node.inputConnections.empty()) {
                 return VtValue();
             } else {
-                return getNodeOutput(node.inputConnections.begin()->second);
+                auto& connections = node.inputConnections.begin()->second;
+                if (connections.size() != 1) {
+                    if (connections.size() > 1) {
+                        TF_RUNTIME_ERROR("Connected array elements are not supported. Please report this.");
+                    }
+                    return VtValue();
+                }
+                return getNodeOutput(connections[0]);
             }
         }
     };

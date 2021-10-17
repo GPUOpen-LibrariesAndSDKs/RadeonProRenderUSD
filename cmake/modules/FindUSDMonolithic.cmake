@@ -17,7 +17,9 @@ find_path(USD_LIBRARY_DIR
     NO_SYSTEM_ENVIRONMENT_PATH)
 
 find_library(USD_MONOLITHIC_LIBRARY
-    NAMES ${PXR_LIB_PREFIX}usd_ms
+    NAMES
+        usd_ms # Windows requires raw library name to find
+        ${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX} # Linux requires prefix and suffix
     PATHS ${USD_LIBRARY_DIR}
     NO_DEFAULT_PATH
     NO_SYSTEM_ENVIRONMENT_PATH)

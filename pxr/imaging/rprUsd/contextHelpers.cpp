@@ -146,6 +146,7 @@ const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
     {kPluginTahoe, "Tahoe64.dll"},
     {kPluginNorthstar, "Northstar64.dll"},
     {kPluginHybrid, "Hybrid.dll"},
+    {kPluginHybridPro, "HybridPro.dll"},
 #elif defined __linux__
     {kPluginNorthstar, "libNorthstar64.so"},
     {kPluginTahoe, "libTahoe64.so"},
@@ -354,8 +355,8 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 #endif
 
     if (metadata->isGlInteropEnabled) {
-        if ((creationFlags & RPR_CREATION_FLAGS_ENABLE_CPU) == 0 ||
-            metadata->pluginType == kPluginHybrid) {
+        if ((creationFlags & RPR_CREATION_FLAGS_ENABLE_CPU) ||
+            RprUsdIsHybrid(metadata->pluginType)) {
             PRINT_CONTEXT_CREATION_DEBUG_INFO("GL interop could not be used with CPU rendering or Hybrid plugin");
             metadata->isGlInteropEnabled = false;
         } else if (!RprUsdInitGLApi()) {
@@ -369,7 +370,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
     }
 
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
-    if (metadata->pluginType == RprUsdPluginType::kPluginHybrid && metadata->interopInfo) {
+    if (RprUsdIsHybrid(metadata->pluginType) && metadata->interopInfo) {
         // Create interop context for hybrid
         // TODO: should not it be configurable?
         constexpr std::uint32_t MB = 1024u * 1024u;
@@ -395,6 +396,11 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         if (RPR_ERROR_CHECK(context->SetActivePlugin(pluginID), "Failed to set active plugin")) {
             delete context;
             return nullptr;
+        }
+
+        if (metadata->pluginType == kPluginHybridPro) {
+            std::string pluginName = "Hybrid";
+            status = rprContextSetInternalParameterBuffer(rpr::GetRprObject(context), pluginID, "plugin.name", pluginName.c_str(), pluginName.size() + 1);
         }
 
         RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, textureCachePath.c_str()), "Failed to set texture cache path");

@@ -74,8 +74,10 @@ public:
     RPRUSD_API
     std::vector<RprUsdMaterialNodeDesc> const& GetRegisteredNodes();
 
+#ifdef USE_CUSTOM_MATERIALX_LOADER
     RPRUSD_API
     RPRMtlxLoader* GetMtlxLoader() const { return m_mtlxLoader.get(); }
+#endif
 
     /// Register implementation of the Node with \p id
     RPRUSD_API
@@ -107,13 +109,17 @@ private:
     /// Material network selector for the current session, controlled via env variable
     TfToken m_materialNetworkSelector;
 
+#ifdef USE_CUSTOM_MATERIALX_LOADER
     std::unique_ptr<RPRMtlxLoader> m_mtlxLoader;
-
-    std::vector<RprUsdMaterialNodeDesc> m_registeredNodes;
-    std::map<TfToken, size_t> m_registeredNodesLookup;
 
     std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
     bool m_mtlxDefsDirty = true;
+#else
+    mutable std::string m_materialXStdlibPath;
+#endif
+
+    std::vector<RprUsdMaterialNodeDesc> m_registeredNodes;
+    std::map<TfToken, size_t> m_registeredNodesLookup;
 
     std::vector<TextureCommit> m_textureCommits;
 };
