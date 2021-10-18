@@ -51,11 +51,13 @@ using json = nlohmann::json;
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/fileUtils.h"
+#include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/work/loops.h"
 
 #include "notify/message.h"
 
+#include <RadeonProRender_MaterialX.h>
 #include <RadeonProRender_Baikal.h>
 #ifdef RPR_LOADSTORE_AVAILABLE
 #include <RprLoadStore.h>
@@ -3249,6 +3251,13 @@ private:
         m_rprContext = RprContextPtr(RprUsdCreateContext(&m_rprContextMetadata), RprContextDeleter);
         if (!m_rprContext) {
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
+        }
+
+        auto contextApiHandle = rpr::GetRprObject(m_rprContext.get());
+        for (std::string materialXSearchPath : TfStringSplit(TfGetenv("MATERIALX_SEARCH_PATH"), ARCH_PATH_LIST_SEP)) {
+            if (!materialXSearchPath.empty()) {
+                RPR_ERROR_CHECK(rprMaterialXAddResourceFolder(contextApiHandle, materialXSearchPath.c_str()), "Failed to add mtlx resource folder");
+            }
         }
 
         // TODO: verify
