@@ -48,7 +48,8 @@ else(WIN32)
     else()
         set(RIF_DEPENDENCY_LIBRARIES
             ${RIF_LOCATION_LIB}/libMIOpen.so
-            ${RIF_LOCATION_LIB}/libRadeonML_MIOpen.so)
+            ${RIF_LOCATION_LIB}/libRadeonML_MIOpen.so
+            ${RIF_LOCATION_LIB}/libRadeonML.so.0)
     endif(APPLE)
 endif(WIN32)
 
