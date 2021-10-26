@@ -42,7 +42,7 @@ class "RprRendererSettingsAPI" (
 )
 {
     uniform token rpr:core:renderQuality = "Northstar" (
-        allowedTokens = ["Low", "Medium", "High", "Full", "Northstar"]
+        allowedTokens = ["Low", "Medium", "High", "HybridPro", "Full", "Northstar"]
         displayName = "Render Quality"
         displayGroup = "General"
     )
