@@ -408,7 +408,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     HdSceneDelegate* sceneDelegate,
     HdMaterialNetworkMap const& legacyNetworkMap,
     rpr::Context* rprContext,
-    RprUsdImageCache* imageCache) const {
+    RprUsdImageCache* imageCache) {
 
     if (TfDebug::IsEnabled(RPR_USD_DEBUG_DUMP_MATERIALS)) {
         DumpMaterialNetwork(legacyNetworkMap);
@@ -417,6 +417,12 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     bool isVolume = false;
     HdMaterialNetwork2 network;
     HdMaterialNetwork2ConvertFromHdMaterialNetworkMap(legacyNetworkMap, &network, &isVolume);
+
+	// HdMaterialNetwork2ConvertFromHdMaterialNetworkMap leaves terminal's upstreamOutputName empty,
+	// material graph traversing logic relies on the fact that all upstreamOutputName are valid.
+	for (auto& entry : network.terminals) {
+		entry.second.upstreamOutputName = entry.first;
+	}
 
     RprUsd_MaterialBuilderContext context = {};
     context.hdMaterialNetwork = &network;
@@ -603,7 +609,13 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
         cryptomatteName = materialId.GetString();
     }
 
-    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId) ? out.release() : nullptr;
+	if (out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId)) {
+		m_textureCommits.insert(m_textureCommits.end(), std::make_move_iterator(context.textureCommits.begin()),
+														std::make_move_iterator(context.textureCommits.end()));
+		return out.release();
+	}
+
+    return nullptr;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -15,6 +15,7 @@ limitations under the License.
 #define RPRUSD_MATERIAL_NODES_MATERIAL_NODE_H
 
 #include "pxr/imaging/hd/material.h"
+#include "pxr/imaging/rprUsd/materialRegistry.h"
 
 namespace rpr { class Context; }
 
@@ -38,6 +39,8 @@ struct RprUsd_MaterialBuilderContext {
     VtValue displacementScale;
 
     RPRMtlxLoader* mtlxLoader;
+
+	std::vector<RprUsdMaterialRegistry::TextureCommit> textureCommits;
 };
 
 class RprUsd_MaterialNode {
