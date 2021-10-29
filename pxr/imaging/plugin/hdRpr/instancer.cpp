@@ -30,7 +30,7 @@ TF_DEFINE_PRIVATE_TOKENS(
     (translate)
 );
 
-void HdRprInstancer::Sync() {
+void HdRprInstancer::_Sync() {
     HD_TRACE_FUNCTION();
     HF_MALLOC_TAG_FUNCTION();
 
@@ -85,7 +85,7 @@ void HdRprInstancer::Sync() {
 }
 
 VtMatrix4dArray HdRprInstancer::ComputeTransforms(SdfPath const& prototypeId) {
-    Sync();
+    _Sync();
 
     GfMatrix4d instancerTransform = GetDelegate()->GetInstancerTransform(GetId());
     VtIntArray instanceIndices = GetDelegate()->GetInstanceIndices(GetId(), prototypeId);

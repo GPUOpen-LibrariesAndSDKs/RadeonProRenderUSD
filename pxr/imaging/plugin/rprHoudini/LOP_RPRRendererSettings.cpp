@@ -149,6 +149,7 @@ std::vector<PRM_Template>* GetTemplates(UsdPrimDefinition const* settingsPrimDef
     auto templates = LEAKED(new std::vector<PRM_Template>);
 
     struct UINode {
+        virtual ~UINode() = default;
         virtual UINode* GetChild(std::string const& name) { return nullptr; }
         virtual void AddChild(std::unique_ptr<UINode> child) {}
         virtual bool IsNamedAs(std::string const& name) = 0;
@@ -161,6 +162,7 @@ std::vector<PRM_Template>* GetTemplates(UsdPrimDefinition const* settingsPrimDef
         virtual TemplateGroup Compile(UsdPrimDefinition const* settingsPrimDef, int depth) = 0;
     };
     struct UINodeInterim : public UINode {
+        ~UINodeInterim() override = default;
         std::string name;
         std::vector<std::unique_ptr<UINode>> children;
 
@@ -236,6 +238,8 @@ std::vector<PRM_Template>* GetTemplates(UsdPrimDefinition const* settingsPrimDef
         }
     };
     struct UINodeProperty : public UINode {
+        ~UINodeProperty() override = default;
+
         TfToken propertyName;
         UINodeProperty(TfToken propertyName) : propertyName(propertyName) {}
         bool IsNamedAs(std::string const& name) override { return propertyName == name; }
