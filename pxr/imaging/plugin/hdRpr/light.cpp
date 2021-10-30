@@ -197,11 +197,11 @@ rpr::Shape* HdRprLight::CreateCylinderLightMesh(HdRprApi* rprApi) {
 }
 
 void HdRprLight::SyncAreaLightGeomParams(HdSceneDelegate* sceneDelegate, float* intensity) {
-    bool normalizeIntensity = sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->normalize).Get<bool>();
+    bool normalizeIntensity = HdRpr_GetParam(sceneDelegate, GetId(), HdLightTokens->normalize).Get<bool>();
 
     if (m_lightType == HdPrimTypeTokens->diskLight ||
         m_lightType == HdPrimTypeTokens->sphereLight) {
-        float radius = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->radius).Get<float>());
+        float radius = std::abs(HdRpr_GetParam(sceneDelegate, GetId(), HdLightTokens->radius).Get<float>());
 
         m_localTransform = GfMatrix4f(1.0f).SetScale(GfVec3f(radius * 2.0f));
 
@@ -213,8 +213,8 @@ void HdRprLight::SyncAreaLightGeomParams(HdSceneDelegate* sceneDelegate, float* 
             }
         }
     } else if (m_lightType == HdPrimTypeTokens->rectLight) {
-        float width = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->width).Get<float>());
-        float height = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->height).Get<float>());
+        float width = std::abs(HdRpr_GetParam(sceneDelegate, GetId(), HdLightTokens->width).Get<float>());
+        float height = std::abs(HdRpr_GetParam(sceneDelegate, GetId(), HdLightTokens->height).Get<float>());
 
         m_localTransform = GfMatrix4f(1.0f).SetScale(GfVec3f(width, height, 1.0f));
 
@@ -222,8 +222,8 @@ void HdRprLight::SyncAreaLightGeomParams(HdSceneDelegate* sceneDelegate, float* 
             (*intensity) /= GetRectLightNormalization(m_transform, width, height);
         }
     } else if (m_lightType == HdPrimTypeTokens->cylinderLight) {
-        float radius = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->radius).Get<float>());
-        float length = std::abs(sceneDelegate->GetLightParamValue(GetId(), HdLightTokens->length).Get<float>());
+        float radius = std::abs(HdRpr_GetParam(sceneDelegate, GetId(), HdLightTokens->radius).Get<float>());
+        float length = std::abs(HdRpr_GetParam(sceneDelegate, GetId(), HdLightTokens->length).Get<float>());
 
         m_localTransform = GfMatrix4f(1.0f).SetRotate(GfRotation(GfVec3d(0.0, 1.0, 0.0), 90.0)) * GfMatrix4f(1.0f).SetScale(GfVec3f(length, radius * 2.0f, radius * 2.0f));
 
@@ -415,7 +415,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         bool newLight = false;
-        auto iesFile = sceneDelegate->GetLightParamValue(id, USD_LUX_TOKEN_SHAPING_IES_FILE);
+        auto iesFile = HdRpr_GetParam(sceneDelegate, id, USD_LUX_TOKEN_SHAPING_IES_FILE);
         if (iesFile.IsHolding<SdfAssetPath>()) {
             auto& path = iesFile.UncheckedGet<SdfAssetPath>();
             if (!path.GetResolvedPath().empty()) {
@@ -425,14 +425,14 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
                 }
             }
         } else {
-            auto coneAngle = sceneDelegate->GetLightParamValue(id, USD_LUX_TOKEN_SHAPING_CONE_ANGLE);
-            auto coneSoftness = sceneDelegate->GetLightParamValue(id, USD_LUX_TOKEN_SHAPING_CONE_SOFTNESS);
+            auto coneAngle = HdRpr_GetParam(sceneDelegate, id, USD_LUX_TOKEN_SHAPING_CONE_ANGLE);
+            auto coneSoftness = HdRpr_GetParam(sceneDelegate, id, USD_LUX_TOKEN_SHAPING_CONE_SOFTNESS);
             if (coneAngle.IsHolding<float>() && coneSoftness.IsHolding<float>()) {
                 if (auto light = rprApi->CreateSpotLight(coneAngle.UncheckedGet<float>(), coneSoftness.UncheckedGet<float>())) {
                     m_light = light;
                     newLight = true;
                 }
-            } else if (sceneDelegate->GetLightParamValue(id, UsdLuxTokens->treatAsPoint).GetWithDefault(false)) {
+            } else if (HdRpr_GetParam(sceneDelegate, id, UsdLuxTokens->treatAsPoint).GetWithDefault(false)) {
                 if (auto light = rprApi->CreatePointLight()) {
                     m_light = light;
                     newLight = true;
@@ -471,13 +471,13 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
             return;
         }
 
-        float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
-        float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
+        float intensity = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f);
+        float exposure = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->exposure).Get<float>();
         intensity = ComputeLightIntensity(intensity, exposure);
 
-        GfVec3f color = sceneDelegate->GetLightParamValue(id, HdPrimvarRoleTokens->color).Get<GfVec3f>();
-        if (sceneDelegate->GetLightParamValue(id, HdLightTokens->enableColorTemperature).Get<bool>()) {
-            GfVec3f temperatureColor = UsdLuxBlackbodyTemperatureAsRgb(sceneDelegate->GetLightParamValue(id, HdLightTokens->colorTemperature).Get<float>());
+        GfVec3f color = HdRpr_GetParam(sceneDelegate, id, HdPrimvarRoleTokens->color).Get<GfVec3f>();
+        if (HdRpr_GetParam(sceneDelegate, id, HdLightTokens->enableColorTemperature).Get<bool>()) {
+            GfVec3f temperatureColor = UsdLuxBlackbodyTemperatureAsRgb(HdRpr_GetParam(sceneDelegate, id, HdLightTokens->colorTemperature).Get<float>());
             color[0] *= temperatureColor[0];
             color[1] *= temperatureColor[1];
             color[2] *= temperatureColor[2];
