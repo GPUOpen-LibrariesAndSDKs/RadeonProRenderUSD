@@ -108,12 +108,12 @@ private:
 
 #ifdef USE_CUSTOM_MATERIALX_LOADER
     std::unique_ptr<RPRMtlxLoader> m_mtlxLoader;
-
-    std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
-    bool m_mtlxDefsDirty = true;
 #else
     mutable std::string m_materialXStdlibPath;
 #endif
+
+    std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
+    bool m_mtlxDefsDirty = true;
 
     std::vector<RprUsdMaterialNodeDesc> m_registeredNodes;
     std::map<TfToken, size_t> m_registeredNodesLookup;

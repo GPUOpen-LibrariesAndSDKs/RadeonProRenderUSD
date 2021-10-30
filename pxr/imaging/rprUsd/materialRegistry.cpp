@@ -32,6 +32,7 @@ limitations under the License.
 #include "pxr/usd/usd/schemaBase.h"
 
 #include "materialNodes/usdNode.h"
+#include "materialNodes/mtlxNode.h"
 #include "materialNodes/rprApiMtlxNode.h"
 #include "materialNodes/houdiniPrincipledShaderNode.h"
 
@@ -42,7 +43,6 @@ limitations under the License.
 namespace mx = MaterialX;
 
 #ifdef USE_CUSTOM_MATERIALX_LOADER
-#include "materialNodes/mtlxNode.h"
 #include <MaterialXFormat/XmlIo.h>
 #include <rprMtlxLoader.h>
 #endif
@@ -72,7 +72,6 @@ RprUsdMaterialRegistry::~RprUsdMaterialRegistry() = default;
 
 std::vector<RprUsdMaterialNodeDesc> const&
 RprUsdMaterialRegistry::GetRegisteredNodes() {
-#ifdef USE_CUSTOM_MATERIALX_LOADER
     if (m_mtlxDefsDirty) {
         m_mtlxDefsDirty = false;
 
@@ -82,20 +81,6 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
             return m_registeredNodes;
         }
         TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("mtlx resources: %s\n", mtlxResources.c_str());
-
-        if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
-            MaterialX::FilePathVec libraryNames = {"libraries", "materials"};
-            MaterialX::FileSearchPath searchPath = mtlxResources;
-            m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
-            m_mtlxLoader->SetupStdlib(libraryNames, searchPath);
-
-            auto logLevel = RPRMtlxLoader::LogLevel(TfGetEnvSetting(RPRUSD_RPRMTLXLOADER_LOG_LEVEL));
-            if (logLevel < RPRMtlxLoader::LogLevel::None ||
-                logLevel > RPRMtlxLoader::LogLevel::Info) {
-                logLevel = RPRMtlxLoader::LogLevel::Error;
-            }
-            m_mtlxLoader->SetLogging(logLevel);
-        }
 
         auto rprMaterialsPath = TfAbsPath(TfNormPath(mtlxResources + "/materials"));
 
@@ -135,8 +120,23 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
                 TF_RUNTIME_ERROR("Error on parsing of \"%s\": materialX error - %s", file.c_str(), e.what());
             }
         }
-    }
+
+#ifdef USE_CUSTOM_MATERIALX_LOADER
+        if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
+            MaterialX::FilePathVec libraryNames = { "libraries", "materials" };
+            MaterialX::FileSearchPath searchPath = mtlxResources;
+            m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
+            m_mtlxLoader->SetupStdlib(libraryNames, searchPath);
+
+            auto logLevel = RPRMtlxLoader::LogLevel(TfGetEnvSetting(RPRUSD_RPRMTLXLOADER_LOG_LEVEL));
+            if (logLevel < RPRMtlxLoader::LogLevel::None ||
+                logLevel > RPRMtlxLoader::LogLevel::Info) {
+                logLevel = RPRMtlxLoader::LogLevel::Error;
+            }
+            m_mtlxLoader->SetLogging(logLevel);
+        }
 #endif // USE_CUSTOM_MATERIALX_LOADER
+    }
 
     return m_registeredNodes;
 }
