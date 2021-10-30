@@ -343,7 +343,7 @@ public:
 
         if (!m_mtlxString.empty()) {
             m_surfaceNode.reset(RprUsd_CreateRprMtlxFromString(m_mtlxString, *m_ctx));
-        } else {
+        } else if (!m_mtlxFilepath.empty()) {
             m_surfaceNode.reset(RprUsd_CreateRprMtlxFromFile(m_mtlxFilepath, *m_ctx));
         }
 
