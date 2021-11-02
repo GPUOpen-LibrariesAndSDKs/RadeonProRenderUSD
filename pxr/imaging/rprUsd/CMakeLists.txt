@@ -83,7 +83,6 @@ pxr_library(rprUsd
         arch
         garch
         work
-        hdMtlx
         cpprpr
         json
         MaterialXCore
@@ -109,9 +108,6 @@ pxr_library(rprUsd
         materialNodes/rpr/materialXNode.h
         ${RPRUSD_SCHEMA_PUBLIC_HEADERS}
 
-    CPPFILES
-        hdMtlxFixed.cpp
-
     PYTHON_CPPFILES
         moduleDeps.cpp
 
@@ -125,6 +121,12 @@ pxr_library(rprUsd
         __init__.py
         devicesConfiguration.py
 )
+
+if(PXR_VERSION GREATER_EQUAL 2108)
+    target_sources(rprUsd PRIVATE hdMtlxFixed.cpp)
+    target_link_libraries(rprUsd hdMtlx)
+    target_compile_definitions(rprUsd PRIVATE USE_USDSHADE_MTLX)
+endif()
 
 add_dependencies(rprUsd_headerfiles rprUsdSchema)
 

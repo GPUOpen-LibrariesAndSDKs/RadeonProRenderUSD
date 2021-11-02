@@ -294,7 +294,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
 
     // Analyze material graph and find out the minimum required amount of components required
     textureCommit.numComponentsRequired = 0;
-    for (auto& entry : m_ctx->hdMaterialNetwork->nodes) {
+    for (auto& entry : m_ctx->materialNetwork->nodes) {
         for (auto& entry : entry.second.inputConnections) {
             auto& connections = entry.second;
             if (connections.size() != 1) {

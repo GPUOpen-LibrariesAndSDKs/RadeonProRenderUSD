@@ -630,7 +630,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyInstancer)) {
+#ifdef USE_DECOUPLED_INSTANCER
             _UpdateInstancer(sceneDelegate, dirtyBits);
+#endif
             if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()))) {
                 auto instanceTransforms = instancer->SampleInstanceTransforms(id);
                 auto newNumInstances = (instanceTransforms.count > 0) ? instanceTransforms.values[0].size() : 0;

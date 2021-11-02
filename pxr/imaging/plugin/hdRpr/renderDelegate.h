@@ -23,6 +23,10 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 #if PXR_VERSION >= 2102
+#define USE_DECOUPLED_INSTANCER
+#endif
+
+#ifdef USE_DECOUPLED_INSTANCER
 #define HDRPR_INSTANCER_ID_ARG_DECL
 #define HDRPR_INSTANCER_ID_ARG
 #else
@@ -76,7 +80,7 @@ public:
     void CommitResources(HdChangeTracker* tracker) override;
 
     TfToken GetMaterialBindingPurpose() const override { return HdTokens->full; }
-    TfTokenVector GetMaterialRenderContexts() const override;
+    TfTokenVector GetMaterialRenderContexts() const;
 
     HdAovDescriptor GetDefaultAovDescriptor(TfToken const& name) const override;
 

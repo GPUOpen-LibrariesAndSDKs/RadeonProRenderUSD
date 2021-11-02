@@ -329,7 +329,7 @@ public:
                         }
                     };
 
-                    RprUsdMaterialRegistry::GetInstance().CommitTexture(std::move(textureCommit));
+					m_ctx->textureCommits.push_back(std::move(textureCommit));
                 }
 
                 delete[] mtlxPtr->imageNodes;

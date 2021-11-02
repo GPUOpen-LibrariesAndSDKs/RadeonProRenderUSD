@@ -36,8 +36,6 @@ limitations under the License.
 #include "materialNodes/rprApiMtlxNode.h"
 #include "materialNodes/houdiniPrincipledShaderNode.h"
 
-#include "pxr/imaging/hdMtlx/hdMtlx.h"
-
 #include <MaterialXCore/Document.h>
 #include <MaterialXFormat/Util.h>
 namespace mx = MaterialX;
@@ -49,6 +47,7 @@ namespace mx = MaterialX;
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+#ifdef USE_USDSHADE_MTLX
 mx::DocumentPtr
 HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
     HdMaterialNetwork2 const& hdNetwork,
@@ -57,6 +56,52 @@ HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
     mx::DocumentPtr const& libraries,
     std::set<SdfPath>* hdTextureNodes,
     mx::StringMap* mxHdTextureMap);
+#else
+void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
+	HdMaterialNetworkMap const& hdNetworkMap,
+	RprUsd_MaterialNetwork* result,
+	bool* isVolume) {
+	for (auto& entry : hdNetworkMap.map) {
+		auto& terminalName = entry.first;
+		auto& hdNetwork = entry.second;
+
+		// Transfer over individual nodes
+		for (auto& node : hdNetwork.nodes) {
+			// Check if this node is a terminal
+			auto termIt = std::find(hdNetworkMap.terminals.begin(), hdNetworkMap.terminals.end(), node.path);
+			if (termIt != hdNetworkMap.terminals.end()) {
+				result->terminals.emplace(
+					terminalName,
+					RprUsd_MaterialNetworkConnection{ node.path, terminalName });
+			}
+
+			if (result->nodes.count(node.path)) {
+				continue;
+			}
+
+			auto& newNode = result->nodes[node.path];
+			newNode.nodeTypeId = node.identifier;
+			newNode.parameters = node.parameters;
+		}
+
+		// Transfer relationships to inputConnections on receiving/downstream nodes.
+		for (HdMaterialRelationship const& rel : hdNetwork.relationships) {
+			// outputId (in hdMaterial terms) is the input of the receiving node
+			auto const& iter = result->nodes.find(rel.outputId);
+			// skip connection if the destination node doesn't exist
+			if (iter == result->nodes.end()) {
+				continue;
+			}
+			auto &connections = iter->second.inputConnections[rel.outputName];
+			connections.push_back(RprUsd_MaterialNetworkConnection{rel.inputId, rel.inputName});
+		}
+
+		// Currently unused
+		// Transfer primvars:
+		//result->primvars.insert(hdNetwork.primvars.begin(), hdNetwork.primvars.end());
+	}
+}
+#endif // USE_USDSHADE_MTLX
 
 TF_INSTANTIATE_SINGLETON(RprUsdMaterialRegistry);
 
@@ -342,15 +387,16 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     SdfPath const& materialPath,
     RprUsd_MaterialBuilderContext const& context,
     std::string* materialXStdlibPath) {
-    auto terminalIt = context.hdMaterialNetwork->terminals.find(HdMaterialTerminalTokens->surface);
-    if (terminalIt == context.hdMaterialNetwork->terminals.end()) {
+#ifdef USE_USDSHADE_MTLX
+    auto terminalIt = context.materialNetwork->terminals.find(HdMaterialTerminalTokens->surface);
+    if (terminalIt == context.materialNetwork->terminals.end()) {
         return nullptr;
     }
-    HdMaterialConnection2 const& nodeConnection = terminalIt->second;
+    RprUsd_MaterialNetworkConnection const& nodeConnection = terminalIt->second;
 
     SdfPath const& nodePath = nodeConnection.upstreamNode;
-    auto nodeIt = context.hdMaterialNetwork->nodes.find(nodePath);
-    if (nodeIt == context.hdMaterialNetwork->nodes.end()) {
+    auto nodeIt = context.materialNetwork->nodes.find(nodePath);
+    if (nodeIt == context.materialNetwork->nodes.end()) {
         return nullptr;
     }
 
@@ -387,7 +433,7 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     mx::DocumentPtr mtlxDoc;
     try {
         mtlxDoc = HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
-            *context.hdMaterialNetwork,
+            *context.materialNetwork,
             terminalNode,
             materialPath,
             stdLibraries,
@@ -414,6 +460,9 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
 		std::unique_ptr<rpr::MaterialNode> m_retainedNode;
 	};
 	return new RprUsdMaterial_RprApiMtlx(mtlxNode);
+#else
+	return nullptr;
+#endif // USE_USDSHADE_MTLX
 }
 
 } // namespace anonymous
@@ -430,8 +479,8 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     }
 
     bool isVolume = false;
-    HdMaterialNetwork2 network;
-    HdMaterialNetwork2ConvertFromHdMaterialNetworkMap(legacyNetworkMap, &network, &isVolume);
+	RprUsd_MaterialNetwork network;
+	RprUsd_MaterialNetworkFromHdMaterialNetworkMap(legacyNetworkMap, &network, &isVolume);
 
 	// HdMaterialNetwork2ConvertFromHdMaterialNetworkMap leaves terminal's upstreamOutputName empty,
 	// material graph traversing logic relies on the fact that all upstreamOutputName are valid.
@@ -440,7 +489,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
 	}
 
     RprUsd_MaterialBuilderContext context = {};
-    context.hdMaterialNetwork = &network;
+    context.materialNetwork = &network;
     context.rprContext = rprContext;
     context.imageCache = imageCache;
 #ifdef USE_CUSTOM_MATERIALX_LOADER
@@ -545,9 +594,9 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     }
 
     std::set<SdfPath> visited;
-    std::function<VtValue(HdMaterialConnection2 const&)> getNodeOutput =
+    std::function<VtValue(RprUsd_MaterialNetworkConnection const&)> getNodeOutput =
         [&materialNodes, &network, &getNodeOutput, &visited]
-        (HdMaterialConnection2 const& nodeConnection) -> VtValue {
+        (RprUsd_MaterialNetworkConnection const& nodeConnection) -> VtValue {
         auto& nodePath = nodeConnection.upstreamNode;
 
         auto nodeIt = network.nodes.find(nodePath);
@@ -573,7 +622,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
                         }
                         continue;
                     }
-                    HdMaterialConnection2 const& connection = connections[0];
+                    RprUsd_MaterialNetworkConnection const& connection = connections[0];
 
                     auto nodeOutput = getNodeOutput(connection);
                     if (!nodeOutput.IsEmpty()) {

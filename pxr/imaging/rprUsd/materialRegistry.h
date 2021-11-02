@@ -45,6 +45,34 @@ struct RprUsdMaterialNodeDesc {
     RprUsdMaterialNodeInfo const* info;
 };
 
+#ifdef USE_USDSHADE_MTLX
+using RprUsd_MaterialNetworkConnection = HdMaterialConnection2;
+using RprUsd_MaterialNetwork = HdMaterialNetwork2;
+inline void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(HdMaterialNetworkMap const& hdNetworkMap, RprUsd_MaterialNetwork* result, bool* isVolume = nullptr) {
+    HdMaterialNetwork2ConvertFromHdMaterialNetworkMap(hdNetworkMap, result, isVolume);
+}
+#else
+struct RprUsd_MaterialNetworkConnection {
+	SdfPath upstreamNode;
+	TfToken upstreamOutputName;
+};
+
+struct RprUsd_MaterialNetwork {
+	struct Node {
+		TfToken nodeTypeId;
+		std::map<TfToken, VtValue> parameters;
+		std::map<TfToken, std::vector<RprUsd_MaterialNetworkConnection>> inputConnections;
+	};
+
+	std::map<SdfPath, Node> nodes;
+	std::map<TfToken, RprUsd_MaterialNetworkConnection> terminals;
+};
+void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
+	HdMaterialNetworkMap const& hdNetworkMap,
+	RprUsd_MaterialNetwork* result,
+	bool* isVolume = nullptr);
+#endif // USE_USDSHADE_MTLX
+
 /// \class RprUsdMaterialRegistry
 ///
 /// Interface for the material resolution system. An RPR materials library is
@@ -108,9 +136,9 @@ private:
 
 #ifdef USE_CUSTOM_MATERIALX_LOADER
     std::unique_ptr<RPRMtlxLoader> m_mtlxLoader;
-#else
-    mutable std::string m_materialXStdlibPath;
 #endif
+
+	std::string m_materialXStdlibPath;
 
     std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
     bool m_mtlxDefsDirty = true;

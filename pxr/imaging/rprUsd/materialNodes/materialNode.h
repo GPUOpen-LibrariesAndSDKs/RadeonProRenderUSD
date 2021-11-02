@@ -26,7 +26,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 class RprUsdImageCache;
 
 struct RprUsd_MaterialBuilderContext {
-    HdMaterialNetwork2 const* hdMaterialNetwork;
+	RprUsd_MaterialNetwork const* materialNetwork;
     SdfPath const* currentNodePath;
 
     rpr::Context* rprContext;
