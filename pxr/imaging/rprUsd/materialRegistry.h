@@ -66,7 +66,7 @@ public:
         HdSceneDelegate* sceneDelegate,
         HdMaterialNetworkMap const& networkMap,
         rpr::Context* rprContext,
-        RprUsdImageCache* imageCache) const;
+        RprUsdImageCache* imageCache);
 
     RPRUSD_API
     TfToken const& GetMaterialNetworkSelector();
@@ -94,9 +94,6 @@ public:
 
         std::function<void(std::shared_ptr<RprUsdCoreImage> const&)> setTextureCallback;
     };
-
-    RPRUSD_API
-    void CommitTexture(TextureCommit commit);
 
     RPRUSD_API
     void CommitResources(RprUsdImageCache* imageCache);
@@ -217,10 +214,6 @@ inline void RprUsdMaterialRegistry::Register(
     } else {
         m_registeredNodes.push_back(std::move(desc));
     }
-}
-
-inline void RprUsdMaterialRegistry::CommitTexture(TextureCommit commit) {
-    m_textureCommits.push_back(std::move(commit));
 }
 
 inline const char* GetCStr(std::string const& str) {

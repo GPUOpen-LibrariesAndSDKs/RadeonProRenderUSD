@@ -167,6 +167,15 @@ inline void HdRprGetPrimvarIndices(HdInterpolation interpolation, VtIntArray con
     }
 }
 
+template<typename T>
+T HdRpr_GetParam(HdSceneDelegate* sceneDelegate, SdfPath id, TfToken name, T defaultValue) {
+    // TODO: This is not Get() Because of the reasons listed here:
+    // https://groups.google.com/g/usd-interest/c/k-N05Ac7SRk/m/RtK5HvglAQAJ
+    // We may need to fix this in newer versions of USD
+    VtValue val = sceneDelegate->GetLightParamValue(id, name);
+    return val.GetWithDefault(defaultValue);
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // HDRPR_PRIMVAR_UTIL_H

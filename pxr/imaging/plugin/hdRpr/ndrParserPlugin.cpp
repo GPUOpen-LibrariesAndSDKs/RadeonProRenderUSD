@@ -17,9 +17,9 @@ limitations under the License.
 
 #include "pxr/base/tf/staticTokens.h"
 
-PXR_NAMESPACE_OPEN_SCOPE
+#include "pxr/imaging/rprUsd/tokens.h"
 
-TF_DEFINE_PRIVATE_TOKENS(_tokens, (rpr));
+PXR_NAMESPACE_OPEN_SCOPE
 
 /// \class HdRprNdrParserPlugin
 ///
@@ -33,8 +33,8 @@ public:
             /* version     = */ discoveryResult.version,
             /* name        = */ discoveryResult.name,
             /* family      = */ discoveryResult.family,
-            /* context     = */ _tokens->rpr,
-            /* sourceType  = */ _tokens->rpr,
+            /* context     = */ RprUsdTokens->rpr,
+            /* sourceType  = */ RprUsdTokens->rpr,
             /* uri         = */ discoveryResult.uri,
 #if PXR_VERSION > 1911
             /* resolvedUri = */ discoveryResult.resolvedUri,
@@ -46,12 +46,12 @@ public:
     }
 
     const NdrTokenVec& GetDiscoveryTypes() const override {
-        static NdrTokenVec s_discoveryTypes{_tokens->rpr};
+        static NdrTokenVec s_discoveryTypes{RprUsdTokens->rpr};
         return s_discoveryTypes;
     }
 
     const TfToken& GetSourceType() const override {
-        return _tokens->rpr;
+        return RprUsdTokens->rpr;
     }
 };
 

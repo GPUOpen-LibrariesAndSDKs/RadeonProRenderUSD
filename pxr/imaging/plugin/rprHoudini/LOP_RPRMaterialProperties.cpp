@@ -94,25 +94,14 @@ OP_ERROR LOP_RPRMaterialProperties::cookMyLop(OP_Context &context) {
 
     UsdStageRefPtr stage = writelock.data()->stage();
 
-    UsdPrim materialPrim = stage->GetPrimAtPath(materialSdfPath);
-    if (!materialPrim) {
+    UsdPrim material = stage->GetPrimAtPath(materialSdfPath);
+    if (!material) {
         addError(LOP_MESSAGE, TfStringPrintf("Material with %s path does not exist", materialPath.c_str()).c_str());
         return error();
     }
 
-    UsdShadeMaterial material(materialPrim);
-    if (!material) {
-        addError(LOP_MESSAGE, TfStringPrintf("Specified path does not point to a material: %s", materialPath.c_str()).c_str());
-        return error();
-    }
-
-    UsdShadeShader surfaceSource = material.ComputeSurfaceSource(RprUsdTokens->rpr);
-    if (surfaceSource) {
-        surfaceSource.CreateInput(RprUsdTokens->id, SdfValueTypeNames->Int).Set(id);
-        surfaceSource.CreateInput(RprUsdTokens->cryptomatteName, SdfValueTypeNames->String).Set(VtValue(std::string(cryptomatteName)));
-    } else {
-        addWarning(LOP_MESSAGE, "Material has no surface source");
-    }
+    material.CreateAttribute(RprUsdTokens->rprMaterialId, SdfValueTypeNames->Int).Set(id);
+    material.CreateAttribute(RprUsdTokens->rprMaterialAssetName, SdfValueTypeNames->String).Set(VtValue(std::string(cryptomatteName)));
 
     return error();
 }

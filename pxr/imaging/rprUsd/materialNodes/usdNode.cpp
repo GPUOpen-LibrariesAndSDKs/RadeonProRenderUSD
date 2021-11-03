@@ -335,7 +335,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
 
     // Texture loading is postponed to allow multi-threading loading.
     //
-    RprUsdMaterialRegistry::GetInstance().CommitTexture(std::move(textureCommit));
+	ctx->textureCommits.push_back(std::move(textureCommit));
 
     auto scaleIt = hydraParameters.find(RprUsd_UsdUVTextureTokens->scale);
     if (scaleIt != hydraParameters.end() &&
