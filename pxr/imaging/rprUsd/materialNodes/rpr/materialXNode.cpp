@@ -110,15 +110,15 @@ public:
             return ret;
         } else if (inputId == RprUsdRprMaterialXNodeTokens->stPrimvarName) {
             return ReadInput(inputId, value, &m_ctx->uvPrimvarName);
-		} else {
+        } else {
 #ifdef USE_CUSTOM_MATERIALX_LOADER
-			if (inputId == RprUsdRprMaterialXNodeTokens->surfaceElement) {
-				return SetRenderElement(RPRMtlxLoader::kOutputSurface, value);
-			} else if (inputId == RprUsdRprMaterialXNodeTokens->displacementElement) {
-				return SetRenderElement(RPRMtlxLoader::kOutputDisplacement, value);
-			}
+            if (inputId == RprUsdRprMaterialXNodeTokens->surfaceElement) {
+                return SetRenderElement(RPRMtlxLoader::kOutputSurface, value);
+            } else if (inputId == RprUsdRprMaterialXNodeTokens->displacementElement) {
+                return SetRenderElement(RPRMtlxLoader::kOutputDisplacement, value);
+            }
 #endif
-		}
+        }
 
         TF_RUNTIME_ERROR("[%s] Unknown input %s",
             RprUsdRprMaterialXNodeTokens->rpr_materialx_node.GetText(), inputId.GetText());
@@ -126,7 +126,7 @@ public:
     }
 
 #ifdef USE_CUSTOM_MATERIALX_LOADER
-	bool SetRenderElement(RPRMtlxLoader::OutputType outputType, VtValue const& value) {
+    bool SetRenderElement(RPRMtlxLoader::OutputType outputType, VtValue const& value) {
         if (!value.IsHolding<std::string>()) {
             TF_RUNTIME_ERROR("[rpr_materialx_node] Invalid type of render element: %s",
                 value.GetTypeName().c_str());
@@ -329,7 +329,7 @@ public:
                         }
                     };
 
-					m_ctx->textureCommits.push_back(std::move(textureCommit));
+                    m_ctx->textureCommits.push_back(std::move(textureCommit));
                 }
 
                 delete[] mtlxPtr->imageNodes;
@@ -410,7 +410,7 @@ private:
     std::string m_mtlxBasePath;
 
 #ifdef USE_CUSTOM_MATERIALX_LOADER
-	std::string m_selectedRenderElements[RPRMtlxLoader::kOutputsTotal];
+    std::string m_selectedRenderElements[RPRMtlxLoader::kOutputsTotal];
 #endif
 
     bool m_isDirty = true;

@@ -53,24 +53,24 @@ inline void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(HdMaterialNetworkMap 
 }
 #else
 struct RprUsd_MaterialNetworkConnection {
-	SdfPath upstreamNode;
-	TfToken upstreamOutputName;
+    SdfPath upstreamNode;
+    TfToken upstreamOutputName;
 };
 
 struct RprUsd_MaterialNetwork {
-	struct Node {
-		TfToken nodeTypeId;
-		std::map<TfToken, VtValue> parameters;
-		std::map<TfToken, std::vector<RprUsd_MaterialNetworkConnection>> inputConnections;
-	};
+    struct Node {
+        TfToken nodeTypeId;
+        std::map<TfToken, VtValue> parameters;
+        std::map<TfToken, std::vector<RprUsd_MaterialNetworkConnection>> inputConnections;
+    };
 
-	std::map<SdfPath, Node> nodes;
-	std::map<TfToken, RprUsd_MaterialNetworkConnection> terminals;
+    std::map<SdfPath, Node> nodes;
+    std::map<TfToken, RprUsd_MaterialNetworkConnection> terminals;
 };
 void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
-	HdMaterialNetworkMap const& hdNetworkMap,
-	RprUsd_MaterialNetwork* result,
-	bool* isVolume = nullptr);
+    HdMaterialNetworkMap const& hdNetworkMap,
+    RprUsd_MaterialNetwork* result,
+    bool* isVolume = nullptr);
 #endif // USE_USDSHADE_MTLX
 
 /// \class RprUsdMaterialRegistry
@@ -138,7 +138,7 @@ private:
     std::unique_ptr<RPRMtlxLoader> m_mtlxLoader;
 #endif
 
-	std::string m_materialXStdlibPath;
+    std::string m_materialXStdlibPath;
 
     std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
     bool m_mtlxDefsDirty = true;

@@ -58,48 +58,48 @@ HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
     mx::StringMap* mxHdTextureMap);
 #else
 void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
-	HdMaterialNetworkMap const& hdNetworkMap,
-	RprUsd_MaterialNetwork* result,
-	bool* isVolume) {
-	for (auto& entry : hdNetworkMap.map) {
-		auto& terminalName = entry.first;
-		auto& hdNetwork = entry.second;
+    HdMaterialNetworkMap const& hdNetworkMap,
+    RprUsd_MaterialNetwork* result,
+    bool* isVolume) {
+    for (auto& entry : hdNetworkMap.map) {
+        auto& terminalName = entry.first;
+        auto& hdNetwork = entry.second;
 
-		// Transfer over individual nodes
-		for (auto& node : hdNetwork.nodes) {
-			// Check if this node is a terminal
-			auto termIt = std::find(hdNetworkMap.terminals.begin(), hdNetworkMap.terminals.end(), node.path);
-			if (termIt != hdNetworkMap.terminals.end()) {
-				result->terminals.emplace(
-					terminalName,
-					RprUsd_MaterialNetworkConnection{ node.path, terminalName });
-			}
+        // Transfer over individual nodes
+        for (auto& node : hdNetwork.nodes) {
+            // Check if this node is a terminal
+            auto termIt = std::find(hdNetworkMap.terminals.begin(), hdNetworkMap.terminals.end(), node.path);
+            if (termIt != hdNetworkMap.terminals.end()) {
+                result->terminals.emplace(
+                    terminalName,
+                    RprUsd_MaterialNetworkConnection{ node.path, terminalName });
+            }
 
-			if (result->nodes.count(node.path)) {
-				continue;
-			}
+            if (result->nodes.count(node.path)) {
+                continue;
+            }
 
-			auto& newNode = result->nodes[node.path];
-			newNode.nodeTypeId = node.identifier;
-			newNode.parameters = node.parameters;
-		}
+            auto& newNode = result->nodes[node.path];
+            newNode.nodeTypeId = node.identifier;
+            newNode.parameters = node.parameters;
+        }
 
-		// Transfer relationships to inputConnections on receiving/downstream nodes.
-		for (HdMaterialRelationship const& rel : hdNetwork.relationships) {
-			// outputId (in hdMaterial terms) is the input of the receiving node
-			auto const& iter = result->nodes.find(rel.outputId);
-			// skip connection if the destination node doesn't exist
-			if (iter == result->nodes.end()) {
-				continue;
-			}
-			auto &connections = iter->second.inputConnections[rel.outputName];
-			connections.push_back(RprUsd_MaterialNetworkConnection{rel.inputId, rel.inputName});
-		}
+        // Transfer relationships to inputConnections on receiving/downstream nodes.
+        for (HdMaterialRelationship const& rel : hdNetwork.relationships) {
+            // outputId (in hdMaterial terms) is the input of the receiving node
+            auto const& iter = result->nodes.find(rel.outputId);
+            // skip connection if the destination node doesn't exist
+            if (iter == result->nodes.end()) {
+                continue;
+            }
+            auto &connections = iter->second.inputConnections[rel.outputName];
+            connections.push_back(RprUsd_MaterialNetworkConnection{rel.inputId, rel.inputName});
+        }
 
-		// Currently unused
-		// Transfer primvars:
-		//result->primvars.insert(hdNetwork.primvars.begin(), hdNetwork.primvars.end());
-	}
+        // Currently unused
+        // Transfer primvars:
+        //result->primvars.insert(hdNetwork.primvars.begin(), hdNetwork.primvars.end());
+    }
 }
 #endif // USE_USDSHADE_MTLX
 
@@ -445,23 +445,23 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     }
 
     std::string mtlxString = mx::writeToXmlString(mtlxDoc, nullptr);
-	rpr::MaterialNode* mtlxNode = RprUsd_CreateRprMtlxFromString(mtlxString, context);
-	if (!mtlxNode) {
-		return nullptr;
-	}
+    rpr::MaterialNode* mtlxNode = RprUsd_CreateRprMtlxFromString(mtlxString, context);
+    if (!mtlxNode) {
+        return nullptr;
+    }
 
-	struct RprUsdMaterial_RprApiMtlx : public RprUsdMaterial {
-		RprUsdMaterial_RprApiMtlx(rpr::MaterialNode* retainedNode)
-			: m_retainedNode(retainedNode) {
-			// TODO: fill m_uvPrimvarName
-			m_surfaceNode = m_retainedNode.get();
-		}
+    struct RprUsdMaterial_RprApiMtlx : public RprUsdMaterial {
+        RprUsdMaterial_RprApiMtlx(rpr::MaterialNode* retainedNode)
+            : m_retainedNode(retainedNode) {
+            // TODO: fill m_uvPrimvarName
+            m_surfaceNode = m_retainedNode.get();
+        }
 
-		std::unique_ptr<rpr::MaterialNode> m_retainedNode;
-	};
-	return new RprUsdMaterial_RprApiMtlx(mtlxNode);
+        std::unique_ptr<rpr::MaterialNode> m_retainedNode;
+    };
+    return new RprUsdMaterial_RprApiMtlx(mtlxNode);
 #else
-	return nullptr;
+    return nullptr;
 #endif // USE_USDSHADE_MTLX
 }
 
@@ -479,14 +479,14 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     }
 
     bool isVolume = false;
-	RprUsd_MaterialNetwork network;
-	RprUsd_MaterialNetworkFromHdMaterialNetworkMap(legacyNetworkMap, &network, &isVolume);
+    RprUsd_MaterialNetwork network;
+    RprUsd_MaterialNetworkFromHdMaterialNetworkMap(legacyNetworkMap, &network, &isVolume);
 
-	// HdMaterialNetwork2ConvertFromHdMaterialNetworkMap leaves terminal's upstreamOutputName empty,
-	// material graph traversing logic relies on the fact that all upstreamOutputName are valid.
-	for (auto& entry : network.terminals) {
-		entry.second.upstreamOutputName = entry.first;
-	}
+    // HdMaterialNetwork2ConvertFromHdMaterialNetworkMap leaves terminal's upstreamOutputName empty,
+    // material graph traversing logic relies on the fact that all upstreamOutputName are valid.
+    for (auto& entry : network.terminals) {
+        entry.second.upstreamOutputName = entry.first;
+    }
 
     RprUsd_MaterialBuilderContext context = {};
     context.materialNetwork = &network;
@@ -673,11 +673,11 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
         cryptomatteName = materialId.GetString();
     }
 
-	if (out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId)) {
-		m_textureCommits.insert(m_textureCommits.end(), std::make_move_iterator(context.textureCommits.begin()),
-														std::make_move_iterator(context.textureCommits.end()));
-		return out.release();
-	}
+    if (out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId)) {
+        m_textureCommits.insert(m_textureCommits.end(), std::make_move_iterator(context.textureCommits.begin()),
+                                                        std::make_move_iterator(context.textureCommits.end()));
+        return out.release();
+    }
 
     return nullptr;
 }

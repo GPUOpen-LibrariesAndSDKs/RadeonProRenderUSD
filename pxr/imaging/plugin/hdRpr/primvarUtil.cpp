@@ -38,7 +38,7 @@ void HdRprParseGeometrySettings(
     };
 
     for (auto& desc : constantPrimvarDescs) {
-		std::string primvarName = "primvars:" + desc.name.GetString();
+        std::string primvarName = "primvars:" + desc.name.GetString();
         if (primvarName == RprUsdTokens->primvarsRprObjectId) {
             HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &geomSettings->id);
         } else if (primvarName == RprUsdTokens->primvarsRprMeshSubdivisionLevel) {
