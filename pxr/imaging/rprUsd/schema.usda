@@ -452,15 +452,6 @@ class "RprObjectSettingsAPI" (
         doc = ""
     )
 
-    bool primvars:rpr:object:visibility:light = true (
-        customData = {
-            string apiName = "objectVisibilityLight"
-        }
-        displayGroup = "Visibility"
-        displayName = "Visibility Light"
-        doc = ""
-    )
-
     string primvars:rpr:object:assetName = "" (
         customData = {
             string apiName = "objectAssetName"

@@ -300,7 +300,6 @@ void HdRprLight::CreateAreaLightMesh(HdRprApi* rprApi, HdSceneDelegate* sceneDel
     geomSettings.visibilityMask = kVisibleAll;
     geomSettings.visibilityMask &= ~kVisiblePrimary;
     geomSettings.visibilityMask &= ~kVisibleShadow;
-    geomSettings.visibilityMask &= ~kVisibleLight;
 
     auto constantPrimvars = sceneDelegate->GetPrimvarDescriptors(GetId(), HdInterpolationConstant);
     HdRprParseGeometrySettings(sceneDelegate, GetId(), constantPrimvars, &geomSettings);
