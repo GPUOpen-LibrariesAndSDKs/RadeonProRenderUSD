@@ -1517,8 +1517,8 @@ public:
             if (upscaleAndDenoise.isDirty) {
                 upscaleAndDenoise.value.enable = config->GetEnableUpscalingAndDenoising();
 
-                m_denoiseMinIter = config->GetDenoiseMinIter();
-                m_denoiseIterStep = config->GetDenoiseIterStep();
+                m_denoiseMinIter = config->GetDenoisingMinIter();
+                m_denoiseIterStep = config->GetDenoisingIterStep();
 
                 TfToken mode = config->GetUpscalerMode();
 
