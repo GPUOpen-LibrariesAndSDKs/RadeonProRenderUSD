@@ -226,7 +226,7 @@ render_setting_categories = [
         },
         'settings': [
             {
-                'name': 'enableUpscalingAndDenoising',
+                'name': 'ai:enable',
                 'ui_name': 'Enable AI Denoising + Upscaling',
                 'defaultValue': False,
                 'houdini': {
@@ -238,11 +238,11 @@ render_setting_categories = [
             {
                 'folder': 'Upscale and Denoise Settings',
                 'houdini': {
-                    'hidewhen': 'enableUpscalingAndDenoising == 0'
+                    'hidewhen': 'ai:enable == 0'
                 },
                 'settings': [
                     {
-                        'name': 'denoising:minIter',
+                        'name': 'ai:denoising:minIter',
                         'ui_name': 'Denoise Min Iteration',
                         'defaultValue': 4,
                         'minValue': 1,
@@ -250,7 +250,7 @@ render_setting_categories = [
                         'help': 'The first iteration on which denoising should be applied.'
                     },
                     {
-                        'name': 'denoising:iterStep',
+                        'name': 'ai:denoising:iterStep',
                         'ui_name': 'Denoise Iteration Step',
                         'defaultValue': 32,
                         'minValue': 1,
@@ -258,7 +258,7 @@ render_setting_categories = [
                         'help': 'Denoise use frequency. To denoise on each iteration, set to 1.'
                     },
                     {
-                        'name': 'upscalerMode',
+                        'name': 'ai:upscaling:mode',
                         'ui_name': 'Upscaler mode',
                         'defaultValue': 'Fast',
                         'values': [

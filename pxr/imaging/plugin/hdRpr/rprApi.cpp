@@ -1515,18 +1515,18 @@ public:
 
             upscaleAndDenoise.isDirty = config->IsDirty(HdRprConfig::DirtyUpscaleAndDenoise);
             if (upscaleAndDenoise.isDirty) {
-                upscaleAndDenoise.value.enable = config->GetEnableUpscalingAndDenoising();
+                upscaleAndDenoise.value.enable = config->GetAiEnable();
 
-                m_denoiseMinIter = config->GetDenoisingMinIter();
-                m_denoiseIterStep = config->GetDenoisingIterStep();
+                m_denoiseMinIter = config->GetAiDenoisingMinIter();
+                m_denoiseIterStep = config->GetAiDenoisingIterStep();
 
-                TfToken mode = config->GetUpscalerMode();
+                TfToken mode = config->GetAiUpscalingMode();
 
-                if (mode == HdRprUpscalerModeTokens->Good) {
+                if (mode == HdRprAiUpscalingModeTokens->Good) {
                     upscaleAndDenoise.value.mode = HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Good;
-                } else if (mode == HdRprUpscalerModeTokens->Best) {
+                } else if (mode == HdRprAiUpscalingModeTokens->Best) {
                     upscaleAndDenoise.value.mode = HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Best;
-                } else if (mode == HdRprUpscalerModeTokens->Fast) {
+                } else if (mode == HdRprAiUpscalingModeTokens->Fast) {
                     upscaleAndDenoise.value.mode = HdRprApiColorAov::UpscaleAndDenoiseParams::UpscalerMode::Fast;
                 }
             }
