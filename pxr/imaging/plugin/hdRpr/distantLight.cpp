@@ -13,6 +13,7 @@ limitations under the License.
 
 #include "distantLight.h"
 #include "renderParam.h"
+#include "primvarUtil.h"
 #include "rprApi.h"
 
 #include "pxr/imaging/rprUsd/debugCodes.h"
@@ -45,7 +46,7 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
 #if PXR_VERSION >= 2011
         m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
 #else
-        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
+        m_transform = GfMatrix4f(HdRpr_GetParam(sceneDelegate, id, HdTokens->transform).Get<GfMatrix4d>());
 #endif
     }
 
@@ -62,13 +63,13 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
             return;
         }
 
-        float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
-        float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
+        float intensity = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f);
+        float exposure = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->exposure, 1.0f);
         float computedIntensity = computeLightIntensity(intensity, exposure);
 
-        GfVec3f color = sceneDelegate->GetLightParamValue(id, HdPrimvarRoleTokens->color).Get<GfVec3f>();
-        if (sceneDelegate->GetLightParamValue(id, HdLightTokens->enableColorTemperature).Get<bool>()) {
-            GfVec3f temperatureColor = UsdLuxBlackbodyTemperatureAsRgb(sceneDelegate->GetLightParamValue(id, HdLightTokens->colorTemperature).Get<float>());
+        GfVec3f color = HdRpr_GetParam(sceneDelegate, id, HdPrimvarRoleTokens->color, GfVec3f(1.0f));
+        if (HdRpr_GetParam(sceneDelegate, id, HdLightTokens->enableColorTemperature, false)) {
+            GfVec3f temperatureColor = UsdLuxBlackbodyTemperatureAsRgb(HdRpr_GetParam(sceneDelegate, id, HdLightTokens->colorTemperature, 5000.0f));
             color[0] *= temperatureColor[0];
             color[1] *= temperatureColor[1];
             color[2] *= temperatureColor[2];
@@ -87,7 +88,7 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
-        float angle = sceneDelegate->GetLightParamValue(id, _tokens->angle).Get<float>();
+        float angle = HdRpr_GetParam(sceneDelegate, id, _tokens->angle, 3.0f);
 
         rprApi->SetDirectionalLightAttributes(m_rprLight, color * computedIntensity, angle * (M_PI / 180.0));
 

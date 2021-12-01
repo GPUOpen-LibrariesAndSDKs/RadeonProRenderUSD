@@ -113,6 +113,38 @@ else()
     set(Houdini_LIB_DIR ${HOUDINI_ROOT}/dsolib)
 endif()
 
+find_path(Houdini_MTLX_INCLUDE_DIR
+    "MaterialXCore/Document.h"
+    PATHS ${HOUDINI_ROOT}
+    PATH_SUFFIXES "toolkit/include"
+    NO_DEFAULT_PATH)
+if(Houdini_MTLX_INCLUDE_DIR)
+    if(WIN32)
+        find_path(Houdini_MTLX_IMPLIB_DIR
+            "MaterialXCore.lib"
+            PATHS ${HOUDINI_ROOT}
+            PATH_SUFFIXES "custom/houdini/dsolib"
+            NO_DEFAULT_PATH)
+        list(APPEND HUSD_REQ_VARS "Houdini_MTLX_IMPLIB_DIR")
+    else()
+        set(_MTLX_LIB_PREFIX "lib")
+    endif()
+
+    foreach(targetName MaterialXCore MaterialXFormat)
+        add_library(${targetName} SHARED IMPORTED)
+        set_target_properties(${targetName} PROPERTIES
+            IMPORTED_LOCATION "${Houdini_USD_LIB_DIR}/${_MTLX_LIB_PREFIX}${targetName}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            INTERFACE_INCLUDE_DIRECTORIES ${Houdini_MTLX_INCLUDE_DIR})
+        target_compile_definitions(${targetName} INTERFACE -DMATERIALX_BUILD_SHARED_LIBS)
+        if(WIN32)
+            set_target_properties(${targetName} PROPERTIES
+                IMPORTED_IMPLIB "${Houdini_MTLX_IMPLIB_DIR}/${targetName}.lib")
+        endif()
+    endforeach()
+
+    set(MaterialX_FOUND 1)
+endif()
+
 include(FindPackageHandleStandardArgs)
 
 find_package_handle_standard_args(
@@ -125,9 +157,18 @@ if(HoudiniUSD_FOUND)
     message(STATUS "  Houdini Python includes: ${Houdini_Python_INCLUDE_DIR}")
     message(STATUS "  Houdini Python lib: ${Houdini_Python_LIB}")
     message(STATUS "  Houdini Boost.Python lib: ${Houdini_Boostpython_LIB}")
+    if(MaterialX_FOUND)
+        message(STATUS "  Houdini MaterialX: ${Houdini_MTLX_INCLUDE_DIR}")
+    endif()
 endif()
 
 if(HoudiniUSD_FOUND AND NOT TARGET hd)
+    set(version_file ${Houdini_USD_INCLUDE_DIR}/pxr/pxr.h)
+    file(STRINGS "${version_file}" PXR_VERSION
+         REGEX "^#define[\t ]+PXR_VERSION[\t ]+.*")
+    string(REGEX REPLACE "^.*PXR_VERSION[\t ]+([0-9]*).*$" "\\1"
+           PXR_VERSION "${PXR_VERSION}")
+
     # Generic creation of the usd targets. This is not meant to be perfect. The
     # criteria is "does it work for our use". Also, these names match the ones
     # of the USD distribution so we can use either without many conditions.
@@ -136,8 +177,8 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
     foreach(targetName
         arch tf gf js trace work plug vt ar kind sdf ndr sdr pcp usd usdGeom
         usdVol usdLux usdMedia usdShade usdRender usdHydra usdRi usdSkel usdUI
-        usdUtils garch hf hio cameraUtil pxOsd glf hgi hgiGL hd hdSt hdx
-        usdImaging usdImagingGL usdRiImaging usdSkelImaging usdVolImaging
+        usdUtils garch hf hio cameraUtil pxOsd glf hgi hgiGL hd hdSt hdMtlx hdx
+        usdImaging usdImagingGL usdRiImaging usdSkelImaging usdVolI maging
         usdAppUtils usdviewq)
         add_library(${targetName} SHARED IMPORTED)
         set_target_properties(${targetName} PROPERTIES
@@ -175,4 +216,16 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
     endif(APPLE)
     # By default Boost links libraries implicitly for the user via pragma's, we do not want this
     target_compile_definitions(tf INTERFACE -DHBOOST_ALL_NO_LIB)
+
+    set(HOUDINI_BIN ${HOUDINI_ROOT}/bin)
+    find_program(USD_SCHEMA_GENERATOR
+        NAMES
+            usdGenSchema.py usdGenSchema
+        PATHS
+            ${HOUDINI_BIN}
+        REQUIRED
+        NO_DEFAULT_PATH)
+    if(USD_SCHEMA_GENERATOR)
+        set(USD_SCHEMA_GENERATOR ${HOUDINI_BIN}/hython ${USD_SCHEMA_GENERATOR})
+    endif()
 endif()

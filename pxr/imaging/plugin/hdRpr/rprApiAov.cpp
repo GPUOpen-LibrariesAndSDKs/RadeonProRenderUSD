@@ -143,7 +143,7 @@ HdRprApiAov::HdRprApiAov(int width,
 
 
     // XXX (Hybrid): Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
-    if (rprContextMetadata.pluginType != kPluginHybrid) {
+    if (!RprUsdIsHybrid(rprContextMetadata.pluginType)) {
         m_resolved = pxr::make_unique<HdRprApiFramebuffer>(rprContext, actualWidth, actualHeight);
     }
 }
@@ -162,9 +162,7 @@ HdRprApiAov::HdRprApiAov(int width,
     , m_rifContext(rifContext)
 {}
 
-void 
-HdRprApiAov::Resolve()
-{
+void HdRprApiAov::Resolve() {
     if (m_aov) {
         m_aov->Resolve(m_resolved.get());
     }

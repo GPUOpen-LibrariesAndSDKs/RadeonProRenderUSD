@@ -44,7 +44,7 @@ public:
     HdTimeSampleArray<VtMatrix4dArray, 2> SampleInstanceTransforms(SdfPath const& prototypeId);
 
 private:
-    void Sync();
+    void _Sync();
 
     VtMatrix4dArray m_transform;
     VtVec3fArray m_translate;

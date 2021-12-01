@@ -45,6 +45,34 @@ struct RprUsdMaterialNodeDesc {
     RprUsdMaterialNodeInfo const* info;
 };
 
+#ifdef USE_USDSHADE_MTLX
+using RprUsd_MaterialNetworkConnection = HdMaterialConnection2;
+using RprUsd_MaterialNetwork = HdMaterialNetwork2;
+inline void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(HdMaterialNetworkMap const& hdNetworkMap, RprUsd_MaterialNetwork* result, bool* isVolume = nullptr) {
+    HdMaterialNetwork2ConvertFromHdMaterialNetworkMap(hdNetworkMap, result, isVolume);
+}
+#else
+struct RprUsd_MaterialNetworkConnection {
+    SdfPath upstreamNode;
+    TfToken upstreamOutputName;
+};
+
+struct RprUsd_MaterialNetwork {
+    struct Node {
+        TfToken nodeTypeId;
+        std::map<TfToken, VtValue> parameters;
+        std::map<TfToken, std::vector<RprUsd_MaterialNetworkConnection>> inputConnections;
+    };
+
+    std::map<SdfPath, Node> nodes;
+    std::map<TfToken, RprUsd_MaterialNetworkConnection> terminals;
+};
+void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
+    HdMaterialNetworkMap const& hdNetworkMap,
+    RprUsd_MaterialNetwork* result,
+    bool* isVolume = nullptr);
+#endif // USE_USDSHADE_MTLX
+
 /// \class RprUsdMaterialRegistry
 ///
 /// Interface for the material resolution system. An RPR materials library is
@@ -66,7 +94,7 @@ public:
         HdSceneDelegate* sceneDelegate,
         HdMaterialNetworkMap const& networkMap,
         rpr::Context* rprContext,
-        RprUsdImageCache* imageCache) const;
+        RprUsdImageCache* imageCache);
 
     RPRUSD_API
     TfToken const& GetMaterialNetworkSelector();
@@ -74,8 +102,10 @@ public:
     RPRUSD_API
     std::vector<RprUsdMaterialNodeDesc> const& GetRegisteredNodes();
 
+#ifdef USE_CUSTOM_MATERIALX_LOADER
     RPRUSD_API
     RPRMtlxLoader* GetMtlxLoader() const { return m_mtlxLoader.get(); }
+#endif
 
     /// Register implementation of the Node with \p id
     RPRUSD_API
@@ -94,9 +124,6 @@ public:
     };
 
     RPRUSD_API
-    void CommitTexture(TextureCommit commit);
-
-    RPRUSD_API
     void CommitResources(RprUsdImageCache* imageCache);
 
 private:
@@ -107,13 +134,17 @@ private:
     /// Material network selector for the current session, controlled via env variable
     TfToken m_materialNetworkSelector;
 
+#ifdef USE_CUSTOM_MATERIALX_LOADER
     std::unique_ptr<RPRMtlxLoader> m_mtlxLoader;
+#endif
 
-    std::vector<RprUsdMaterialNodeDesc> m_registeredNodes;
-    std::map<TfToken, size_t> m_registeredNodesLookup;
+    std::string m_materialXStdlibPath;
 
     std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
     bool m_mtlxDefsDirty = true;
+
+    std::vector<RprUsdMaterialNodeDesc> m_registeredNodes;
+    std::map<TfToken, size_t> m_registeredNodesLookup;
 
     std::vector<TextureCommit> m_textureCommits;
 };
@@ -211,10 +242,6 @@ inline void RprUsdMaterialRegistry::Register(
     } else {
         m_registeredNodes.push_back(std::move(desc));
     }
-}
-
-inline void RprUsdMaterialRegistry::CommitTexture(TextureCommit commit) {
-    m_textureCommits.push_back(std::move(commit));
 }
 
 inline const char* GetCStr(std::string const& str) {

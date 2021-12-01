@@ -11,6 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
+#include "pxr/pxr.h"
+
+#if PXR_VERSION >= 2102
+# error "GlfImage was removed, Hio API should be used instead"
+#endif
+
 #include "pxr/imaging/glf/glew.h"
 #include "pxr/imaging/glf/image.h"
 #include "pxr/imaging/glf/utils.h"
