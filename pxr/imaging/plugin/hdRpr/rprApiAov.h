@@ -115,6 +115,19 @@ public:
     };
     void SetTonemap(TonemapParams const& params);
 
+    struct GammaParams {
+        bool enable;
+        float value;
+
+        bool operator==(GammaParams const& lhs) {
+            return value == lhs.value && enable == lhs.enable;
+        }
+        bool operator!=(GammaParams const& lhs) {
+            return !(*this == lhs);
+        }
+    };
+    void SetGamma(GammaParams const& params);
+
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
     void OnSizeChange(rif::Context* rifContext) override;
@@ -127,6 +140,7 @@ private:
         kFilterEAWDenoise = 1 << 2,
         kFilterComposeOpacity = 1 << 3,
         kFilterTonemap = 1 << 4,
+        kFilterGamma = 1 << 5
     };
     void SetFilter(Filter filter, bool enable);
     
@@ -150,6 +164,7 @@ private:
     bool m_isEnabledFiltersDirty = true;
 
     TonemapParams m_tonemap;
+    GammaParams m_gamma;
 
     int m_width = 0;
     int m_height = 0;
