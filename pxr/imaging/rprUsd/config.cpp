@@ -4,6 +4,7 @@
 #include "pxr/base/tf/tf.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/envSetting.h"
+#include "pxr/base/tf/fileUtils.h"
 
 #include <json.hpp>
 using json = nlohmann::json;
@@ -25,12 +26,8 @@ TF_DEFINE_ENV_SETTING(HDRPR_CACHE_PATH_OVERRIDE, "",
 
 namespace {
 
-bool ArchCreateDirectory(const char* path) {
-#ifdef WIN32
-    return CreateDirectory(path, NULL) == TRUE;
-#else
-    return mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
-#endif
+bool ArchCreateDirectory(std::string const & path) {
+    return TfMakeDirs(path, -1, true);
 }
 
 bool ArchDirectoryExists(const char* path) {
@@ -87,7 +84,7 @@ std::string GetDefaultCacheDir(const char* cacheType) {
 
 		bool directoryExists = ArchDirectoryExists(overriddenCacheDir.c_str());
 		if (!directoryExists) {
-			bool succeeded = ArchCreateDirectory(overriddenCacheDir.c_str());
+			bool succeeded = ArchCreateDirectory(overriddenCacheDir);
 			if (!succeeded)
 			{
 				TF_RUNTIME_ERROR("Can't create shader cache directory at: %s", overriddenCacheDir.c_str());
