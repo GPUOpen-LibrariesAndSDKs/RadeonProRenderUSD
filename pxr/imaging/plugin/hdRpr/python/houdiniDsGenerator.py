@@ -57,7 +57,7 @@ def _get_houdini_hidewhen_string(conditions, settings):
         if condition and callable(condition):
             condition = condition(settings)
 
-        # Fix for not working hidewhen on some fields, they except encoded names
+        # Fix for non-working hidewhen on some fields, they expect encoded names
         if condition and ':' in condition:
             import hou
             condition_name = condition.split()[0]
