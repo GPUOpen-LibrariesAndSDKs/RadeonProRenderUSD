@@ -47,5 +47,5 @@ foreach(mtlx ${MTLX_FILES})
     get_filename_component(dir ${mtlx} DIRECTORY)
     install(
         FILES ${mtlx}
-        DESTINATION materials/${dir})
+        DESTINATION ${CMAKE_INSTALL_PREFIX}/plugin/usd/rprUsd/resources/mtlx/materials/${dir})
 endforeach()

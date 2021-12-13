@@ -166,7 +166,7 @@ void HdRprBasisCurves::Sync(HdSceneDelegate* sceneDelegate,
                 TF_WARN("[%s] Ribbon curves are not supported. Curve of tube type will be created", id.GetText());
             }
 
-            if (m_uvsInterpolation != HdInterpolationConstant || m_uvsInterpolation != HdInterpolationUniform) {
+            if (m_uvsInterpolation != HdInterpolationConstant && m_uvsInterpolation != HdInterpolationUniform) {
                 TF_WARN("[%s] Unsupported uv interpolation type", id.GetText());
             }
 

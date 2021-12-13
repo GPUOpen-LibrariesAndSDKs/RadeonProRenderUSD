@@ -79,7 +79,7 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
 
     def CreateHoudiniParam(name, label, htype, default, values=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None):
         param = 'parm {\n'
-        param += '    name "{}"\n'.format(_get_valid_houdini_param_name(name))
+        param += '    name "{}"\n'.format(name)
         param += '    label "{}"\n'.format(label)
         param += '    type {}\n'.format(htype)
         if size: param += '    size {}\n'.format(size)
@@ -97,7 +97,7 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
             for condition in disablewhen_conditions:
                 param += '{{ {} }} '.format(condition)
             param += '"\n'
-        if valid_range:                    
+        if valid_range:
             param += '    range {{ {}! {} }}\n'.format(valid_range[0], valid_range[1])
         if help_msg:
             param += '    help "{}"\n'.format(help_msg)
@@ -105,9 +105,12 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
 
         return param
 
-    name = setting['name']
+    setting_name = setting['name']
+    if not setting_name.startswith('rpr:') and not setting_name.startswith('primvars:'):
+        setting_name = 'rpr:' + setting_name
 
-    control_param_name = _get_valid_houdini_param_name(name + '_control')
+    name = _get_valid_houdini_param_name(setting_name)
+    control_param_name = _get_valid_houdini_param_name(setting_name + '_control')
 
     render_param_values = None
     default_value = setting['defaultValue']
@@ -144,7 +147,7 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
                 expression = 'menu_values.extend([\\"{}\\", \\"{}\\"])'.format(value.get_key(), value.get_ui_name())
 
                 if value.enable_py_condition:
-                    enable_condition = value.enable_py_condition.replace('"', '\\"')
+                    enable_condition = value.enable_py_condition().replace('"', '\\"')
                     expression = 'if {}: {}'.format(enable_condition, expression)
 
                 render_param_values += '[ "{}" ]\n'.format(expression)

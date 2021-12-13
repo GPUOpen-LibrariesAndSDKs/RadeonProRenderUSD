@@ -16,19 +16,20 @@ if(NOT RPR_DISABLE_CUSTOM_MATERIALX_LOADER)
         add_subdirectory(MaterialX EXCLUDE_FROM_ALL) # EXCLUDE_FROM_ALL allows us to skip installation of mtlx static libraries
     endif()
 
+    set(MTLX_STDLIB_INSTALL_PATH ${CMAKE_INSTALL_PREFIX}/plugin/usd/rprUsd/resources/mtlx)
     install(
         FILES
             MaterialX/libraries/bxdf/standard_surface.mtlx
             MaterialX/libraries/bxdf/usd_preview_surface.mtlx
         DESTINATION
-            libraries/bxdf)
+            ${MTLX_STDLIB_INSTALL_PATH}/libraries/bxdf)
     foreach(mtlx_lib stdlib pbrlib)
         install(
             FILES
                 MaterialX/libraries/${mtlx_lib}/${mtlx_lib}_ng.mtlx
                 MaterialX/libraries/${mtlx_lib}/${mtlx_lib}_defs.mtlx
             DESTINATION
-                libraries/${mtlx_lib})
+                ${MTLX_STDLIB_INSTALL_PATH}/libraries/${mtlx_lib})
     endforeach()
 endif()
 
