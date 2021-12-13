@@ -25,21 +25,21 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (roughness)
     (normal)
 
-    (shadowColor2)
-    (shadowColor)
-    (midColor)
-    (highlightColor)
-    (highlightColor2)
+    (shadowTint2)
+    (shadowTint)
+    (midTint)
+    (highlightTint)
+    (highlightTint2)
 
-    (shadowPosition)
-    (midPosition1)
-    (midPosition2)
-    (highlightPosition)
+    (shadowLevel)
+    (midLevel)
+    (highlightLevel)
+    (highlightLevel2)
 
-    (shadowRange)
-    (midRange1)
-    (midRange2)
-    (highlightRange)
+    (shadowLevelMix)
+    (midLevelMix)
+    (highlightLevelMix)
+    (highlightLevelMix2)
     
     (colorsMode)
     (ThreeColors)
@@ -103,31 +103,31 @@ public:
     bool SetInput(
         TfToken const& id,
         VtValue const& value) override {
-        if /* tint */ (id == _tokens->shadowColor2) {
+        if /* tint */ (id == _tokens->shadowTint2) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_SHADOW2);
-        } else if (id == _tokens->shadowColor) {
+        } else if (id == _tokens->shadowTint) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_SHADOW);
-        } else if (id == _tokens->midColor) {
+        } else if (id == _tokens->midTint) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_MID);
-        } else if (id == _tokens->highlightColor) {
+        } else if (id == _tokens->highlightTint) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_HIGHLIGHT);
-        } else if (id == _tokens->highlightColor2) {
+        } else if (id == _tokens->highlightTint2) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_HIGHLIGHT2);
-        } /* level */ else if (id == _tokens->shadowPosition) {
+        } /* level */ else if (id == _tokens->shadowLevel) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION_SHADOW);
-        } else if (id == _tokens->midPosition1) {
+        } else if (id == _tokens->midLevel) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION1);
-        } else if (id == _tokens->midPosition2) {
+        } else if (id == _tokens->highlightLevel) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION2);
-        } else if (id == _tokens->highlightPosition) {
+        } else if (id == _tokens->highlightLevel2) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION_HIGHLIGHT);
-        } /* mix */ else if (id == _tokens->shadowRange) {
+        } /* mix */ else if (id == _tokens->shadowLevelMix) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE_SHADOW);
-        } else if (id == _tokens->midRange1) {
+        } else if (id == _tokens->midLevelMix) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE1);
-        }  else if (id == _tokens->midRange2) {
+        }  else if (id == _tokens->highlightLevelMix) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE2);
-        } else if (id == _tokens->highlightRange) {
+        } else if (id == _tokens->highlightLevelMix2) {
             return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE_HIGHLIGHT);
         } else if (id == _tokens->interpolationMode) {
             if (value.IsHolding<int>()) {
@@ -196,21 +196,21 @@ public:
         colorModeInput.tokenValues = { _tokens->ThreeColors, _tokens->FiveColors };
         nodeInfo.inputs.push_back(colorModeInput);
 
-        nodeInfo.inputs.emplace_back(_tokens->shadowColor2, GfVec3f(0.0f));
-        nodeInfo.inputs.emplace_back(_tokens->shadowColor, GfVec3f(0.1f));
-        nodeInfo.inputs.emplace_back(_tokens->midColor, GfVec3f(0.4f));
-        nodeInfo.inputs.emplace_back(_tokens->highlightColor, GfVec3f(0.8f));
-        nodeInfo.inputs.emplace_back(_tokens->highlightColor2, GfVec3f(0.9f));
+        nodeInfo.inputs.emplace_back(_tokens->shadowTint2, GfVec3f(0.0f));
+        nodeInfo.inputs.emplace_back(_tokens->shadowTint, GfVec3f(0.1f));
+        nodeInfo.inputs.emplace_back(_tokens->midTint, GfVec3f(0.4f));
+        nodeInfo.inputs.emplace_back(_tokens->highlightTint, GfVec3f(0.8f));
+        nodeInfo.inputs.emplace_back(_tokens->highlightTint2, GfVec3f(0.9f));
 
-        nodeInfo.inputs.emplace_back(_tokens->shadowPosition, 0.4f);
-        nodeInfo.inputs.emplace_back(_tokens->midPosition1, 0.5f);
-        nodeInfo.inputs.emplace_back(_tokens->midPosition2, 0.8f);
-        nodeInfo.inputs.emplace_back(_tokens->highlightPosition, 0.9f);
+        nodeInfo.inputs.emplace_back(_tokens->shadowLevel, 0.4f);
+        nodeInfo.inputs.emplace_back(_tokens->midLevel, 0.5f);
+        nodeInfo.inputs.emplace_back(_tokens->highlightLevel, 0.8f);
+        nodeInfo.inputs.emplace_back(_tokens->highlightLevel2, 0.9f);
 
-        nodeInfo.inputs.emplace_back(_tokens->shadowRange, 0.05f);
-        nodeInfo.inputs.emplace_back(_tokens->midRange1, 0.05f);
-        nodeInfo.inputs.emplace_back(_tokens->midRange2, 0.05f);
-        nodeInfo.inputs.emplace_back(_tokens->highlightRange, 0.05f);
+        nodeInfo.inputs.emplace_back(_tokens->shadowLevelMix, 0.05f);
+        nodeInfo.inputs.emplace_back(_tokens->midLevelMix, 0.05f);
+        nodeInfo.inputs.emplace_back(_tokens->highlightLevelMix, 0.05f);
+        nodeInfo.inputs.emplace_back(_tokens->highlightLevelMix2, 0.05f);
 
         RprUsd_RprNodeInput transparencyModeInput(_tokens->transparencyMode, _tokens->DisableTransparency);
         transparencyModeInput.value = VtValue(0);
