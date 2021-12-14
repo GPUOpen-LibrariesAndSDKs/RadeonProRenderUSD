@@ -1502,6 +1502,7 @@ public:
         bool clearAovs = false;
         RenderSetting<bool> enableDenoise;
         RenderSetting<HdRprApiColorAov::TonemapParams> tonemap;
+        RenderSetting<HdRprApiColorAov::GammaParams> gamma;
         RenderSetting<bool> instantaneousShutter;
         RenderSetting<TfToken> aspectRatioPolicy;
         {
@@ -1523,6 +1524,12 @@ public:
                 tonemap.value.sensitivity = config->GetTonemappingSensitivity();
                 tonemap.value.fstop = config->GetTonemappingFstop();
                 tonemap.value.gamma = config->GetTonemappingGamma();
+            }
+
+            gamma.isDirty = config->IsDirty(HdRprConfig::DirtyGamma);
+            if (gamma.isDirty) {
+                gamma.value.enable = config->GetGammaEnable();
+                gamma.value.value = config->GetGammaValue();
             }
 
             aspectRatioPolicy.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
@@ -1570,7 +1577,7 @@ public:
             config->ResetDirty();
         }
         UpdateCamera(aspectRatioPolicy, instantaneousShutter);
-        UpdateAovs(rprRenderParam, enableDenoise, tonemap, clearAovs);
+        UpdateAovs(rprRenderParam, enableDenoise, tonemap, gamma, clearAovs);
 
         m_dirtyFlags = ChangeTracker::Clean;
         if (m_hdCamera) {
@@ -2031,11 +2038,15 @@ public:
         return false;
     }
 
-    void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, RenderSetting<HdRprApiColorAov::TonemapParams> tonemap, bool clearAovs) {
+    void UpdateAovs(HdRprRenderParam* rprRenderParam, RenderSetting<bool> enableDenoise, RenderSetting<HdRprApiColorAov::TonemapParams> tonemap,  RenderSetting<HdRprApiColorAov::GammaParams> gamma, bool clearAovs) {
         UpdateDenoising(enableDenoise);
 
         if (tonemap.isDirty) {
             m_colorAov->SetTonemap(tonemap.value);
+        }
+
+        if (gamma.isDirty) {
+            m_colorAov->SetGamma(gamma.value);
         }
 
         if (m_dirtyFlags & (ChangeTracker::DirtyAOVBindings | ChangeTracker::DirtyAOVRegistry)) {

@@ -440,6 +440,28 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'Gamma',
+        'settings': [
+            {
+                'name': 'gamma:enable',
+                'ui_name': 'Enable Gamma',
+                'help': 'Enable Gamma',
+                'defaultValue': False
+            },
+            {
+                'name': 'gamma:value',
+                'ui_name': 'Gamma',
+                'help': 'Gamma value',
+                'defaultValue': 1.0,
+                'minValue': 0.0,
+                'maxValue': 5.0,
+                'houdini': {
+                    'hidewhen': 'gamma:enable == 0'
+                }
+            }
+        ]
+    },
+    {
         'name': 'Tonemapping',
         'settings': [
             {
