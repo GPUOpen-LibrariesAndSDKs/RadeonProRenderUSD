@@ -196,6 +196,36 @@ render_setting_categories = [
                         }
                     },
                     {
+                        'name': 'contour:useUv',
+                        'ui_name': 'Use UV',
+                        'defaultValue': True,
+                        'help': 'Whether to use UV for edge detection or not',
+                        'houdini': {
+                            'hidewhen': 'coreRenderMode != "Contour"'
+                        }
+                    },
+                    {
+                        'name': 'contour:linewidthUv',
+                        'ui_name': 'Linewidth UV',
+                        'defaultValue': 1.0,
+                        'minValue': 0.0,
+                        'maxValue': 100.0,
+                        'help': 'Linewidth of edges detected via UV',
+                        'houdini': {
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseUv == 0']
+                        }
+                    },
+                    {
+                        'name': 'contour:uvThreshold',
+                        'defaultValue': 1.0,
+                        'minValue': 0.0,
+                        'maxValue': 100.0,
+                        'help': 'Threshold of edges detected via UV',
+                        'houdini': {
+                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseUv == 0']
+                        }
+                    },
+                    {
                         'name': 'contour:debug',
                         'ui_name': 'Debug',
                         'defaultValue': False,
