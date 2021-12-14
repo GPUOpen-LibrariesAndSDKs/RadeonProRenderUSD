@@ -297,6 +297,19 @@ class "RprRendererSettingsAPI" (
         rprMaxValue = 5.0
     )
 
+    uniform bool rpr:gamma:enable = false (
+        displayName = "Enable Gamma"
+        displayGroup = "Postprocessing|Gamma"
+        doc = "Enable gamma correction."
+    )
+    uniform float rpr:gamma:value = 1.0 (
+        displayName = "Gamma"
+        displayGroup = "Postprocessing|Gamma"
+        doc = "Gamma correction value."
+        rprMinValue = 0.0
+        rprMaxValue = 5.0
+    )
+
     # Northstar only
     uniform asset rpr:ocio:configPath = "" (
         displayName = "Config Path"

@@ -56,6 +56,14 @@ def _get_houdini_hidewhen_string(conditions, settings):
     for condition in conditions:
         if condition and callable(condition):
             condition = condition(settings)
+
+        # Fix for non-working hidewhen on some fields, they expect encoded names
+        if condition and ':' in condition:
+            import hou
+            condition_name = condition.split()[0]
+            encoded_name = hou.encode(f'rpr:{condition_name}')
+            condition = condition.replace(condition_name, encoded_name)
+
         if condition:
             if isinstance(condition, str):
                 houdini_hidewhen_conditions.append(condition)
