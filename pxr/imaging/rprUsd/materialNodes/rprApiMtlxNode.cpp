@@ -69,11 +69,17 @@ rpr::MaterialNode* RprUsd_CreateRprMtlxFromFile(std::string const& mtlxFile, Rpr
         return nullptr;
     }
 
-    rpr_material_node matxNodeHandle = rpr::GetRprObject(matxNode.get());
-    status = rprMaterialXSetFile(matxNodeHandle, mtlxFile.c_str());
-    if (status != RPR_SUCCESS) {
-        RPR_ERROR_CHECK(status, "Failed to set matx node file");
-        ArchUnlinkFile(mtlxFile.c_str());
+    try {
+        rpr_material_node matxNodeHandle = rpr::GetRprObject(matxNode.get());
+        status = rprMaterialXSetFile(matxNodeHandle, mtlxFile.c_str());
+        if (status != RPR_SUCCESS) {
+            RPR_ERROR_CHECK(status, "Failed to set matx node file");
+            return nullptr;
+        }
+    } catch (...) {
+        // C API that leaks C++ exceptions and leaves an object in undetermined state? Classic.
+        // We have to leak a memory here to prevent a crash.
+        matxNode.release();
         return nullptr;
     }
 

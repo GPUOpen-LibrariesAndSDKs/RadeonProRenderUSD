@@ -38,7 +38,7 @@ void HdRprParseGeometrySettings(
     };
 
     for (auto& desc : constantPrimvarDescs) {
-		std::string primvarName = "primvars:" + desc.name.GetString();
+        std::string primvarName = "primvars:" + desc.name.GetString();
         if (primvarName == RprUsdTokens->primvarsRprObjectId) {
             HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &geomSettings->id);
         } else if (primvarName == RprUsdTokens->primvarsRprMeshSubdivisionLevel) {
@@ -69,8 +69,6 @@ void HdRprParseGeometrySettings(
             setVisibilityFlag(desc.name, kVisibleDiffuse);
         } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityTransparent) {
             setVisibilityFlag(desc.name, kVisibleTransparent);
-        } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityLight) {
-            setVisibilityFlag(desc.name, kVisibleLight);
         }
     }
 }

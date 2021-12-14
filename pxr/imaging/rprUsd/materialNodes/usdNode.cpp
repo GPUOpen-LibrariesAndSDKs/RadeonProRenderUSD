@@ -294,7 +294,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
 
     // Analyze material graph and find out the minimum required amount of components required
     textureCommit.numComponentsRequired = 0;
-    for (auto& entry : m_ctx->hdMaterialNetwork->nodes) {
+    for (auto& entry : m_ctx->materialNetwork->nodes) {
         for (auto& entry : entry.second.inputConnections) {
             auto& connections = entry.second;
             if (connections.size() != 1) {
@@ -335,7 +335,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
 
     // Texture loading is postponed to allow multi-threading loading.
     //
-	ctx->textureCommits.push_back(std::move(textureCommit));
+    ctx->textureCommits.push_back(std::move(textureCommit));
 
     auto scaleIt = hydraParameters.find(RprUsd_UsdUVTextureTokens->scale);
     if (scaleIt != hydraParameters.end() &&

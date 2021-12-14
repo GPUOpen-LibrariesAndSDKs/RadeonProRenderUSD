@@ -465,15 +465,6 @@ class "RprObjectSettingsAPI" (
         doc = ""
     )
 
-    bool primvars:rpr:object:visibility:light = true (
-        customData = {
-            string apiName = "objectVisibilityLight"
-        }
-        displayGroup = "Visibility"
-        displayName = "Visibility Light"
-        doc = ""
-    )
-
     string primvars:rpr:object:assetName = "" (
         customData = {
             string apiName = "objectAssetName"
@@ -500,9 +491,128 @@ class "RprMeshSettingsAPI" (
         token apiSchemaType = "singleApply"
         token[] apiSchemaAutoApplyTo = ["Gprim"]
     }
-    inherits = </RprObjectSettingsAPI>
+    inherits = </APISchemaBase>
 )
 {
+    uniform int primvars:rpr:object:transform:samples = 1 (
+        customData = {
+            string apiName = "objectTransformSamples"
+        }
+        displayGroup = "Object"
+        displayName = "Motion Blur Transform Samples"
+        doc = ""
+    )
+
+    uniform int primvars:rpr:object:deform:samples = 3 (
+        customData = {
+            string apiName = "objectDeformSamples"
+        }
+        displayGroup = "Object"
+        displayName = "Motion Blur Deform Samples"
+        doc = ""
+    )
+
+    int primvars:rpr:object:id = 0 (
+        customData = {
+            string apiName = "objectId"
+        }
+        displayGroup = "Object"
+        displayName = "ID"
+        doc = "Index number of the 'Object Index' render pass"
+    )
+
+    bool primvars:rpr:object:visibility:camera = true (
+        customData = {
+            string apiName = "objectVisibilityCamera"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Camera"
+        doc = """ Used to show or hide an object from the camera.
+                  Disabling camera visibility is the most optimized way to hide an object from the camera but still have it cast shadows, be visible in reflections, etc.
+              """
+    )
+
+    bool primvars:rpr:object:visibility:diffuse = true (
+        customData = {
+            string apiName = "objectVisibilityDiffuse"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Diffuse"
+        doc = "Diffuse visibility affects indirect diffuse rays and makes an object visible or invisible in reflections on diffuse surfaces."
+    )
+
+    bool primvars:rpr:object:visibility:shadow = true (
+        customData = {
+            string apiName = "objectVisibilityShadow"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Shadow"
+        doc = "Shadow visibility controls whether to show or to hide shadows cast by the object onto other surfaces (including reflected shadows and shadows seen through transparent objects). You might need this option to hide shadows that darken other objects in the scene or create unwanted effects."
+    )
+
+    bool primvars:rpr:object:visibility:reflection = true (
+        customData = {
+            string apiName = "objectVisibilityReflection"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Reflection"
+        doc = "Reflection visibility makes an object visible or invisible in reflections on specular surfaces. Note that hiding an object from specular reflections keeps its shadows (including reflected shadows) visible."
+    )
+
+    bool primvars:rpr:object:visibility:glossyReflection = true (
+        customData = {
+            string apiName = "objectVisibilityGlossyReflection"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Glossy Reflection"
+        doc = ""
+    )
+
+    bool primvars:rpr:object:visibility:refraction = true (
+        customData = {
+            string apiName = "objectVisibilityRefraction"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Refraction"
+        doc = "Refraction visibility makes an object visible or invisible when seen through transparent objects. Note that hiding an object from refractive rays keeps its shadows (including refracted shadows) visible."
+    )
+
+    bool primvars:rpr:object:visibility:glossyRefraction = true (
+        customData = {
+            string apiName = "objectVisibilityGlossyRefraction"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Glossy Refraction"
+        doc = ""
+    )
+
+    bool primvars:rpr:object:visibility:transparent = true (
+        customData = {
+            string apiName = "objectVisibilityTransparent"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Transparent"
+        doc = ""
+    )
+
+    bool primvars:rpr:object:visibility:light = true (
+        customData = {
+            string apiName = "objectVisibilityLight"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Light"
+        doc = ""
+    )
+
+    string primvars:rpr:object:assetName = "" (
+        customData = {
+            string apiName = "objectAssetName"
+        }
+        displayGroup = "Object"
+        displayName = "Asset Name"
+        doc = "Asset name for cryptomatte asset pass"
+    )
+
     uniform int primvars:rpr:mesh:subdivisionLevel = 0 (
         customData = {
             string apiName = "subdivisionLevel"
