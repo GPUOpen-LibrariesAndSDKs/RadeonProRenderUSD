@@ -135,7 +135,7 @@ public:
                 auto interpolationMode =  !interpolationModeInt ? RPR_INTERPOLATION_MODE_NONE : RPR_INTERPOLATION_MODE_LINEAR;
                 return m_rampNode->SetInput(RPR_MATERIAL_INPUT_INTERPOLATION, interpolationMode) == RPR_SUCCESS;
             }
-            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `Token`", id.GetText(), value.GetTypeName().c_str());
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `int`", id.GetText(), value.GetTypeName().c_str());
             return false;
         } else if (id == _tokens->color) {
             return ProcessInput<GfVec3f>(id, value, m_toonClosureNode, RPR_MATERIAL_INPUT_COLOR);
@@ -153,14 +153,14 @@ public:
                 int colorModeInt = value.UncheckedGet<int>();
                 return m_rampNode->SetInput(RPR_MATERIAL_INPUT_TOON_5_COLORS, colorModeInt) == RPR_SUCCESS;
             }
-            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `Token`", id.GetText(), value.GetTypeName().c_str());
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `int`", id.GetText(), value.GetTypeName().c_str());
             return false;
         } else if (id == _tokens->transparency) {
             if (value.IsHolding<float>()) {
                 float transparency = value.UncheckedGet<float>();
                 return m_blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, transparency, transparency, transparency, transparency) == RPR_SUCCESS;
             }
-            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `Token`", id.GetText(), value.GetTypeName().c_str());
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `float`", id.GetText(), value.GetTypeName().c_str());
             return false;
         } else if (id == _tokens->transparencyMode) {
             if (value.IsHolding<int>()) {
@@ -168,7 +168,7 @@ public:
                 SetTransparencyEnabled(static_cast<bool>(transparencyModeInt));
                 return true;
             }
-            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `Token`", id.GetText(), value.GetTypeName().c_str());
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `int`", id.GetText(), value.GetTypeName().c_str());
             return false;
         }
 
