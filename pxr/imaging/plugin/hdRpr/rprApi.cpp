@@ -1861,11 +1861,6 @@ public:
             return;
         }
 
-        GfRange1f clippingRange(0.01f, 100000000.0f);
-        m_hdCamera->GetClippingRange(&clippingRange);
-        RPR_ERROR_CHECK(m_camera->SetNearPlane(clippingRange.GetMin()), "Failed to set camera near plane");
-        RPR_ERROR_CHECK(m_camera->SetFarPlane(clippingRange.GetMax()), "Failed to set camera far plane");
-
         double shutterOpen = 0.0;
         double shutterClose = 0.0;
         if (!instantaneousShutter.value) {
@@ -1916,6 +1911,9 @@ public:
         float sensorHeight;
         float focalLength;
 
+        float nearPlane;
+        float farPlane;
+
         GfVec2f apertureSize;
         GfVec2f apertureOffset(0.0f);
         HdRprCamera::Projection projection;
@@ -1939,13 +1937,29 @@ public:
 
                 sensorWidth = std::abs(nearPlaneTrace[0]) * 2.0;
                 sensorHeight = std::abs(nearPlaneTrace[1]) * 2.0;
+
+                nearPlane = (1.0 + m_cameraProjectionMatrix[3][2]) / m_cameraProjectionMatrix[2][2];
+                farPlane = -(1.0 - m_cameraProjectionMatrix[3][2]) / m_cameraProjectionMatrix[2][2];
             } else {
                 projection = HdRprCamera::Perspective;
 
                 sensorWidth = 1.0f;
                 sensorHeight = 1.0f / aspectRatio;
                 focalLength = m_cameraProjectionMatrix[1][1] / (2.0 * aspectRatio);
+
+                nearPlane = m_cameraProjectionMatrix[3][2] / (m_cameraProjectionMatrix[2][2] - 1);
+                farPlane = m_cameraProjectionMatrix[3][2] / (m_cameraProjectionMatrix[2][2] + 1);
             }
+        }
+
+        GfRange1f clippingRange(0.01f, 100000000.0f);
+        if (m_hdCamera->GetClippingRange(&clippingRange)) {
+            RPR_ERROR_CHECK(m_camera->SetNearPlane(clippingRange.GetMin()), "Failed to set camera near plane");
+            RPR_ERROR_CHECK(m_camera->SetFarPlane(clippingRange.GetMax()), "Failed to set camera far plane");
+        }
+        else {
+            RPR_ERROR_CHECK(m_camera->SetNearPlane(nearPlane), "Failed to set camera near plane");
+            RPR_ERROR_CHECK(m_camera->SetFarPlane(farPlane), "Failed to set camera far plane");
         }
 
         RPR_ERROR_CHECK(m_camera->SetLensShift(apertureOffset[0], apertureOffset[1]), "Failed to set camera lens shift");
