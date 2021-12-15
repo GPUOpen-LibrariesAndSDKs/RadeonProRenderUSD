@@ -41,9 +41,9 @@ public:
 
     HdTimeSampleArray<VtMatrix4dArray, 2> SampleInstanceTransforms(SdfPath const& prototypeId);
 
-	void Sync(HdSceneDelegate *sceneDelegate,
-			  HdRenderParam   *renderParam,
-			  HdDirtyBits     *dirtyBits) override;
+    void Sync(HdSceneDelegate *sceneDelegate,
+              HdRenderParam   *renderParam,
+              HdDirtyBits     *dirtyBits) override;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

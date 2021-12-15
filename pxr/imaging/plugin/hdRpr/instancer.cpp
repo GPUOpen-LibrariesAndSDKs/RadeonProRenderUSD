@@ -291,14 +291,13 @@ HdTimeSampleArray<VtMatrix4dArray, 2> HdRprInstancer::SampleInstanceTransforms(S
 
 void
 HdRprInstancer::Sync(HdSceneDelegate *sceneDelegate,
-	HdRenderParam   *renderParam,
-	HdDirtyBits     *dirtyBits) {
-	HD_TRACE_FUNCTION();
-	HF_MALLOC_TAG_FUNCTION();
+    HdRenderParam   *renderParam,
+    HdDirtyBits     *dirtyBits) {
+    HD_TRACE_FUNCTION();
+    HF_MALLOC_TAG_FUNCTION();
 
-	SdfPath const& instancerId = GetId();
-
-	_UpdateInstancer(sceneDelegate, dirtyBits);
+    SdfPath const& instancerId = GetId();
+    _UpdateInstancer(sceneDelegate, dirtyBits);
 }
 
 
