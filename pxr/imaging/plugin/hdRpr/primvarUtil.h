@@ -173,8 +173,10 @@ inline VtValue HdRpr_GetParam(HdSceneDelegate* sceneDelegate, SdfPath id, TfToke
     // We may need to fix this in newer versions of USD
 #if PXR_VERSION < 2108
     return sceneDelegate->GetLightParamValue(id, name);
-#else
+#elif PXR_VERSION < 2111
     return sceneDelegate->GetCameraParamValue(id, name);
+#else
+    return sceneDelegate->GetLightParamValue(id, name);
 #endif
 }
 
