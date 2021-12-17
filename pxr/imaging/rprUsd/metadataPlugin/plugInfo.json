@@ -1,0 +1,29 @@
+{
+    "Plugins": [
+        {
+            "Info": {
+                "SdfMetadata": {
+                    "rprMinValue": {
+                        "appliesTo": "attributes",
+                        "type": "float",
+                        "default": 0.0
+                    },
+                    "rprMaxValue": {
+                        "appliesTo": "attributes",
+                        "type": "float",
+                        "default": 1e38
+                    },
+                    "rprHidden": {
+                        "appliesTo": "attributes",
+                        "type": "int",
+                        "default": 0
+                    }
+                }
+            }, 
+            "Name": "rprUsdMetadata", 
+            "ResourcePath": ".", 
+            "Root": ".", 
+            "Type": "resource"
+        }
+    ]
+}

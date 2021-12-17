@@ -294,21 +294,30 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
 
     // Analyze material graph and find out the minimum required amount of components required
     textureCommit.numComponentsRequired = 0;
-    for (auto& entry : m_ctx->hdMaterialNetwork->nodes) {
-        for (auto& connection : entry.second.inputConnections) {
-            if (connection.second.upstreamNode == *m_ctx->currentNodePath) {
+    for (auto& entry : m_ctx->materialNetwork->nodes) {
+        for (auto& entry : entry.second.inputConnections) {
+            auto& connections = entry.second;
+            if (connections.size() != 1) {
+                if (connections.size() > 1) {
+                    TF_RUNTIME_ERROR("Connected array elements are not supported. Please report this.");
+                }
+                continue;
+            }
+            auto& connection = connections[0];
+
+            if (connection.upstreamNode == *m_ctx->currentNodePath) {
                 uint32_t numComponentsRequired = 0;
-                if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgba) {
+                if (connection.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgba) {
                     numComponentsRequired = 4;
-                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgb) {
+                } else if (connection.upstreamOutputName == RprUsd_UsdUVTextureTokens->rgb) {
                     numComponentsRequired = 3;
-                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->r) {
+                } else if (connection.upstreamOutputName == RprUsd_UsdUVTextureTokens->r) {
                     numComponentsRequired = 1;
-                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->g) {
+                } else if (connection.upstreamOutputName == RprUsd_UsdUVTextureTokens->g) {
                     numComponentsRequired = 2;
-                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->b) {
+                } else if (connection.upstreamOutputName == RprUsd_UsdUVTextureTokens->b) {
                     numComponentsRequired = 3;
-                } else if (connection.second.upstreamOutputName == RprUsd_UsdUVTextureTokens->a) {
+                } else if (connection.upstreamOutputName == RprUsd_UsdUVTextureTokens->a) {
                     numComponentsRequired = 4;
                 }
                 textureCommit.numComponentsRequired = std::max(textureCommit.numComponentsRequired, numComponentsRequired);
@@ -326,7 +335,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
 
     // Texture loading is postponed to allow multi-threading loading.
     //
-    RprUsdMaterialRegistry::GetInstance().CommitTexture(std::move(textureCommit));
+    ctx->textureCommits.push_back(std::move(textureCommit));
 
     auto scaleIt = hydraParameters.find(RprUsd_UsdUVTextureTokens->scale);
     if (scaleIt != hydraParameters.end() &&

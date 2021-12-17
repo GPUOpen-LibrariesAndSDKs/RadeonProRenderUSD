@@ -14,24 +14,9 @@ limitations under the License.
 #include "primvarUtil.h"
 #include "rprApi.h"
 
-PXR_NAMESPACE_OPEN_SCOPE
+#include "pxr/imaging/rprUsd/tokens.h"
 
-TF_DEFINE_PRIVATE_TOKENS(HdRprGeometryPrimvarTokens,
-    ((id, "rpr:id"))
-    ((subdivisionLevel, "rpr:subdivisionLevel"))
-    ((ignoreContour, "rpr:ignoreContour"))
-    ((cryptomatteName, "rpr:cryptomatteName"))
-    ((geomSamples, "rpr:geomSamples"))
-    ((visibilityPrimary, "rpr:visibilityPrimary"))
-    ((visibilityShadow, "rpr:visibilityShadow"))
-    ((visibilityReflection, "rpr:visibilityReflection"))
-    ((visibilityGlossyReflection, "rpr:visibilityGlossyReflection"))
-    ((visibilityRefraction, "rpr:visibilityRefraction"))
-    ((visibilityGlossyRefraction, "rpr:visibilityGlossyRefraction"))
-    ((visibilityDiffuse, "rpr:visibilityDiffuse"))
-    ((visibilityTransparent, "rpr:visibilityTransparent"))
-    ((visibilityLight, "rpr:visibilityLight"))
-);
+PXR_NAMESPACE_OPEN_SCOPE
 
 void HdRprParseGeometrySettings(
     HdSceneDelegate* sceneDelegate, SdfPath const& id,
@@ -53,38 +38,37 @@ void HdRprParseGeometrySettings(
     };
 
     for (auto& desc : constantPrimvarDescs) {
-        if (desc.name == HdRprGeometryPrimvarTokens->id) {
-            HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->id, sceneDelegate, id, &geomSettings->id);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->subdivisionLevel) {
+        std::string primvarName = "primvars:" + desc.name.GetString();
+        if (primvarName == RprUsdTokens->primvarsRprObjectId) {
+            HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &geomSettings->id);
+        } else if (primvarName == RprUsdTokens->primvarsRprMeshSubdivisionLevel) {
             int subdivisionLevel;
-            if (HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->subdivisionLevel, sceneDelegate, id, &subdivisionLevel)) {
+            if (HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &subdivisionLevel)) {
                 geomSettings->subdivisionLevel = std::max(0, std::min(subdivisionLevel, 7));
             }
-        } else if (desc.name == HdRprGeometryPrimvarTokens->ignoreContour) {
-            HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->ignoreContour, sceneDelegate, id, &geomSettings->ignoreContour);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->cryptomatteName) {
-            HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->cryptomatteName, sceneDelegate, id, &geomSettings->cryptomatteName);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->geomSamples) {
-            HdRprGetConstantPrimvar(HdRprGeometryPrimvarTokens->geomSamples, sceneDelegate, id, &geomSettings->numGeometrySamples);
+        } else if (primvarName == RprUsdTokens->primvarsRprMeshIgnoreContour) {
+            HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &geomSettings->ignoreContour);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectAssetName) {
+            HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &geomSettings->cryptomatteName);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectDeformSamples) {
+            HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &geomSettings->numGeometrySamples);
             geomSettings->numGeometrySamples = std::max(1, geomSettings->numGeometrySamples);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityPrimary) {
-            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityPrimary, kVisiblePrimary);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityShadow) {
-            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityShadow, kVisibleShadow);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityReflection) {
-            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityReflection, kVisibleReflection);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityGlossyReflection) {
-            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityGlossyReflection, kVisibleGlossyReflection);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityRefraction) {
-            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityRefraction, kVisibleRefraction);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityGlossyRefraction) {
-            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityGlossyRefraction, kVisibleGlossyRefraction);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityDiffuse) {
-            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityDiffuse, kVisibleDiffuse);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityTransparent) {
-            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityTransparent, kVisibleTransparent);
-        } else if (desc.name == HdRprGeometryPrimvarTokens->visibilityLight) {
-            setVisibilityFlag(HdRprGeometryPrimvarTokens->visibilityLight, kVisibleLight);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityCamera) {
+            setVisibilityFlag(desc.name, kVisiblePrimary);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityShadow) {
+            setVisibilityFlag(desc.name, kVisibleShadow);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityReflection) {
+            setVisibilityFlag(desc.name, kVisibleReflection);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityGlossyReflection) {
+            setVisibilityFlag(desc.name, kVisibleGlossyReflection);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityRefraction) {
+            setVisibilityFlag(desc.name, kVisibleRefraction);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityGlossyRefraction) {
+            setVisibilityFlag(desc.name, kVisibleGlossyRefraction);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityDiffuse) {
+            setVisibilityFlag(desc.name, kVisibleDiffuse);
+        } else if (primvarName == RprUsdTokens->primvarsRprObjectVisibilityTransparent) {
+            setVisibilityFlag(desc.name, kVisibleTransparent);
         }
     }
 }

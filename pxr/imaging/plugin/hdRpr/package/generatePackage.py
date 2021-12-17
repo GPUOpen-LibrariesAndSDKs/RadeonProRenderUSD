@@ -60,8 +60,6 @@ output_dir = os.path.abspath(args.output_dir)
 package_dir = '_package'
 cmake_configure_cmd = ['cmake', '-DCMAKE_INSTALL_PREFIX='+package_dir, '-DDUMP_PACKAGE_FILE_NAME=ON']
 cmake_configure_cmd += shlex.split(args.cmake_options)
-if platform.system() == 'Windows':
-    cmake_configure_cmd += ['-G', 'Visual Studio 15 2017 Win64']
 cmake_configure_cmd += ['..']
 
 build_dir = 'build_generatePackage_tmp_dir'

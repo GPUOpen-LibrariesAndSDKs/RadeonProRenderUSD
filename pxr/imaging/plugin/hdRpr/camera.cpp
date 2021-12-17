@@ -15,12 +15,9 @@ limitations under the License.
 #include "renderParam.h"
 
 #include "pxr/usd/usdGeom/tokens.h"
+#include "pxr/imaging/rprUsd/tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-
-TF_DEFINE_PRIVATE_TOKENS(HdRprCameraTokens,
-    (apertureBlades)
-);
 
 namespace {
 
@@ -113,7 +110,7 @@ void HdRprCamera::Sync(HdSceneDelegate* sceneDelegate,
         }
 #endif
 
-        EvalCameraParam(&m_apertureBlades, HdRprCameraTokens->apertureBlades, sceneDelegate, id, 16);
+        EvalCameraParam(&m_apertureBlades, RprUsdTokens->rprCameraBlades, sceneDelegate, id, 16u);
     }
 
     if (*dirtyBits & HdCamera::DirtyViewMatrix) {

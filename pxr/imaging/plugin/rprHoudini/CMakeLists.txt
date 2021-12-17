@@ -9,7 +9,9 @@ add_library(RPR_for_Houdini SHARED
     LOP_RPRMaterialProperties.h
     LOP_RPRMaterialProperties.cpp
     LOP_RPRExportHelper.h
-    LOP_RPRExportHelper.cpp)
+    LOP_RPRExportHelper.cpp
+    LOP_RPRRendererSettings.h
+    LOP_RPRRendererSettings.cpp)
 
 target_link_libraries(RPR_for_Houdini
     arch
@@ -64,6 +66,7 @@ install(
     FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/__init__.py
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/cache.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/devices.py
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/materialLibrary.py
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/materialLibrary.ui
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/na.png

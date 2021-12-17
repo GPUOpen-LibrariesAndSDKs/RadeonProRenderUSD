@@ -24,13 +24,32 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (color)
     (roughness)
     (normal)
+
+    (shadowTint2)
     (shadowTint)
-    (midLevel)
-    (midLevelMix)
     (midTint)
-    (highlightLevel)
-    (highlightLevelMix)
     (highlightTint)
+    (highlightTint2)
+
+    (shadowLevel)
+    (midLevel)
+    (highlightLevel)
+    (highlightLevel2)
+
+    (shadowLevelMix)
+    (midLevelMix)
+    (highlightLevelMix)
+    (highlightLevelMix2)
+    
+    (colorsMode)
+    (ThreeColors)
+    (FiveColors)
+
+    (transparencyMode)
+    (transparency)
+    (DisableTransparency)
+    (EnableTransparency)
+    
     (interpolationMode)
     (Linear)
     (None)
@@ -53,51 +72,70 @@ bool ProcessInput(TfToken const& inputId, VtValue const& inputValue, SmartPtr co
 class RprUsd_RprToonNode : public RprUsd_MaterialNode {
 public:
     RprUsd_RprToonNode(RprUsd_MaterialBuilderContext* ctx) {
-
         rpr::Status status;
         m_toonClosureNode.reset(ctx->rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_TOON_CLOSURE, &status));
         if (!m_toonClosureNode) {
             throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to create toon closure node", ctx->rprContext));
         }
+
         m_rampNode.reset(ctx->rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_TOON_RAMP, &status));
         if (!m_rampNode) {
             throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to create toon ramp node", ctx->rprContext));
         }
+
         status = m_toonClosureNode->SetInput(RPR_MATERIAL_INPUT_DIFFUSE_RAMP, m_rampNode.get());
         if (status != RPR_SUCCESS) {
             throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set ramp node input of closure node", ctx->rprContext));
         }
+
+        m_rprContext = ctx->rprContext;
     }
     ~RprUsd_RprToonNode() override = default;
 
     VtValue GetOutput(TfToken const& outputId) override {
-        return VtValue(m_toonClosureNode);
+        if (m_TransparencyEnabled) {
+            return VtValue(m_blendNode);
+        } else {
+            return VtValue(m_toonClosureNode);
+        }
     }
 
     bool SetInput(
         TfToken const& id,
         VtValue const& value) override {
-        if (id == _tokens->shadowTint) {
+        if /* tint */ (id == _tokens->shadowTint2) {
+            return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_SHADOW2);
+        } else if (id == _tokens->shadowTint) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_SHADOW);
-        } else if (id == _tokens->midLevel) {
-            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION1);
-        } else if (id == _tokens->midLevelMix) {
-            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE1);
         } else if (id == _tokens->midTint) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_MID);
-        } else if (id == _tokens->highlightLevel) {
-            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION2);
-        } else if (id == _tokens->highlightLevelMix) {
-            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE2);
         } else if (id == _tokens->highlightTint) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_HIGHLIGHT);
+        } else if (id == _tokens->highlightTint2) {
+            return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_HIGHLIGHT2);
+        } /* level */ else if (id == _tokens->shadowLevel) {
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION_SHADOW);
+        } else if (id == _tokens->midLevel) {
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION1);
+        } else if (id == _tokens->highlightLevel) {
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION2);
+        } else if (id == _tokens->highlightLevel2) {
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION_HIGHLIGHT);
+        } /* mix */ else if (id == _tokens->shadowLevelMix) {
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE_SHADOW);
+        } else if (id == _tokens->midLevelMix) {
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE1);
+        }  else if (id == _tokens->highlightLevelMix) {
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE2);
+        } else if (id == _tokens->highlightLevelMix2) {
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE_HIGHLIGHT);
         } else if (id == _tokens->interpolationMode) {
             if (value.IsHolding<int>()) {
                 int interpolationModeInt = value.UncheckedGet<int>();
                 auto interpolationMode =  !interpolationModeInt ? RPR_INTERPOLATION_MODE_NONE : RPR_INTERPOLATION_MODE_LINEAR;
                 return m_rampNode->SetInput(RPR_MATERIAL_INPUT_INTERPOLATION, interpolationMode) == RPR_SUCCESS;
             }
-            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `Token`", id.GetText(), value.GetTypeName().c_str());
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `int`", id.GetText(), value.GetTypeName().c_str());
             return false;
         } else if (id == _tokens->color) {
             return ProcessInput<GfVec3f>(id, value, m_toonClosureNode, RPR_MATERIAL_INPUT_COLOR);
@@ -110,6 +148,28 @@ public:
             }
 
             return ProcessInput<GfVec3f>(id, value, m_toonClosureNode, RPR_MATERIAL_INPUT_NORMAL);
+        } else if (id == _tokens->colorsMode) {
+            if (value.IsHolding<int>()) {
+                int colorModeInt = value.UncheckedGet<int>();
+                return m_rampNode->SetInput(RPR_MATERIAL_INPUT_TOON_5_COLORS, colorModeInt) == RPR_SUCCESS;
+            }
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `int`", id.GetText(), value.GetTypeName().c_str());
+            return false;
+        } else if (id == _tokens->transparency) {
+            if (value.IsHolding<float>()) {
+                float transparency = value.UncheckedGet<float>();
+                return m_blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, transparency, transparency, transparency, transparency) == RPR_SUCCESS;
+            }
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `float`", id.GetText(), value.GetTypeName().c_str());
+            return false;
+        } else if (id == _tokens->transparencyMode) {
+            if (value.IsHolding<int>()) {
+                int transparencyModeInt = value.UncheckedGet<int>();
+                SetTransparencyEnabled(static_cast<bool>(transparencyModeInt));
+                return true;
+            }
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `int`", id.GetText(), value.GetTypeName().c_str());
+            return false;
         }
 
         TF_RUNTIME_ERROR("Unknown input `%s` for RPR Toon node", id.GetText());
@@ -130,13 +190,33 @@ public:
         nodeInfo.uiFolder = "Shaders";
 
         nodeInfo.inputs.emplace_back(_tokens->color, GfVec3f(1.0f));
-        nodeInfo.inputs.emplace_back(_tokens->shadowTint, GfVec3f(0.0f));
-        nodeInfo.inputs.emplace_back(_tokens->midLevel, 0.5f);
-        nodeInfo.inputs.emplace_back(_tokens->midLevelMix, 0.05f);
+
+        RprUsd_RprNodeInput colorModeInput(_tokens->colorsMode, _tokens->ThreeColors);
+        colorModeInput.value = VtValue(0);
+        colorModeInput.tokenValues = { _tokens->ThreeColors, _tokens->FiveColors };
+        nodeInfo.inputs.push_back(colorModeInput);
+
+        nodeInfo.inputs.emplace_back(_tokens->shadowTint2, GfVec3f(0.0f));
+        nodeInfo.inputs.emplace_back(_tokens->shadowTint, GfVec3f(0.1f));
         nodeInfo.inputs.emplace_back(_tokens->midTint, GfVec3f(0.4f));
-        nodeInfo.inputs.emplace_back(_tokens->highlightLevel, 0.8f);
-        nodeInfo.inputs.emplace_back(_tokens->highlightLevelMix, 0.05f);
         nodeInfo.inputs.emplace_back(_tokens->highlightTint, GfVec3f(0.8f));
+        nodeInfo.inputs.emplace_back(_tokens->highlightTint2, GfVec3f(0.9f));
+
+        nodeInfo.inputs.emplace_back(_tokens->shadowLevel, 0.4f);
+        nodeInfo.inputs.emplace_back(_tokens->midLevel, 0.5f);
+        nodeInfo.inputs.emplace_back(_tokens->highlightLevel, 0.8f);
+        nodeInfo.inputs.emplace_back(_tokens->highlightLevel2, 0.9f);
+
+        nodeInfo.inputs.emplace_back(_tokens->shadowLevelMix, 0.05f);
+        nodeInfo.inputs.emplace_back(_tokens->midLevelMix, 0.05f);
+        nodeInfo.inputs.emplace_back(_tokens->highlightLevelMix, 0.05f);
+        nodeInfo.inputs.emplace_back(_tokens->highlightLevelMix2, 0.05f);
+
+        RprUsd_RprNodeInput transparencyModeInput(_tokens->transparencyMode, _tokens->DisableTransparency);
+        transparencyModeInput.value = VtValue(0);
+        transparencyModeInput.tokenValues = { _tokens->DisableTransparency, _tokens->EnableTransparency };
+        nodeInfo.inputs.push_back(transparencyModeInput);
+        nodeInfo.inputs.emplace_back(_tokens->transparency, 0.5f);
 
         RprUsd_RprNodeInput interpolationModeInput(_tokens->interpolationMode, _tokens->None);
         interpolationModeInput.value = VtValue(0);
@@ -155,10 +235,51 @@ public:
 
 private:
     std::unique_ptr<rpr::MaterialNode> m_rampNode;
+    std::unique_ptr<rpr::MaterialNode> m_transparentNode;
+    std::shared_ptr<rpr::MaterialNode> m_blendNode;
     std::shared_ptr<rpr::MaterialNode> m_toonClosureNode;
+
+    bool m_TransparencyEnabled = false;
+    rpr::Context* m_rprContext = nullptr;
+
+    void SetTransparencyEnabled(bool value) {
+        if (value) {
+            rpr::Status status;
+
+            m_transparentNode.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_TRANSPARENT, &status));
+            if (!m_transparentNode) {
+                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to create transparent node", m_rprContext));
+            }
+
+            m_blendNode.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_BLEND, &status));
+            if (!m_blendNode) {
+                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to create blend node", m_rprContext));
+            }
+
+            status = m_blendNode->SetInput(RPR_MATERIAL_INPUT_COLOR0, m_transparentNode.get());
+            if (status != RPR_SUCCESS) {
+                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set color1 input of blend node", m_rprContext));
+            }
+
+            status = m_blendNode->SetInput(RPR_MATERIAL_INPUT_COLOR1, m_toonClosureNode.get());
+            if (status != RPR_SUCCESS) {
+                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set color0 input of blend node", m_rprContext));
+            }
+
+            status = m_blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, 0.5f);
+            if (status != RPR_SUCCESS) {
+                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set weight input of blend node", m_rprContext));
+            }
+        } else {
+            m_blendNode.reset();
+            m_transparentNode.reset();
+        }
+
+        m_TransparencyEnabled = value;
+    }
 };
 
-ARCH_CONSTRUCTOR(RprUsd_InitDisplaceNode, 255, void) {
+ARCH_CONSTRUCTOR(RprUsd_InitToonNode, 255, void) {
     auto nodeInfo = RprUsd_RprToonNode::GetInfo();
     RprUsdMaterialRegistry::GetInstance().Register(
         TfToken(nodeInfo->name, TfToken::Immortal),

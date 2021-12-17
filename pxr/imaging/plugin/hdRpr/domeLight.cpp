@@ -13,9 +13,11 @@ limitations under the License.
 
 #include "domeLight.h"
 #include "renderParam.h"
+#include "primvarUtil.h"
 #include "rprApi.h"
 
 #include "pxr/imaging/rprUsd/debugCodes.h"
+#include "pxr/imaging/rprUsd/tokens.h"
 
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/imaging/hd/light.h"
@@ -25,10 +27,6 @@ limitations under the License.
 #include "pxr/base/gf/matrix4d.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
-
-TF_DEFINE_PRIVATE_TOKENS(_tokens,
-    ((backgroundOverride, "rpr:backgroundOverride"))
-);
 
 static void removeFirstSlash(std::string& string) {
     // Don't need this for *nix/Mac
@@ -54,7 +52,11 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
     HdDirtyBits bits = *dirtyBits;
 
     if (bits & HdLight::DirtyTransform) {
-        m_transform = GfMatrix4f(sceneDelegate->GetLightParamValue(id, HdTokens->transform).Get<GfMatrix4d>());
+#if PXR_VERSION >= 2011
+        m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
+#else
+        m_transform = GfMatrix4f(HdRpr_GetParam(sceneDelegate, id, HdTokens->transform).Get<GfMatrix4d>());
+#endif
         m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(1.0f, 1.0f, -1.0f));
     }
 
@@ -71,14 +73,16 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
             return;
         }
 
-        VtValue const& backgroundOverride = sceneDelegate->GetLightParamValue(id, _tokens->backgroundOverride);
+        HdRprApi::BackgroundOverride backgroundOverride;
+        backgroundOverride.enable = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideEnable, false);
+        backgroundOverride.color = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideColor, GfVec3f(1.0f));
 
-        float intensity = sceneDelegate->GetLightParamValue(id, HdLightTokens->intensity).Get<float>();
-        float exposure = sceneDelegate->GetLightParamValue(id, HdLightTokens->exposure).Get<float>();
+        float intensity = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f);
+        float exposure = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->exposure, 1.0f);
         float computedIntensity = computeLightIntensity(intensity, exposure);
 
         std::string texturePath;
-        VtValue texturePathValue = sceneDelegate->GetLightParamValue(id, HdLightTokens->textureFile);
+        VtValue texturePathValue = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->textureFile);
         if (texturePathValue.IsHolding<SdfAssetPath>()) {
             auto& assetPath = texturePathValue.UncheckedGet<SdfAssetPath>();
             if (assetPath.GetResolvedPath().empty()) {
@@ -94,9 +98,9 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (texturePath.empty()) {
-            GfVec3f color = sceneDelegate->GetLightParamValue(id, HdPrimvarRoleTokens->color).Get<GfVec3f>();
-            if (sceneDelegate->GetLightParamValue(id, HdLightTokens->enableColorTemperature).Get<bool>()) {
-                GfVec3f temperatureColor = UsdLuxBlackbodyTemperatureAsRgb(sceneDelegate->GetLightParamValue(id, HdLightTokens->colorTemperature).Get<float>());
+            GfVec3f color = HdRpr_GetParam(sceneDelegate, id, HdPrimvarRoleTokens->color, GfVec3f(1.0f));
+            if (HdRpr_GetParam(sceneDelegate, id, HdLightTokens->enableColorTemperature, false)) {
+                GfVec3f temperatureColor = UsdLuxBlackbodyTemperatureAsRgb(HdRpr_GetParam(sceneDelegate, id, HdLightTokens->colorTemperature, 5000.0f));
                 color[0] *= temperatureColor[0];
                 color[1] *= temperatureColor[1];
                 color[2] *= temperatureColor[2];

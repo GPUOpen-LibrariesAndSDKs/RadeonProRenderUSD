@@ -35,18 +35,22 @@ find_library(RIF_LIBRARY
 if(WIN32)
     set(RIF_BINARIES
         ${RIF_LOCATION_LIB}/dxcompiler.dll
+	${RIF_LOCATION_LIB}/dxil.dll
         ${RIF_LOCATION_LIB}/MIOpen.dll
         ${RIF_LOCATION_LIB}/RadeonImageFilters.dll
+        ${RIF_LOCATION_LIB}/RadeonML.dll
         ${RIF_LOCATION_LIB}/RadeonML_MIOpen.dll
         ${RIF_LOCATION_LIB}/RadeonML_DirectML.dll)
 else(WIN32)
     if(APPLE)
         set(RIF_DEPENDENCY_LIBRARIES
+            ${RIF_LOCATION_LIB}/libRadeonML.dylib
             ${RIF_LOCATION_LIB}/libRadeonML_MPS.dylib)
     else()
         set(RIF_DEPENDENCY_LIBRARIES
             ${RIF_LOCATION_LIB}/libMIOpen.so
-            ${RIF_LOCATION_LIB}/libRadeonML_MIOpen.so)
+            ${RIF_LOCATION_LIB}/libRadeonML_MIOpen.so
+            ${RIF_LOCATION_LIB}/libRadeonML.so.0)
     endif(APPLE)
 endif(WIN32)
 

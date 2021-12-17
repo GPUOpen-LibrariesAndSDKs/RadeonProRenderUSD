@@ -19,4 +19,11 @@ PXR_NAMESPACE_USING_DIRECTIVE
 TF_WRAP_MODULE
 {
     TF_WRAP(Config);
+    TF_WRAP(ContextHelpers);
+    TF_WRAP(RprUsdTokens);
+    TF_WRAP(RprUsdDomeLightSettingsAPI);
+    TF_WRAP(RprUsdMaterialSettingsAPI);
+    TF_WRAP(RprUsdObjectSettingsAPI);
+    TF_WRAP(RprUsdMeshSettingsAPI);
+    TF_WRAP(RprUsdRendererSettingsAPI);
 }

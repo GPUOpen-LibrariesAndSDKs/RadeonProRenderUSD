@@ -4,6 +4,9 @@
 #include "pxr/base/tf/tf.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/envSetting.h"
+#include "pxr/base/tf/fileUtils.h"
+#include "pxr/base/plug/plugin.h"
+#include "pxr/base/plug/thisPlugin.h"
 
 #include <json.hpp>
 using json = nlohmann::json;
@@ -21,31 +24,27 @@ using json = nlohmann::json;
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_ENV_SETTING(HDRPR_CACHE_PATH_OVERRIDE, "",
-	"Set this to override shaders cache path");
+    "Set this to override shaders cache path");
 
 namespace {
 
-bool ArchCreateDirectory(const char* path) {
-#ifdef WIN32
-    return CreateDirectory(path, NULL) == TRUE;
-#else
-    return mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
-#endif
+bool ArchCreateDirectory(std::string const & path) {
+    return TfMakeDirs(path, -1, true);
 }
 
 bool ArchDirectoryExists(const char* path) {
 #ifdef WIN32
-	DWORD ftyp = GetFileAttributesA(path);
-	if (ftyp == INVALID_FILE_ATTRIBUTES)
-		return false;  //something is wrong with your path!
+    DWORD ftyp = GetFileAttributesA(path);
+    if (ftyp == INVALID_FILE_ATTRIBUTES)
+        return false;  //something is wrong with your path!
 
-	if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
-		return true;   // this is a directory!
+    if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
+        return true;   // this is a directory!
 
-	return false;    // this is not a directory!
+    return false;    // this is not a directory!
 #else
-	throw std::runtime_error("ArchDirectoryExists not implemented for this platform");
-	return false;
+    throw std::runtime_error("ArchDirectoryExists not implemented for this platform");
+    return false;
 #endif
 }
 
@@ -81,34 +80,35 @@ std::string GetAppDataPath() {
 
 std::string GetDefaultCacheDir(const char* cacheType) {
     // Return HDRPR_CACHE_PATH_OVERRIDE if provided
-	auto overriddenCacheDir = TfGetEnvSetting(HDRPR_CACHE_PATH_OVERRIDE);
-	if (!overriddenCacheDir.empty()) {
-		overriddenCacheDir = overriddenCacheDir + ARCH_PATH_SEP + cacheType;
+    auto overriddenCacheDir = TfGetEnvSetting(HDRPR_CACHE_PATH_OVERRIDE);
+    if (!overriddenCacheDir.empty()) {
+        overriddenCacheDir = overriddenCacheDir + ARCH_PATH_SEP + cacheType;
 
-		bool directoryExists = ArchDirectoryExists(overriddenCacheDir.c_str());
-		if (!directoryExists) {
-			bool succeeded = ArchCreateDirectory(overriddenCacheDir.c_str());
-			if (!succeeded)
-			{
-				TF_RUNTIME_ERROR("Can't create shader cache directory at: %s", overriddenCacheDir.c_str());
-			}
-		}
+        bool directoryExists = ArchDirectoryExists(overriddenCacheDir.c_str());
+        if (!directoryExists) {
+            bool succeeded = ArchCreateDirectory(overriddenCacheDir);
+            if (!succeeded)
+            {
+                TF_RUNTIME_ERROR("Can't create shader cache directory at: %s", overriddenCacheDir.c_str());
+            }
+        }
 
-		return overriddenCacheDir;
-	}
+        return overriddenCacheDir;
+    }
     
-    auto cacheDir = ArchGetEnv("RPR");
+    PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
+    auto cacheDir = plugin->GetResourcePath();
     if (cacheDir.empty()) {
         // Fallback to AppData
         cacheDir = GetAppDataPath() + (ARCH_PATH_SEP "hdRpr");
-        ArchCreateDirectory(cacheDir.c_str());
+        ArchCreateDirectory(cacheDir);
     }
 
     cacheDir += (ARCH_PATH_SEP "cache");
-    ArchCreateDirectory(cacheDir.c_str());
+    ArchCreateDirectory(cacheDir);
 
     cacheDir = cacheDir + ARCH_PATH_SEP + cacheType;
-    ArchCreateDirectory(cacheDir.c_str());
+    ArchCreateDirectory(cacheDir);
 
     return cacheDir;
 }
@@ -179,7 +179,7 @@ RprUsdConfig::RprUsdConfig()
         configDir = GetAppDataPath() + (ARCH_PATH_SEP "hdRpr");
     }
     if (!configDir.empty()) {
-        ArchCreateDirectory(configDir.c_str());
+        ArchCreateDirectory(configDir);
     }
     m_filepath = configDir + (ARCH_PATH_SEP "cfg.json");
 
@@ -241,6 +241,11 @@ std::string RprUsdConfig::GetKernelCacheDir() const {
         ret = GetDefaultCacheDir("kernel");
     }
     return ret;
+}
+
+std::string RprUsdConfig::GetDeviceConfigurationFilepath() const {
+    std::string configCacheDir = GetDefaultCacheDir("config");
+    return configCacheDir + ARCH_PATH_SEP + "devicesConfig.txt";
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

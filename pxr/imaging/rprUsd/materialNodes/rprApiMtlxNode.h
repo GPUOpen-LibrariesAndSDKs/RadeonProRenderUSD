@@ -11,24 +11,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#ifndef PXR_IMAGING_RPRUSD_TOKENS_H
-#define PXR_IMAGING_RPRUSD_TOKENS_H
+#ifndef RPRUSD_MATERIAL_NODES_RPR_API_MTLX_NODE_H
+#define RPRUSD_MATERIAL_NODES_RPR_API_MTLX_NODE_H
 
 #include "pxr/pxr.h"
-#include "pxr/imaging/rprUsd/api.h"
-#include "pxr/base/tf/staticTokens.h"
+
+#include <string>
+
+namespace rpr { class MaterialNode; }
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-#define RPRUSD_TOKENS \
-    (rpr) \
-    /* UsdShadeShader */ \
-    ((id, "rpr:id")) \
-    ((cryptomatteName, "rpr:cryptomatteName"))
+struct RprUsd_MaterialBuilderContext;
 
-
-TF_DECLARE_PUBLIC_TOKENS(RprUsdTokens, RPRUSD_API, RPRUSD_TOKENS);
+rpr::MaterialNode* RprUsd_CreateRprMtlxFromString(std::string const& mtlxString, RprUsd_MaterialBuilderContext const& context);
+rpr::MaterialNode* RprUsd_CreateRprMtlxFromFile(std::string const& mtlxFile, RprUsd_MaterialBuilderContext const& context);
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-#endif //PXR_IMAGING_RPRUSD_TOKENS_H
+#endif // RPRUSD_MATERIAL_NODES_RPR_API_MTLX_NODE_H
