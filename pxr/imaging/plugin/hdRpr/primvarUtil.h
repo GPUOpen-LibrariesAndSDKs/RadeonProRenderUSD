@@ -172,17 +172,17 @@ inline VtValue HdRpr_GetParam(HdSceneDelegate* sceneDelegate, SdfPath id, TfToke
     // https://groups.google.com/g/usd-interest/c/k-N05Ac7SRk/m/RtK5HvglAQAJ
     // We may need to fix this in newer versions of USD
 
-	VtValue lightValue = sceneDelegate->GetLightParamValue(id, name);
-	if (!lightValue.IsEmpty()) {
-		return lightValue;
-	}
+    VtValue lightValue = sceneDelegate->GetLightParamValue(id, name);
+    if (!lightValue.IsEmpty()) {
+        return lightValue;
+    }
 
-	VtValue cameraValue = sceneDelegate->GetCameraParamValue(id, name);
-	if (!cameraValue.IsEmpty()) {
-		return cameraValue;
-	}
+    VtValue cameraValue = sceneDelegate->GetCameraParamValue(id, name);
+    if (!cameraValue.IsEmpty()) {
+        return cameraValue;
+    }
 
-	return VtValue();
+    return VtValue();
 }
 
 template<typename T>
