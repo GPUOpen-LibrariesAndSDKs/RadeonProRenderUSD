@@ -174,7 +174,7 @@ inline VtValue HdRpr_GetParam(HdSceneDelegate* sceneDelegate, SdfPath id, TfToke
 
     #ifdef HOUDINI_BUILD
     return sceneDelegate->GetCameraParamValue(id, name);
-    #elif
+    #else
 
     VtValue lightValue = sceneDelegate->GetLightParamValue(id, name);
     if (!lightValue.IsEmpty()) {
