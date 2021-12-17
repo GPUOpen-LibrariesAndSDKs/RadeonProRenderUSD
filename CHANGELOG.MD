@@ -1,5 +1,34 @@
 # Change Log
 
+## Version 2.2
+### New Features:
+- Support of Houdini 19.  Houdini 19 adds MaterialX nodes which Radeon ProRender supports through the plug-in.
+- Updates to the Render Quality modes: 
+    - RPR Interactive is a new mode supporting GPUs which use the Vulkan ray tracing extension, and is optimized for fast viewport rendering;
+    - RPR Final, previously Full” mode. It is intended “” for final rendering the utmost physical correctness and image quality;
+    - Both modes render similar images;
+    - Both modes support full MaterialX shader networks.
+
+### Bugs Fixed
+- Support of camera aperture offset has been added.
+- Multiple render devices as well as CPU + GPU rendering can now be selected.
+- Single color VDB volumes now work using the “gain” parameter.
+- The performance of rendering in the RPR Final mode using adaptive sampling has been improved by optimizing the active pixels check.
+- The new Gamma Tonemap filter has been added.
+- A setting for using UV to generate Outline renders has been added.
+- An issue of incorrect Subsurface Scattering on Vega GPUS has been added.
+- Black rendering of toon shaders on macOS has been fixed.
+- A crash that could occur when processing emission shaders objects with subdivision added has been eliminated.
+- The startup time for CPU rendering has been reduced.
+- Low utilization on macOS with CPU + GPU rendering has been eliminated.
+- Performance in scenes with multiple transparent materials has been improved.
+- An issue with artifacts in alpha texture masks has been fixed.
+- The render performance on Vega and Polaris GPUs has been improved.
+- Particle motion blur on GPUs has been fixed.
+- A crash that could occur when using .tif textures with zip compression has been eliminated.
+- An issue with emission shaders disappearing in volume objects has been eliminated.
+
+
 ## Version 2.1
 ### New Features:
 - Subsurface Scattering and Volume shaders now work in RPR 2.0.  This allows the rendering of organic materials, such as skin, which absorb light into their interior.
