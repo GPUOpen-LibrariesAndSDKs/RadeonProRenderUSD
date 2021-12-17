@@ -172,6 +172,10 @@ inline VtValue HdRpr_GetParam(HdSceneDelegate* sceneDelegate, SdfPath id, TfToke
     // https://groups.google.com/g/usd-interest/c/k-N05Ac7SRk/m/RtK5HvglAQAJ
     // We may need to fix this in newer versions of USD
 
+    #ifdef HOUDINI_BUILD
+    return sceneDelegate->GetCameraParamValue(id, name);
+    #elif
+
     VtValue lightValue = sceneDelegate->GetLightParamValue(id, name);
     if (!lightValue.IsEmpty()) {
         return lightValue;
@@ -183,6 +187,7 @@ inline VtValue HdRpr_GetParam(HdSceneDelegate* sceneDelegate, SdfPath id, TfToke
     }
 
     return VtValue();
+    #endif
 }
 
 template<typename T>
