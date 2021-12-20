@@ -176,13 +176,35 @@ public:
         return false;
     }
 
-    static RprUsd_RprNodeInfo* GetInfo() {
-        static RprUsd_RprNodeInfo* ret = nullptr;
+    struct RprUsd_ToonNodeInfo : public RprUsd_RprNodeInfo {
+        bool HasDynamicVisibility() const override { return true; }
+        VisibilityUpdate GetVisibilityUpdate(const char* changedParam, RprUsdMaterialNodeStateProvider* stateProvider) const override {
+            VisibilityUpdate visibilityUpdate;
+
+            if (_tokens->transparencyMode == changedParam) {
+                bool isTransparencyEnabled = stateProvider->GetValue(changedParam).GetWithDefault(0) != 0;
+                visibilityUpdate.Add(isTransparencyEnabled, _tokens->transparency.GetText());
+            } else if (_tokens->colorsMode == changedParam) {
+                bool isFiveColorMode = stateProvider->GetValue(changedParam).GetWithDefault(0) != 0;
+                visibilityUpdate.Add(isFiveColorMode, _tokens->shadowTint2.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->highlightTint2.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->shadowLevel.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->shadowLevelMix.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->highlightLevel2.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->highlightLevelMix2.GetText());
+            }
+
+            return visibilityUpdate;
+        };
+    };
+
+    static RprUsd_ToonNodeInfo* GetInfo() {
+        static RprUsd_ToonNodeInfo* ret = nullptr;
         if (ret) {
             return ret;
         }
 
-        ret = new RprUsd_RprNodeInfo;
+        ret = new RprUsd_ToonNodeInfo;
         auto& nodeInfo = *ret;
 
         nodeInfo.name = "rpr_toon";

@@ -72,6 +72,9 @@ public:
     VOP_Type getShaderType() const override;
 #endif
 
+    void opChanged(OP_EventType reason, void* data) override;
+    bool runCreateScript() override;
+
 protected:
     /// Returns the internal name of an input parameter.
     void getInputNameSubclass(UT_String &in, int i_idx) const override;
