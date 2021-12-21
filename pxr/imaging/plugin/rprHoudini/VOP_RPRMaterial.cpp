@@ -168,7 +168,7 @@ static PRM_Default* NewPRMDefault(
         items->push_back(PRM_Item());
 
         auto& choiceList = *choiceListPtr;
-        auto choiceListType = PRM_ChoiceListType(PRM_CHOICELIST_SINGLE | PRM_CHOICELIST_USE_TOKEN);
+        auto choiceListType = PRM_ChoiceListType(PRM_CHOICELIST_SINGLE);
         choiceList = LEAKED(new PRM_ChoiceList(choiceListType, items->data()));
 
         return defau1t;
@@ -416,21 +416,19 @@ void VOP_RPRMaterial::opChanged(OP_EventType reason, void* data) {
     }
 }
 
-bool VOP_RPRMaterial::runCreateScript() {
-    if (!m_shaderInfo->HasDynamicVisibility()) {
-        return true;
-    }
+void VOP_RPRMaterial::onCreated() {
+    VOP_Node::onCreated();
 
-    VOP_Node_StateProvider stateProvider{this};
-    for (size_t i = 0; i < m_shaderInfo->GetNumInputs(); ++i) {
-        const char* parmName = m_shaderInfo->GetInput(i)->GetName();
-        auto visibilityUpdate = m_shaderInfo->GetVisibilityUpdate(parmName, &stateProvider);
-        for (auto const& parmVisibility : visibilityUpdate.parmsVisibility) {
-            getParm(parmVisibility.name).setVisibleState(parmVisibility.isVisible);
+    if (m_shaderInfo->HasDynamicVisibility()) {
+        VOP_Node_StateProvider stateProvider{this};
+        for (size_t i = 0; i < m_shaderInfo->GetNumInputs(); ++i) {
+            const char* parmName = m_shaderInfo->GetInput(i)->GetName();
+            auto visibilityUpdate = m_shaderInfo->GetVisibilityUpdate(parmName, &stateProvider);
+            for (auto const& parmVisibility : visibilityUpdate.parmsVisibility) {
+                getParm(parmVisibility.name).setVisibleState(parmVisibility.isVisible);
+            }
         }
     }
-
-    return true;
 }
 
 void VOP_RPRMaterial::getInputNameSubclass(UT_String &in, int i_idx) const {

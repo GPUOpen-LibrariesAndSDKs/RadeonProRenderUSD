@@ -73,7 +73,7 @@ public:
 #endif
 
     void opChanged(OP_EventType reason, void* data) override;
-    bool runCreateScript() override;
+    void onCreated() override;
 
 protected:
     /// Returns the internal name of an input parameter.
@@ -112,6 +112,7 @@ public:
 
     void opChanged(OP_EventType reason, void* data) override;
     bool runCreateScript() override;
+    void onCreated() override { VOP_Node::onCreated(); }
 
 private:
     static void ElementChoiceGenFunc(void* op, PRM_Name* choices, int maxChoicesSize, const PRM_SpareData*, const PRM_Parm*);
