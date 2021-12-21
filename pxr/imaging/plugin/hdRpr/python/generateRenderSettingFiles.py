@@ -671,7 +671,7 @@ render_setting_categories = [
         'name': 'ImageTransformation',
         'settings': [
             {
-                'name': 'flipVertical',
+                'name': 'core:flipVertical',
                 'defaultValue': False
             }
         ]

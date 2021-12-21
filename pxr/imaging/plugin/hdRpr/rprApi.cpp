@@ -3274,7 +3274,7 @@ private:
             config->Sync(m_delegate);
 
             m_currentRenderQuality = GetRenderQuality(*config);
-            flipRequestedByRenderSetting = config->GetFlipVertical();
+            flipRequestedByRenderSetting = config->GetCoreFlipVertical();
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);

@@ -53,6 +53,11 @@ class "RprRendererSettingsAPI" (
         displayGroup = "General|Render Mode"
     )
 
+    uniform bool rpr:core:flipVertical = false (
+        displayName = "Flip Vertical"
+        displayGroup = "General"
+    )
+
     # tahoe only
     uniform float rpr:ambientOcclusion:radius = 1.0 (
         displayName = "Ambient Occlusion Radius"
