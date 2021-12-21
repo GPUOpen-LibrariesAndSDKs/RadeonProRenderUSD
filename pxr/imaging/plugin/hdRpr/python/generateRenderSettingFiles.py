@@ -142,7 +142,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via normals',
                         'houdini': {
-                            'hidewhen': ['core:renderMode != "Contour"', 'contourUseNormal == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useNormal == 0']
                         }
                     },
                     {
@@ -152,7 +152,7 @@ render_setting_categories = [
                         'minValue': 0.0,
                         'maxValue': 180.0,
                         'houdini': {
-                            'hidewhen': ['core:renderMode != "Contour"', 'contourUseNormal == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useNormal == 0']
                         }
                     },
                     {
@@ -172,7 +172,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via primitive Id',
                         'houdini': {
-                            'hidewhen': ['core:renderMode != "Contour"', 'contourUsePrimId == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:usePrimId == 0']
                         }
                     },
                     {
@@ -192,7 +192,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via material Id',
                         'houdini': {
-                            'hidewhen': ['core:renderMode != "Contour"', 'contourUseMaterialId == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useMaterialId == 0']
                         }
                     },
                     {
@@ -212,17 +212,18 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via UV',
                         'houdini': {
-                            'hidewhen': ['core:renderMode != "Contour"', 'contourUseUv == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useUv == 0']
                         }
                     },
                     {
                         'name': 'contour:uvThreshold',
+                        'ui_name': 'UV Threshold',
                         'defaultValue': 1.0,
                         'minValue': 0.0,
-                        'maxValue': 100.0,
+                        'maxValue': 1.0,
                         'help': 'Threshold of edges detected via UV',
                         'houdini': {
-                            'hidewhen': ['core:renderMode != "Contour"', 'contourUseUv == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useUv == 0']
                         }
                     },
                     {
@@ -601,7 +602,7 @@ render_setting_categories = [
                 ],
                 'help': 'Batch - save cryptomatte only in the batch rendering mode (USD Render ROP, husk). Interactive - same as the Batch but also save cryptomatte in the non-batch rendering mode. Cryptomatte always saved after \'Max Samples\' is reached.',
                 'houdini': {
-                    'hidewhen': 'cryptomatteOutputPath == ""',
+                    'hidewhen': 'cryptomatte:outputPath == ""',
                 }
             },
             {
@@ -610,7 +611,7 @@ render_setting_categories = [
                 'defaultValue': False,
                 'help': 'Whether to generate cryptomatte preview layer or not. Whether you need it depends on the software you are planning to use cryptomatte in. For example, Houdini\'s COP Cryptomatte requires it, Nuke, on contrary, does not.',
                 'houdini': {
-                    'hidewhen': 'cryptomatteOutputPath == ""',
+                    'hidewhen': 'cryptomatte:outputPath == ""',
                 }
 
             }
