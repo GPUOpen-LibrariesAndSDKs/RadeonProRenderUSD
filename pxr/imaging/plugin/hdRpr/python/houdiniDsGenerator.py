@@ -51,24 +51,35 @@ def _get_valid_houdini_param_name(name):
         import hou
         return hou.encode(name)
 
-def _get_houdini_hidewhen_string(conditions, settings):
+def _get_usd_render_setting_name(name):
+    if not name.startswith('rpr:') and not name.startswith('primvars:'):
+        name = 'rpr:' + name
+    return name
+
+def _get_houdini_hidewhen_string(condition, settings):
     houdini_hidewhen_conditions = []
-    for condition in conditions:
-        if condition and callable(condition):
-            condition = condition(settings)
+    def process_condition(condition):
+        if not condition:
+            return
 
-        # Fix for non-working hidewhen on some fields, they expect encoded names
-        if condition and ':' in condition:
-            import hou
-            condition_name = condition.split()[0]
-            encoded_name = hou.encode(f'rpr:{condition_name}')
-            condition = condition.replace(condition_name, encoded_name)
+        if callable(condition):
+            return process_condition(condition(settings))
+        elif isinstance(condition, list):
+            for entry in condition:
+                process_condition(entry)
+        elif isinstance(condition, str):
+            if ':' in condition:
+                setting_name, tail = condition.split(' ', 1)
 
-        if condition:
-            if isinstance(condition, str):
-                houdini_hidewhen_conditions.append(condition)
-            elif isinstance(condition, list):
-                houdini_hidewhen_conditions.extend(condition);
+                setting_name = _get_usd_render_setting_name(setting_name)
+                houdini_name = _get_valid_houdini_param_name(setting_name)
+                condition = ' '.join([houdini_name, tail])
+
+            houdini_hidewhen_conditions.append(condition)
+        else:
+            print('ERROR: Unexpected condition value: {}'.format(condition))
+            exit(1)
+    process_condition(condition)
 
     houdini_hidewhen = ''
     if houdini_hidewhen_conditions:
@@ -83,7 +94,7 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
         return ''
 
     houdini_settings = setting.get('houdini', {})
-    houdini_hidewhen = _get_houdini_hidewhen_string((houdini_settings.get('hidewhen'), global_hidewhen), settings)
+    houdini_hidewhen = _get_houdini_hidewhen_string([houdini_settings.get('hidewhen'), global_hidewhen], settings)
 
     def CreateHoudiniParam(name, label, htype, default, values=[], tags=[], disablewhen_conditions=[], size=None, valid_range=None, help_msg=None):
         param = 'parm {\n'
@@ -113,9 +124,7 @@ def _generate_ds_setting(setting, spare_category, global_hidewhen, settings):
 
         return param
 
-    setting_name = setting['name']
-    if not setting_name.startswith('rpr:') and not setting_name.startswith('primvars:'):
-        setting_name = 'rpr:' + setting_name
+    setting_name = _get_usd_render_setting_name(setting['name'])
 
     name = _get_valid_houdini_param_name(setting_name)
     control_param_name = _get_valid_houdini_param_name(setting_name + '_control')
@@ -209,7 +218,7 @@ def generate_houdini_ds(install_path, ds_name, settings):
                 houdini_params += '  label "{}"\n'.format(setting['folder'])
 
                 houdini_settings = setting.get('houdini', {})
-                houdini_hidewhen = _get_houdini_hidewhen_string((houdini_settings.get('hidewhen'), category_hidewhen), settings)
+                houdini_hidewhen = _get_houdini_hidewhen_string([houdini_settings.get('hidewhen'), category_hidewhen], settings)
                 if houdini_hidewhen:
                     houdini_params += '  {}\n'.format(houdini_hidewhen)
 
