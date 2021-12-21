@@ -217,9 +217,10 @@ render_setting_categories = [
                     },
                     {
                         'name': 'contour:uvThreshold',
+                        'ui_name': 'UV Threshold',
                         'defaultValue': 1.0,
                         'minValue': 0.0,
-                        'maxValue': 100.0,
+                        'maxValue': 1.0,
                         'help': 'Threshold of edges detected via UV',
                         'houdini': {
                             'hidewhen': ['core:renderMode != "Contour"', 'contour:useUv == 0']
