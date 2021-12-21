@@ -172,6 +172,12 @@ inline VtValue HdRpr_GetParam(HdSceneDelegate* sceneDelegate, SdfPath id, TfToke
     // https://groups.google.com/g/usd-interest/c/k-N05Ac7SRk/m/RtK5HvglAQAJ
     // We may need to fix this in newer versions of USD
 
+    // Order here is important
+    // GetCameraParamValue works with deprecated schema and required work backward compatibility
+    //
+    // GetLightParamValue works with new schema, but if it wouldn't find any value
+    // it would return default value (But real value might be stored in GetCameraParamValue)
+
     VtValue cameraValue = sceneDelegate->GetCameraParamValue(id, name);
     if (!cameraValue.IsEmpty()) {
         return cameraValue;
