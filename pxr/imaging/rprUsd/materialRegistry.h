@@ -152,6 +152,10 @@ private:
 class RprUsdMaterialNodeInput;
 class RprUsdMaterialNodeElement;
 
+struct RprUsdMaterialNodeStateProvider {
+    virtual VtValue GetValue(const char* name) = 0;
+};
+
 /// \class RprUsdMaterialNodeInfo
 ///
 /// Describes resolved node, its name, inputs, outputs, etc
@@ -170,6 +174,20 @@ public:
 
     virtual const char* GetUIName() const = 0;
     virtual const char* GetUIFolder() const { return nullptr; };
+
+    virtual bool HasDynamicVisibility() const { return false; }
+    struct VisibilityUpdate {
+        struct Visibility {
+            const char* name;
+            bool isVisible;
+        };
+        std::vector<Visibility> parmsVisibility;
+
+        void Add(bool isVisible, const char* name) {
+            parmsVisibility.push_back({ name, isVisible });
+        }
+    };
+    virtual VisibilityUpdate GetVisibilityUpdate(const char* changedParam, RprUsdMaterialNodeStateProvider*) const { return {}; };
 };
 
 class RprUsdMaterialNodeElement {
