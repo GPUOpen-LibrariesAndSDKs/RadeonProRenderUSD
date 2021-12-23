@@ -645,11 +645,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         }
                     }
                     m_rprMeshInstances.clear();
-
-                    auto visibilityMask = GetVisibilityMask();
-                    for (int i = 0; i < m_rprMeshes.size(); ++i) {
-                        rprApi->SetMeshVisibility(m_rprMeshes[i], visibilityMask);
-                    }
                 } else {
                     updateTransform = false;
 
