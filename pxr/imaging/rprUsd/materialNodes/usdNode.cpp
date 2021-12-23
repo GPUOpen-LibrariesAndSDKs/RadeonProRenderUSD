@@ -230,18 +230,18 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
         throw RprUsd_NodeError("UsdUVTexture requires file parameter");
     }
 
-    RprUsdMaterialRegistry::TextureCommit textureCommit = {};
+    m_textureLoadRequest.reset(new RprUsdMaterialRegistry::TextureLoadRequest);
 
     if (fileIt->second.IsHolding<SdfAssetPath>()) {
         auto& assetPath = fileIt->second.UncheckedGet<SdfAssetPath>();
         if (assetPath.GetResolvedPath().empty()) {
-            textureCommit.filepath = assetPath.GetAssetPath();
+            m_textureLoadRequest->filepath = assetPath.GetAssetPath();
         } else {
-            textureCommit.filepath = assetPath.GetResolvedPath();
+            m_textureLoadRequest->filepath = assetPath.GetResolvedPath();
         }
     }
 
-    if (textureCommit.filepath.empty()) {
+    if (m_textureLoadRequest->filepath.empty()) {
         throw RprUsd_NodeError("UsdUVTexture: empty file path");
     }
 
@@ -250,13 +250,13 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
         if (colorSpaceIt->second.IsHolding<TfToken>()) {
             auto& colorSpace = colorSpaceIt->second.UncheckedGet<TfToken>();
             if (colorSpace == RprUsd_UsdUVTextureTokens->sRGB) {
-                textureCommit.colorspace = "srgb";
+                m_textureLoadRequest->colorspace = "srgb";
             } else if (colorSpace == RprUsd_UsdUVTextureTokens->raw) {
-                textureCommit.colorspace = "raw";
+                m_textureLoadRequest->colorspace = "raw";
             } else if (colorSpace == RprUsd_UsdUVTextureTokens->colorSpaceAuto) {
-                textureCommit.colorspace = "";
+                m_textureLoadRequest->colorspace = "";
             } else {
-                textureCommit.colorspace = colorSpace.GetString();
+                m_textureLoadRequest->colorspace = colorSpace.GetString();
             }
         }
     }
@@ -274,7 +274,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
             TF_RUNTIME_ERROR("RPR renderer does not support different wrapS and wrapT modes");
         }
 
-        textureCommit.wrapType = wrapS ? wrapS : wrapT;
+        m_textureLoadRequest->wrapType = wrapS ? wrapS : wrapT;
     }
 
     rpr::Status status;
@@ -284,7 +284,9 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
     }
     m_outputs[RprUsd_UsdUVTextureTokens->rgba] = VtValue(m_imageNode);
 
-    textureCommit.setTextureCallback = [this](std::shared_ptr<RprUsdCoreImage> const& image) {
+    m_textureLoadRequest->onDidLoadTexture = [this](std::shared_ptr<RprUsdCoreImage> const& image) {
+        m_textureLoadRequest = nullptr;
+
         if (!image) return;
 
         if (!RPR_ERROR_CHECK(m_imageNode->SetInput(RPR_MATERIAL_INPUT_DATA, image->GetRootImage()), "Failed to set material node image data input")) {
@@ -293,7 +295,7 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
     };
 
     // Analyze material graph and find out the minimum required amount of components required
-    textureCommit.numComponentsRequired = 0;
+    m_textureLoadRequest->numComponentsRequired = 0;
     for (auto& entry : m_ctx->materialNetwork->nodes) {
         for (auto& entry : entry.second.inputConnections) {
             auto& connections = entry.second;
@@ -320,22 +322,22 @@ RprUsd_UsdUVTexture::RprUsd_UsdUVTexture(
                 } else if (connection.upstreamOutputName == RprUsd_UsdUVTextureTokens->a) {
                     numComponentsRequired = 4;
                 }
-                textureCommit.numComponentsRequired = std::max(textureCommit.numComponentsRequired, numComponentsRequired);
+                m_textureLoadRequest->numComponentsRequired = std::max(m_textureLoadRequest->numComponentsRequired, numComponentsRequired);
 
-                if (textureCommit.numComponentsRequired == 4) {
+                if (m_textureLoadRequest->numComponentsRequired == 4) {
                     break;
                 }
             }
         }
 
-        if (textureCommit.numComponentsRequired == 4) {
+        if (m_textureLoadRequest->numComponentsRequired == 4) {
             break;
         }
     }
 
     // Texture loading is postponed to allow multi-threading loading.
     //
-    ctx->textureCommits.push_back(std::move(textureCommit));
+    RprUsdMaterialRegistry::GetInstance().EnqueueTextureLoadRequest(m_textureLoadRequest);
 
     auto scaleIt = hydraParameters.find(RprUsd_UsdUVTextureTokens->scale);
     if (scaleIt != hydraParameters.end() &&

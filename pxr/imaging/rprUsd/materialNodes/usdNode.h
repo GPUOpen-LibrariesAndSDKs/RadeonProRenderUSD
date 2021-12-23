@@ -96,6 +96,8 @@ private:
     std::shared_ptr<RprUsd_RprArithmeticNode> m_scaleNode;
     std::shared_ptr<RprUsd_RprArithmeticNode> m_biasNode;
 
+    std::shared_ptr<RprUsdMaterialRegistry::TextureLoadRequest> m_textureLoadRequest;
+
     std::map<TfToken, VtValue> m_outputs;
 };
 
