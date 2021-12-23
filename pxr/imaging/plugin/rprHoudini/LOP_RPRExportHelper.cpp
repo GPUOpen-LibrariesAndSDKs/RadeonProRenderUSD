@@ -28,15 +28,12 @@ limitations under the License.
 #include <pxr/base/gf/vec2i.h>
 #include <pxr/usd/usd/stage.h>
 #include <pxr/usd/usdGeom/scope.h>
+#include <pxr/usd/usdGeom/camera.h>
 #include <pxr/usd/usdRender/settings.h>
 
-PXR_NAMESPACE_OPEN_SCOPE
+#include <pxr/imaging/rprUsd/tokens.h>
 
-TF_DEFINE_PRIVATE_TOKENS(_tokens,
-    (rprExportPath)
-    (rprExportAsSingleFile)
-    (rprExportUseImageCache)
-);
+PXR_NAMESPACE_OPEN_SCOPE
 
 static PRM_Name g_exportPathName("exportPath", "Export Path");
 static PRM_Name g_exportAsSingleFileName("exportAsSingleFile", "Export As Single File");
@@ -117,8 +114,17 @@ OP_ERROR LOP_RPRExportHelper::cookMyLop(OP_Context &context) {
     bool exportAsSingleFile = bool(evalInt(g_exportAsSingleFileName.getToken(), 0, context.getTime()));
     bool exportUseImageCache = bool(evalInt(g_exportUseImageCacheName.getToken(), 0, context.getTime()));
 
-    UT_String renderSettingsPath;
-    evalString(renderSettingsPath, g_renderSettingsName.getToken(), 0, context.getTime());
+    UT_String renderSettingsPathValue;
+    evalString(renderSettingsPathValue, g_renderSettingsName.getToken(), 0, context.getTime());
+    SdfPath renderSettingsPath = HUSDgetSdfPath(renderSettingsPathValue);
+    if (renderSettingsPath.IsEmpty()) {
+        if (renderSettingsPathValue.isstring()) {
+            addError(LOP_MESSAGE, "Render settings path is corrupted");
+        } else {
+            addError(LOP_MESSAGE, "Render settings path must be specified");
+        }
+        return error();
+    }
 
     HUSD_AutoWriteLock writelock(editableDataHandle());
     HUSD_AutoLayerLock layerlock(writelock);
@@ -130,19 +136,36 @@ OP_ERROR LOP_RPRExportHelper::cookMyLop(OP_Context &context) {
     auto modifyRenderSettings = [&](UsdRenderSettings& renderSettings) {
         auto prim = renderSettings.GetPrim();
 
-        return SetRenderSetting(&prim, _tokens->rprExportPath, SdfValueTypeNames->String, exportPath.toStdString(), exportPathParm->isTimeDependent()) &&
-               SetRenderSetting(&prim, _tokens->rprExportAsSingleFile, SdfValueTypeNames->Bool, exportAsSingleFile, false) &&
-               SetRenderSetting(&prim, _tokens->rprExportUseImageCache, SdfValueTypeNames->Bool, exportUseImageCache, false);
+        return SetRenderSetting(&prim, RprUsdTokens->rprExportPath, SdfValueTypeNames->Asset, SdfAssetPath(exportPath.toStdString()), exportPathParm->isTimeDependent()) &&
+               SetRenderSetting(&prim, RprUsdTokens->rprExportAsSingleFile, SdfValueTypeNames->Bool, exportAsSingleFile, false) &&
+               SetRenderSetting(&prim, RprUsdTokens->rprExportUseImageCache, SdfValueTypeNames->Bool, exportUseImageCache, false);
     };
+
+    SdfPath camerasPath("/cameras");
+    SdfPath renderPath("/Render");
+
+    bool cameraExists = false;
+    if (auto cameraScopePrim = stage->GetPrimAtPath(camerasPath)) {
+        for (auto const& prim : cameraScopePrim.GetDescendants()) {
+            if (auto camera = UsdGeomCamera(prim)) {
+                cameraExists = true;
+                break;
+            }
+        }
+    }
+
+    if (!cameraExists) {
+        if (UsdGeomCamera camera = UsdGeomCamera::Define(stage, camerasPath.AppendElementString("camera1"))) {
+            addWarning(LOP_MESSAGE, "Implicit camera has been added. Please author a camera.");
+        } else {
+            addError(LOP_MESSAGE, "Failed to create implicit camera. Please author a camera.");
+            return error();
+        }
+    }
 
     // Use explicitly specified render settings primitive if any
     //
-    UsdRenderSettings renderSettings;
-    if (renderSettingsPath.isstring()) {
-        renderSettings = UsdRenderSettings(stage->GetPrimAtPath(HUSDgetSdfPath(renderSettingsPath)));
-    }
-
-    if (renderSettings) {
+    if (UsdRenderSettings renderSettings = UsdRenderSettings(stage->GetPrimAtPath(renderSettingsPath))) {
         modifyRenderSettings(renderSettings);
     } else {
         // If no valid render settings primitive was specified,
@@ -150,7 +173,7 @@ OP_ERROR LOP_RPRExportHelper::cookMyLop(OP_Context &context) {
         // because we don't know which one will be selected implicitly
         //
         bool hasAnyRenderSettingsPrims = false;
-        if (auto renderPrim = stage->GetPrimAtPath(SdfPath("/Render"))) {
+        if (auto renderPrim = stage->GetPrimAtPath(renderPath)) {
             for (auto const& prim : renderPrim.GetDescendants()) {
                 if (auto renderSettings = UsdRenderSettings(prim)) {
                     if (modifyRenderSettings(renderSettings)) {
@@ -163,12 +186,11 @@ OP_ERROR LOP_RPRExportHelper::cookMyLop(OP_Context &context) {
         // But if there are no render settings primitives, create a new one
         // 
         if (!hasAnyRenderSettingsPrims) {
-            SdfPath renderScopePath("/Render");
-            if (auto renderScope = UsdGeomScope::Define(stage, renderScopePath)) {
-                auto renderSettingsPath = renderScopePath.AppendElementString("rprExportRenderSettings");
-                if (auto renderSettings = UsdRenderSettings::Define(stage, renderSettingsPath)) {
-                    modifyRenderSettings(renderSettings);
-                }
+            if (auto renderSettings = UsdRenderSettings::Define(stage, renderSettingsPath)) {
+                modifyRenderSettings(renderSettings);
+                addWarning(LOP_MESSAGE, "Implicit render settings prim has been added. Please author your own.");
+            } else {
+                addError(LOP_MESSAGE, "Failed to create implicit render settings prim");
             }
         }
     }

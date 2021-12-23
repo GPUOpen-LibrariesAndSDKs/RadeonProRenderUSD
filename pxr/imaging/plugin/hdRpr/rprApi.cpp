@@ -86,6 +86,14 @@ TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
 
 namespace {
 
+std::string const& GetPath(SdfAssetPath const& path) {
+    if (!path.GetResolvedPath().empty()) {
+        return path.GetResolvedPath();
+    } else {
+        return path.GetAssetPath();
+    }
+}
+
 TfToken GetRenderQuality(HdRprConfig const& config) {
     std::string renderQualityOverride = TfGetEnvSetting(HDRPR_RENDER_QUALITY_OVERRIDE);
 
@@ -1543,7 +1551,7 @@ public:
             instantaneousShutter.value = config->GetInstantaneousShutter();
 
             if (config->IsDirty(HdRprConfig::DirtyRprExport)) {
-                m_rprSceneExportPath = config->GetExportPath();
+                m_rprSceneExportPath = GetPath(config->GetExportPath());
                 m_rprExportAsSingleFile = config->GetExportAsSingleFile();
                 m_rprExportUseImageCache = config->GetExportUseImageCache();
             }
@@ -1745,8 +1753,8 @@ public:
                 // globally define path to OCIO config. See the docs for details about the motivation for this.
                 // Houdini handles it in the same while leaving possibility to override it through UI.
                 // We allow the OCIO config path to be overridden through render settings.
-                if (!preferences.GetOcioConfigPath().empty()) {
-                    ocioConfigPath = preferences.GetOcioConfigPath();
+                if (!GetPath(preferences.GetOcioConfigPath()).empty()) {
+                    ocioConfigPath = GetPath(preferences.GetOcioConfigPath());
                 } else {
                     ocioConfigPath = TfGetenv("OCIO");
                 }
@@ -1758,7 +1766,7 @@ public:
 
             if (preferences.IsDirty(HdRprConfig::DirtyCryptomatte) || force) {
 #ifdef RPR_EXR_EXPORT_ENABLED
-                m_cryptomatteOutputPath = preferences.GetCryptomatteOutputPath();
+                m_cryptomatteOutputPath = GetPath(preferences.GetCryptomatteOutputPath());
                 m_cryptomattePreviewLayer = preferences.GetCryptomattePreviewLayer();
 #else
                 if (!preferences.GetCryptomatteOutputPath().empty()) {
