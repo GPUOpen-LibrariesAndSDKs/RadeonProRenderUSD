@@ -195,14 +195,28 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
     return m_registeredNodes;
 }
 
+void RprUsdMaterialRegistry::EnqueueTextureLoadRequest(std::weak_ptr<TextureLoadRequest> textureLoadRequest) {
+    m_textureLoadRequests.push_back(std::move(textureLoadRequest));
+}
+
 void RprUsdMaterialRegistry::CommitResources(
     RprUsdImageCache* imageCache) {
-    if (m_textureCommits.empty()) {
+
+    std::vector<std::shared_ptr<TextureLoadRequest>> textureLoadRequests;
+    textureLoadRequests.reserve(m_textureLoadRequests.size());
+    for (std::weak_ptr<TextureLoadRequest>& requestHandle : m_textureLoadRequests) {
+        if (std::shared_ptr<TextureLoadRequest> request = requestHandle.lock()) {
+            textureLoadRequests.push_back(std::move(request));
+        }
+    }
+    m_textureLoadRequests.clear();
+
+    if (textureLoadRequests.empty()) {
         return;
     }
 
-    using CommitUniqueTextureIndices = std::vector<size_t>;
-    auto uniqueTextureIndicesPerCommit = std::make_unique<CommitUniqueTextureIndices[]>(m_textureCommits.size());
+    using LoadRequestUniqueTextureIndices = std::vector<size_t>;
+    auto uniqueTextureIndicesPerLoadRequest = std::make_unique<LoadRequestUniqueTextureIndices[]>(textureLoadRequests.size());
 
     struct UniqueTextureInfo {
         std::string path;
@@ -223,30 +237,30 @@ void RprUsdMaterialRegistry::CommitResources(
         return status.first->second;
     };
 
-    // Iterate over all texture commits and collect unique textures including UDIM tiles
+    // Iterate over all texture load requests and collect unique textures including UDIM tiles
     //
     std::string formatString;
-    for (size_t i = 0; i < m_textureCommits.size(); ++i) {
-        auto& commit = m_textureCommits[i];
-        if (auto rprImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, {}, 0)) {
-            commit.setTextureCallback(rprImage);
+    for (size_t i = 0; i < textureLoadRequests.size(); ++i) {
+        auto& loadRequest = textureLoadRequests[i];
+        if (auto rprImage = imageCache->GetImage(loadRequest->filepath, loadRequest->colorspace, loadRequest->wrapType, {}, 0)) {
+            loadRequest->onDidLoadTexture(rprImage);
             continue;
         }
 
-        auto& commitTexIndices = uniqueTextureIndicesPerCommit[i];
+        auto& loadRequestTexIndices = uniqueTextureIndicesPerLoadRequest[i];
 
-        if (RprUsdGetUDIMFormatString(commit.filepath, &formatString)) {
+        if (RprUsdGetUDIMFormatString(loadRequest->filepath, &formatString)) {
             constexpr uint32_t kStartTile = 1001;
             constexpr uint32_t kEndTile = 1100;
 
             for (uint32_t tileId = kStartTile; tileId <= kEndTile; ++tileId) {
                 auto tilePath = TfStringPrintf(formatString.c_str(), tileId);
                 if (ArchFileAccess(tilePath.c_str(), F_OK) == 0) {
-                    commitTexIndices.push_back(getUniqueTextureIndex(tilePath, tileId));
+                    loadRequestTexIndices.push_back(getUniqueTextureIndex(tilePath, tileId));
                 }
             }
         } else {
-            commitTexIndices.push_back(getUniqueTextureIndex(commit.filepath));
+            loadRequestTexIndices.push_back(getUniqueTextureIndex(loadRequest->filepath));
         }
     }
 
@@ -267,25 +281,23 @@ void RprUsdMaterialRegistry::CommitResources(
     // Create rpr::Image for each previously read unique texture
     // XXX(RPR): so as RPR API is single-threaded we cannot parallelize this
     //
-    for (size_t i = 0; i < m_textureCommits.size(); ++i) {
-        auto& commitTexIndices = uniqueTextureIndicesPerCommit[i];
-        if (commitTexIndices.empty()) continue;
+    for (size_t i = 0; i < textureLoadRequests.size(); ++i) {
+        auto& loadRequestTexIndices = uniqueTextureIndicesPerLoadRequest[i];
+        if (loadRequestTexIndices.empty()) continue;
 
         std::vector<RprUsdCoreImage::UDIMTile> tiles;
-        tiles.reserve(commitTexIndices.size());
-        for (auto uniqueTextureIdx : commitTexIndices) {
+        tiles.reserve(loadRequestTexIndices.size());
+        for (auto uniqueTextureIdx : loadRequestTexIndices) {
             auto& texture = uniqueTextures[uniqueTextureIdx];
             if (!texture.data) continue;
 
             tiles.emplace_back(texture.udimTileId, texture.data.operator->());
         }
 
-        auto& commit = m_textureCommits[i];
-        auto coreImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, tiles, commit.numComponentsRequired);
-        commit.setTextureCallback(coreImage);
+        auto& loadRequest = textureLoadRequests[i];
+        auto coreImage = imageCache->GetImage(loadRequest->filepath, loadRequest->colorspace, loadRequest->wrapType, tiles, loadRequest->numComponentsRequired);
+        loadRequest->onDidLoadTexture(coreImage);
     }
-
-    m_textureCommits.clear();
 }
 
 namespace {
@@ -674,8 +686,6 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     }
 
     if (out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId)) {
-        m_textureCommits.insert(m_textureCommits.end(), std::make_move_iterator(context.textureCommits.begin()),
-                                                        std::make_move_iterator(context.textureCommits.end()));
         return out.release();
     }
 

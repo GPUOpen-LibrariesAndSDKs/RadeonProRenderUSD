@@ -114,14 +114,17 @@ public:
         RprUsdMaterialNodeFactoryFnc factory,
         RprUsdMaterialNodeInfo const* info = nullptr);
 
-    struct TextureCommit {
+    struct TextureLoadRequest {
         std::string filepath;
         std::string colorspace;
         rpr::ImageWrapType wrapType;
         uint32_t numComponentsRequired = 0;
 
-        std::function<void(std::shared_ptr<RprUsdCoreImage> const&)> setTextureCallback;
+        std::function<void(std::shared_ptr<RprUsdCoreImage> const&)> onDidLoadTexture;
     };
+
+    RPRUSD_API
+    void EnqueueTextureLoadRequest(std::weak_ptr<TextureLoadRequest> textureLoadRequest);
 
     RPRUSD_API
     void CommitResources(RprUsdImageCache* imageCache);
@@ -146,7 +149,7 @@ private:
     std::vector<RprUsdMaterialNodeDesc> m_registeredNodes;
     std::map<TfToken, size_t> m_registeredNodesLookup;
 
-    std::vector<TextureCommit> m_textureCommits;
+    std::vector<std::weak_ptr<TextureLoadRequest>> m_textureLoadRequests;
 };
 
 class RprUsdMaterialNodeInput;
