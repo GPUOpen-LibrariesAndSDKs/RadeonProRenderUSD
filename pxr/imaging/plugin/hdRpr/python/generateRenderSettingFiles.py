@@ -548,7 +548,7 @@ render_setting_categories = [
                 'name': 'ocio:configPath',
                 'ui_name': 'OpenColorIO Config Path',
                 'defaultValue': '',
-                'c_type': 'std::string',
+                'c_type': 'SdfAssetPath',
                 'help': 'The file path of the OpenColorIO config file to be used. Overrides any value specified in OCIO environment variable.',
                 'houdini': {
                     'type': 'file',
@@ -586,7 +586,7 @@ render_setting_categories = [
                 'name': 'cryptomatte:outputPath',
                 'ui_name': 'Cryptomatte Output Path',
                 'defaultValue': '',
-                'c_type': 'std::string',
+                'c_type': 'SdfAssetPath',
                 'help': 'Controls where cryptomatte should be saved. Use \'Cryptomatte Output Mode\' to control when cryptomatte is saved.',
                 'houdini': {
                     'type': 'file'
@@ -639,7 +639,7 @@ render_setting_categories = [
             {
                 'name': 'export:path',
                 'defaultValue': '',
-                'c_type': 'std::string'
+                'c_type': 'SdfAssetPath'
             },
             {
                 'name': 'export:asSingleFile',
@@ -690,6 +690,7 @@ def generate_render_setting_files(install_path, generate_ds_files):
 
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/renderDelegate.h"
+#include "pxr/usd/sdf/assetPath.h"
 
 #include <mutex>
 
