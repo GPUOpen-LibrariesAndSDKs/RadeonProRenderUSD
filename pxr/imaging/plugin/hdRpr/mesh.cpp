@@ -625,17 +625,19 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyInstancer)) {
+            forceVisibilityUpdate = true;
+
 #ifdef USE_DECOUPLED_INSTANCER
             _UpdateInstancer(sceneDelegate, dirtyBits);
             HdInstancer::_SyncInstancerAndParents(sceneDelegate->GetRenderIndex(), GetInstancerId());
 #endif
+
             m_instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()));
             if (m_instancer) {
                 auto instanceTransforms = m_instancer->SampleInstanceTransforms(id);
                 auto newNumInstances = (instanceTransforms.count > 0) ? instanceTransforms.values[0].size() : 0;
                 if (newNumInstances == 0) {
                     ReleaseInstances(rprApi);
-                    forceVisibilityUpdate = true;
                 } else {
                     updateTransform = false;
 
@@ -688,12 +690,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                             rprApi->SetTransform(meshInstances[j], instanceTransforms.count, instanceTransforms.times.data(), combinedTransforms[j].data());
                         }
                     }
-
-                    forceVisibilityUpdate = true;
                 }
             } else {
                 ReleaseInstances(rprApi);
-                forceVisibilityUpdate = true;
             }
         }
 
