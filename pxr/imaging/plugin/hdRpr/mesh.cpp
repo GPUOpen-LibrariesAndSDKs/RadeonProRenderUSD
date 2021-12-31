@@ -137,8 +137,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
     }
 
+    bool forceVisibilityUpdate = false;
     bool isIgnoreContourDirty = false;
-    bool isVisibilityMaskDirty = false;
     bool isIdDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
         HdRprGeometrySettings geomSettings = {};
@@ -153,7 +153,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
-            isVisibilityMaskDirty = true;
+            forceVisibilityUpdate = true;
         }
 
         if (m_id != geomSettings.id) {
@@ -431,12 +431,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         for (auto mesh : m_rprMeshes) {
             rprApi->Release(mesh);
         }
-        for (auto instances : m_rprMeshInstances) {
-            for (auto instance : instances) {
-                rprApi->Release(instance);
-            }
-        }
-        m_rprMeshInstances.clear();
+        ReleaseInstances(rprApi);
         m_rprMeshes.clear();
 
         if (m_geomSubsets.empty()) {
@@ -630,26 +625,19 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyInstancer)) {
+            forceVisibilityUpdate = true;
+
 #ifdef USE_DECOUPLED_INSTANCER
             _UpdateInstancer(sceneDelegate, dirtyBits);
             HdInstancer::_SyncInstancerAndParents(sceneDelegate->GetRenderIndex(), GetInstancerId());
 #endif
-            if (auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()))) {
-                auto instanceTransforms = instancer->SampleInstanceTransforms(id);
+
+            m_instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(GetInstancerId()));
+            if (m_instancer) {
+                auto instanceTransforms = m_instancer->SampleInstanceTransforms(id);
                 auto newNumInstances = (instanceTransforms.count > 0) ? instanceTransforms.values[0].size() : 0;
                 if (newNumInstances == 0) {
-                    // Reset to state without instances
-                    for (auto instances : m_rprMeshInstances) {
-                        for (auto instance : instances) {
-                            rprApi->Release(instance);
-                        }
-                    }
-                    m_rprMeshInstances.clear();
-
-                    auto visibilityMask = GetVisibilityMask();
-                    for (int i = 0; i < m_rprMeshes.size(); ++i) {
-                        rprApi->SetMeshVisibility(m_rprMeshes[i], visibilityMask);
-                    }
+                    ReleaseInstances(rprApi);
                 } else {
                     updateTransform = false;
 
@@ -701,26 +689,29 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         for (int j = 0; j < newNumInstances; ++j) {
                             rprApi->SetTransform(meshInstances[j], instanceTransforms.count, instanceTransforms.times.data(), combinedTransforms[j].data());
                         }
-
-                        // Hide prototype
-                        rprApi->SetMeshVisibility(m_rprMeshes[i], kInvisible);
                     }
                 }
+            } else {
+                ReleaseInstances(rprApi);
             }
         }
 
-        if (newMesh || ((*dirtyBits & HdChangeTracker::DirtyVisibility) || isVisibilityMaskDirty)) {
+        if (newMesh || ((*dirtyBits & HdChangeTracker::DirtyVisibility) || forceVisibilityUpdate)) {
             auto visibilityMask = GetVisibilityMask();
-            if (m_rprMeshInstances.empty()) {
+            if (m_instancer) {
+                // Prototypes are always hidden
                 for (auto& rprMesh : m_rprMeshes) {
-                    rprApi->SetMeshVisibility(rprMesh, visibilityMask);
+                    rprApi->SetMeshVisibility(rprMesh, kInvisible);
                 }
-            } else {
-                // Do not touch prototype meshes (m_rprMeshes), set visibility for instances only
+                // Instances visibility controlled by the user
                 for (auto& instances : m_rprMeshInstances) {
                     for (auto& rprMesh : instances) {
                         rprApi->SetMeshVisibility(rprMesh, visibilityMask);
                     }
+                }
+            } else {
+                for (auto& rprMesh : m_rprMeshes) {
+                    rprApi->SetMeshVisibility(rprMesh, visibilityMask);
                 }
             }
         }
@@ -760,12 +751,7 @@ void HdRprMesh::Finalize(HdRenderParam* renderParam) {
     for (auto mesh : m_rprMeshes) {
         rprApi->Release(mesh);
     }
-    for (auto instances : m_rprMeshInstances) {
-        for (auto instance : instances) {
-            rprApi->Release(instance);
-        }
-    }
-    m_rprMeshInstances.clear();
+    ReleaseInstances(rprApi);
     m_rprMeshes.clear();
 
     rprApi->Release(m_fallbackMaterial);
@@ -778,6 +764,15 @@ void HdRprMesh::Finalize(HdRenderParam* renderParam) {
     }
 
     HdRprBaseRprim::Finalize(renderParam);
+}
+
+void HdRprMesh::ReleaseInstances(HdRprApi* rprApi) {
+    for (auto instances : m_rprMeshInstances) {
+        for (auto instance : instances) {
+            rprApi->Release(instance);
+        }
+    }
+    m_rprMeshInstances.clear();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
