@@ -118,7 +118,8 @@ private:
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (openvdbAsset) \
     (percentDone) \
-    (RPR)
+    (RPR) \
+    (mtlx)
 );
 
 const TfTokenVector HdRprDelegate::SUPPORTED_RPRIM_TYPES = {
@@ -155,7 +156,6 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
     for (auto& entry : renderSettings) {
         SetRenderSetting(entry.first, entry.second);
     }
-
 
     m_rprApi.reset(new HdRprApi(this));
     g_rprApi = m_rprApi.get();
@@ -202,8 +202,8 @@ void HdRprDelegate::CommitResources(HdChangeTracker* tracker) {
     m_rprApi->CommitResources();
 }
 
-TfToken HdRprDelegate::GetMaterialNetworkSelector() const {
-    return RprUsdMaterialRegistry::GetInstance().GetMaterialNetworkSelector();
+TfTokenVector HdRprDelegate::GetMaterialRenderContexts() const {
+    return {RprUsdMaterialRegistry::GetInstance().GetMaterialNetworkSelector(), _tokens->mtlx};
 }
 
 TfTokenVector const& HdRprDelegate::GetSupportedRprimTypes() const {
@@ -428,7 +428,7 @@ PXR_NAMESPACE_CLOSE_SCOPE
 void HdRprSetRenderQuality(const char* quality) {
     PXR_INTERNAL_NS::HdRprConfig* config;
     auto configInstanceLock = PXR_INTERNAL_NS::HdRprDelegate::GetLastCreatedInstance()->LockConfigInstance(&config);
-    config->SetRenderQuality(PXR_INTERNAL_NS::TfToken(quality));
+    config->SetCoreRenderQuality(PXR_INTERNAL_NS::TfToken(quality));
 }
 
 char* HdRprGetRenderQuality() {

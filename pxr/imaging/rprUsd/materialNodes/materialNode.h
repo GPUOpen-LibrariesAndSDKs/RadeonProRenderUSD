@@ -15,6 +15,7 @@ limitations under the License.
 #define RPRUSD_MATERIAL_NODES_MATERIAL_NODE_H
 
 #include "pxr/imaging/hd/material.h"
+#include "pxr/imaging/rprUsd/materialRegistry.h"
 
 namespace rpr { class Context; }
 
@@ -24,24 +25,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 class RprUsdImageCache;
 
-struct RprUsd_MaterialNetwork {
-    struct Connection {
-        SdfPath upstreamNode;
-        TfToken upstreamOutputName;
-    };
-
-    struct Node {
-        TfToken nodeTypeId;
-        std::map<TfToken, VtValue> parameters;
-        std::map<TfToken, Connection> inputConnections;
-    };
-
-    std::map<SdfPath, Node> nodes;
-    std::map<TfToken, Connection> terminals;
-};
-
 struct RprUsd_MaterialBuilderContext {
-    RprUsd_MaterialNetwork const* hdMaterialNetwork;
+    RprUsd_MaterialNetwork const* materialNetwork;
     SdfPath const* currentNodePath;
 
     rpr::Context* rprContext;

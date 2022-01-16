@@ -11,11 +11,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
-#include "pxr/imaging/rprUsd/tokens.h"
+#ifndef RPR_LOP_RPRRENDERERSETTINGS_H
+#define RPR_LOP_RPRRENDERERSETTINGS_H
+
+#include "pxr/pxr.h"
+
+#include <LOP/LOP_Node.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_PUBLIC_TOKENS(RprUsdTokens, RPRUSD_TOKENS);
+/// This node exposes RPR specific render settings
+class LOP_RPRRendererSettings : public LOP_Node {
+public:
+    LOP_RPRRendererSettings(OP_Network *net, const char *name, OP_Operator *op);
+    ~LOP_RPRRendererSettings() override = default;
+
+    static void Register(OP_OperatorTable *table);
+
+protected:
+    OP_ERROR cookMyLop(OP_Context &context) override;
+};
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
+#endif // RPR_LOP_RPRRENDERERSETTINGS_H

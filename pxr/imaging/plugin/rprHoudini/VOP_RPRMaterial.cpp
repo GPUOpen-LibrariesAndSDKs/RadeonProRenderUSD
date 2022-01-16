@@ -168,7 +168,7 @@ static PRM_Default* NewPRMDefault(
         items->push_back(PRM_Item());
 
         auto& choiceList = *choiceListPtr;
-        auto choiceListType = PRM_ChoiceListType(PRM_CHOICELIST_SINGLE | PRM_CHOICELIST_USE_TOKEN);
+        auto choiceListType = PRM_ChoiceListType(PRM_CHOICELIST_SINGLE);
         choiceList = LEAKED(new PRM_ChoiceList(choiceListType, items->data()));
 
         return defau1t;
@@ -352,6 +352,85 @@ VOP_Type VOP_RPRMaterial::getShaderType() const {
 
 #endif
 
+template <typename T>
+VtValue GetParmValue(PRM_Parm const* parm) {
+    T value;
+    parm->getValue(0.0, value, 0, 0);
+    return VtValue(value);
+}
+
+template <>
+VtValue GetParmValue<std::string>(PRM_Parm const* parm) {
+    UT_String value;
+    parm->getValue(0.0, value, 0, true, 0);
+    return VtValue(std::string(value));
+}
+
+struct VOP_Node_StateProvider : public RprUsdMaterialNodeStateProvider {
+    VOP_Node const* node;
+
+    VOP_Node_StateProvider(VOP_Node const* node) : node(node) {
+
+    }
+
+    VtValue GetValue(const char* name) override {
+        PRM_Parm const* parm = node->getParmPtr(name);
+        if (!parm) {
+            return {};
+        }
+
+        PRM_Type const& type = parm->getType();
+        if (type == PRM_FLT) {
+            return GetParmValue<fpreal>(parm);
+        } else if (type == PRM_TOGGLE) {
+            return GetParmValue<int32>(parm);
+        } else if (type == PRM_ORD_E) {
+            return GetParmValue<int32>(parm);
+        } else if (type == PRM_STRING_E) {
+            return GetParmValue<std::string>(parm);
+        }
+        return {};
+    }
+};
+
+void VOP_RPRMaterial::opChanged(OP_EventType reason, void* data) {
+    VOP_Node::opChanged(reason, data);
+
+    if (!m_shaderInfo->HasDynamicVisibility()) {
+        return;
+    }
+
+    if (reason == OP_PARM_CHANGED) {
+        int parmIndex = int(reinterpret_cast<intptr_t>(data));
+        if (parmIndex == -1) {
+            // might happen on "File"->"Save As..." and Auto-Save
+            return;
+        }
+
+        VOP_Node_StateProvider stateProvider{this};
+        PRM_Parm const& parm = getParm(parmIndex);
+        auto visibilityUpdate = m_shaderInfo->GetVisibilityUpdate(parm.getToken(), &stateProvider);
+        for (auto const& parmVisibility : visibilityUpdate.parmsVisibility) {
+            getParm(parmVisibility.name).setVisibleState(parmVisibility.isVisible);
+        }
+    }
+}
+
+void VOP_RPRMaterial::onCreated() {
+    VOP_Node::onCreated();
+
+    if (m_shaderInfo->HasDynamicVisibility()) {
+        VOP_Node_StateProvider stateProvider{this};
+        for (size_t i = 0; i < m_shaderInfo->GetNumInputs(); ++i) {
+            const char* parmName = m_shaderInfo->GetInput(i)->GetName();
+            auto visibilityUpdate = m_shaderInfo->GetVisibilityUpdate(parmName, &stateProvider);
+            for (auto const& parmVisibility : visibilityUpdate.parmsVisibility) {
+                getParm(parmVisibility.name).setVisibleState(parmVisibility.isVisible);
+            }
+        }
+    }
+}
+
 void VOP_RPRMaterial::getInputNameSubclass(UT_String &in, int i_idx) const {
     in = inputLabel(i_idx);
 }
@@ -504,7 +583,7 @@ void VOP_MaterialX::ElementChoiceGenFunc(
 }
 
 void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
-    VOP_RPRMaterial::opChanged(reason, data);
+    VOP_Node::opChanged(reason, data);
 
     if (reason == OP_PARM_CHANGED) {
         int parmIndex = int(reinterpret_cast<intptr_t>(data));
@@ -539,6 +618,7 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
             // Rebuild renderable elements cache
             //
             m_renderableElements = {};
+#ifdef USE_CUSTOM_MATERIALX_LOADER
             if (auto mtlxLoader = RprUsdMaterialRegistry::GetInstance().GetMtlxLoader()) {
                 try {
                     auto mtlxDoc = MaterialX::createDocument();
@@ -549,6 +629,7 @@ void VOP_MaterialX::opChanged(OP_EventType reason, void* data) {
                     // no-op
                 }
             }
+#endif
 
             // Hide everything but file parm when a file is not specified
             //

@@ -26,6 +26,7 @@ enum RprUsdPluginType {
     kPluginTahoe,
     kPluginNorthstar,
     kPluginHybrid,
+    kPluginHybridPro,
     kPluginsCount
 };
 
@@ -38,6 +39,10 @@ struct RprUsdContextMetadata {
 
 RPRUSD_API
 bool RprUsdIsGpuUsed(RprUsdContextMetadata const& contextMetadata);
+
+inline bool RprUsdIsHybrid(RprUsdPluginType pluginType) {
+    return pluginType == kPluginHybrid || pluginType == kPluginHybridPro;
+}
 
 PXR_NAMESPACE_CLOSE_SCOPE
 

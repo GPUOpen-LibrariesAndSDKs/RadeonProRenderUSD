@@ -39,19 +39,11 @@ public:
         HdInstancer(delegate, id HDRPR_INSTANCER_ID_ARG) {
     }
 
-    VtMatrix4dArray ComputeTransforms(SdfPath const& prototypeId);
-
     HdTimeSampleArray<VtMatrix4dArray, 2> SampleInstanceTransforms(SdfPath const& prototypeId);
 
-private:
-    void Sync();
-
-    VtMatrix4dArray m_transform;
-    VtVec3fArray m_translate;
-    VtVec4fArray m_rotate;
-    VtVec3fArray m_scale;
-
-    std::mutex m_syncMutex;
+    void Sync(HdSceneDelegate *sceneDelegate,
+              HdRenderParam   *renderParam,
+              HdDirtyBits     *dirtyBits) override;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

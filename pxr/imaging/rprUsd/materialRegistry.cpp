@@ -18,30 +18,104 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/material.h"
 #include "pxr/imaging/rprUsd/tokens.h"
 #include "pxr/imaging/rprUsd/error.h"
+#include "pxr/base/plug/registry.h"
+#include "pxr/base/plug/plugin.h"
+#include "pxr/base/plug/thisPlugin.h"
+#include "pxr/base/arch/vsnprintf.h"
 #include "pxr/base/tf/instantiateSingleton.h"
 #include "pxr/base/tf/staticTokens.h"
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/pathUtils.h"
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/work/loops.h"
+#include "pxr/usd/sdr/registry.h"
+#include "pxr/usd/usd/schemaBase.h"
 
 #include "materialNodes/usdNode.h"
+#include "materialNodes/mtlxNode.h"
+#include "materialNodes/rprApiMtlxNode.h"
 #include "materialNodes/houdiniPrincipledShaderNode.h"
 
-#include "materialNodes/mtlxNode.h"
+#include <MaterialXCore/Document.h>
+#include <MaterialXFormat/Util.h>
+namespace mx = MaterialX;
+
+#ifdef USE_CUSTOM_MATERIALX_LOADER
 #include <MaterialXFormat/XmlIo.h>
 #include <rprMtlxLoader.h>
+#endif
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+#ifdef USE_USDSHADE_MTLX
+mx::DocumentPtr
+HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
+    HdMaterialNetwork2 const& hdNetwork,
+    HdMaterialNode2 const& hdMaterialXNode,
+    SdfPath const& materialPath,
+    mx::DocumentPtr const& libraries,
+    std::set<SdfPath>* hdTextureNodes,
+    mx::StringMap* mxHdTextureMap);
+#else
+void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
+    HdMaterialNetworkMap const& hdNetworkMap,
+    RprUsd_MaterialNetwork* result,
+    bool* isVolume) {
+    for (auto& entry : hdNetworkMap.map) {
+        auto& terminalName = entry.first;
+        auto& hdNetwork = entry.second;
+
+        // Transfer over individual nodes
+        for (auto& node : hdNetwork.nodes) {
+            // Check if this node is a terminal
+            auto termIt = std::find(hdNetworkMap.terminals.begin(), hdNetworkMap.terminals.end(), node.path);
+            if (termIt != hdNetworkMap.terminals.end()) {
+                result->terminals.emplace(
+                    terminalName,
+                    RprUsd_MaterialNetworkConnection{ node.path, terminalName });
+            }
+
+            if (result->nodes.count(node.path)) {
+                continue;
+            }
+
+            auto& newNode = result->nodes[node.path];
+            newNode.nodeTypeId = node.identifier;
+            newNode.parameters = node.parameters;
+        }
+
+        // Transfer relationships to inputConnections on receiving/downstream nodes.
+        for (HdMaterialRelationship const& rel : hdNetwork.relationships) {
+            // outputId (in hdMaterial terms) is the input of the receiving node
+            auto const& iter = result->nodes.find(rel.outputId);
+            // skip connection if the destination node doesn't exist
+            if (iter == result->nodes.end()) {
+                continue;
+            }
+            auto &connections = iter->second.inputConnections[rel.outputName];
+            connections.push_back(RprUsd_MaterialNetworkConnection{rel.inputId, rel.inputName});
+        }
+
+        // Currently unused
+        // Transfer primvars:
+        //result->primvars.insert(hdNetwork.primvars.begin(), hdNetwork.primvars.end());
+    }
+}
+#endif // USE_USDSHADE_MTLX
 
 TF_INSTANTIATE_SINGLETON(RprUsdMaterialRegistry);
 
 TF_DEFINE_ENV_SETTING(RPRUSD_MATERIAL_NETWORK_SELECTOR, "rpr",
     "Material network selector to be used in hdRpr");
+
+#ifdef USE_CUSTOM_MATERIALX_LOADER
 TF_DEFINE_ENV_SETTING(RPRUSD_USE_RPRMTLXLOADER, true,
     "Whether to use RPRMtlxLoader or rprLoadMateriaX");
 TF_DEFINE_ENV_SETTING(RPRUSD_RPRMTLXLOADER_LOG_LEVEL, int(RPRMtlxLoader::LogLevel::Error),
     "Set logging level of RPRMtlxLoader");
+#endif // USE_CUSTOM_MATERIALX_LOADER
+
+TF_DEFINE_PRIVATE_TOKENS(_tokens, (mtlx));
 
 RprUsdMaterialRegistry::RprUsdMaterialRegistry()
     : m_materialNetworkSelector(TfGetEnvSetting(RPRUSD_MATERIAL_NETWORK_SELECTOR)) {
@@ -55,28 +129,14 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
     if (m_mtlxDefsDirty) {
         m_mtlxDefsDirty = false;
 
-        auto RPR = TfGetenv("RPR");
-        if (RPR.empty()) {
-            TF_WARN("RPR environment variable is not set");
+        std::string mtlxResources = PlugFindPluginResource(PLUG_THIS_PLUGIN, "mtlx");
+        if (mtlxResources.empty()) {
+            TF_RUNTIME_ERROR("Missing mtlx resources");
             return m_registeredNodes;
         }
-        TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("RPR: %s\n", RPR.c_str());
+        TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("mtlx resources: %s\n", mtlxResources.c_str());
 
-        if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
-            MaterialX::FilePathVec libraryNames = {"libraries", "materials"};
-            MaterialX::FileSearchPath searchPath = RPR;
-            m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
-            m_mtlxLoader->SetupStdlib(libraryNames, searchPath);
-
-            auto logLevel = RPRMtlxLoader::LogLevel(TfGetEnvSetting(RPRUSD_RPRMTLXLOADER_LOG_LEVEL));
-            if (logLevel < RPRMtlxLoader::LogLevel::None ||
-                logLevel > RPRMtlxLoader::LogLevel::Info) {
-                logLevel = RPRMtlxLoader::LogLevel::Error;
-            }
-            m_mtlxLoader->SetLogging(logLevel);
-        }
-
-        auto rprMaterialsPath = TfAbsPath(TfNormPath(RPR + "/materials"));
+        auto rprMaterialsPath = TfAbsPath(TfNormPath(mtlxResources + "/materials"));
 
         auto materialFiles = TfGlob(TfNormPath(rprMaterialsPath + "/*/*.mtlx"), ARCH_GLOB_DEFAULT | ARCH_GLOB_NOSORT);
         if (materialFiles.empty()) {
@@ -114,19 +174,49 @@ RprUsdMaterialRegistry::GetRegisteredNodes() {
                 TF_RUNTIME_ERROR("Error on parsing of \"%s\": materialX error - %s", file.c_str(), e.what());
             }
         }
+
+#ifdef USE_CUSTOM_MATERIALX_LOADER
+        if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {
+            MaterialX::FilePathVec libraryNames = { "libraries", "materials" };
+            MaterialX::FileSearchPath searchPath = mtlxResources;
+            m_mtlxLoader = std::make_unique<RPRMtlxLoader>();
+            m_mtlxLoader->SetupStdlib(libraryNames, searchPath);
+
+            auto logLevel = RPRMtlxLoader::LogLevel(TfGetEnvSetting(RPRUSD_RPRMTLXLOADER_LOG_LEVEL));
+            if (logLevel < RPRMtlxLoader::LogLevel::None ||
+                logLevel > RPRMtlxLoader::LogLevel::Info) {
+                logLevel = RPRMtlxLoader::LogLevel::Error;
+            }
+            m_mtlxLoader->SetLogging(logLevel);
+        }
+#endif // USE_CUSTOM_MATERIALX_LOADER
     }
 
     return m_registeredNodes;
 }
 
+void RprUsdMaterialRegistry::EnqueueTextureLoadRequest(std::weak_ptr<TextureLoadRequest> textureLoadRequest) {
+    m_textureLoadRequests.push_back(std::move(textureLoadRequest));
+}
+
 void RprUsdMaterialRegistry::CommitResources(
     RprUsdImageCache* imageCache) {
-    if (m_textureCommits.empty()) {
+
+    std::vector<std::shared_ptr<TextureLoadRequest>> textureLoadRequests;
+    textureLoadRequests.reserve(m_textureLoadRequests.size());
+    for (std::weak_ptr<TextureLoadRequest>& requestHandle : m_textureLoadRequests) {
+        if (std::shared_ptr<TextureLoadRequest> request = requestHandle.lock()) {
+            textureLoadRequests.push_back(std::move(request));
+        }
+    }
+    m_textureLoadRequests.clear();
+
+    if (textureLoadRequests.empty()) {
         return;
     }
 
-    using CommitUniqueTextureIndices = std::vector<size_t>;
-    auto uniqueTextureIndicesPerCommit = std::make_unique<CommitUniqueTextureIndices[]>(m_textureCommits.size());
+    using LoadRequestUniqueTextureIndices = std::vector<size_t>;
+    auto uniqueTextureIndicesPerLoadRequest = std::make_unique<LoadRequestUniqueTextureIndices[]>(textureLoadRequests.size());
 
     struct UniqueTextureInfo {
         std::string path;
@@ -147,30 +237,30 @@ void RprUsdMaterialRegistry::CommitResources(
         return status.first->second;
     };
 
-    // Iterate over all texture commits and collect unique textures including UDIM tiles
+    // Iterate over all texture load requests and collect unique textures including UDIM tiles
     //
     std::string formatString;
-    for (size_t i = 0; i < m_textureCommits.size(); ++i) {
-        auto& commit = m_textureCommits[i];
-        if (auto rprImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, {}, 0)) {
-            commit.setTextureCallback(rprImage);
+    for (size_t i = 0; i < textureLoadRequests.size(); ++i) {
+        auto& loadRequest = textureLoadRequests[i];
+        if (auto rprImage = imageCache->GetImage(loadRequest->filepath, loadRequest->colorspace, loadRequest->wrapType, {}, 0)) {
+            loadRequest->onDidLoadTexture(rprImage);
             continue;
         }
 
-        auto& commitTexIndices = uniqueTextureIndicesPerCommit[i];
+        auto& loadRequestTexIndices = uniqueTextureIndicesPerLoadRequest[i];
 
-        if (RprUsdGetUDIMFormatString(commit.filepath, &formatString)) {
+        if (RprUsdGetUDIMFormatString(loadRequest->filepath, &formatString)) {
             constexpr uint32_t kStartTile = 1001;
             constexpr uint32_t kEndTile = 1100;
 
             for (uint32_t tileId = kStartTile; tileId <= kEndTile; ++tileId) {
                 auto tilePath = TfStringPrintf(formatString.c_str(), tileId);
                 if (ArchFileAccess(tilePath.c_str(), F_OK) == 0) {
-                    commitTexIndices.push_back(getUniqueTextureIndex(tilePath, tileId));
+                    loadRequestTexIndices.push_back(getUniqueTextureIndex(tilePath, tileId));
                 }
             }
         } else {
-            commitTexIndices.push_back(getUniqueTextureIndex(commit.filepath));
+            loadRequestTexIndices.push_back(getUniqueTextureIndex(loadRequest->filepath));
         }
     }
 
@@ -191,25 +281,23 @@ void RprUsdMaterialRegistry::CommitResources(
     // Create rpr::Image for each previously read unique texture
     // XXX(RPR): so as RPR API is single-threaded we cannot parallelize this
     //
-    for (size_t i = 0; i < m_textureCommits.size(); ++i) {
-        auto& commitTexIndices = uniqueTextureIndicesPerCommit[i];
-        if (commitTexIndices.empty()) continue;
+    for (size_t i = 0; i < textureLoadRequests.size(); ++i) {
+        auto& loadRequestTexIndices = uniqueTextureIndicesPerLoadRequest[i];
+        if (loadRequestTexIndices.empty()) continue;
 
         std::vector<RprUsdCoreImage::UDIMTile> tiles;
-        tiles.reserve(commitTexIndices.size());
-        for (auto uniqueTextureIdx : commitTexIndices) {
+        tiles.reserve(loadRequestTexIndices.size());
+        for (auto uniqueTextureIdx : loadRequestTexIndices) {
             auto& texture = uniqueTextures[uniqueTextureIdx];
             if (!texture.data) continue;
 
             tiles.emplace_back(texture.udimTileId, texture.data.operator->());
         }
 
-        auto& commit = m_textureCommits[i];
-        auto coreImage = imageCache->GetImage(commit.filepath, commit.colorspace, commit.wrapType, tiles, commit.numComponentsRequired);
-        commit.setTextureCallback(coreImage);
+        auto& loadRequest = textureLoadRequests[i];
+        auto coreImage = imageCache->GetImage(loadRequest->filepath, loadRequest->colorspace, loadRequest->wrapType, tiles, loadRequest->numComponentsRequired);
+        loadRequest->onDidLoadTexture(coreImage);
     }
-
-    m_textureCommits.clear();
 }
 
 namespace {
@@ -307,50 +395,86 @@ void DumpMaterialNetwork(HdMaterialNetworkMap const& networkMap) {
     }
 }
 
-void ConvertLegacyHdMaterialNetwork(
-    HdMaterialNetworkMap const& hdNetworkMap,
-    RprUsd_MaterialNetwork *result) {
-
-    for (auto& entry : hdNetworkMap.map) {
-        auto& terminalName = entry.first;
-        auto& hdNetwork = entry.second;
-
-        // Transfer over individual nodes
-        for (auto& node : hdNetwork.nodes) {
-            // Check if this node is a terminal
-            auto termIt = std::find(hdNetworkMap.terminals.begin(), hdNetworkMap.terminals.end(), node.path);
-            if (termIt != hdNetworkMap.terminals.end()) {
-                result->terminals.emplace(
-                    terminalName,
-                    RprUsd_MaterialNetwork::Connection{node.path, terminalName});
-            }
-
-            if (result->nodes.count(node.path)) {
-                continue;
-            }
-
-            auto& newNode = result->nodes[node.path];
-            newNode.nodeTypeId = node.identifier;
-            newNode.parameters = node.parameters;
-        }
-
-        // Transfer relationships to inputConnections on receiving/downstream nodes.
-        for (HdMaterialRelationship const& rel : hdNetwork.relationships) {
-            // outputId (in hdMaterial terms) is the input of the receiving node
-            auto const& iter = result->nodes.find(rel.outputId);
-            // skip connection if the destination node doesn't exist
-            if (iter == result->nodes.end()) {
-                continue;
-            }
-            auto &connection = iter->second.inputConnections[rel.outputName];
-            connection.upstreamNode = rel.inputId;
-            connection.upstreamOutputName = rel.inputName;
-        }
-
-        // Currently unused
-        // Transfer primvars:
-        //result->primvars.insert(hdNetwork.primvars.begin(), hdNetwork.primvars.end());
+RprUsdMaterial* CreateMaterialXFromUsdShade(
+    SdfPath const& materialPath,
+    RprUsd_MaterialBuilderContext const& context,
+    std::string* materialXStdlibPath) {
+#ifdef USE_USDSHADE_MTLX
+    auto terminalIt = context.materialNetwork->terminals.find(HdMaterialTerminalTokens->surface);
+    if (terminalIt == context.materialNetwork->terminals.end()) {
+        return nullptr;
     }
+    RprUsd_MaterialNetworkConnection const& nodeConnection = terminalIt->second;
+
+    SdfPath const& nodePath = nodeConnection.upstreamNode;
+    auto nodeIt = context.materialNetwork->nodes.find(nodePath);
+    if (nodeIt == context.materialNetwork->nodes.end()) {
+        return nullptr;
+    }
+
+    HdMaterialNode2 const& terminalNode = nodeIt->second;
+
+    SdrRegistry &sdrRegistry = SdrRegistry::GetInstance();
+    SdrShaderNodeConstPtr const mtlxSdrNode = sdrRegistry.GetShaderNodeByIdentifierAndType(terminalNode.nodeTypeId, _tokens->mtlx);
+
+    if (!mtlxSdrNode) {
+        return nullptr;
+    }
+
+    if (materialXStdlibPath->empty()) {
+        const TfType schemaBaseType = TfType::Find<UsdSchemaBase>();
+        PlugPluginPtr usdPlugin = PlugRegistry::GetInstance().GetPluginForType(schemaBaseType);
+        if (usdPlugin) {
+            std::string usdLibPath = usdPlugin->GetPath();
+            std::string usdDir = TfNormPath(TfGetPathName(usdLibPath) + "..");
+            *materialXStdlibPath = usdDir;
+        }
+    }
+    
+    mx::DocumentPtr stdLibraries = mx::createDocument();
+
+    if (!materialXStdlibPath->empty()) {
+        mx::FilePathVec libraryFolders = {"libraries"};
+        mx::FileSearchPath searchPath;
+        searchPath.append(mx::FilePath(*materialXStdlibPath));
+        mx::loadLibraries(libraryFolders, searchPath, stdLibraries);
+    }
+
+    MaterialX::StringMap textureMap;
+    std::set<SdfPath> hdTextureNodes;
+    mx::DocumentPtr mtlxDoc;
+    try {
+        mtlxDoc = HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
+            *context.materialNetwork,
+            terminalNode,
+            materialPath,
+            stdLibraries,
+            &hdTextureNodes,
+            &textureMap);
+    } catch (MaterialX::Exception& e) {
+        TF_RUNTIME_ERROR("Failed to convert HdNetwork to MaterialX document: %s", e.what());
+        return nullptr;
+    }
+
+    std::string mtlxString = mx::writeToXmlString(mtlxDoc, nullptr);
+    rpr::MaterialNode* mtlxNode = RprUsd_CreateRprMtlxFromString(mtlxString, context);
+    if (!mtlxNode) {
+        return nullptr;
+    }
+
+    struct RprUsdMaterial_RprApiMtlx : public RprUsdMaterial {
+        RprUsdMaterial_RprApiMtlx(rpr::MaterialNode* retainedNode)
+            : m_retainedNode(retainedNode) {
+            // TODO: fill m_uvPrimvarName
+            m_surfaceNode = m_retainedNode.get();
+        }
+
+        std::unique_ptr<rpr::MaterialNode> m_retainedNode;
+    };
+    return new RprUsdMaterial_RprApiMtlx(mtlxNode);
+#else
+    return nullptr;
+#endif // USE_USDSHADE_MTLX
 }
 
 } // namespace anonymous
@@ -360,23 +484,35 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     HdSceneDelegate* sceneDelegate,
     HdMaterialNetworkMap const& legacyNetworkMap,
     rpr::Context* rprContext,
-    RprUsdImageCache* imageCache) const {
+    RprUsdImageCache* imageCache) {
 
     if (TfDebug::IsEnabled(RPR_USD_DEBUG_DUMP_MATERIALS)) {
         DumpMaterialNetwork(legacyNetworkMap);
     }
 
-    // HdMaterialNetworkMap is deprecated,
-    // convert HdMaterialNetwork over to the new description
-    // so we do not have to redo all the code when new description comes in Hd
+    bool isVolume = false;
     RprUsd_MaterialNetwork network;
-    ConvertLegacyHdMaterialNetwork(legacyNetworkMap, &network);
+    RprUsd_MaterialNetworkFromHdMaterialNetworkMap(legacyNetworkMap, &network, &isVolume);
+
+    // HdMaterialNetwork2ConvertFromHdMaterialNetworkMap leaves terminal's upstreamOutputName empty,
+    // material graph traversing logic relies on the fact that all upstreamOutputName are valid.
+    for (auto& entry : network.terminals) {
+        entry.second.upstreamOutputName = entry.first;
+    }
 
     RprUsd_MaterialBuilderContext context = {};
-    context.hdMaterialNetwork = &network;
+    context.materialNetwork = &network;
     context.rprContext = rprContext;
     context.imageCache = imageCache;
+#ifdef USE_CUSTOM_MATERIALX_LOADER
     context.mtlxLoader = m_mtlxLoader.get();
+#endif // USE_CUSTOM_MATERIALX_LOADER
+
+    if (!isVolume) {
+        if (auto usdShadeMtlxMaterial = CreateMaterialXFromUsdShade(materialId, context, &m_materialXStdlibPath)) {
+            return usdShadeMtlxMaterial;
+        }
+    }
 
     // The simple wrapper to retain material nodes that are used to build terminal outputs
     struct RprUsdGraphBasedMaterial : public RprUsdMaterial {
@@ -470,9 +606,9 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     }
 
     std::set<SdfPath> visited;
-    std::function<VtValue(RprUsd_MaterialNetwork::Connection const&)> getNodeOutput =
+    std::function<VtValue(RprUsd_MaterialNetworkConnection const&)> getNodeOutput =
         [&materialNodes, &network, &getNodeOutput, &visited]
-        (RprUsd_MaterialNetwork::Connection const& nodeConnection) -> VtValue {
+        (RprUsd_MaterialNetworkConnection const& nodeConnection) -> VtValue {
         auto& nodePath = nodeConnection.upstreamNode;
 
         auto nodeIt = network.nodes.find(nodePath);
@@ -491,7 +627,14 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
                 visited.insert(nodePath);
 
                 for (auto& inputConnection : node.inputConnections) {
-                    auto& connection = inputConnection.second;
+                    auto& connections = inputConnection.second;
+                    if (connections.size() != 1) {
+                        if (connections.size() > 1) {
+                            TF_RUNTIME_ERROR("Connected array elements are not supported. Please report this.");
+                        }
+                        continue;
+                    }
+                    RprUsd_MaterialNetworkConnection const& connection = connections[0];
 
                     auto nodeOutput = getNodeOutput(connection);
                     if (!nodeOutput.IsEmpty()) {
@@ -511,7 +654,14 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             if (node.inputConnections.empty()) {
                 return VtValue();
             } else {
-                return getNodeOutput(node.inputConnections.begin()->second);
+                auto& connections = node.inputConnections.begin()->second;
+                if (connections.size() != 1) {
+                    if (connections.size() > 1) {
+                        TF_RUNTIME_ERROR("Connected array elements are not supported. Please report this.");
+                    }
+                    return VtValue();
+                }
+                return getNodeOutput(connections[0]);
             }
         }
     };
@@ -529,42 +679,17 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     auto surfaceOutput = getTerminalOutput(HdMaterialTerminalTokens->surface);
     auto displacementOutput = getTerminalOutput(HdMaterialTerminalTokens->displacement);
 
-    int materialRprId = -1;
-    std::string const* cryptomatteName = nullptr;
-
-    auto surfaceTerminalIt = network.terminals.find(HdMaterialTerminalTokens->surface);
-    if (surfaceTerminalIt != network.terminals.end()) {
-        auto& surfaceNodePath = surfaceTerminalIt->second.upstreamNode;
-
-        auto surfaceNodeIt = network.nodes.find(surfaceNodePath);
-        if (surfaceNodeIt != network.nodes.end()) {
-            auto& parameters = surfaceNodeIt->second.parameters;
-
-            auto idIt = parameters.find(RprUsdTokens->id);
-            if (idIt != parameters.end()) {
-                auto& value = idIt->second;
-
-                if (value.IsHolding<int>()) {
-                    materialRprId = value.UncheckedGet<int>();
-                }
-            }
-
-            auto cryptomatteNameIt = parameters.find(RprUsdTokens->cryptomatteName);
-            if (cryptomatteNameIt != parameters.end()) {
-                auto& value = cryptomatteNameIt->second;
-
-                if (value.IsHolding<std::string>()) {
-                    cryptomatteName = &value.UncheckedGet<std::string>();
-                }
-            }
-        }
+    int materialRprId = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialId).GetWithDefault(-1);
+    std::string cryptomatteName = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialAssetName).GetWithDefault(std::string{});
+    if (cryptomatteName.empty()) {
+        cryptomatteName = materialId.GetString();
     }
 
-    if (!cryptomatteName) {
-        cryptomatteName = &materialId.GetString();
+    if (out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId)) {
+        return out.release();
     }
 
-    return out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName->c_str(), materialRprId) ? out.release() : nullptr;
+    return nullptr;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

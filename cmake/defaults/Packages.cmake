@@ -45,7 +45,6 @@ if(NOT USDMonolithic_FOUND)
         endif()
     else()
         message(STATUS "Configuring usdview plugin")
-        list(APPEND CMAKE_PREFIX_PATH ${pxr_DIR})
     endif()
 else()
     message(STATUS "Configuring usdview plugin: monolithic USD")
@@ -53,6 +52,22 @@ endif()
 
 if(NOT pxr_FOUND AND NOT HoudiniUSD_FOUND AND NOT USDMonolithic_FOUND)
     message(FATAL_ERROR "Required: USD install or Houdini with included USD.")
+endif()
+
+if(NOT HoudiniUSD_FOUND)
+    list(APPEND CMAKE_PREFIX_PATH ${pxr_DIR})
+    find_program(USD_SCHEMA_GENERATOR
+        NAMES usdGenSchema.py usdGenSchema
+        PATHS ${pxr_DIR}/bin
+        REQUIRED
+        NO_DEFAULT_PATH)
+    if(USD_SCHEMA_GENERATOR)
+        list(PREPEND USD_SCHEMA_GENERATOR python)
+    endif()
+endif()
+
+if(NOT USD_SCHEMA_GENERATOR)
+    message(FATAL_ERROR "Failed to find usd schema generator - usdGenSchema")
 endif()
 
 find_package(Rpr REQUIRED)
@@ -88,7 +103,7 @@ if(HoudiniUSD_FOUND)
     set(OPENEXR_LIB_LOCATION ${Houdini_LIB_DIR})
 else()
     # We are using python to generate source files
-    find_package(PythonInterp 2.7 REQUIRED)
+    find_package(PythonInterp 2.7)
 endif()
 
 if (NOT PXR_MALLOC_LIBRARY)
@@ -97,7 +112,13 @@ if (NOT PXR_MALLOC_LIBRARY)
     endif()
 endif()
 
-find_package(MaterialX QUIET)
+if(NOT MaterialX_FOUND)
+    find_package(MaterialX QUIET)
+endif()
+
+if(MaterialX_FOUND)
+    set(RPR_DISABLE_CUSTOM_MATERIALX_LOADER ON)
+endif()
 
 if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
     find_package(Vulkan REQUIRED)

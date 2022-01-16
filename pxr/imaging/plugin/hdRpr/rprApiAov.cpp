@@ -66,7 +66,7 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
     m_aov->AttachAs(rprAovType);
 
     // XXX (Hybrid): Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)
-    if (rprContextMetadata.pluginType != kPluginHybrid) {
+    if (!RprUsdIsHybrid(rprContextMetadata.pluginType)) {
         m_resolved = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height);
     }
 }
@@ -314,6 +314,30 @@ void HdRprApiColorAov::SetTonemap(TonemapParams const& params) {
     }
 }
 
+void HdRprApiColorAov::SetGamma(GammaParams const& params) {
+    bool isGammaEnabled = m_enabledFilters & kFilterGamma;
+    bool gammaEnableDirty = params.enable != isGammaEnabled;
+    
+    SetFilter(kFilterGamma, params.enable);
+
+    if (m_gamma != params) {
+        m_gamma = params;
+
+        if (!gammaEnableDirty && isGammaEnabled) {
+            if (m_mainFilterType == kFilterGamma) {
+                m_filter.get()->SetParam("gamma", m_gamma.value);
+            } else {
+                for (auto& entry : m_auxFilters) {
+                    if (entry.first == kFilterGamma) {
+                        entry.second.get()->SetParam("gamma", m_gamma.value);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
 void HdRprApiColorAov::SetTonemapFilterParams(rif::Filter* filter) {
     filter->SetParam("exposureTime", m_tonemap.exposureTime);
     filter->SetParam("sensitivity", m_tonemap.sensitivity);
@@ -357,7 +381,8 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
         if ((m_enabledFilters & kFilterAIDenoise) ||
             (m_enabledFilters & kFilterEAWDenoise) ||
             (m_enabledFilters & kFilterComposeOpacity) ||
-            (m_enabledFilters & kFilterTonemap)) {
+            (m_enabledFilters & kFilterTonemap) ||
+            (m_enabledFilters & kFilterGamma)) {
 
             auto addFilter = [this, &filterPool](Filter type, std::function<std::unique_ptr<rif::Filter>()> filterCreator) {
                 std::unique_ptr<rif::Filter> filter;
@@ -381,6 +406,14 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
                 addFilter(kFilterTonemap,
                     [rifContext]() {
                         return rif::Filter::CreateCustom(RIF_IMAGE_FILTER_PHOTO_LINEAR_TONEMAP, rifContext);
+                    }
+                );
+            }
+
+            if (m_enabledFilters & kFilterGamma) {
+                addFilter(kFilterGamma,
+                    [rifContext]() {
+                        return rif::Filter::CreateCustom(RIF_IMAGE_FILTER_GAMMA_CORRECTION, rifContext);
                     }
                 );
             }
@@ -480,6 +513,8 @@ void HdRprApiColorAov::ResizeFilter(int width, int height, Filter filterType, ri
         filter->SetParam("outSize", GfVec2i(width, height));
     } else if (filterType == kFilterTonemap) {
         SetTonemapFilterParams(filter);
+    } else if (filterType == kFilterGamma) {
+        filter->SetParam("gamma", m_gamma.value);
     }
 }
 
