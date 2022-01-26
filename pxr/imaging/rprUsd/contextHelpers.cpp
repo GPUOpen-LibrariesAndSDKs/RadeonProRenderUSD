@@ -45,6 +45,7 @@ using json = nlohmann::json;
 #include <fstream>
 #include <thread>
 #include <map>
+#include <iostream>
 
 #define PRINT_CONTEXT_CREATION_DEBUG_INFO(format, ...) \
     if (!TfDebug::IsEnabled(RPR_USD_DEBUG_CORE_UNSUPPORTED_ERROR)) /* empty */; else TfDebug::Helper().Msg(format, ##__VA_ARGS__)
@@ -325,6 +326,8 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         return nullptr;
     }
 
+    std::cout << "Config path: " << deviceConfigurationFilepath << '\n';
+
     DevicesConfiguration devicesConfiguration = LoadDevicesConfiguration(metadata->pluginType, deviceConfigurationFilepath);
 
     std::vector<rpr_context_properties> contextProperties;
@@ -334,12 +337,15 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
     };
 
     rpr::CreationFlags creationFlags = 0;
-    for (int gpuIndex : devicesConfiguration.gpus) {
+    /*for (int gpuIndex : devicesConfiguration.gpus) {
+        std::cout << "Use gpu: " << gpuIndex << '\n';
         if (gpuIndex >= 0 && gpuIndex < kMaxNumGpus) {
             creationFlags |= kGpuCreationFlags[gpuIndex];
         }
-    }
+    }*/
+    devicesConfiguration.numCpuThreads = 8;
     if (devicesConfiguration.numCpuThreads > 0) {
+        std::cout << "Use cpu: " << devicesConfiguration.numCpuThreads << '\n';
         creationFlags |= RPR_CREATION_FLAGS_ENABLE_CPU;
         appendContextProperty(RPR_CONTEXT_CPU_THREAD_LIMIT, (void*)(size_t)devicesConfiguration.numCpuThreads);
     }

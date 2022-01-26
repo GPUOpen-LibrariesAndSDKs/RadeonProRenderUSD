@@ -20,6 +20,8 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/material.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
 
+#include <iostream>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprBasisCurves::HdRprBasisCurves(SdfPath const& id
@@ -242,6 +244,8 @@ rpr::Curve* HdRprBasisCurves::CreateLinearRprCurve(HdRprApi* rprApi) {
     //   4 vertices and 2 radiuses per segment
     // For cylindrical curve we can leave indices data in the same format as in USD,
     //   but we have to ensure that number of indices in each curve multiple of kRprNumPointsPerSegment
+
+    std::cout << "Linear rpr curve\n";
 
     const bool periodic = m_topology.GetCurveWrap() == HdTokens->periodic;
     const bool strip = periodic || m_topology.GetCurveWrap() == HdTokens->nonperiodic;
