@@ -115,6 +115,25 @@ class "RprRendererSettingsAPI" (
         rprMinValue = 0.0
         rprMaxValue = 100.0
     )
+    uniform bool rpr:contour:useUv = true (
+        displayName = "Use UV"
+        displayGroup = "General|Render Mode|Contour"
+        doc = "Whether to use UV for edge detection or not"
+    )
+    uniform float rpr:contour:linewidthUv = 1.0 (
+        displayName = "Linewidth UV"
+        displayGroup = "General|Render Mode|Contour"
+        doc = "Linewidth of edges detected via UV."
+        rprMinValue = 0.0
+        rprMaxValue = 100.0
+    )
+    uniform float rpr:contour:uvThreshold = 1.0 (
+        displayName = "Normal Threshold"
+        displayGroup = "General|Render Mode|Contour"
+        doc = "Threshold of edges detected via UV."
+        rprMinValue = 0.0
+        rprMaxValue = 100.0
+    )
     uniform bool rpr:contour:debug = false (
         displayName = "Debug"
         displayGroup = "General|Render Mode|Contour"
