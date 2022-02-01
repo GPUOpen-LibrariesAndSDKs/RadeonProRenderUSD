@@ -3169,7 +3169,7 @@ Don't show this message again?
     }
 
     bool IsSphereAndDiskLightSupported() const {
-        return m_rprContextMetadata.pluginType == kPluginNorthstar;
+        return m_rprContextMetadata.pluginType == kPluginNorthstar || m_rprContextMetadata.pluginType == kPluginHybridPro;
     }
 
     TfToken const& GetCurrentRenderQuality() const {
