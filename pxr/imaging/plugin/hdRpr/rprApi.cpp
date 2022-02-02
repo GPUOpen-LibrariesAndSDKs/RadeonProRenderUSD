@@ -51,6 +51,7 @@ using json = nlohmann::json;
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/fileUtils.h"
+#include "pxr/base/tf/pathUtils.h"
 #include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/work/loops.h"
@@ -83,6 +84,10 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
     "Set this to override render quality coming from the render settings");
+
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    (usdFilename)
+);
 
 namespace {
 
@@ -2828,6 +2833,14 @@ Don't show this message again?
             return;
         }
 #endif // BUILD_AS_HOUDINI_PLUGIN
+
+        // Houdini does not resolve the relative path to an inexisting file, so we need to do it manually.
+        if (TfIsRelativePath(m_rprSceneExportPath)) {
+            std::string usdFilename = m_delegate->GetRenderSetting(_tokens->usdFilename, std::string());
+            if (!usdFilename.empty()) {
+                m_rprSceneExportPath = TfNormPath(TfGetPathName(usdFilename) + "/" + m_rprSceneExportPath);
+            }
+        }
 
         if (!CreateIntermediateDirectories(m_rprSceneExportPath)) {
             fprintf(stderr, "Failed to create .rpr export output directory\n");
