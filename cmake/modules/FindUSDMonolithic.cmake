@@ -9,7 +9,7 @@ find_path(USD_INCLUDE_DIR pxr/pxr.h
     NO_SYSTEM_ENVIRONMENT_PATH)
 
 find_path(USD_LIBRARY_DIR
-    NAMES "${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
+    NAMES "${PXR_LIB_PREFIX}usd_usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
     PATHS ${pxr_DIR}/lib
           $ENV{pxr_DIR}/lib
     DOC "USD Libraries directory"
@@ -18,8 +18,8 @@ find_path(USD_LIBRARY_DIR
 
 find_library(USD_MONOLITHIC_LIBRARY
     NAMES
-        usd_ms # Windows requires raw library name to find
-        ${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX} # Linux requires prefix and suffix
+        usd_usd_ms # Windows requires raw library name to find
+        ${PXR_LIB_PREFIX}usd_usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX} # Linux requires prefix and suffix
     PATHS ${USD_LIBRARY_DIR}
     NO_DEFAULT_PATH
     NO_SYSTEM_ENVIRONMENT_PATH)
@@ -75,23 +75,23 @@ if(USDMonolithic_FOUND)
         )
     endif()
 
-    add_library(usd_ms SHARED IMPORTED)
-    set_property(TARGET usd_ms APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+    add_library(usd_usd_ms SHARED IMPORTED)
+    set_property(TARGET usd_usd_ms APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
 
-    target_compile_definitions(usd_ms INTERFACE
+    target_compile_definitions(usd_usd_ms INTERFACE
         -DPXR_PYTHON_ENABLED=1)
-    target_link_libraries(usd_ms INTERFACE
+    target_link_libraries(usd_usd_ms INTERFACE
         ${USD_MONOLITHIC_LIBRARY}
         ${Boost_LIBRARIES}
         ${PYTHON_LIBRARIES})
-    target_link_directories(usd_ms INTERFACE
+    target_link_directories(usd_usd_ms INTERFACE
         ${USD_LIBRARY_DIR})
-    target_include_directories(usd_ms INTERFACE
+    target_include_directories(usd_usd_ms INTERFACE
         ${USD_INCLUDE_DIR}
         ${Boost_INCLUDE_DIRS})
-    set_target_properties(usd_ms PROPERTIES
+    set_target_properties(usd_usd_ms PROPERTIES
       IMPORTED_IMPLIB_RELEASE "${USD_MONOLITHIC_LIBRARY}"
-      IMPORTED_LOCATION_RELEASE "${USD_LIBRARY_DIR}/${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      IMPORTED_LOCATION_RELEASE "${USD_LIBRARY_DIR}/${PXR_LIB_PREFIX}usd_usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
     )
 
     foreach(targetName
@@ -101,6 +101,6 @@ if(USDMonolithic_FOUND)
         usdImaging usdImagingGL usdRiImaging usdSkelImaging usdVolImaging
         usdAppUtils usdviewq)
         add_library(${targetName} INTERFACE)
-        target_link_libraries(${targetName} INTERFACE usd_ms)
+        target_link_libraries(${targetName} INTERFACE usd_usd_ms)
     endforeach()
 endif()
