@@ -149,7 +149,7 @@ class "RprRendererSettingsAPI" (
               """
     )
 
-    uniform bool rpr:alpha:enable = true (
+    uniform bool rpr:alpha:enable = false (
         displayName = "Enable Color Alpha"
         displayGroup = "General"
         doc = ""
