@@ -13,11 +13,11 @@ limitations under the License.
 
 #include "material.h"
 #include "pxr/imaging/rprUsd/materialNodes/rpr/materialXNode.h"
+#include "pxr/usd/sdf/assetPath.h"
+#include "pxr/imaging/hd/sceneDelegate.h"
 
 #include "renderParam.h"
 #include "rprApi.h"
-
-#include "pxr/usd/sdf/assetPath.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 

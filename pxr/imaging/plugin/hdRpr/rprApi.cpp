@@ -1383,7 +1383,7 @@ public:
     }
 
     GfMatrix4d GetCameraViewMatrix() const {
-        return m_hdCamera ? m_hdCamera->GetViewMatrix() : GfMatrix4d(1.0);
+        return m_hdCamera ? m_hdCamera->GetTransform().GetInverse() : GfMatrix4d(1.0);
     }
 
     const GfMatrix4d& GetCameraProjectionMatrix() const {
@@ -1934,13 +1934,19 @@ public:
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Failed to set camera angular motion");
         } else {
-            setCameraLookAt(m_hdCamera->GetViewMatrix(), m_hdCamera->GetViewInverseMatrix());
+            setCameraLookAt(m_hdCamera->GetTransform().GetInverse(), m_hdCamera->GetTransform());
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(0.0f, 0.0f, 0.0f), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(1.0f, 0.0f, 0.0f, 0.0f), "Failed to set camera angular motion");
         }
 
         auto aspectRatio = double(m_viewportSize[0]) / m_viewportSize[1];
-        m_cameraProjectionMatrix = CameraUtilConformedWindow(m_hdCamera->GetProjectionMatrix(), m_hdCamera->GetWindowPolicy(), aspectRatio);
+
+#if PXR_VERSION >= 2203
+        GfMatrix4d projectionMatrix = m_hdCamera->ComputeProjectionMatrix();
+#else
+        GfMatrix4d projectionMatrix = m_hdCamera->GetProjectionMatrix();
+#endif
+        m_cameraProjectionMatrix = CameraUtilConformedWindow(projectionMatrix, m_hdCamera->GetWindowPolicy(), aspectRatio);
 
         float sensorWidth;
         float sensorHeight;

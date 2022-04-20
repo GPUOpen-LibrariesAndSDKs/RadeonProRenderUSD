@@ -380,7 +380,11 @@ bool HdRprDelegate::IsStopSupported() const {
     return true;
 }
 
+#if PXR_VERSION >= 2203
+bool HdRprDelegate::Stop(bool blocking) {
+#else
 bool HdRprDelegate::Stop() {
+#endif
     m_renderThread.StopRender();
     return true;
 }

@@ -88,6 +88,7 @@ pxr_library(rprUsd
         plug
         arch
         garch
+        usdShade
         work
         cpprpr
         json

@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/materialRegistry.h"
 #include "pxr/base/gf/vec2f.h"
+#include "pxr/base/gf/vec3f.h"
 
 namespace std {
 
