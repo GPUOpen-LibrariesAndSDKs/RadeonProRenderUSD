@@ -70,11 +70,19 @@ set(PXR_OBJECT_LIBS ""
     "Aggregation of all core libraries built as OBJECT libraries."
 )
 
-set(PXR_LIB_PREFIX ${CMAKE_SHARED_LIBRARY_PREFIX}
-    CACHE
-    STRING
-    "Prefix for build library name"
-)
+if(PXR_VERSION GREATER_EQUAL 2111)
+  set(PXR_LIB_PREFIX "${CMAKE_SHARED_LIBRARY_PREFIX}usd_"
+      CACHE
+      STRING
+      "Prefix for build library name"
+  )
+else()
+  set(PXR_LIB_PREFIX "${CMAKE_SHARED_LIBRARY_PREFIX}"
+      CACHE
+      STRING
+      "Prefix for build library name"
+  )
+endif()
 
 option(BUILD_SHARED_LIBS "Build shared libraries." ON)
 option(PXR_BUILD_MONOLITHIC "Build a monolithic library." OFF)

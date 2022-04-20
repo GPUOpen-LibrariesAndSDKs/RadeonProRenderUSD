@@ -62,7 +62,9 @@ if(NOT OpenEXR_FIND_COMPONENTS)
         Iex
         Imath
         IlmImf
-        IlmThread)
+        IlmThread
+        IlmImfUtil
+        IexMath)
 endif()
 
 foreach(OPENEXR_LIB ${OpenEXR_FIND_COMPONENTS})
