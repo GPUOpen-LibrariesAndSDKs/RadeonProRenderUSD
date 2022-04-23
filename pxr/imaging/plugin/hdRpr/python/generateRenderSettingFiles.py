@@ -621,6 +621,24 @@ render_setting_categories = [
         }
     },
     {
+        'name': 'Camera',
+        'settings': [
+            {
+                'name': 'core:cameraMode',
+                'ui_name': 'Camera Mode',
+                'defaultValue': 'Default',
+                'values': [
+                    SettingValue('Default'),
+                    SettingValue('Latitude Longitude 360'),
+                    SettingValue('Latitude Longitude Stereo'),
+                    SettingValue('Cubemap'),
+                    SettingValue('Cubemap Stereo'),
+                    SettingValue('Fisheye'),
+                ]
+            }
+        ]
+    },
+    {
         'name': 'UsdNativeCamera',
         'settings': [
             {

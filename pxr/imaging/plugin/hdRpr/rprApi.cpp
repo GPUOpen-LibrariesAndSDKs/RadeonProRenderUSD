@@ -1523,6 +1523,7 @@ public:
         RenderSetting<HdRprApiColorAov::GammaParams> gamma;
         RenderSetting<bool> instantaneousShutter;
         RenderSetting<TfToken> aspectRatioPolicy;
+        RenderSetting<TfToken> cameraMode;
         {
             HdRprConfig* config;
             auto configInstanceLock = m_delegate->LockConfigInstance(&config);
@@ -1550,6 +1551,8 @@ public:
                 gamma.value.value = config->GetGammaValue();
             }
 
+            cameraMode.isDirty = config->IsDirty(HdRprConfig::DirtyCamera);
+            cameraMode.value = config->GetCoreCameraMode();
             aspectRatioPolicy.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
             aspectRatioPolicy.value = config->GetAspectRatioConformPolicy();
             instantaneousShutter.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
@@ -1594,7 +1597,7 @@ public:
             UpdateSettings(*config);
             config->ResetDirty();
         }
-        UpdateCamera(aspectRatioPolicy, instantaneousShutter);
+        UpdateCamera(cameraMode, aspectRatioPolicy, instantaneousShutter);
         UpdateAovs(rprRenderParam, enableDenoise, tonemap, gamma, clearAovs);
 
         m_dirtyFlags = ChangeTracker::Clean;
@@ -1859,12 +1862,31 @@ public:
         }
     }
 
-    void UpdateCamera(RenderSetting<TfToken> const& aspectRatioPolicy, RenderSetting<bool> const& instantaneousShutter) {
+    bool GetRprCameraMode(TfToken const& mode, rpr_camera_mode* out) {
+        static std::map<TfToken, rpr_camera_mode> s_mapping = {
+            {HdRprCoreCameraModeTokens->LatitudeLongitude360, RPR_CAMERA_MODE_LATITUDE_LONGITUDE_360},
+            {HdRprCoreCameraModeTokens->LatitudeLongitudeStereo, RPR_CAMERA_MODE_LATITUDE_LONGITUDE_STEREO},
+            {HdRprCoreCameraModeTokens->Cubemap, RPR_CAMERA_MODE_CUBEMAP},
+            {HdRprCoreCameraModeTokens->CubemapStereo, RPR_CAMERA_MODE_CUBEMAP_STEREO},
+            {HdRprCoreCameraModeTokens->Fisheye, RPR_CAMERA_MODE_FISHEYE},
+        };
+
+        auto it = s_mapping.find(mode);
+        if (it == s_mapping.end()) return false;
+        *out = it->second;
+        return true;
+    }
+
+    void UpdateCamera(
+        RenderSetting<TfToken> const& cameraMode,
+        RenderSetting<TfToken> const& aspectRatioPolicy,
+        RenderSetting<bool> const& instantaneousShutter) {
         if (!m_hdCamera || !m_camera) {
             return;
         }
 
-        if (aspectRatioPolicy.isDirty ||
+        if (cameraMode.isDirty ||
+            aspectRatioPolicy.isDirty ||
             instantaneousShutter.isDirty) {
             m_dirtyFlags |= ChangeTracker::DirtyHdCamera;
         }
@@ -1977,7 +1999,10 @@ public:
 
         RPR_ERROR_CHECK(m_camera->SetLensShift(apertureOffset[0], apertureOffset[1]), "Failed to set camera lens shift");
 
-        if (projection == HdRprCamera::Orthographic) {
+        rpr_camera_mode rprCameraMode;
+        if (GetRprCameraMode(cameraMode.value, &rprCameraMode)) {
+            RPR_ERROR_CHECK(m_camera->SetMode(rprCameraMode), "Failed to set camera mode");
+        } else if (projection == HdRprCamera::Orthographic) {
             RPR_ERROR_CHECK(m_camera->SetMode(RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
             RPR_ERROR_CHECK(m_camera->SetOrthoWidth(sensorWidth), "Failed to set camera ortho width");
             RPR_ERROR_CHECK(m_camera->SetOrthoHeight(sensorHeight), "Failed to set camera ortho height");
