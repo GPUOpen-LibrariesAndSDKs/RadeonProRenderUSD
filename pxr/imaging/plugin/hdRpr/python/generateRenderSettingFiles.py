@@ -58,6 +58,7 @@ def houdini_parm_name(name):
 
 HYBRID_IS_AVAILABLE_PY_CONDITION = lambda: 'platform.system() != "Darwin"'
 NORTHSTAR_ENABLED_PY_CONDITION = lambda: 'hou.pwd().parm("{}").evalAsString() == "Northstar"'.format(houdini_parm_name('core:renderQuality'))
+NOT_NORTHSTAR_ENABLED_PY_CONDITION = lambda: 'hou.pwd().parm("{}").evalAsString() != "Northstar"'.format(houdini_parm_name('core:renderQuality'))
 
 render_setting_categories = [
     {
@@ -631,8 +632,8 @@ render_setting_categories = [
                     SettingValue('Default'),
                     SettingValue('Latitude Longitude 360'),
                     SettingValue('Latitude Longitude Stereo'),
-                    SettingValue('Cubemap'),
-                    SettingValue('Cubemap Stereo'),
+                    SettingValue('Cubemap', enable_py_condition=NOT_NORTHSTAR_ENABLED_PY_CONDITION),
+                    SettingValue('Cubemap Stereo', enable_py_condition=NOT_NORTHSTAR_ENABLED_PY_CONDITION),
                     SettingValue('Fisheye'),
                 ]
             }
