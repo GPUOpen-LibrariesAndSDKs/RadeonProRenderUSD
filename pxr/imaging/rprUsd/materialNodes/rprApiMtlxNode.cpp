@@ -19,6 +19,7 @@ limitations under the License.
 #include "rpr/baseNode.h"
 
 #include <RadeonProRender_MaterialX.h>
+#include <iostream>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -72,6 +73,7 @@ rpr::MaterialNode* RprUsd_CreateRprMtlxFromFile(std::string const& mtlxFile, Rpr
     try {
         rpr_material_node matxNodeHandle = rpr::GetRprObject(matxNode.get());
         status = rprMaterialXSetFile(matxNodeHandle, mtlxFile.c_str());
+        std::cout << "(HdRpr) Set file: " << mtlxFile << std::endl;
         if (status != RPR_SUCCESS) {
             RPR_ERROR_CHECK(status, "Failed to set matx node file");
             return nullptr;

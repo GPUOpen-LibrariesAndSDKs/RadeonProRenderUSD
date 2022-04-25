@@ -90,8 +90,9 @@ pxr_library(rprUsd
         work
         cpprpr
         json
-        MaterialXCore
-        MaterialXFormat
+        # #MTLXFIX
+        #MaterialXCore
+        #MaterialXFormat
 
     PUBLIC_CLASSES
         util
@@ -143,8 +144,9 @@ target_sources(rprUsd PRIVATE
     materialNodes/materialNode.h
     materialNodes/usdNode.h
     materialNodes/usdNode.cpp
-    materialNodes/mtlxNode.h
-    materialNodes/mtlxNode.cpp
+    # #MTLXFIX
+    #materialNodes/mtlxNode.h
+    #materialNodes/mtlxNode.cpp
     materialNodes/rprApiMtlxNode.h
     materialNodes/rprApiMtlxNode.cpp
     materialNodes/rpr/baseNode.h

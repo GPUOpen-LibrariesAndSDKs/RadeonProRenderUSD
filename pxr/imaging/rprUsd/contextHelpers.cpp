@@ -151,6 +151,7 @@ const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
     {kPluginNorthstar, "libNorthstar64.so"},
     {kPluginTahoe, "libTahoe64.so"},
     {kPluginHybrid, "Hybrid.so"},
+    {kPluginHybridPro, "HybridPro.so"},
 #elif defined __APPLE__
     {kPluginTahoe, "libTahoe64.dylib"},
     {kPluginNorthstar, "libNorthstar64.dylib"},
@@ -428,7 +429,7 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
 
     RprUsdDevicesInfo ret = {};
 
-    if (pluginType == kPluginHybrid) {
+    if (pluginType == kPluginHybrid || pluginType == kPluginHybridPro) {
         ret.cpu.numThreads = 0;
 
         std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
