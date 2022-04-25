@@ -62,7 +62,7 @@ if(NOT HoudiniUSD_FOUND)
         REQUIRED
         NO_DEFAULT_PATH)
     if(USD_SCHEMA_GENERATOR)
-        list(PREPEND USD_SCHEMA_GENERATOR python)
+        list(PREPEND USD_SCHEMA_GENERATOR ${PYTHON_EXECUTABLE})
     endif()
 endif()
 
