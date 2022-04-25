@@ -149,6 +149,12 @@ class "RprRendererSettingsAPI" (
               """
     )
 
+    uniform token rpr:core:cameraMode = "Default" (
+        allowedTokens = ["Default", "Latitude Longitude 360", "Latitude Longitude Stereo", "Cubemap", "Cubemap Stereo", "Fisheye"]
+        displayName = "Camera Mode"
+        displayGroup = "General"
+    )
+
     uniform bool rpr:alpha:enable = false (
         displayName = "Enable Color Alpha"
         displayGroup = "General"
