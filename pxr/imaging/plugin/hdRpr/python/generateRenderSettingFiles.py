@@ -523,7 +523,7 @@ render_setting_categories = [
             {
                 'name': 'alpha:enable',
                 'ui_name': 'Enable Color Alpha',
-                'defaultValue': True
+                'defaultValue': False
             }
         ]
     },
