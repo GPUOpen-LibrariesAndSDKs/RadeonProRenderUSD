@@ -143,8 +143,9 @@ private:
 
     std::string m_materialXStdlibPath;
 
-    // #MTLXFIX
-    // std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
+#ifndef MATERIALX_DISABLE
+    std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
+#endif
     bool m_mtlxDefsDirty = true;
 
     std::vector<RprUsdMaterialNodeDesc> m_registeredNodes;

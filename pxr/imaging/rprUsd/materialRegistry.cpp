@@ -32,14 +32,17 @@ limitations under the License.
 #include "pxr/usd/usd/schemaBase.h"
 
 #include "materialNodes/usdNode.h"
-// #MTLXFIX
-// #include "materialNodes/mtlxNode.h"
+#ifndef MATERIALX_DISABLE
+#include "materialNodes/mtlxNode.h"
+#endif
 #include "materialNodes/rprApiMtlxNode.h"
 #include "materialNodes/houdiniPrincipledShaderNode.h"
 
-// #include <MaterialXCore/Document.h>
-// #include <MaterialXFormat/Util.h>
-// namespace mx = MaterialX;
+#ifndef MATERIALX_DISABLE
+#include <MaterialXCore/Document.h>
+#include <MaterialXFormat/Util.h>
+namespace mx = MaterialX;
+#endif
 
 #ifdef USE_CUSTOM_MATERIALX_LOADER
 #include <MaterialXFormat/XmlIo.h>
@@ -128,7 +131,55 @@ RprUsdMaterialRegistry::~RprUsdMaterialRegistry() = default;
 std::vector<RprUsdMaterialNodeDesc> const&
 RprUsdMaterialRegistry::GetRegisteredNodes() {
     if (m_mtlxDefsDirty) {
-        // #MTLXFIX
+#ifndef MATERIALX_DISABLE
+        m_mtlxDefsDirty = false;
+
+        std::string mtlxResources = PlugFindPluginResource(PLUG_THIS_PLUGIN, "mtlx");
+        if (mtlxResources.empty()) {
+            TF_RUNTIME_ERROR("Missing mtlx resources");
+            return m_registeredNodes;
+        }
+        TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("mtlx resources: %s\n", mtlxResources.c_str());
+
+        auto rprMaterialsPath = TfAbsPath(TfNormPath(mtlxResources + "/materials"));
+
+        auto materialFiles = TfGlob(TfNormPath(rprMaterialsPath + "/*/*.mtlx"), ARCH_GLOB_DEFAULT | ARCH_GLOB_NOSORT);
+        if (materialFiles.empty()) {
+            TF_WARN("No materials found");
+        }
+
+        for (auto& file : materialFiles) {
+            TF_DEBUG(RPR_USD_DEBUG_MATERIAL_REGISTRY).Msg("Processing material: \"%s\"\n", file.c_str());
+
+            // UI Folder corresponds to subsections on UI
+            // e.g. $RPR/Patterns/material.mtlx corresponds to Pattern UI folder
+            auto uiFolder = file.substr(rprMaterialsPath.size() + 1);
+            uiFolder = TfNormPath(TfGetPathName(uiFolder));
+            if (uiFolder == ".") {
+                uiFolder = std::string();
+            }
+
+            try {
+                auto mtlxDoc = MaterialX::createDocument();
+                MaterialX::readFromXmlFile(mtlxDoc, file);
+
+                auto nodeDefs = mtlxDoc->getNodeDefs();
+                if (nodeDefs.size() == 0) {
+                    TF_WARN("\"%s\" file has no node definitions", file.c_str());
+                } else {
+                    for (auto& nodeDef : nodeDefs) {
+                        auto shaderInfo = std::make_unique<RprUsd_MtlxNodeInfo>(mtlxDoc, nodeDef, uiFolder);
+                        if (auto factory = shaderInfo->GetFactory()) {
+                            Register(TfToken(shaderInfo->GetName()), factory, shaderInfo.get());
+                            m_mtlxInfos.push_back(std::move(shaderInfo));
+                        }
+                    }
+                }
+            } catch (MaterialX::Exception& e) {
+                TF_RUNTIME_ERROR("Error on parsing of \"%s\": materialX error - %s", file.c_str(), e.what());
+            }
+        }
+#endif // MATERIALX_DISABLE
 
 #ifdef USE_CUSTOM_MATERIALX_LOADER
         if (TfGetEnvSetting(RPRUSD_USE_RPRMTLXLOADER)) {

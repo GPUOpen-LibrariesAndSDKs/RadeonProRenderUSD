@@ -91,9 +91,6 @@ pxr_library(rprUsd
         work
         cpprpr
         json
-        # #MTLXFIX
-        #MaterialXCore
-        #MaterialXFormat
 
     PUBLIC_CLASSES
         util
@@ -145,9 +142,6 @@ target_sources(rprUsd PRIVATE
     materialNodes/materialNode.h
     materialNodes/usdNode.h
     materialNodes/usdNode.cpp
-    # #MTLXFIX
-    #materialNodes/mtlxNode.h
-    #materialNodes/mtlxNode.cpp
     materialNodes/rprApiMtlxNode.h
     materialNodes/rprApiMtlxNode.cpp
     materialNodes/rpr/baseNode.h
@@ -164,6 +158,13 @@ target_sources(rprUsd PRIVATE
     materialNodes/houdiniPrincipledShaderNode.cpp
     ${RPRUSD_SCHEMA_SOURCES}
     ${RPRUSD_SCHEMA_DIR}/configured/plugInfo.json)
+
+if(MATERIALX_DISABLE)
+    target_compile_definitions(rprUsd PUBLIC MATERIALX_DISABLE)
+elseif()
+    target_link_libraries(rprUsd MaterialXCore MaterialXFormat)
+    target_sources(rprUsd PRIVATE materialNodes/mtlxNode.h materialNodes/mtlxNode.cpp)
+endif()
 
 add_subdirectory(materialNodes/mtlxFiles)
 

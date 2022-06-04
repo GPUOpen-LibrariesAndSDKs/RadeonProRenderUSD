@@ -122,12 +122,9 @@ if(NOT MaterialX_FOUND)
     find_package(MaterialX QUIET)
 endif()
 
-if(MaterialX_FOUND)
+if(MaterialX_FOUND OR MATERIALX_DISABLE)
     set(RPR_DISABLE_CUSTOM_MATERIALX_LOADER ON)
 endif()
-
-# #MTLXFIX
-set(RPR_DISABLE_CUSTOM_MATERIALX_LOADER ON)
 
 if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
     find_package(Vulkan REQUIRED)
