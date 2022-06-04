@@ -17,6 +17,7 @@ limitations under the License.
 #include "rprApi.h"
 
 #include "pxr/imaging/rprUsd/debugCodes.h"
+#include "pxr/imaging/rprUsd/tokens.h"
 
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/gf/rotation.h"
@@ -296,13 +297,25 @@ void HdRprLight::CreateAreaLightMesh(HdRprApi* rprApi, HdSceneDelegate* sceneDel
 
     HdRprGeometrySettings geomSettings = {};
 
-    // By default, conform to Karma's behavior - lights are invisible but still have an effect on the scene
     geomSettings.visibilityMask = kVisibleAll;
-    geomSettings.visibilityMask &= ~kVisiblePrimary;
-    geomSettings.visibilityMask &= ~kVisibleShadow;
-
-    auto constantPrimvars = sceneDelegate->GetPrimvarDescriptors(GetId(), HdInterpolationConstant);
-    HdRprParseGeometrySettings(sceneDelegate, GetId(), constantPrimvars, &geomSettings);
+    auto setVisibilityFlag = [&](TfToken const& name, HdRprVisibilityFlag flag) {
+        VtValue value = HdRpr_GetParam(sceneDelegate, GetId(), name);
+        if (value.IsHolding<bool>()) {
+            if (value.UncheckedGet<bool>()) {
+                geomSettings.visibilityMask |= flag;
+            } else {
+                geomSettings.visibilityMask &= ~flag;
+            }
+        }
+    };
+    setVisibilityFlag(RprUsdTokens->rprObjectVisibilityCamera, kVisiblePrimary);
+    setVisibilityFlag(RprUsdTokens->rprObjectVisibilityShadow, kVisibleShadow);
+    setVisibilityFlag(RprUsdTokens->rprObjectVisibilityReflection, kVisibleReflection);
+    setVisibilityFlag(RprUsdTokens->rprObjectVisibilityGlossyReflection, kVisibleGlossyReflection);
+    setVisibilityFlag(RprUsdTokens->rprObjectVisibilityRefraction, kVisibleRefraction);
+    setVisibilityFlag(RprUsdTokens->rprObjectVisibilityGlossyRefraction, kVisibleGlossyRefraction);
+    setVisibilityFlag(RprUsdTokens->rprObjectVisibilityDiffuse, kVisibleDiffuse);
+    setVisibilityFlag(RprUsdTokens->rprObjectVisibilityTransparent, kVisibleTransparent);
 
     for (auto& mesh : light->meshes) {
         rprApi->SetMeshVisibility(mesh, geomSettings.visibilityMask);

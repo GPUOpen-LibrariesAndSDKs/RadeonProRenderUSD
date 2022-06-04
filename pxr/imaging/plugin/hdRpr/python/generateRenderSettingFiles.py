@@ -58,6 +58,7 @@ def houdini_parm_name(name):
 
 HYBRID_IS_AVAILABLE_PY_CONDITION = lambda: 'platform.system() != "Darwin"'
 NORTHSTAR_ENABLED_PY_CONDITION = lambda: 'hou.pwd().parm("{}").evalAsString() == "Northstar"'.format(houdini_parm_name('core:renderQuality'))
+NOT_NORTHSTAR_ENABLED_PY_CONDITION = lambda: 'hou.pwd().parm("{}").evalAsString() != "Northstar"'.format(houdini_parm_name('core:renderQuality'))
 
 render_setting_categories = [
     {
@@ -523,7 +524,7 @@ render_setting_categories = [
             {
                 'name': 'alpha:enable',
                 'ui_name': 'Enable Color Alpha',
-                'defaultValue': True
+                'defaultValue': False
             }
         ]
     },
@@ -619,6 +620,24 @@ render_setting_categories = [
         'houdini': {
             'hidewhen': hidewhen_not_northstar
         }
+    },
+    {
+        'name': 'Camera',
+        'settings': [
+            {
+                'name': 'core:cameraMode',
+                'ui_name': 'Camera Mode',
+                'defaultValue': 'Default',
+                'values': [
+                    SettingValue('Default'),
+                    SettingValue('Latitude Longitude 360'),
+                    SettingValue('Latitude Longitude Stereo'),
+                    SettingValue('Cubemap', enable_py_condition=NOT_NORTHSTAR_ENABLED_PY_CONDITION),
+                    SettingValue('Cubemap Stereo', enable_py_condition=NOT_NORTHSTAR_ENABLED_PY_CONDITION),
+                    SettingValue('Fisheye'),
+                ]
+            }
+        ]
     },
     {
         'name': 'UsdNativeCamera',

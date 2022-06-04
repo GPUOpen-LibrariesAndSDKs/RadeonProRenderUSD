@@ -54,6 +54,12 @@ if(NOT pxr_FOUND AND NOT HoudiniUSD_FOUND AND NOT USDMonolithic_FOUND)
     message(FATAL_ERROR "Required: USD install or Houdini with included USD.")
 endif()
 
+if (NOT PYTHON_EXECUTABLE)
+    set(build_schema_python_exec "python")
+else()
+    set(build_schema_python_exec ${PYTHON_EXECUTABLE})
+endif()
+
 if(NOT HoudiniUSD_FOUND)
     list(APPEND CMAKE_PREFIX_PATH ${pxr_DIR})
     find_program(USD_SCHEMA_GENERATOR
@@ -62,7 +68,7 @@ if(NOT HoudiniUSD_FOUND)
         REQUIRED
         NO_DEFAULT_PATH)
     if(USD_SCHEMA_GENERATOR)
-        list(PREPEND USD_SCHEMA_GENERATOR python)
+        list(PREPEND USD_SCHEMA_GENERATOR ${build_schema_python_exec})
     endif()
 endif()
 
