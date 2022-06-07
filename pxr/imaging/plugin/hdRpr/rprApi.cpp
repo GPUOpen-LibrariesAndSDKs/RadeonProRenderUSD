@@ -1800,6 +1800,30 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RENDER_QUALITY), hybridRenderQuality), "Fail to set context hybrid render quality");
             }
         }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyHybrid) || force) {
+            auto value = preferences.GetHybridTonemapping();
+            if (value == HdRprHybridTonemappingTokens->None) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_NONE), "Failed to set tonemapping");
+            } else if (value == HdRprHybridTonemappingTokens->Filmic) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_FILMIC), "Failed to set tonemapping");
+            } else if (value == HdRprHybridTonemappingTokens->Aces) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_ACES), "Failed to set tonemapping");
+            } else if (value == HdRprHybridTonemappingTokens->Reinhard) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_REINHARD), "Failed to set tonemapping");
+            }
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyHybrid) || force) {
+            auto value = preferences.GetHybridDenoising();
+            if (value == HdRprHybridDenoisingTokens->None) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_NONE), "Failed to set denoiser");
+            } else if (value == HdRprHybridDenoisingTokens->SVGF) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_SVGF), "Failed to set denoiser");
+            } else if (value == HdRprHybridDenoisingTokens->ASVGF) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_ASVGF), "Failed to set denoiser");
+            }
+        }
     }
 
     void UpdateSettings(HdRprConfig const& preferences, bool force = false) {
@@ -1814,7 +1838,7 @@ public:
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
             m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
-        } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        } else if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             UpdateHybridSettings(preferences, force);
         }
 

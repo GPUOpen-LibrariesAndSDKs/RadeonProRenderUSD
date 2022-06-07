@@ -464,6 +464,32 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'Hybrid',
+        'settings': [
+            {
+                'name': 'hybrid:tonemapping',
+                'ui_name': 'Hybrid Tonemapping',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('Filmic'),
+                    SettingValue('Aces'),
+                    SettingValue('Reinhard')
+                ]
+            },
+            {
+                'name': 'hybrid:denoising',
+                'ui_name': 'Hybrid Denoising',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('SVGF'),
+                    SettingValue('ASVGF')
+                ]
+            }
+        ]
+    },
+    {
         'name': 'Tonemapping',
         'settings': [
             {
