@@ -126,7 +126,7 @@ pxr_library(rprUsd
         devicesConfiguration.py
 )
 
-if(PXR_VERSION GREATER_EQUAL 2108)
+if(PXR_VERSION GREATER_EQUAL 2108 AND NOT MATERIALX_DISABLE)
     target_sources(rprUsd PRIVATE hdMtlxFixed.cpp)
     target_link_libraries(rprUsd hdMtlx)
     target_compile_definitions(rprUsd PRIVATE USE_USDSHADE_MTLX)
