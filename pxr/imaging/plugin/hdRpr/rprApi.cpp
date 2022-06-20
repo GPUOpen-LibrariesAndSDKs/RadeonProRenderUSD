@@ -1802,6 +1802,33 @@ public:
         }
     }
 
+    void UpdateHybridProSettings(HdRprConfig const& preferences, bool force) {
+      if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, preferences.GetQualityRayDepth()), "Failed to set max recursion");
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetQualityRayDepthDiffuse()), "Failed to set max depth diffuse");
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetQualityRayDepthGlossy()), "Failed to set max depth glossy");
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetQualityRayDepthRefraction()), "Failed to set max depth refraction");
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
+
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
+        auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+      }
+
+      if ((preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) ||
+        preferences.IsDirty(HdRprConfig::DirtyInteractiveQuality)) || force) {
+        m_isInteractive = preferences.GetInteractiveMode();
+        auto maxRayDepth = m_isInteractive ? preferences.GetQualityInteractiveRayDepth() : preferences.GetQualityRayDepth();
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
+
+        if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
+          m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+      }
+    }
+
     void UpdateSettings(HdRprConfig const& preferences, bool force = false) {
         if (preferences.IsDirty(HdRprConfig::DirtySampling) || force) {
             m_maxSamples = preferences.GetMaxSamples();
@@ -1816,6 +1843,8 @@ public:
             UpdateTahoeSettings(preferences, force);
         } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
             UpdateHybridSettings(preferences, force);
+        } else if (m_rprContextMetadata.pluginType == kPluginHybridPro) {
+            UpdateHybridProSettings(preferences, force);
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force ||
