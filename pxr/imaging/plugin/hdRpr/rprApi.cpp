@@ -1786,6 +1786,33 @@ public:
     }
 
     void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
+        if (m_rprContextMetadata.pluginType == kPluginHybridPro) {
+            if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, preferences.GetQualityRayDepth()), "Failed to set max recursion");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetQualityRayDepthDiffuse()), "Failed to set max depth diffuse");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetQualityRayDepthGlossy()), "Failed to set max depth glossy");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetQualityRayDepthRefraction()), "Failed to set max depth refraction");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
+                auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+
+            if ((preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) ||
+                preferences.IsDirty(HdRprConfig::DirtyInteractiveQuality)) || force) {
+                m_isInteractive = preferences.GetInteractiveMode();
+                auto maxRayDepth = m_isInteractive ? preferences.GetQualityInteractiveRayDepth() : preferences.GetQualityRayDepth();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
+
+                if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
+                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+                }
+            }
+        }
+
         if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
             rpr_uint hybridRenderQuality = -1;
             if (m_currentRenderQuality == HdRprCoreRenderQualityTokens->High) {
@@ -1802,33 +1829,6 @@ public:
         }
     }
 
-    void UpdateHybridProSettings(HdRprConfig const& preferences, bool force) {
-        if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, preferences.GetQualityRayDepth()), "Failed to set max recursion");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetQualityRayDepthDiffuse()), "Failed to set max depth diffuse");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetQualityRayDepthGlossy()), "Failed to set max depth glossy");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetQualityRayDepthRefraction()), "Failed to set max depth refraction");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
-
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
-            auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
-
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
-        }
-
-        if ((preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) ||
-            preferences.IsDirty(HdRprConfig::DirtyInteractiveQuality)) || force) {
-            m_isInteractive = preferences.GetInteractiveMode();
-            auto maxRayDepth = m_isInteractive ? preferences.GetQualityInteractiveRayDepth() : preferences.GetQualityRayDepth();
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
-
-            if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
-                m_dirtyFlags |= ChangeTracker::DirtyScene;
-            }
-        }
-    }
-
     void UpdateSettings(HdRprConfig const& preferences, bool force = false) {
         if (preferences.IsDirty(HdRprConfig::DirtySampling) || force) {
             m_maxSamples = preferences.GetMaxSamples();
@@ -1841,10 +1841,8 @@ public:
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
             m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
-        } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        } else if (m_rprContextMetadata.pluginType == kPluginHybrid || m_rprContextMetadata.pluginType == kPluginHybridPro) {
             UpdateHybridSettings(preferences, force);
-        } else if (m_rprContextMetadata.pluginType == kPluginHybridPro) {
-            UpdateHybridProSettings(preferences, force);
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force ||
@@ -2334,7 +2332,7 @@ public:
     uint32_t cryptomatte_avoid_bad_float_hash(uint32_t hash) {
         // from Cryptomatte Specification version 1.2.0
         // This is for avoiding nan, inf, subnormals
-        // 
+        //
         // if all exponent bits are 0 (subnormals, +zero, -zero) set exponent to 1
         // if all exponent bits are 1 (NaNs, +inf, -inf) set exponent to 254
         uint32_t exponent = hash >> 23 & 255; // extract exponent (8 bits)
@@ -2728,12 +2726,11 @@ public:
                 }
             }
 
-            m_numSamples += m_numSamplesPerIter;
-
             auto startTime = std::chrono::high_resolution_clock::now();
 
             m_rucData.previousProgress = -1.0f;
             auto status = m_rprContext->Render();
+            m_rucData.previousProgress = -1.0f;
 
             m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
 
@@ -2759,7 +2756,7 @@ public:
 
                     // Always force denoise on the last sample because it's quite hard to match
                     // the max amount of samples and denoise controls (min iter and iter step)
-                    if (m_numSamples == m_maxSamples) {
+                    if (m_numSamples + m_numSamplesPerIter == m_maxSamples) {
                         doDenoisedResolve = true;
                     }
                 }
@@ -2779,6 +2776,8 @@ public:
 
             // As soon as the first sample has been rendered, we enable aborting
             m_isAbortingEnabled.store(true);
+
+            m_numSamples += m_numSamplesPerIter;
         }
     }
 
