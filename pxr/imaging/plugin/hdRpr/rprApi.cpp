@@ -2332,7 +2332,7 @@ public:
     uint32_t cryptomatte_avoid_bad_float_hash(uint32_t hash) {
         // from Cryptomatte Specification version 1.2.0
         // This is for avoiding nan, inf, subnormals
-        //
+        // 
         // if all exponent bits are 0 (subnormals, +zero, -zero) set exponent to 1
         // if all exponent bits are 1 (NaNs, +inf, -inf) set exponent to 254
         uint32_t exponent = hash >> 23 & 255; // extract exponent (8 bits)
