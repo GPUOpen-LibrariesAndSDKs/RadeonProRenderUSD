@@ -161,7 +161,7 @@ target_sources(rprUsd PRIVATE
 
 if(MATERIALX_DISABLE)
     target_compile_definitions(rprUsd PUBLIC MATERIALX_DISABLE)
-elseif()
+else()
     target_link_libraries(rprUsd MaterialXCore MaterialXFormat)
     target_sources(rprUsd PRIVATE materialNodes/mtlxNode.h materialNodes/mtlxNode.cpp)
 endif()
