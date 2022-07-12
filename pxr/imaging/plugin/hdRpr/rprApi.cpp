@@ -1523,6 +1523,7 @@ public:
         RenderSetting<HdRprApiColorAov::GammaParams> gamma;
         RenderSetting<bool> instantaneousShutter;
         RenderSetting<TfToken> aspectRatioPolicy;
+        RenderSetting<TfToken> cameraMode;
         {
             HdRprConfig* config;
             auto configInstanceLock = m_delegate->LockConfigInstance(&config);
@@ -1550,6 +1551,8 @@ public:
                 gamma.value.value = config->GetGammaValue();
             }
 
+            cameraMode.isDirty = config->IsDirty(HdRprConfig::DirtyCamera);
+            cameraMode.value = config->GetCoreCameraMode();
             aspectRatioPolicy.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
             aspectRatioPolicy.value = config->GetAspectRatioConformPolicy();
             instantaneousShutter.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
@@ -1594,7 +1597,7 @@ public:
             UpdateSettings(*config);
             config->ResetDirty();
         }
-        UpdateCamera(aspectRatioPolicy, instantaneousShutter);
+        UpdateCamera(cameraMode, aspectRatioPolicy, instantaneousShutter);
         UpdateAovs(rprRenderParam, enableDenoise, tonemap, gamma, clearAovs);
 
         m_dirtyFlags = ChangeTracker::Clean;
@@ -1783,6 +1786,33 @@ public:
     }
 
     void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
+        if (m_rprContextMetadata.pluginType == kPluginHybridPro) {
+            if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, preferences.GetQualityRayDepth()), "Failed to set max recursion");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetQualityRayDepthDiffuse()), "Failed to set max depth diffuse");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetQualityRayDepthGlossy()), "Failed to set max depth glossy");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetQualityRayDepthRefraction()), "Failed to set max depth refraction");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
+                auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+
+            if ((preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) ||
+                preferences.IsDirty(HdRprConfig::DirtyInteractiveQuality)) || force) {
+                m_isInteractive = preferences.GetInteractiveMode();
+                auto maxRayDepth = m_isInteractive ? preferences.GetQualityInteractiveRayDepth() : preferences.GetQualityRayDepth();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
+
+                if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
+                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+                }
+            }
+        }
+
         if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
             rpr_uint hybridRenderQuality = -1;
             if (m_currentRenderQuality == HdRprCoreRenderQualityTokens->High) {
@@ -1811,7 +1841,7 @@ public:
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
             m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
-        } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        } else if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             UpdateHybridSettings(preferences, force);
         }
 
@@ -1859,12 +1889,31 @@ public:
         }
     }
 
-    void UpdateCamera(RenderSetting<TfToken> const& aspectRatioPolicy, RenderSetting<bool> const& instantaneousShutter) {
+    bool GetRprCameraMode(TfToken const& mode, rpr_camera_mode* out) {
+        static std::map<TfToken, rpr_camera_mode> s_mapping = {
+            {HdRprCoreCameraModeTokens->LatitudeLongitude360, RPR_CAMERA_MODE_LATITUDE_LONGITUDE_360},
+            {HdRprCoreCameraModeTokens->LatitudeLongitudeStereo, RPR_CAMERA_MODE_LATITUDE_LONGITUDE_STEREO},
+            {HdRprCoreCameraModeTokens->Cubemap, RPR_CAMERA_MODE_CUBEMAP},
+            {HdRprCoreCameraModeTokens->CubemapStereo, RPR_CAMERA_MODE_CUBEMAP_STEREO},
+            {HdRprCoreCameraModeTokens->Fisheye, RPR_CAMERA_MODE_FISHEYE},
+        };
+
+        auto it = s_mapping.find(mode);
+        if (it == s_mapping.end()) return false;
+        *out = it->second;
+        return true;
+    }
+
+    void UpdateCamera(
+        RenderSetting<TfToken> const& cameraMode,
+        RenderSetting<TfToken> const& aspectRatioPolicy,
+        RenderSetting<bool> const& instantaneousShutter) {
         if (!m_hdCamera || !m_camera) {
             return;
         }
 
-        if (aspectRatioPolicy.isDirty ||
+        if (cameraMode.isDirty ||
+            aspectRatioPolicy.isDirty ||
             instantaneousShutter.isDirty) {
             m_dirtyFlags |= ChangeTracker::DirtyHdCamera;
         }
@@ -1977,7 +2026,10 @@ public:
 
         RPR_ERROR_CHECK(m_camera->SetLensShift(apertureOffset[0], apertureOffset[1]), "Failed to set camera lens shift");
 
-        if (projection == HdRprCamera::Orthographic) {
+        rpr_camera_mode rprCameraMode;
+        if (GetRprCameraMode(cameraMode.value, &rprCameraMode)) {
+            RPR_ERROR_CHECK(m_camera->SetMode(rprCameraMode), "Failed to set camera mode");
+        } else if (projection == HdRprCamera::Orthographic) {
             RPR_ERROR_CHECK(m_camera->SetMode(RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
             RPR_ERROR_CHECK(m_camera->SetOrthoWidth(sensorWidth), "Failed to set camera ortho width");
             RPR_ERROR_CHECK(m_camera->SetOrthoHeight(sensorHeight), "Failed to set camera ortho height");
@@ -2674,11 +2726,12 @@ public:
                 }
             }
 
+            m_numSamples += m_numSamplesPerIter;
+
             auto startTime = std::chrono::high_resolution_clock::now();
 
             m_rucData.previousProgress = -1.0f;
             auto status = m_rprContext->Render();
-            m_rucData.previousProgress = -1.0f;
 
             m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
 
@@ -2704,7 +2757,7 @@ public:
 
                     // Always force denoise on the last sample because it's quite hard to match
                     // the max amount of samples and denoise controls (min iter and iter step)
-                    if (m_numSamples + m_numSamplesPerIter == m_maxSamples) {
+                    if (m_numSamples == m_maxSamples) {
                         doDenoisedResolve = true;
                     }
                 }
@@ -2724,8 +2777,6 @@ public:
 
             // As soon as the first sample has been rendered, we enable aborting
             m_isAbortingEnabled.store(true);
-
-            m_numSamples += m_numSamplesPerIter;
         }
     }
 
