@@ -31,6 +31,8 @@ option(RPR_ENABLE_VULKAN_INTEROP_SUPPORT OFF "Build hdRpr with Vulkan interop su
 
 option(PXR_SYMLINK_HEADER_FILES "Symlink the header files from, ie, pxr/base/lib/tf to CMAKE_DIR/pxr/base/tf, instead of copying; ensures that you may edit the header file in either location, and improves experience in IDEs which find normally the \"copied\" header, ie, CLion; has no effect on windows" OFF)
 
+option(MAYAUSD_OPENEXR_STATIC "Make static linking of OpenEXR for Maya USD" OFF)
+
 # Precompiled headers are a win on Windows, not on gcc.
 set(pxr_enable_pch "OFF")
 if(MSVC)
