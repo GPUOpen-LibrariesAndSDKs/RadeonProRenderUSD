@@ -2726,8 +2726,6 @@ public:
                 }
             }
 
-            m_numSamples += m_numSamplesPerIter;
-
             auto startTime = std::chrono::high_resolution_clock::now();
 
             m_rucData.previousProgress = -1.0f;
@@ -2757,7 +2755,7 @@ public:
 
                     // Always force denoise on the last sample because it's quite hard to match
                     // the max amount of samples and denoise controls (min iter and iter step)
-                    if (m_numSamples == m_maxSamples) {
+                    if (m_numSamples + m_numSamplesPerIter == m_maxSamples) {
                         doDenoisedResolve = true;
                     }
                 }
@@ -2777,6 +2775,8 @@ public:
 
             // As soon as the first sample has been rendered, we enable aborting
             m_isAbortingEnabled.store(true);
+
+            m_numSamples += m_numSamplesPerIter;
         }
     }
 
