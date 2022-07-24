@@ -154,17 +154,24 @@ macro(find_exr)
     endif()
 endmacro()
 
-find_exr(Half IlmImf Iex)
-
 set(RPR_EXR_EXPORT_ENABLED TRUE)
-if(NOT OpenEXR_FOUND)
-    set(RPR_EXR_EXPORT_ENABLED FALSE)
+
+if(HoudiniUSD_FOUND)
+    find_exr(OpenEXR OpenEXRCore Iex)
 endif()
 
-find_exr(Half)
-
 if(NOT OpenEXR_FOUND)
-    message(FATAL_ERROR "Failed to find Half library")
+    find_exr(Half IlmImf Iex)
+
+    if(NOT OpenEXR_FOUND)
+        set(RPR_EXR_EXPORT_ENABLED FALSE)
+    endif()
+
+    find_exr(Half)
+
+    if(NOT OpenEXR_FOUND)
+        message(FATAL_ERROR "Failed to find Half library")
+    endif()
 endif()
 
 # ----------------------------------------------

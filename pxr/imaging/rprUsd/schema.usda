@@ -149,8 +149,8 @@ class "RprRendererSettingsAPI" (
               """
     )
 
-    uniform token rpr:core:cameraMode = "Default" (
-        allowedTokens = ["Default", "Latitude Longitude 360", "Latitude Longitude Stereo", "Cubemap", "Cubemap Stereo", "Fisheye"]
+    uniform token rpr:core:cameraMode = "default" (
+        allowedTokens = ["default", "Latitude Longitude 360", "Latitude Longitude Stereo", "Cubemap", "Cubemap Stereo", "Fisheye"]
         displayName = "Camera Mode"
         displayGroup = "General"
     )
