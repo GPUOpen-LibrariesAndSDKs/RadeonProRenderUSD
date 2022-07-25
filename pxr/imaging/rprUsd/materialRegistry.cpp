@@ -30,6 +30,8 @@ limitations under the License.
 #include "pxr/base/work/loops.h"
 #include "pxr/usd/sdr/registry.h"
 #include "pxr/usd/usd/schemaBase.h"
+#include "pxr/usd/usdShade/tokens.h"
+#include "pxr/imaging/hd/sceneDelegate.h"
 
 #include "materialNodes/usdNode.h"
 #include "materialNodes/mtlxNode.h"
@@ -59,7 +61,7 @@ HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
 #else
 void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
     HdMaterialNetworkMap const& hdNetworkMap,
-    RprUsd_MaterialNetwork* result,
+    RprUsd_MaterialNetwork& result,
     bool* isVolume) {
     for (auto& entry : hdNetworkMap.map) {
         auto& terminalName = entry.first;
@@ -70,16 +72,16 @@ void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
             // Check if this node is a terminal
             auto termIt = std::find(hdNetworkMap.terminals.begin(), hdNetworkMap.terminals.end(), node.path);
             if (termIt != hdNetworkMap.terminals.end()) {
-                result->terminals.emplace(
+                result.terminals.emplace(
                     terminalName,
                     RprUsd_MaterialNetworkConnection{ node.path, terminalName });
             }
 
-            if (result->nodes.count(node.path)) {
+            if (result.nodes.count(node.path)) {
                 continue;
             }
 
-            auto& newNode = result->nodes[node.path];
+            auto& newNode = result.nodes[node.path];
             newNode.nodeTypeId = node.identifier;
             newNode.parameters = node.parameters;
         }
@@ -87,9 +89,9 @@ void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
         // Transfer relationships to inputConnections on receiving/downstream nodes.
         for (HdMaterialRelationship const& rel : hdNetwork.relationships) {
             // outputId (in hdMaterial terms) is the input of the receiving node
-            auto const& iter = result->nodes.find(rel.outputId);
+            auto const& iter = result.nodes.find(rel.outputId);
             // skip connection if the destination node doesn't exist
-            if (iter == result->nodes.end()) {
+            if (iter == result.nodes.end()) {
                 continue;
             }
             auto &connections = iter->second.inputConnections[rel.outputName];
@@ -98,7 +100,7 @@ void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
 
         // Currently unused
         // Transfer primvars:
-        //result->primvars.insert(hdNetwork.primvars.begin(), hdNetwork.primvars.end());
+        //result.primvars.insert(hdNetwork.primvars.begin(), hdNetwork.primvars.end());
     }
 }
 #endif // USE_USDSHADE_MTLX
@@ -400,7 +402,7 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     RprUsd_MaterialBuilderContext const& context,
     std::string* materialXStdlibPath) {
 #ifdef USE_USDSHADE_MTLX
-    auto terminalIt = context.materialNetwork->terminals.find(HdMaterialTerminalTokens->surface);
+    auto terminalIt = context.materialNetwork->terminals.find(UsdShadeTokens->surface);
     if (terminalIt == context.materialNetwork->terminals.end()) {
         return nullptr;
     }
@@ -492,7 +494,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
 
     bool isVolume = false;
     RprUsd_MaterialNetwork network;
-    RprUsd_MaterialNetworkFromHdMaterialNetworkMap(legacyNetworkMap, &network, &isVolume);
+    RprUsd_MaterialNetworkFromHdMaterialNetworkMap(legacyNetworkMap, network, &isVolume);
 
     // HdMaterialNetwork2ConvertFromHdMaterialNetworkMap leaves terminal's upstreamOutputName empty,
     // material graph traversing logic relies on the fact that all upstreamOutputName are valid.
@@ -675,9 +677,9 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
         return getNodeOutput(terminalIt->second);
     };
 
-    auto volumeOutput = getTerminalOutput(HdMaterialTerminalTokens->volume);
-    auto surfaceOutput = getTerminalOutput(HdMaterialTerminalTokens->surface);
-    auto displacementOutput = getTerminalOutput(HdMaterialTerminalTokens->displacement);
+    auto volumeOutput = getTerminalOutput(UsdShadeTokens->volume);
+    auto surfaceOutput = getTerminalOutput(UsdShadeTokens->surface);
+    auto displacementOutput = getTerminalOutput(UsdShadeTokens->displacement);
 
     int materialRprId = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialId).GetWithDefault(-1);
     std::string cryptomatteName = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialAssetName).GetWithDefault(std::string{});
