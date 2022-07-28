@@ -1715,6 +1715,8 @@ public:
             auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
 
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_IMAGE_FILTER_RADIUS, preferences.GetQualityImageFilterRadius()), "Failed to set Pixel filter width");
+
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
