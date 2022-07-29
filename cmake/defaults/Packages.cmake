@@ -154,7 +154,11 @@ macro(find_exr)
     endif()
 endmacro()
 
-find_exr(Half IlmImf Iex)
+if (NOT MAYAUSD_OPENEXR_STATIC)
+    find_exr(Half IlmImf Iex)
+else()
+    find_exr(Half IlmImf Iex IlmThread zlib)
+endif()
 
 set(RPR_EXR_EXPORT_ENABLED TRUE)
 if(NOT OpenEXR_FOUND)
