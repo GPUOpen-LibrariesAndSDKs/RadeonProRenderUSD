@@ -7,6 +7,8 @@
 #include "pxr/base/arch/attributes.h"
 #include "pxr/base/gf/matrix3f.h"
 
+#include <unordered_map>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,

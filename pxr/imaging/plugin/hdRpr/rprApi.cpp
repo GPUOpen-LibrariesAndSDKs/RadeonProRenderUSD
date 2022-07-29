@@ -69,6 +69,8 @@ using json = nlohmann::json;
 #include <ImfOutputFile.h>
 #include <ImfChannelList.h>
 #include <ImfStringAttribute.h>
+#include <ImfFrameBuffer.h>
+#include <ImfHeader.h>
 #endif // RPR_EXR_EXPORT_ENABLED
 
 #ifdef BUILD_AS_HOUDINI_PLUGIN

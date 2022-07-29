@@ -23,7 +23,9 @@
 #
 
 find_path(OPENEXR_INCLUDE_DIR
+NAMES
     OpenEXR/half.h
+    Imath/half.h
 HINTS
     "${OPENEXR_LOCATION}"
     "$ENV{OPENEXR_LOCATION}"
@@ -67,6 +69,8 @@ if(NOT OpenEXR_FIND_COMPONENTS)
         IexMath)
 endif()
 
+set(OPENEXR_LIBRARY_VARS)
+set(OPENEXR_LIBRARIES)
 foreach(OPENEXR_LIB ${OpenEXR_FIND_COMPONENTS})
 
     # OpenEXR libraries may be suffixed with the version number, so we search
@@ -86,20 +90,20 @@ foreach(OPENEXR_LIB ${OpenEXR_FIND_COMPONENTS})
             "OPENEXR's ${OPENEXR_LIB} library path"
     )
 
-    if(OPENEXR_${OPENEXR_LIB}_LIBRARY)
-        list(APPEND OPENEXR_LIBRARIES ${OPENEXR_${OPENEXR_LIB}_LIBRARY})
-    endif()
+    list(APPEND OPENEXR_LIBRARY_VARS OPENEXR_${OPENEXR_LIB}_LIBRARY)
+    list(APPEND OPENEXR_LIBRARIES ${OPENEXR_${OPENEXR_LIB}_LIBRARY})
 endforeach(OPENEXR_LIB)
 
 # So #include <half.h> works
 list(APPEND OPENEXR_INCLUDE_DIRS ${OPENEXR_INCLUDE_DIR})
 list(APPEND OPENEXR_INCLUDE_DIRS ${OPENEXR_INCLUDE_DIR}/OpenEXR)
+list(APPEND OPENEXR_INCLUDE_DIRS ${OPENEXR_INCLUDE_DIR}/Imath)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(OpenEXR
     REQUIRED_VARS
         OPENEXR_INCLUDE_DIRS
-        OPENEXR_LIBRARIES
+        ${OPENEXR_LIBRARY_VARS}
     VERSION_VAR
         OPENEXR_VERSION
 )
