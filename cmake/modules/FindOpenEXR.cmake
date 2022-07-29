@@ -33,7 +33,8 @@ PATH_SUFFIXES
     include/
 DOC
     "OpenEXR headers path"
-)
+NO_DEFAULT_PATH
+NO_SYSTEM_ENVIRONMENT_PATH)
 
 if(OPENEXR_INCLUDE_DIR)
   set(openexr_config_file "${OPENEXR_INCLUDE_DIR}/OpenEXR/OpenEXRConfig.h")
@@ -88,7 +89,8 @@ foreach(OPENEXR_LIB ${OpenEXR_FIND_COMPONENTS})
             lib/
         DOC
             "OPENEXR's ${OPENEXR_LIB} library path"
-    )
+        NO_DEFAULT_PATH
+        NO_SYSTEM_ENVIRONMENT_PATH)
 
     list(APPEND OPENEXR_LIBRARY_VARS OPENEXR_${OPENEXR_LIB}_LIBRARY)
     list(APPEND OPENEXR_LIBRARIES ${OPENEXR_${OPENEXR_LIB}_LIBRARY})
