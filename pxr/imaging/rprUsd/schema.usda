@@ -271,6 +271,15 @@ class "RprRendererSettingsAPI" (
         rprMaxValue = 1000000
     )
 
+    # northstar only
+    uniform float rpr:quality:imageFilterRadius = 1.5 (
+        displayGroup = "Quality"
+        displayName = "Pixel filter width"
+        doc = "Determines Pixel filter width (anti-aliasing)."
+        rprMinValue = 0.0
+        rprMaxValue = 5.0
+    )
+
     # not for hybrid
     uniform int rpr:quality:interactive:rayDepth = 2 (
         displayName = "Max Ray Depth"
