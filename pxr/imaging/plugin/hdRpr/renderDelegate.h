@@ -94,7 +94,11 @@ public:
 
 #if PXR_VERSION >= 2005
     bool IsStopSupported() const override;
+#if PXR_VERSION >= 2203
+    bool Stop(bool blocking = true) override;
+#else
     bool Stop() override;
+#endif
     bool Restart() override;
     void SetDrivers(HdDriverVector const& drivers) override;
 #endif // PXR_VERSION >= 2005

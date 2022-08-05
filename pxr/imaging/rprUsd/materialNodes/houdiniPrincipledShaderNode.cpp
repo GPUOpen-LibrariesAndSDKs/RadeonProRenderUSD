@@ -19,6 +19,8 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/materialMappings.h"
 #include "pxr/imaging/rprUsd/materialHelpers.h"
 #include "pxr/base/tf/staticTokens.h"
+#include "pxr/usd/usdShade/tokens.h"
+#include "pxr/imaging/hd/sceneDelegate.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -463,7 +465,7 @@ RprUsd_HoudiniPrincipledNode::RprUsd_HoudiniPrincipledNode(
 }
 
 VtValue RprUsd_HoudiniPrincipledNode::GetOutput(TfToken const& outputId) {
-    if (outputId == HdMaterialTerminalTokens->displacement) {
+    if (outputId == UsdShadeTokens->displacement) {
         return m_displacementOutput;
     } else {
         return RprUsd_BaseRuntimeNode::GetOutput(outputId);

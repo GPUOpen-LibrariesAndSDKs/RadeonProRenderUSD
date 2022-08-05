@@ -54,6 +54,12 @@ if(NOT pxr_FOUND AND NOT HoudiniUSD_FOUND AND NOT USDMonolithic_FOUND)
     message(FATAL_ERROR "Required: USD install or Houdini with included USD.")
 endif()
 
+if (NOT PYTHON_EXECUTABLE)
+    set(build_schema_python_exec "python")
+else()
+    set(build_schema_python_exec ${PYTHON_EXECUTABLE})
+endif()
+
 if(NOT HoudiniUSD_FOUND)
     list(APPEND CMAKE_PREFIX_PATH ${pxr_DIR})
     find_program(USD_SCHEMA_GENERATOR
@@ -62,7 +68,7 @@ if(NOT HoudiniUSD_FOUND)
         REQUIRED
         NO_DEFAULT_PATH)
     if(USD_SCHEMA_GENERATOR)
-        list(PREPEND USD_SCHEMA_GENERATOR python)
+        list(PREPEND USD_SCHEMA_GENERATOR ${build_schema_python_exec})
     endif()
 endif()
 
@@ -103,7 +109,7 @@ if(HoudiniUSD_FOUND)
     set(OPENEXR_LIB_LOCATION ${Houdini_LIB_DIR})
 else()
     # We are using python to generate source files
-    find_package(PythonInterp 2.7)
+    find_package(PythonInterp 3.7)
 endif()
 
 if (NOT PXR_MALLOC_LIBRARY)
@@ -148,17 +154,30 @@ macro(find_exr)
     endif()
 endmacro()
 
-find_exr(Half IlmImf Iex)
-
-set(RPR_EXR_EXPORT_ENABLED TRUE)
-if(NOT OpenEXR_FOUND)
-    set(RPR_EXR_EXPORT_ENABLED FALSE)
+if (NOT MAYAUSD_OPENEXR_STATIC)
+    find_exr(Half IlmImf Iex)
+else()
+    find_exr(Half IlmImf Iex IlmThread zlib)
 endif()
 
-find_exr(Half)
+set(RPR_EXR_EXPORT_ENABLED TRUE)
+
+if(HoudiniUSD_FOUND)
+    find_exr(OpenEXR OpenEXRCore Iex)
+endif()
 
 if(NOT OpenEXR_FOUND)
-    message(FATAL_ERROR "Failed to find Half library")
+    find_exr(Half IlmImf Iex)
+
+    if(NOT OpenEXR_FOUND)
+        set(RPR_EXR_EXPORT_ENABLED FALSE)
+    endif()
+
+    find_exr(Half)
+
+    if(NOT OpenEXR_FOUND)
+        message(FATAL_ERROR "Failed to find Half library")
+    endif()
 endif()
 
 # ----------------------------------------------

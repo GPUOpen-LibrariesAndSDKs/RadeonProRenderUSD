@@ -17,6 +17,7 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/material.h"
 #include "pxr/imaging/rprUsd/materialMappings.h"
 #include "pxr/base/gf/vec2f.h"
+#include "pxr/base/gf/vec3f.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 

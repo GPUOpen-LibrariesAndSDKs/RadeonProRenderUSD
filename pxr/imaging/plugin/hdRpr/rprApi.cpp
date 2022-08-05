@@ -51,6 +51,7 @@ using json = nlohmann::json;
 #include "pxr/usd/usdGeom/tokens.h"
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/fileUtils.h"
+#include "pxr/base/tf/pathUtils.h"
 #include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/work/loops.h"
@@ -68,6 +69,8 @@ using json = nlohmann::json;
 #include <ImfOutputFile.h>
 #include <ImfChannelList.h>
 #include <ImfStringAttribute.h>
+#include <ImfFrameBuffer.h>
+#include <ImfHeader.h>
 #endif // RPR_EXR_EXPORT_ENABLED
 
 #ifdef BUILD_AS_HOUDINI_PLUGIN
@@ -84,7 +87,19 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
     "Set this to override render quality coming from the render settings");
 
+TF_DEFINE_PRIVATE_TOKENS(_tokens,
+    (usdFilename)
+);
+
 namespace {
+
+std::string const& GetPath(SdfAssetPath const& path) {
+    if (!path.GetResolvedPath().empty()) {
+        return path.GetResolvedPath();
+    } else {
+        return path.GetAssetPath();
+    }
+}
 
 TfToken GetRenderQuality(HdRprConfig const& config) {
     std::string renderQualityOverride = TfGetEnvSetting(HDRPR_RENDER_QUALITY_OVERRIDE);
@@ -1370,7 +1385,7 @@ public:
     }
 
     GfMatrix4d GetCameraViewMatrix() const {
-        return m_hdCamera ? m_hdCamera->GetViewMatrix() : GfMatrix4d(1.0);
+        return m_hdCamera ? m_hdCamera->GetTransform().GetInverse() : GfMatrix4d(1.0);
     }
 
     const GfMatrix4d& GetCameraProjectionMatrix() const {
@@ -1510,6 +1525,7 @@ public:
         RenderSetting<HdRprApiColorAov::GammaParams> gamma;
         RenderSetting<bool> instantaneousShutter;
         RenderSetting<TfToken> aspectRatioPolicy;
+        RenderSetting<TfToken> cameraMode;
         {
             HdRprConfig* config;
             auto configInstanceLock = m_delegate->LockConfigInstance(&config);
@@ -1537,13 +1553,15 @@ public:
                 gamma.value.value = config->GetGammaValue();
             }
 
+            cameraMode.isDirty = config->IsDirty(HdRprConfig::DirtyCamera);
+            cameraMode.value = config->GetCoreCameraMode();
             aspectRatioPolicy.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
             aspectRatioPolicy.value = config->GetAspectRatioConformPolicy();
             instantaneousShutter.isDirty = config->IsDirty(HdRprConfig::DirtyUsdNativeCamera);
             instantaneousShutter.value = config->GetInstantaneousShutter();
 
             if (config->IsDirty(HdRprConfig::DirtyRprExport)) {
-                m_rprSceneExportPath = config->GetExportPath();
+                m_rprSceneExportPath = GetPath(config->GetExportPath());
                 m_rprExportAsSingleFile = config->GetExportAsSingleFile();
                 m_rprExportUseImageCache = config->GetExportUseImageCache();
             }
@@ -1581,7 +1599,7 @@ public:
             UpdateSettings(*config);
             config->ResetDirty();
         }
-        UpdateCamera(aspectRatioPolicy, instantaneousShutter);
+        UpdateCamera(cameraMode, aspectRatioPolicy, instantaneousShutter);
         UpdateAovs(rprRenderParam, enableDenoise, tonemap, gamma, clearAovs);
 
         m_dirtyFlags = ChangeTracker::Clean;
@@ -1695,9 +1713,11 @@ public:
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_SHADOW, preferences.GetQualityRayDepthShadow()), "Failed to set max depth shadow");
 
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPSILON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
             auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_IMAGE_FILTER_RADIUS, preferences.GetQualityImageFilterRadius()), "Failed to set Pixel filter width");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
@@ -1745,8 +1765,8 @@ public:
                 // globally define path to OCIO config. See the docs for details about the motivation for this.
                 // Houdini handles it in the same while leaving possibility to override it through UI.
                 // We allow the OCIO config path to be overridden through render settings.
-                if (!preferences.GetOcioConfigPath().empty()) {
-                    ocioConfigPath = preferences.GetOcioConfigPath();
+                if (!GetPath(preferences.GetOcioConfigPath()).empty()) {
+                    ocioConfigPath = GetPath(preferences.GetOcioConfigPath());
                 } else {
                     ocioConfigPath = TfGetenv("OCIO");
                 }
@@ -1758,7 +1778,7 @@ public:
 
             if (preferences.IsDirty(HdRprConfig::DirtyCryptomatte) || force) {
 #ifdef RPR_EXR_EXPORT_ENABLED
-                m_cryptomatteOutputPath = preferences.GetCryptomatteOutputPath();
+                m_cryptomatteOutputPath = GetPath(preferences.GetCryptomatteOutputPath());
                 m_cryptomattePreviewLayer = preferences.GetCryptomattePreviewLayer();
 #else
                 if (!preferences.GetCryptomatteOutputPath().empty()) {
@@ -1770,6 +1790,33 @@ public:
     }
 
     void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
+        if (m_rprContextMetadata.pluginType == kPluginHybridPro) {
+            if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, preferences.GetQualityRayDepth()), "Failed to set max recursion");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetQualityRayDepthDiffuse()), "Failed to set max depth diffuse");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetQualityRayDepthGlossy()), "Failed to set max depth glossy");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetQualityRayDepthRefraction()), "Failed to set max depth refraction");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPSILON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
+                auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+
+            if ((preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) ||
+                preferences.IsDirty(HdRprConfig::DirtyInteractiveQuality)) || force) {
+                m_isInteractive = preferences.GetInteractiveMode();
+                auto maxRayDepth = m_isInteractive ? preferences.GetQualityInteractiveRayDepth() : preferences.GetQualityRayDepth();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
+
+                if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
+                    m_dirtyFlags |= ChangeTracker::DirtyScene;
+                }
+            }
+        }
+
         if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
             rpr_uint hybridRenderQuality = -1;
             if (m_currentRenderQuality == HdRprCoreRenderQualityTokens->High) {
@@ -1798,7 +1845,7 @@ public:
         if (m_rprContextMetadata.pluginType == kPluginTahoe ||
             m_rprContextMetadata.pluginType == kPluginNorthstar) {
             UpdateTahoeSettings(preferences, force);
-        } else if (m_rprContextMetadata.pluginType == kPluginHybrid) {
+        } else if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             UpdateHybridSettings(preferences, force);
         }
 
@@ -1846,12 +1893,31 @@ public:
         }
     }
 
-    void UpdateCamera(RenderSetting<TfToken> const& aspectRatioPolicy, RenderSetting<bool> const& instantaneousShutter) {
+    bool GetRprCameraMode(TfToken const& mode, rpr_camera_mode* out) {
+        static std::map<TfToken, rpr_camera_mode> s_mapping = {
+            {HdRprCoreCameraModeTokens->LatitudeLongitude360, RPR_CAMERA_MODE_LATITUDE_LONGITUDE_360},
+            {HdRprCoreCameraModeTokens->LatitudeLongitudeStereo, RPR_CAMERA_MODE_LATITUDE_LONGITUDE_STEREO},
+            {HdRprCoreCameraModeTokens->Cubemap, RPR_CAMERA_MODE_CUBEMAP},
+            {HdRprCoreCameraModeTokens->CubemapStereo, RPR_CAMERA_MODE_CUBEMAP_STEREO},
+            {HdRprCoreCameraModeTokens->Fisheye, RPR_CAMERA_MODE_FISHEYE},
+        };
+
+        auto it = s_mapping.find(mode);
+        if (it == s_mapping.end()) return false;
+        *out = it->second;
+        return true;
+    }
+
+    void UpdateCamera(
+        RenderSetting<TfToken> const& cameraMode,
+        RenderSetting<TfToken> const& aspectRatioPolicy,
+        RenderSetting<bool> const& instantaneousShutter) {
         if (!m_hdCamera || !m_camera) {
             return;
         }
 
-        if (aspectRatioPolicy.isDirty ||
+        if (cameraMode.isDirty ||
+            aspectRatioPolicy.isDirty ||
             instantaneousShutter.isDirty) {
             m_dirtyFlags |= ChangeTracker::DirtyHdCamera;
         }
@@ -1899,13 +1965,19 @@ public:
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Failed to set camera angular motion");
         } else {
-            setCameraLookAt(m_hdCamera->GetViewMatrix(), m_hdCamera->GetViewInverseMatrix());
+            setCameraLookAt(m_hdCamera->GetTransform().GetInverse(), m_hdCamera->GetTransform());
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(0.0f, 0.0f, 0.0f), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(1.0f, 0.0f, 0.0f, 0.0f), "Failed to set camera angular motion");
         }
 
         auto aspectRatio = double(m_viewportSize[0]) / m_viewportSize[1];
-        m_cameraProjectionMatrix = CameraUtilConformedWindow(m_hdCamera->GetProjectionMatrix(), m_hdCamera->GetWindowPolicy(), aspectRatio);
+
+#if PXR_VERSION >= 2203
+        GfMatrix4d projectionMatrix = m_hdCamera->ComputeProjectionMatrix();
+#else
+        GfMatrix4d projectionMatrix = m_hdCamera->GetProjectionMatrix();
+#endif
+        m_cameraProjectionMatrix = CameraUtilConformedWindow(projectionMatrix, m_hdCamera->GetWindowPolicy(), aspectRatio);
 
         float sensorWidth;
         float sensorHeight;
@@ -1964,7 +2036,10 @@ public:
 
         RPR_ERROR_CHECK(m_camera->SetLensShift(apertureOffset[0], apertureOffset[1]), "Failed to set camera lens shift");
 
-        if (projection == HdRprCamera::Orthographic) {
+        rpr_camera_mode rprCameraMode;
+        if (GetRprCameraMode(cameraMode.value, &rprCameraMode)) {
+            RPR_ERROR_CHECK(m_camera->SetMode(rprCameraMode), "Failed to set camera mode");
+        } else if (projection == HdRprCamera::Orthographic) {
             RPR_ERROR_CHECK(m_camera->SetMode(RPR_CAMERA_MODE_ORTHOGRAPHIC), "Failed to set camera mode");
             RPR_ERROR_CHECK(m_camera->SetOrthoWidth(sensorWidth), "Failed to set camera ortho width");
             RPR_ERROR_CHECK(m_camera->SetOrthoHeight(sensorHeight), "Failed to set camera ortho height");
@@ -2665,7 +2740,6 @@ public:
 
             m_rucData.previousProgress = -1.0f;
             auto status = m_rprContext->Render();
-            m_rucData.previousProgress = -1.0f;
 
             m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
 
@@ -2820,6 +2894,14 @@ Don't show this message again?
             return;
         }
 #endif // BUILD_AS_HOUDINI_PLUGIN
+
+        // Houdini does not resolve the relative path to an inexisting file, so we need to do it manually.
+        if (TfIsRelativePath(m_rprSceneExportPath)) {
+            std::string usdFilename = m_delegate->GetRenderSetting(_tokens->usdFilename, std::string());
+            if (!usdFilename.empty()) {
+                m_rprSceneExportPath = TfNormPath(TfGetPathName(usdFilename) + "/" + m_rprSceneExportPath);
+            }
+        }
 
         if (!CreateIntermediateDirectories(m_rprSceneExportPath)) {
             fprintf(stderr, "Failed to create .rpr export output directory\n");
@@ -3148,7 +3230,7 @@ Don't show this message again?
     }
 
     bool IsSphereAndDiskLightSupported() const {
-        return m_rprContextMetadata.pluginType == kPluginNorthstar;
+        return m_rprContextMetadata.pluginType == kPluginNorthstar || m_rprContextMetadata.pluginType == kPluginHybridPro;
     }
 
     TfToken const& GetCurrentRenderQuality() const {

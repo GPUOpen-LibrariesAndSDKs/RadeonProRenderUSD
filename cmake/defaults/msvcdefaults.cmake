@@ -103,7 +103,14 @@ _add_define("YY_NO_UNISTD_H")
 _add_define("BOOST_ALL_DYN_LINK")
 
 # Need half::_toFloat and half::_eLut.
-_add_define("OPENEXR_DLL")
+if (NOT ${MAYAUSD_OPENEXR_STATIC})
+    _add_define("OPENEXR_DLL")
+endif()
+
+# Exclude headers from unnecessary Windows APIs to improve build
+# times and avoid annoying conflicts with macros defined in those
+# headers.
+_add_define("WIN32_LEAN_AND_MEAN")
 
 # M_PI, M_PI_2, etc
 _add_define("_USE_MATH_DEFINES")

@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/materialRegistry.h"
 #include "pxr/base/arch/attributes.h"
+#include "pxr/usd/usdShade/tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -47,9 +48,9 @@ public:
     bool SetInput(
         TfToken const& inputId,
         VtValue const& value) override {
-        if (inputId == HdMaterialTerminalTokens->volume ||
-            inputId == HdMaterialTerminalTokens->surface ||
-            inputId == HdMaterialTerminalTokens->displacement) {
+        if (inputId == UsdShadeTokens->volume ||
+            inputId == UsdShadeTokens->surface ||
+            inputId == UsdShadeTokens->displacement) {
             if (value.IsHolding<std::shared_ptr<rpr::MaterialNode>>()) {
                 m_outputs[inputId] = value;
                 return true;
@@ -72,17 +73,17 @@ public:
         nodeInfo.uiFolder = "Shaders";
 
         RprUsd_RprNodeInput surfaceInput(RprUsdMaterialNodeElement::kSurfaceShader);
-        surfaceInput.name = HdMaterialTerminalTokens->surface;
+        surfaceInput.name = UsdShadeTokens->surface;
         surfaceInput.uiName = "Surface Shader";
         nodeInfo.inputs.push_back(surfaceInput);
 
         RprUsd_RprNodeInput displacementInput(RprUsdMaterialNodeElement::kDisplacementShader);
-        displacementInput.name = HdMaterialTerminalTokens->displacement;
+        displacementInput.name = UsdShadeTokens->displacement;
         displacementInput.uiName = "Displacement Shader";
         nodeInfo.inputs.push_back(displacementInput);
 
         RprUsd_RprNodeInput volumeInput(RprUsdMaterialNodeElement::kVolumeShader);
-        volumeInput.name = HdMaterialTerminalTokens->volume;
+        volumeInput.name = UsdShadeTokens->volume;
         volumeInput.uiName = "Volume Shader";
         nodeInfo.inputs.push_back(volumeInput);
 
