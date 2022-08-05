@@ -72,7 +72,6 @@ set(PXR_OBJECT_LIBS ""
     "Aggregation of all core libraries built as OBJECT libraries."
 )
 
-
 if(PXR_VERSION GREATER_EQUAL 2111)
   set(PXR_LIB_PREFIX "${CMAKE_SHARED_LIBRARY_PREFIX}usd_"
       CACHE
