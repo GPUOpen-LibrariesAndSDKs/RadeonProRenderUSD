@@ -111,8 +111,10 @@ else()
     # We are using python to generate source files
     find_package(PythonInterp 3.7)
 
-    # Required, otherwise couldn't find it
-    set(OPENEXR_LOCATION ${USD_INCLUDE_DIR}/../)
+    # If it's not provided externally, consider that it's default USD build and OpenEXR could be found at root
+    if (not OPENEXR_LOCATION)
+        set(OPENEXR_LOCATION ${USD_INCLUDE_DIR}/../)
+    endif()
 endif()
 
 if (NOT PXR_MALLOC_LIBRARY)
