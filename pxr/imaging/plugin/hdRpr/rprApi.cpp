@@ -1962,8 +1962,8 @@ public:
             auto& transformSamples = m_hdCamera->GetTransformSamples();
 
             // XXX (RPR): there is no way to sample all transforms via current RPR API
-            auto& startTransform = transformSamples.values.front() * m_unitSizeTransform;
-            auto& endTransform = transformSamples.values.back() * m_unitSizeTransform;
+            auto startTransform = transformSamples.values.front() * m_unitSizeTransform;
+            auto endTransform = transformSamples.values.back() * m_unitSizeTransform;
 
             GfVec3f linearMotion, scaleMotion, rotateAxis;
             float rotateAngle;
