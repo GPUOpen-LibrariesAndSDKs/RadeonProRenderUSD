@@ -109,14 +109,6 @@ public:
         return std::unique_lock<std::mutex>(instanceMutex);
     }
 
-    static HdRprDelegate* GetLastCreatedInstance() {
-        if (m_lastCreatedInstance == nullptr) {
-            throw std::runtime_error("HdRprDelegate::GetLastCreatedInstance() was nullptr");
-        }
-
-        return m_lastCreatedInstance;
-    }
-
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;

@@ -110,6 +110,11 @@ if(HoudiniUSD_FOUND)
 else()
     # We are using python to generate source files
     find_package(PythonInterp 3.7)
+
+    # If it's not provided externally, consider that it's default USD build and OpenEXR could be found at root
+    if (NOT OPENEXR_LOCATION)
+        set(OPENEXR_LOCATION ${USD_INCLUDE_DIR}/../)
+    endif()
 endif()
 
 if (NOT PXR_MALLOC_LIBRARY)
@@ -168,7 +173,6 @@ endif()
 
 if(NOT OpenEXR_FOUND)
     find_exr(Half IlmImf Iex)
-
     if(NOT OpenEXR_FOUND)
         set(RPR_EXR_EXPORT_ENABLED FALSE)
     endif()

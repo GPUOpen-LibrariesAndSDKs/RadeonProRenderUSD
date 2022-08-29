@@ -401,6 +401,7 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     SdfPath const& materialPath,
     RprUsd_MaterialBuilderContext const& context,
     std::string* materialXStdlibPath) {
+
 #ifdef USE_USDSHADE_MTLX
     auto terminalIt = context.materialNetwork->terminals.find(UsdShadeTokens->surface);
     if (terminalIt == context.materialNetwork->terminals.end()) {

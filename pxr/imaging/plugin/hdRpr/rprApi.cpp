@@ -49,12 +49,13 @@ using json = nlohmann::json;
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
-#include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/fileUtils.h"
 #include "pxr/base/tf/pathUtils.h"
 #include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/work/loops.h"
+#include "pxr/base/arch/env.h"
+#include "pxr/base/tf/envSetting.h"
 
 #include "notify/message.h"
 
@@ -103,10 +104,15 @@ std::string const& GetPath(SdfAssetPath const& path) {
 
 TfToken GetRenderQuality(HdRprConfig const& config) {
     std::string renderQualityOverride = TfGetEnvSetting(HDRPR_RENDER_QUALITY_OVERRIDE);
+    std::string renderQualityUsdviewEnvSetting = ArchGetEnv("HDRPR_USDVIEW_RENDER_QUALITY");
 
     auto& tokens = HdRprCoreRenderQualityTokens->allTokens;
     if (std::find(tokens.begin(), tokens.end(), renderQualityOverride) != tokens.end()) {
         return TfToken(renderQualityOverride);
+    }
+    
+    if (std::find(tokens.begin(), tokens.end(), renderQualityUsdviewEnvSetting) != tokens.end()) {
+        return TfToken(renderQualityUsdviewEnvSetting);
     }
 
     return config.GetCoreRenderQuality();
@@ -1568,7 +1574,6 @@ public:
 
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 m_currentRenderQuality = GetRenderQuality(*config);
-
                 auto newPlugin = GetPluginType(m_currentRenderQuality);
                 auto activePlugin = m_rprContextMetadata.pluginType;
                 m_state = (newPlugin != activePlugin) ? kStateRestartRequired : kStateRender;
@@ -1580,6 +1585,8 @@ public:
                     activeRenderQuality = HdRprCoreRenderQualityTokens->Full;
                 } else if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
                     activeRenderQuality = HdRprCoreRenderQualityTokens->Northstar;
+                } else if (m_rprContextMetadata.pluginType == kPluginHybridPro) {
+                    activeRenderQuality = HdRprCoreRenderQualityTokens->HybridPro;
                 } else {
                     rpr_uint currentHybridQuality = RPR_RENDER_QUALITY_HIGH;
                     size_t dummy;
