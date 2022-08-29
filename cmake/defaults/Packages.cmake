@@ -112,7 +112,7 @@ else()
     find_package(PythonInterp 3.7)
 
     # If it's not provided externally, consider that it's default USD build and OpenEXR could be found at root
-    if (not OPENEXR_LOCATION)
+    if (NOT OPENEXR_LOCATION)
         set(OPENEXR_LOCATION ${USD_INCLUDE_DIR}/../)
     endif()
 endif()
