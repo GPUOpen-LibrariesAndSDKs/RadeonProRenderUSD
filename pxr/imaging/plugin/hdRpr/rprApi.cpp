@@ -1024,8 +1024,8 @@ public:
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
         LockGuard rprLock(m_rprContext->GetMutex());
 
-		// apply scene units size
-		auto finalTransform = transform * GfMatrix4f(m_unitSizeTransform);
+        // apply scene units size
+        auto finalTransform = transform * GfMatrix4f(m_unitSizeTransform);
 
         if (!RPR_ERROR_CHECK(object->SetTransform(finalTransform.GetArray(), false), "Fail set object transform")) {
             m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -4189,7 +4189,7 @@ private:
     bool* m_presentedCondition = nullptr;
     rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
 
-	GfMatrix4d m_unitSizeTransform = GfMatrix4d(1.0);
+    GfMatrix4d m_unitSizeTransform = GfMatrix4d(1.0);
 };
 
 HdRprApi::HdRprApi(HdRprDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
