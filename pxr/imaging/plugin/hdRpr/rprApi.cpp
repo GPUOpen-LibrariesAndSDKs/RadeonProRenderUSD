@@ -55,6 +55,7 @@ using json = nlohmann::json;
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/work/loops.h"
 #include "pxr/base/arch/env.h"
+#include "pxr/base/tf/envSetting.h"
 
 #include "notify/message.h"
 

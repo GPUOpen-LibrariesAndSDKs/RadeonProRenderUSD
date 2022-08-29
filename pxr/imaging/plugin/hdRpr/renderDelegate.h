@@ -19,7 +19,6 @@ limitations under the License.
 #include "config.h"
 
 #include "pxr/imaging/hd/renderDelegate.h"
-#include "pxr/base/tf/envSetting.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
