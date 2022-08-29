@@ -371,6 +371,10 @@ public:
             TF_RUNTIME_ERROR("%s", e.what());
             m_state = kStateInvalid;
         }
+
+		// Try to get scene unit size from delegate. Default value is 1 meter per unit
+		double unitSize = m_delegate->GetRenderSetting<double>(UsdGeomTokens->metersPerUnit, 1.0);
+		m_unitSizeTransform[0][0] = m_unitSizeTransform[1][1] = m_unitSizeTransform[2][2] = unitSize;
     }
 
     rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndices,
@@ -1019,7 +1023,11 @@ public:
 
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
         LockGuard rprLock(m_rprContext->GetMutex());
-        if (!RPR_ERROR_CHECK(object->SetTransform(transform.GetArray(), false), "Fail set object transform")) {
+
+		// apply scene units size
+		auto finalTransform = transform * GfMatrix4f(m_unitSizeTransform);
+
+        if (!RPR_ERROR_CHECK(object->SetTransform(finalTransform.GetArray(), false), "Fail set object transform")) {
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
@@ -1133,8 +1141,8 @@ public:
         }
 
         // XXX (RPR): for the moment, RPR supports only 1 motion matrix
-        auto& startTransform = transformSamples[0];
-        auto& endTransform = transformSamples[numSamples - 1];
+        auto startTransform = transformSamples[0] * m_unitSizeTransform;
+        auto endTransform = transformSamples[numSamples - 1] * m_unitSizeTransform;
 
         auto rprStartTransform = GfMatrix4f(startTransform);
 
@@ -1332,7 +1340,7 @@ public:
     }
 
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform) {
-        auto t = transform * volume->voxelsTransform;
+        auto t = transform * volume->voxelsTransform * GfMatrix4f(m_unitSizeTransform);
 
         LockGuard rprLock(m_rprContext->GetMutex());
         RPR_ERROR_CHECK(volume->cubeMesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
@@ -1954,8 +1962,8 @@ public:
             auto& transformSamples = m_hdCamera->GetTransformSamples();
 
             // XXX (RPR): there is no way to sample all transforms via current RPR API
-            auto& startTransform = transformSamples.values.front();
-            auto& endTransform = transformSamples.values.back();
+            auto& startTransform = transformSamples.values.front() * m_unitSizeTransform;
+            auto& endTransform = transformSamples.values.back() * m_unitSizeTransform;
 
             GfVec3f linearMotion, scaleMotion, rotateAxis;
             float rotateAngle;
@@ -1965,7 +1973,7 @@ public:
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Failed to set camera angular motion");
         } else {
-            setCameraLookAt(m_hdCamera->GetTransform().GetInverse(), m_hdCamera->GetTransform());
+            setCameraLookAt(m_hdCamera->GetTransform().GetInverse() * m_unitSizeTransform, m_hdCamera->GetTransform() * m_unitSizeTransform);
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(0.0f, 0.0f, 0.0f), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(1.0f, 0.0f, 0.0f, 0.0f), "Failed to set camera angular motion");
         }
@@ -4180,6 +4188,8 @@ private:
     std::condition_variable* m_presentedConditionVariable = nullptr;
     bool* m_presentedCondition = nullptr;
     rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
+
+	GfMatrix4d m_unitSizeTransform = GfMatrix4d(1.0);
 };
 
 HdRprApi::HdRprApi(HdRprDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
