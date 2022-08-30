@@ -31,7 +31,7 @@ using json = nlohmann::json;
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 #include <RadeonProRender_VK.h>
 #include <RadeonProRender_Baikal.h>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.hpp>
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
 #ifdef __APPLE__
@@ -60,6 +60,83 @@ namespace {
 const char* k_RadeonProRenderLibName = "libRadeonProRender64.dylib";
 #elif defined(__linux__)
 const char* k_RadeonProRenderLibName = "libRadeonProRender64.so";
+#endif
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+class HybridSupportCheck {
+public:
+    HybridSupportCheck() {
+        auto applicationInfo = vk::ApplicationInfo()
+            .setPApplicationName("Rpr")
+            .setApplicationVersion(VK_MAKE_VERSION(1, 0, 0))
+            .setPEngineName("Rpr")
+            .setEngineVersion(VK_MAKE_VERSION(1, 0, 0))
+            .setApiVersion(VK_API_VERSION_1_2);
+
+        auto instanceCreateInfo = vk::InstanceCreateInfo()
+            .setPApplicationInfo(&applicationInfo);
+
+        auto instance = vk::createInstanceUnique(instanceCreateInfo);
+
+        std::vector<vk::PhysicalDevice> devices = instance->enumeratePhysicalDevices();
+
+        for (auto device : devices) {
+            m_supported.push_back(IsPhysicalDeviceSupported(device));
+        }
+    }
+
+    bool supported(size_t index) {
+        return index < m_supported.size() ? m_supported[index] : false;
+    }
+private:
+    bool IsPhysicalDeviceSupported(const vk::PhysicalDevice& device) {
+        static const uint32_t AMDVendorId = 0x1002;
+
+        auto props = device.getProperties();
+
+        if (props.vendorID == AMDVendorId) { return true; }
+
+        if (props.deviceID == 0x743f // Navi 24 [Radeon RX 6400 / 6500 XT]
+            || props.deviceID == 0x7422 // Navi 24 [Radeon PRO W6400]
+            || props.deviceID == 0x7423 // Navi 24 [Radeon PRO W6300/W6300M]
+            || props.deviceID == 0x7424 // Navi 24 [Radeon RX 6300]
+            || props.deviceID == 0x73ef // Navi 23 [Radeon RX 6650 XT]
+            || props.deviceID == 0x7421 // Navi 24 [Radeon PRO W6500M]
+            || props.deviceID == 0x1002 // Navi 21 [Radeon RX 6900 XT]
+            || props.deviceID == 0x73bf // Navi 21 [Radeon RX 6800/6800 XT / 6900 XT]
+            || props.deviceID == 0x73c3 // Navi 22 ??? 
+            || props.deviceID == 0x73e0 // Navi 23 ???
+            || props.deviceID == 0x73df // Navi 22 [Radeon RX 6700/6700 XT/6750 XT / 6800M]
+            || props.deviceID == 0x73ff // Navi 23 [Radeon RX 6600/6600 XT/6600M]
+            || props.deviceID == 0x73e1 // Navi 23 WKS-XM [Radeon PRO W6600M] 
+            || props.deviceID == 0x73e3 // Navi 23 WKS-XL [Radeon PRO W6600],
+            || props.deviceID == 0x731f // Navi 10 [Radeon RX 5600 OEM/5600 XT / 5700/5700 XT]
+            || props.deviceID == 0x7340 // Navi 14 [Radeon RX 5500/5500M / Pro 5500M]
+
+            || props.deviceID == 0x7341 // Navi 14 [Radeon Pro W5500] 
+            || props.deviceID == 0x7347 // Navi 14 [Radeon Pro W5500M] 
+            || props.deviceID == 0x734f // Navi 14 [Radeon Pro W5300M] 
+            || props.deviceID == 0x7360 // Navi 12 [Radeon Pro 5600M/V520/BC-160]  
+            || props.deviceID == 0x73a5 // Navi 21 [Radeon RX 6950 XT] 
+            || props.deviceID == 0x73a1 // Navi 21 [Radeon Pro V620]  
+            || props.deviceID == 0x7362 // Navi 12 [Radeon Pro V520]
+
+            || props.deviceID == 0x7310 // Navi 10 [Radeon Pro W5700X] 
+            || props.deviceID == 0x7312 // Navi 10 [Radeon Pro W5700]
+            ) { return true; }
+        return false;
+    }
+
+    std::vector<bool> m_supported;
+};
+#else
+class HybridSupportCheck {
+public:
+    bool supported(size_t index) {
+        return true;
+    }
+};
 #endif
 
 std::string GetRprSdkPath() {
@@ -151,7 +228,6 @@ const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
     {kPluginNorthstar, "libNorthstar64.so"},
     {kPluginTahoe, "libTahoe64.so"},
     {kPluginHybrid, "Hybrid.so"},
-    {kPluginHybridPro, "HybridPro.so"},
 #elif defined __APPLE__
     {kPluginTahoe, "libTahoe64.dylib"},
     {kPluginNorthstar, "libNorthstar64.dylib"},
@@ -177,6 +253,23 @@ rpr_int GetPluginID(RprUsdPluginType pluginType) {
     return pluginID;
 }
 
+bool CheckCompatibility(const std::string& name) {
+    // the purpouse of this check is to avoid some "virtual" GPUs for witch contect could be created, but crashes when used
+    std::string lowercaseName = name;
+    std::transform(lowercaseName.begin(), lowercaseName.end(), lowercaseName.begin(), [](unsigned char c) { return std::tolower(c); });
+    
+    return (lowercaseName.find("amd") != std::string::npos ||
+        lowercaseName.find("radeon") != std::string::npos ||
+        lowercaseName.find("nvidia") != std::string::npos ||    // also checking GPU families for nvidia, list from https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units
+        lowercaseName.find("geforce") != std::string::npos ||
+        lowercaseName.find("quadro") != std::string::npos ||
+        lowercaseName.find("rtx") != std::string::npos ||
+        lowercaseName.find("tegra") != std::string::npos ||
+        lowercaseName.find("tesla") != std::string::npos ||
+        lowercaseName.find("grid") != std::string::npos
+    );
+}
+
 std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
     rpr::CreationFlags additionalFlags = 0x0;
 
@@ -188,7 +281,10 @@ std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::C
         rpr::Status status;
         std::unique_ptr<rpr::Context> context(rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlag | additionalFlags, nullptr, cachePath, &status));
         if (context) {
-            return RprUsdGetStringInfo(context.get(), gpuNameId);
+            std::string name = RprUsdGetStringInfo(context.get(), gpuNameId);
+            if (CheckCompatibility(name)) {
+                return name;
+            }
         }
     } catch (RprUsdError& e) {
         PRINT_CONTEXT_CREATION_DEBUG_INFO("Failed to get gpu name: %s", e.what());
@@ -382,8 +478,8 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
         appendContextProperty(RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO, metadata->interopInfo);
         appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE, &acc_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, &vbuf_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, &ibuf_size);
+        //appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, &vbuf_size);
+        //appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, &ibuf_size);
         appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, &sbuf_size);
     }
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
@@ -429,12 +525,15 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
 
     RprUsdDevicesInfo ret = {};
 
-    if (RprUsdIsHybrid(pluginType)) {
+    if (pluginType == kPluginHybrid) {
         ret.cpu.numThreads = 0;
 
-        std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
-        if (!name.empty()) {
-            ret.gpus.push_back({0, name});
+        HybridSupportCheck check;
+        if (check.supported(0)) {
+            std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
+            if (!name.empty()) {
+                ret.gpus.push_back({ 0, name });
+            }
         }
     } else {
         ret.cpu.numThreads = std::thread::hardware_concurrency();
