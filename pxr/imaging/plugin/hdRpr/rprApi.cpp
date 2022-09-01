@@ -593,7 +593,11 @@ public:
         }
 
         if (dirty) {
-            if (RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(level), "Failed to set mesh subdividion level")) return;
+            uint64_t normalCount;
+            if (RPR_ERROR_CHECK(rprMeshGetInfo(GetRprObject(mesh), RPR_MESH_NORMAL_COUNT, sizeof(normalCount), &normalCount, nullptr), "Failed to get normal count")) return;
+            if (normalCount != 0) {
+                if (RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(level), "Failed to set mesh subdividion level")) return;
+            }
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
