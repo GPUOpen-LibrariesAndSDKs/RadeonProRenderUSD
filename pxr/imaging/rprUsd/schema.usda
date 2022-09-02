@@ -161,10 +161,10 @@ class "RprRendererSettingsAPI" (
         doc = ""
     )
 	
-	uniform double stageMetersPerUnit = 1.0 (
-	    displayName = "Meters Per Unit"
-	    displayGroup = "General"
-	)
+    uniform double stageMetersPerUnit = 1.0 (
+        displayName = "Meters Per Unit"
+        displayGroup = "General"
+    )
 
     # Northstar only
     uniform bool rpr:beautyMotionBlur:enable = true (
