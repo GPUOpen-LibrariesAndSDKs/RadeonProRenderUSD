@@ -378,9 +378,10 @@ public:
             m_state = kStateInvalid;
         }
 
-		// Try to get scene unit size from delegate. Default value is 1 meter per unit
-		double unitSize = m_delegate->GetRenderSetting<double>(UsdGeomTokens->metersPerUnit, 1.0);
-		m_unitSizeTransform[0][0] = m_unitSizeTransform[1][1] = m_unitSizeTransform[2][2] = unitSize;
+        // Try to get scene unit size from delegate. Default value is 1 meter per unit
+        static const TfToken metersPerUnitToken("stageMetersPerUnit", TfToken::Immortal);
+        double unitSize = m_delegate->GetRenderSetting<double>(metersPerUnitToken, 1.0);
+        m_unitSizeTransform[0][0] = m_unitSizeTransform[1][1] = m_unitSizeTransform[2][2] = unitSize;
     }
 
     rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndices,
