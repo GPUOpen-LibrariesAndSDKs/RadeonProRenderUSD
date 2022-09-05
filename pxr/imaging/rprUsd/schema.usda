@@ -164,6 +164,7 @@ class "RprRendererSettingsAPI" (
     uniform double stageMetersPerUnit = 1.0 (
         displayName = "Meters Per Unit"
         displayGroup = "General"
+	doc = "Scene unit size in meters"
     )
 
     # Northstar only
