@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
+#define VK_ENABLE_BETA_EXTENSIONS
 #include <vulkan/vulkan.h>
 #include "hybridCheck.h"
 
@@ -48,6 +49,7 @@ struct VulcanFunctions {
     PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
     PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
     PFN_vkDestroyInstance vkDestroyInstance = nullptr;
+    PFN_vkEnumerateInstanceExtensionProperties vkEnumerateInstanceExtensionProperties = nullptr;
 };
 
 void UnloadVulkanLibrary(LIBRARY_TYPE& vulkan_library) {
@@ -94,10 +96,55 @@ bool LoadInstanceFunctions(LIBRARY_TYPE const& vulkan_library, VkInstance instan
         return false;
     }
 
+    vkf.vkEnumerateInstanceExtensionProperties = (PFN_vkEnumerateInstanceExtensionProperties)vkf.vkGetInstanceProcAddr(instance, "vkEnumerateInstanceExtensionProperties");
+    if (vkf.vkEnumerateInstanceExtensionProperties == nullptr) {
+        return false;
+    }
+
     return true;
 }
 
-bool CreateVulkanInstance(VkInstance& instance, VulcanFunctions& vkf) {
+bool CheckAvailableInstanceExtensions(std::vector<VkExtensionProperties>& available_extensions, VulcanFunctions& vkf) {
+    uint32_t extensions_count = 0;
+    VkResult result = VK_SUCCESS;
+
+    result = vkf.vkEnumerateInstanceExtensionProperties(nullptr, &extensions_count, nullptr);
+    if ((result != VK_SUCCESS) ||
+        (extensions_count == 0)) {
+        return false;
+    }
+
+    available_extensions.resize(extensions_count);
+    result = vkf.vkEnumerateInstanceExtensionProperties(nullptr, &extensions_count, available_extensions.data());
+    if ((result != VK_SUCCESS) ||
+        (extensions_count == 0)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool IsExtensionSupported(std::vector<VkExtensionProperties> const& available_extensions, char const* const extension) {
+    for (auto& available_extension : available_extensions) {
+        if (strstr(available_extension.extensionName, extension)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool CreateVulkanInstance(std::vector<char const*> const& desired_extensions, VkInstance& instance, VulcanFunctions& vkf) {
+    std::vector<VkExtensionProperties> available_extensions;
+    if (!CheckAvailableInstanceExtensions(available_extensions, vkf)) {
+        return false;
+    }
+
+    for (auto& extension : desired_extensions) {
+        if (!IsExtensionSupported(available_extensions, extension)) {
+            return false;
+        }
+    }
+
     VkApplicationInfo application_info = {
         VK_STRUCTURE_TYPE_APPLICATION_INFO,               // VkStructureType           sType
         nullptr,                                          // const void              * pNext
@@ -209,8 +256,20 @@ HybridSupportCheck::HybridSupportCheck() {
     }
 
     VkInstance instance = nullptr;
+    std::vector<char const*> extentions = {
+        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME,
+        VK_EXT_SHADER_SUBGROUP_BALLOT_EXTENSION_NAME,
+        VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME,
+        VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+        VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
+        VK_KHR_MAINTENANCE3_EXTENSION_NAME,
+        VK_KHR_SPIRV_1_4_EXTENSION_NAME
+    };
 
-    if (!CreateVulkanInstance(instance, vkf)) {
+    if (!CreateVulkanInstance(extentions, instance, vkf)) {
         UnloadVulkanLibrary(vulkan_library);
         return;
     }
