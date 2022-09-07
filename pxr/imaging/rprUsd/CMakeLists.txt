@@ -1,6 +1,25 @@
 set(PXR_PREFIX pxr/imaging)
 set(PXR_PACKAGE rprUsd)
 
+function(SetPxrVersion configFileName)
+    if(NOT EXISTS ${configFileName})
+        return()
+    endif()
+    file(READ "${configFileName}" fileContents)
+    string(REPLACE "\\\n" "" fileContents ${fileContents})
+    string(REPLACE "\n" ";" fileLines ${fileContents})
+    list(REMOVE_ITEM fileLines "")
+    foreach(line ${fileLines})
+    string(REGEX MATCH "set.PXR_VERSION +.([0-9]*).." _ ${line})
+    if(CMAKE_MATCH_1)
+        set(PXR_VERSION ${CMAKE_MATCH_1} PARENT_SCOPE)
+        return()
+    endif()
+    endforeach()
+endfunction()
+
+SetPxrVersion(${pxr_DIR}/pxrConfig.cmake)
+
 set(RPRUSD_SCHEMA_PYMODULE_CPPFILES
     wrapTokens.cpp
     wrapRendererSettingsAPI.cpp
@@ -131,7 +150,9 @@ pxr_library(rprUsd
 
 if(PXR_VERSION GREATER_EQUAL 2108)
     target_sources(rprUsd PRIVATE hdMtlxFixed.cpp)
-    target_link_libraries(rprUsd hdMtlx)
+    if(PXR_BUILD_MONOLITHIC STREQUAL "OFF")
+        target_link_libraries(rprUsd hdMtlx)
+    endif()
     target_compile_definitions(rprUsd PRIVATE USE_USDSHADE_MTLX)
 endif()
 
