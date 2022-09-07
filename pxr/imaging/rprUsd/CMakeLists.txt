@@ -142,6 +142,8 @@ if(HoudiniUSD_FOUND)
 endif()
 
 target_sources(rprUsd PRIVATE
+    hybridCheck.h
+    hybridCheck.cpp
     materialNodes/materialNode.h
     materialNodes/usdNode.h
     materialNodes/usdNode.cpp
@@ -170,9 +172,9 @@ GroupSources(rprUsd)
 
 if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
     target_link_libraries(rprUsd ${Vulkan_LIBRARIES})
-    target_include_directories(rprUsd PRIVATE ${Vulkan_INCLUDE_DIRS})
     target_compile_definitions(rprUsd PUBLIC HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT)
 endif()
+target_include_directories(rprUsd PRIVATE ${Vulkan_INCLUDE_DIRS})
 
 install(
     FILES ${RPRUSD_SCHEMA_DIR}/generatedSchema.usda ${RPRUSD_SCHEMA_DIR}/configured/plugInfo.json
