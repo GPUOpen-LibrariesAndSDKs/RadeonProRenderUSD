@@ -16,13 +16,13 @@ limitations under the License.
 
 #ifdef _WIN32
 #include <Windows.h>
-#elif defined __linux
+#elif defined __linux || defined __APPLE__
 #include <dlfcn.h>
 #endif
 
 #ifdef _WIN32
 #define LIBRARY_TYPE HMODULE
-#elif defined __linux
+#elif defined __linux || defined __APPLE__
 #define LIBRARY_TYPE void*
 #endif
 
@@ -32,7 +32,7 @@ bool LoadVulkanLibrary(LIBRARY_TYPE& vulkan_library) {
     vulkan_library = LoadLibrary(TEXT("vulkan-1.dll"));
 #elif defined __linux
     vulkan_library = dlopen("libvulkan.so.1", RTLD_NOW);
-#elif defined(__APPLE__)
+#elif defined __APPLE__
     vulkan_library = dlopen("libvulkan.1.dylib", RTLD_NOW);
 #endif
 
@@ -53,9 +53,7 @@ struct VulcanFunctions {
 void UnloadVulkanLibrary(LIBRARY_TYPE& vulkan_library) {
 #if defined _WIN32
     FreeLibrary(vulkan_library);
-#elif defined __linux
-    dlclose(vulkan_library);
-#elif defined(__APPLE__)
+#elif defined __linux || defined __APPLE__
     dlclose(vulkan_library);
 #endif
 }
@@ -63,7 +61,7 @@ void UnloadVulkanLibrary(LIBRARY_TYPE& vulkan_library) {
 bool LoadGlobalFunctions(LIBRARY_TYPE const& vulkan_library, VulcanFunctions& vkf) {
 #if defined _WIN32
 #define LoadFunction GetProcAddress
-#elif defined __linux
+#elif defined __linux || defined __APPLE__
 #define LoadFunction dlsym
 #endif
 
