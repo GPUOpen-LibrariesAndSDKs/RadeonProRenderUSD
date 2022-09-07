@@ -13,6 +13,7 @@ limitations under the License.
 
 #define VK_ENABLE_BETA_EXTENSIONS
 #include <vulkan/vulkan.h>
+#include <cstring>
 #include "hybridCheck.h"
 
 #ifdef _WIN32
