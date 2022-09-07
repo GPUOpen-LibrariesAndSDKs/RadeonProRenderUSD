@@ -339,6 +339,14 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         newMesh = true;
     }
 
+    if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->displayColor)) {
+        HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
+        m_authoredColors = HdRprSamplePrimvar(id, HdTokens->displayColor, sceneDelegate, primvarDescsPerInterpolation, m_numGeometrySamples, &m_colorSamples, &m_colorInterpolation);
+        if (!m_authoredColors) {
+            m_colorSamples.clear();
+        }
+    }
+
     if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
         UpdateMaterialId(sceneDelegate, rprRenderParam);
     }
@@ -436,6 +444,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (m_geomSubsets.empty()) {
             if (auto rprMesh = rprApi->CreateMesh(m_pointSamples, m_faceVertexIndices, m_normalSamples, m_normalIndices, m_uvSamples, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
+                rprApi->SetMeshVertexColor(rprMesh, m_colorSamples, m_colorInterpolation);
                 m_rprMeshes.push_back(rprMesh);
             }
         } else {
@@ -463,6 +472,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                 VtArray<VtVec3fArray> subsetPointSamples(m_pointSamples.size());
                 VtArray<VtVec3fArray> subsetNormalSamples(m_normalSamples.size());
+                VtArray<VtVec3fArray> subsetColorSamples(m_colorSamples.size());
                 VtArray<VtVec2fArray> subsetUvSamples(m_uvSamples.size());
                 VtIntArray subsetNormalIndices;
                 VtIntArray subsetUvIndices;
@@ -545,10 +555,19 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                                 subsetUvIndices.push_back(subsetuvIndex);
                             }
                         }
+
+                        if (!m_colorSamples.empty()) {
+                            if (newPoint) {
+                                for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
+                                    subsetColorSamples[sampleIndex].push_back(m_colorSamples[sampleIndex][pointIndex]);
+                                }
+                            }
+                        }
                     }
                 }
 
                 if (auto rprMesh = rprApi->CreateMesh(subsetPointSamples, subsetIndexes, subsetNormalSamples, subsetNormalIndices, subsetUvSamples, subsetUvIndices, subsetVertexPerFace, m_topology.GetOrientation())) {
+                    rprApi->SetMeshVertexColor(rprMesh, subsetColorSamples, m_colorInterpolation);
                     m_rprMeshes.push_back(rprMesh);
                     ++it;
                 } else {

@@ -743,6 +743,47 @@ public:
         }
     }
 
+    void SetMeshVertexColor(rpr::Shape* mesh, VtArray<VtVec3fArray> const& primvarSamples, HdInterpolation interpolation) {
+
+        // We use zero primvar channel to store vertex colors
+        const int colorPrimvarKey = 0;
+
+        if (primvarSamples.empty()) {
+            return;
+        }
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            LockGuard rprLock(m_rprContext->GetMutex());
+
+            rpr::PrimvarInterpolationType rprInterpolation;
+
+            switch (interpolation)
+            {
+            case HdInterpolationConstant:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_CONSTANT;
+                break;
+            case HdInterpolationUniform:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_UNIFORM;
+                break;
+            case HdInterpolationVertex:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_VERTEX;
+                break;
+            case HdInterpolationVarying:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_FACEVARYING_UV;
+                break;
+            case HdInterpolationFaceVarying:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_FACEVARYING_NORMAL;
+                break;
+            default:
+                // Rpr does not support HdInterpolationInstance
+                return;
+            }
+
+            mesh->SetPrimvar(colorPrimvarKey, (rpr_float const*)primvarSamples[0].cdata(), primvarSamples.size() * 3, 3, rprInterpolation);
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+    }
+
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
         if (!m_rprContext) {
             return nullptr;
@@ -4364,6 +4405,10 @@ void HdRprApi::SetMeshId(rpr::Shape* mesh, uint32_t id) {
 
 void HdRprApi::SetMeshIgnoreContour(rpr::Shape* mesh, bool ignoreContour) {
     m_impl->SetMeshIgnoreContour(mesh, ignoreContour);
+}
+
+void HdRprApi::SetMeshVertexColor(rpr::Shape* mesh, VtArray<VtVec3fArray> const& primvarSamples, HdInterpolation interpolation) {
+    m_impl->SetMeshVertexColor(mesh, primvarSamples, interpolation);
 }
 
 void HdRprApi::SetCurveMaterial(rpr::Curve* curve, RprUsdMaterial const* material) {

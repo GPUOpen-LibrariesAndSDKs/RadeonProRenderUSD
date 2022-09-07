@@ -123,6 +123,7 @@ public:
     void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask);
     void SetMeshId(rpr::Shape* mesh, uint32_t id);
     void SetMeshIgnoreContour(rpr::Shape* mesh, bool ignoreContour);
+    void SetMeshVertexColor(rpr::Shape* mesh, VtArray<VtVec3fArray> const& primvarSamples, HdInterpolation interpolation);
     void Release(rpr::Shape* shape);
 
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);

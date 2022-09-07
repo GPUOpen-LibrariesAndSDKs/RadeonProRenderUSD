@@ -84,6 +84,10 @@ private:
     bool m_authoredNormals = false;
     bool m_smoothNormals = false;
 
+    VtArray<VtVec3fArray> m_colorSamples;
+    HdInterpolation m_colorInterpolation;
+    bool m_authoredColors = false;
+
     VtArray<VtVec2fArray> m_uvSamples;
     VtIntArray m_uvIndices;
 
