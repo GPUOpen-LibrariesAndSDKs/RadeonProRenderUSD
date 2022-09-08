@@ -788,6 +788,7 @@ public:
             m_dirtyFlags |= ChangeTracker::DirtyScene;
             return true;
         }
+        return false;
     }
 
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
