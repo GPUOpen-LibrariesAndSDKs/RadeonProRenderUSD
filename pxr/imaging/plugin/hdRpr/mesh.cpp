@@ -84,13 +84,19 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
     }
 
     if (!m_fallbackMaterial) {
-        // XXX: Currently, displayColor is used as one color for whole mesh,
-        // but it should be used as attribute per vertex/face.
-        // RPR does not have such functionality, yet
+
+        // Means that vertex color primvar correctly set on mesh. Only Northstar supports this feature
+        if (m_colorsSet)
+        {
+            m_fallbackMaterial = rprApi->CreatePrimvarColorLookupMaterial();
+            rprApi->SetName(m_fallbackMaterial, GetId().GetText());
+            return m_fallbackMaterial;
+        }
 
         GfVec3f color(0.18f);
 
         if (HdRprIsPrimvarExists(HdTokens->displayColor, primvarDescsPerInterpolation)) {
+
             VtValue val = sceneDelegate->Get(GetId(), HdTokens->displayColor);
             if (val.IsHolding<VtVec3fArray>()) {
                 auto colors = val.UncheckedGet<VtVec3fArray>();
@@ -345,6 +351,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (!m_authoredColors) {
             m_colorSamples.clear();
         }
+
+        newMesh = true;
+        m_colorsSet = false;
     }
 
     if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
@@ -444,7 +453,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (m_geomSubsets.empty()) {
             if (auto rprMesh = rprApi->CreateMesh(m_pointSamples, m_faceVertexIndices, m_normalSamples, m_normalIndices, m_uvSamples, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
-                rprApi->SetMeshVertexColor(rprMesh, m_colorSamples, m_colorInterpolation);
+                m_colorsSet = rprApi->SetMeshVertexColor(rprMesh, m_colorSamples, m_colorInterpolation);
                 m_rprMeshes.push_back(rprMesh);
             }
         } else {
@@ -567,7 +576,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 }
 
                 if (auto rprMesh = rprApi->CreateMesh(subsetPointSamples, subsetIndexes, subsetNormalSamples, subsetNormalIndices, subsetUvSamples, subsetUvIndices, subsetVertexPerFace, m_topology.GetOrientation())) {
-                    rprApi->SetMeshVertexColor(rprMesh, subsetColorSamples, m_colorInterpolation);
+                    m_colorsSet = rprApi->SetMeshVertexColor(rprMesh, subsetColorSamples, m_colorInterpolation);
                     m_rprMeshes.push_back(rprMesh);
                     ++it;
                 } else {
