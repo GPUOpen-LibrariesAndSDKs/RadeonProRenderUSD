@@ -21,7 +21,7 @@ using json = nlohmann::json;
 #include "pxr/imaging/rprUsd/config.h"
 #include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/util.h"
-#include "hybridCheck.h"
+//#include "hybridCheck.h"
 
 #include "pxr/base/arch/env.h"
 #include "pxr/base/tf/diagnostic.h"
@@ -452,13 +452,13 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     if (pluginType == kPluginHybrid) {
         ret.cpu.numThreads = 0;
 
-        HybridSupportCheck check;
-        if (check.supported(0)) {
+        //HybridSupportCheck check;
+        //if (check.supported(0)) {
             std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
             if (!name.empty()) {
                 ret.gpus.push_back({ 0, name });
             }
-        }
+        //}
     } else {
         ret.cpu.numThreads = std::thread::hardware_concurrency();
 
