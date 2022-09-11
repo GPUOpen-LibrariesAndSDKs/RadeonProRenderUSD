@@ -47,10 +47,10 @@ bool LoadVulkanLibrary(LIBRARY_TYPE& vulkan_library) {
 struct VulcanFunctions {
     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
     PFN_vkCreateInstance vkCreateInstance = nullptr;
+    PFN_vkEnumerateInstanceExtensionProperties vkEnumerateInstanceExtensionProperties = nullptr;
     PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
     PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
     PFN_vkDestroyInstance vkDestroyInstance = nullptr;
-    PFN_vkEnumerateInstanceExtensionProperties vkEnumerateInstanceExtensionProperties = nullptr;
 };
 
 void UnloadVulkanLibrary(LIBRARY_TYPE& vulkan_library) {
@@ -77,6 +77,11 @@ bool LoadGlobalFunctions(LIBRARY_TYPE const& vulkan_library, VulcanFunctions& vk
     if (vkf.vkCreateInstance == nullptr) {
         return false;
     }
+    
+    vkf.vkEnumerateInstanceExtensionProperties = (PFN_vkEnumerateInstanceExtensionProperties)vkf.vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceExtensionProperties");
+    if (vkf.vkEnumerateInstanceExtensionProperties == nullptr) {
+        return false;
+    }
 
     return true;
 }
@@ -94,11 +99,6 @@ bool LoadInstanceFunctions(LIBRARY_TYPE const& vulkan_library, VkInstance instan
 
     vkf.vkDestroyInstance = (PFN_vkDestroyInstance)vkf.vkGetInstanceProcAddr(instance, "vkDestroyInstance");
     if (vkf.vkDestroyInstance == nullptr) {
-        return false;
-    }
-
-    vkf.vkEnumerateInstanceExtensionProperties = (PFN_vkEnumerateInstanceExtensionProperties)vkf.vkGetInstanceProcAddr(instance, "vkEnumerateInstanceExtensionProperties");
-    if (vkf.vkEnumerateInstanceExtensionProperties == nullptr) {
         return false;
     }
 
