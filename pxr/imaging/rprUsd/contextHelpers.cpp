@@ -182,16 +182,12 @@ bool CheckCompatibility(const std::string& name) {
     std::string lowercaseName = name;
     std::transform(lowercaseName.begin(), lowercaseName.end(), lowercaseName.begin(), [](unsigned char c) { return std::tolower(c); });
     
-    return (lowercaseName.find("amd") != std::string::npos ||
-        lowercaseName.find("radeon") != std::string::npos ||
-        lowercaseName.find("nvidia") != std::string::npos ||    // also checking GPU families for nvidia, list from https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units
-        lowercaseName.find("geforce") != std::string::npos ||
-        lowercaseName.find("quadro") != std::string::npos ||
-        lowercaseName.find("rtx") != std::string::npos ||
-        lowercaseName.find("tegra") != std::string::npos ||
-        lowercaseName.find("tesla") != std::string::npos ||
-        lowercaseName.find("grid") != std::string::npos
-    );
+    auto patterns = { "amd", "radeon", 
+        "nvidia", "geforce", "quadro", "rtx", "tegra", "tesla", "grid"};    // also checking GPU families for nvidia, list from https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units
+    return std::find_if(
+            patterns.begin(), patterns.end(), 
+            [&lowercaseName](const char* pattern) { return lowercaseName.find(pattern) != std::string::npos; }
+        ) != patterns.end();
 }
 
 std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
@@ -449,7 +445,7 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
 
     RprUsdDevicesInfo ret = {};
 
-    if (pluginType == kPluginHybrid) {
+    if (RprUsdIsHybrid(pluginType)) {
         ret.cpu.numThreads = 0;
 
         HybridSupportCheck check;
