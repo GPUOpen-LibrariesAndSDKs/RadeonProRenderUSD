@@ -104,7 +104,7 @@ class _PluginConfiguration:
     @staticmethod
     def default(plugin_type, plugin_devices_info):
         gpu_configs = [_GpuConfiguration(is_enabled=idx==0, gpu_info=gpu_info) for idx, gpu_info in enumerate(plugin_devices_info.gpus)]
-        cpu_config = _CpuConfiguration(num_active_threads=plugin_devices_info.cpu.num_threads if not gpu_configs else 0, cpu_info=plugin_devices_info.cpu)
+        cpu_config = _CpuConfiguration(num_active_threads=plugin_devices_info.cpu.numThreads if not gpu_configs else 0, cpu_info=plugin_devices_info.cpu)
         return _PluginConfiguration(plugin_type=plugin_type, cpu_config=cpu_config, gpu_configs=gpu_configs)
 
     def serialize(self):
@@ -141,7 +141,9 @@ class _Configuration:
 
     def is_outdated(self):
         for plugin_configuration in self.plugin_configurations:
-            devices_info = _devices_info[plugin_configuration.plugin_type]
+            devices_info = _devices_info.get(plugin_configuration.plugin_type)
+            if not devices_info:
+                continue
 
             config_gpu_infos = [gpu_config.gpu_info for gpu_config in plugin_configuration.gpu_configs]
             if plugin_configuration.cpu_config.cpu_info == devices_info.cpu and \

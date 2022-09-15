@@ -21,6 +21,7 @@ using json = nlohmann::json;
 #include "pxr/imaging/rprUsd/config.h"
 #include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/util.h"
+#include "hybridCheck.h"
 
 #include "pxr/base/arch/env.h"
 #include "pxr/base/tf/diagnostic.h"
@@ -151,7 +152,6 @@ const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
     {kPluginNorthstar, "libNorthstar64.so"},
     {kPluginTahoe, "libTahoe64.so"},
     {kPluginHybrid, "Hybrid.so"},
-    {kPluginHybridPro, "HybridPro.so"},
 #elif defined __APPLE__
     {kPluginTahoe, "libTahoe64.dylib"},
     {kPluginNorthstar, "libNorthstar64.dylib"},
@@ -177,6 +177,19 @@ rpr_int GetPluginID(RprUsdPluginType pluginType) {
     return pluginID;
 }
 
+bool CheckCompatibility(const std::string& name) {
+    // the purpouse of this check is to avoid some "virtual" GPUs for witch contect could be created, but crashes when used
+    std::string lowercaseName = name;
+    std::transform(lowercaseName.begin(), lowercaseName.end(), lowercaseName.begin(), [](unsigned char c) { return std::tolower(c); });
+    
+    auto patterns = { "amd", "radeon", 
+        "nvidia", "geforce", "quadro", "rtx", "tegra", "tesla", "grid"};    // also checking GPU families for nvidia, list from https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units
+    return std::find_if(
+            patterns.begin(), patterns.end(), 
+            [&lowercaseName](const char* pattern) { return lowercaseName.find(pattern) != std::string::npos; }
+        ) != patterns.end();
+}
+
 std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
     rpr::CreationFlags additionalFlags = 0x0;
 
@@ -188,7 +201,10 @@ std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::C
         rpr::Status status;
         std::unique_ptr<rpr::Context> context(rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlag | additionalFlags, nullptr, cachePath, &status));
         if (context) {
-            return RprUsdGetStringInfo(context.get(), gpuNameId);
+            std::string name = RprUsdGetStringInfo(context.get(), gpuNameId);
+            if (CheckCompatibility(name)) {
+                return name;
+            }
         }
     } catch (RprUsdError& e) {
         PRINT_CONTEXT_CREATION_DEBUG_INFO("Failed to get gpu name: %s", e.what());
@@ -382,8 +398,8 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
         appendContextProperty(RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO, metadata->interopInfo);
         appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE, &acc_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, &vbuf_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, &ibuf_size);
+        //appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, &vbuf_size);
+        //appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, &ibuf_size);
         appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, &sbuf_size);
     }
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
@@ -432,9 +448,12 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     if (RprUsdIsHybrid(pluginType)) {
         ret.cpu.numThreads = 0;
 
-        std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
-        if (!name.empty()) {
-            ret.gpus.push_back({0, name});
+        HybridSupportCheck check;
+        if (check.supported(0)) {
+            std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
+            if (!name.empty()) {
+                ret.gpus.push_back({ 0, name });
+            }
         }
     } else {
         ret.cpu.numThreads = std::thread::hardware_concurrency();
