@@ -1509,6 +1509,9 @@ public:
             if (outRb.mappedData && (m_isFirstSample || outRb.isMultiSampled)) {
                 outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
             }
+            if (outRb.rprAov && outRb.rprAov->GetAovFb() && outRb.rprAov->GetAovFb()->GetRprObject()) {
+                outRb.rprAov->GetAovFb()->GetRprObject()->SaveToFile("C:\\Projects\\Aovs\\fileDump.jpg");
+            }
         }
 
         m_isFirstSample = false;
