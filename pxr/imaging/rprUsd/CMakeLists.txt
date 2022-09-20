@@ -142,8 +142,8 @@ if(HoudiniUSD_FOUND)
 endif()
 
 target_sources(rprUsd PRIVATE
-    hybridCheck.h
-    hybridCheck.cpp
+    gpuSupportCheck.h
+    gpuSupportCheck.cpp
     materialNodes/materialNode.h
     materialNodes/usdNode.h
     materialNodes/usdNode.cpp

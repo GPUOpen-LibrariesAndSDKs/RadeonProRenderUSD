@@ -13,10 +13,12 @@ limitations under the License.
 
 #include <vector>
 
-class HybridSupportCheck {
+class GPUSupportCheck {
 public:
-    HybridSupportCheck();
-    bool supported(size_t index);
+    GPUSupportCheck();
+    bool GPUSupported(size_t index);
+    bool GPUHybridSupported(size_t index);
 private:
-    std::vector<bool> m_supported;
+    std::vector<bool> m_gpu_supported;
+    std::vector<bool> m_gpu_hybrid_supported;
 };

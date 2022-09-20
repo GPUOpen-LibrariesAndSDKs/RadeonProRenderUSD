@@ -62,7 +62,7 @@ cmake_configure_cmd = ['cmake', '-DCMAKE_INSTALL_PREFIX='+package_dir, '-DDUMP_P
 cmake_configure_cmd += shlex.split(args.cmake_options)
 cmake_configure_cmd += ['..']
 
-build_dir = 'build_generatePackage_tmp_dir'
+build_dir = 'houdini_19.0'
 if not args.disable_auto_cleanup and os.path.isdir(build_dir):
     shutil.rmtree(build_dir)
 
@@ -88,5 +88,5 @@ with current_working_directory(build_dir):
     shutil.copyfile('tmpPackage.tar.gz', output_package)
 print('{} has been created'.format(os.path.relpath(output_package)))
 
-if not args.disable_auto_cleanup:
-    shutil.rmtree(build_dir)
+#if not args.disable_auto_cleanup:
+#    shutil.rmtree(build_dir)
