@@ -377,6 +377,11 @@ public:
             TF_RUNTIME_ERROR("%s", e.what());
             m_state = kStateInvalid;
         }
+
+        // Try to get scene unit size from delegate. Default value is 1 meter per unit
+        static const TfToken metersPerUnitToken("stageMetersPerUnit", TfToken::Immortal);
+        double unitSize = m_delegate->GetRenderSetting<double>(metersPerUnitToken, 1.0);
+        m_unitSizeTransform[0][0] = m_unitSizeTransform[1][1] = m_unitSizeTransform[2][2] = unitSize;
     }
 
     rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndices,
@@ -1025,7 +1030,11 @@ public:
 
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
         LockGuard rprLock(m_rprContext->GetMutex());
-        if (!RPR_ERROR_CHECK(object->SetTransform(transform.GetArray(), false), "Fail set object transform")) {
+
+        // apply scene units size
+        auto finalTransform = transform * GfMatrix4f(m_unitSizeTransform);
+
+        if (!RPR_ERROR_CHECK(object->SetTransform(finalTransform.GetArray(), false), "Fail set object transform")) {
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
@@ -1139,8 +1148,8 @@ public:
         }
 
         // XXX (RPR): for the moment, RPR supports only 1 motion matrix
-        auto& startTransform = transformSamples[0];
-        auto& endTransform = transformSamples[numSamples - 1];
+        auto startTransform = transformSamples[0] * m_unitSizeTransform;
+        auto endTransform = transformSamples[numSamples - 1] * m_unitSizeTransform;
 
         auto rprStartTransform = GfMatrix4f(startTransform);
 
@@ -1338,7 +1347,7 @@ public:
     }
 
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform) {
-        auto t = transform * volume->voxelsTransform;
+        auto t = transform * volume->voxelsTransform * GfMatrix4f(m_unitSizeTransform);
 
         LockGuard rprLock(m_rprContext->GetMutex());
         RPR_ERROR_CHECK(volume->cubeMesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
@@ -1961,8 +1970,8 @@ public:
             auto& transformSamples = m_hdCamera->GetTransformSamples();
 
             // XXX (RPR): there is no way to sample all transforms via current RPR API
-            auto& startTransform = transformSamples.values.front();
-            auto& endTransform = transformSamples.values.back();
+            auto startTransform = transformSamples.values.front() * m_unitSizeTransform;
+            auto endTransform = transformSamples.values.back() * m_unitSizeTransform;
 
             GfVec3f linearMotion, scaleMotion, rotateAxis;
             float rotateAngle;
@@ -1972,7 +1981,7 @@ public:
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Failed to set camera angular motion");
         } else {
-            setCameraLookAt(m_hdCamera->GetTransform().GetInverse(), m_hdCamera->GetTransform());
+            setCameraLookAt(m_hdCamera->GetTransform().GetInverse() * m_unitSizeTransform, m_hdCamera->GetTransform() * m_unitSizeTransform);
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(0.0f, 0.0f, 0.0f), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(1.0f, 0.0f, 0.0f, 0.0f), "Failed to set camera angular motion");
         }
@@ -2031,14 +2040,15 @@ public:
             }
         }
 
+		// we need to scale far plane, near plane and focus distance using scene units scale coefficient
         GfRange1f clippingRange(0.01f, 100000000.0f);
         if (m_hdCamera->GetClippingRange(&clippingRange)) {
-            RPR_ERROR_CHECK(m_camera->SetNearPlane(clippingRange.GetMin()), "Failed to set camera near plane");
-            RPR_ERROR_CHECK(m_camera->SetFarPlane(clippingRange.GetMax()), "Failed to set camera far plane");
+            RPR_ERROR_CHECK(m_camera->SetNearPlane(clippingRange.GetMin() * m_unitSizeTransform[0][0]), "Failed to set camera near plane");
+            RPR_ERROR_CHECK(m_camera->SetFarPlane(clippingRange.GetMax() * m_unitSizeTransform[0][0]), "Failed to set camera far plane");
         }
         else {
-            RPR_ERROR_CHECK(m_camera->SetNearPlane(nearPlane), "Failed to set camera near plane");
-            RPR_ERROR_CHECK(m_camera->SetFarPlane(farPlane), "Failed to set camera far plane");
+            RPR_ERROR_CHECK(m_camera->SetNearPlane(nearPlane * m_unitSizeTransform[0][0]), "Failed to set camera near plane");
+            RPR_ERROR_CHECK(m_camera->SetFarPlane(farPlane * m_unitSizeTransform[0][0]), "Failed to set camera far plane");
         }
 
         RPR_ERROR_CHECK(m_camera->SetLensShift(apertureOffset[0], apertureOffset[1]), "Failed to set camera lens shift");
@@ -2056,7 +2066,7 @@ public:
             float focusDistance = 1.0f;
             m_hdCamera->GetFocusDistance(&focusDistance);
             if (focusDistance > 0.0f) {
-                RPR_ERROR_CHECK(m_camera->SetFocusDistance(focusDistance), "Failed to set camera focus distance");
+                RPR_ERROR_CHECK(m_camera->SetFocusDistance(focusDistance * m_unitSizeTransform[0][0]), "Failed to set camera focus distance");
             }
 
             float fstop = 0.0f;
@@ -4187,6 +4197,8 @@ private:
     std::condition_variable* m_presentedConditionVariable = nullptr;
     bool* m_presentedCondition = nullptr;
     rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
+
+    GfMatrix4d m_unitSizeTransform = GfMatrix4d(1.0);
 };
 
 HdRprApi::HdRprApi(HdRprDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
