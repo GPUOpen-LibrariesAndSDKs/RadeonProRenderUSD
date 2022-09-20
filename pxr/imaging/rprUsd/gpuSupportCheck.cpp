@@ -295,7 +295,6 @@ GPUSupportCheck::GPUSupportCheck() {
         return;
     }
 
-    /*
     std::vector<char const*> extentions = {
         VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
         VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME,
@@ -312,7 +311,6 @@ GPUSupportCheck::GPUSupportCheck() {
         UnloadVulkanLibrary(vulkan_library);
         return;
     }
-    */
     
     UnloadVulkanLibrary(vulkan_library);
 }
