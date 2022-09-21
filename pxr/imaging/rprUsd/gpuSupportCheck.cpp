@@ -15,7 +15,7 @@ limitations under the License.
 #include <vulkan/vulkan.h>
 #include <cstring>
 #include <functional>
-#include "GpuSupportCheck.h"
+#include "gpuSupportCheck.h"
 
 #ifdef _WIN32
 #include <Windows.h>
