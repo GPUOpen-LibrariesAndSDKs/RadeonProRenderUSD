@@ -63,8 +63,6 @@ const char* k_RadeonProRenderLibName = "libRadeonProRender64.dylib";
 const char* k_RadeonProRenderLibName = "libRadeonProRender64.so";
 #endif
 
-GPUSupportCheck GpuSupportCheck;
-
 std::string GetRprSdkPath() {
 #ifdef __APPLE__
     uint32_t count = _dyld_image_count();
@@ -217,6 +215,7 @@ std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::C
 
 template <typename Func>
 void ForEachGpu(rpr_int pluginID, const char* cachePath, Func&& func) {
+    GPUSupportCheck GpuSupportCheck(false);
 #define GPU_ACTION(index) \
     do { \
         if (GpuSupportCheck.GPUSupported(index)) { \
@@ -448,12 +447,11 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     }
 
     RprUsdDevicesInfo ret = {};
-
     if (RprUsdIsHybrid(pluginType)) {
         ret.cpu.numThreads = 0;
 
-        HybridSupportCheck check;
-        if (GpuSupportCheck.GPUHybridSupported(0)) {
+        GPUSupportCheck GpuSupportCheck(true);
+        if (GpuSupportCheck.GPUSupported(0)) {
             std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
             if (!name.empty()) {
                 ret.gpus.push_back({ 0, name });

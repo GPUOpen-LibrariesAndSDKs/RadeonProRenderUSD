@@ -277,7 +277,7 @@ bool CheckSupportForInstance(LIBRARY_TYPE const& vulkan_library, const std::vect
     return true;
 }
 
-GPUSupportCheck::GPUSupportCheck() {
+GPUSupportCheck::GPUSupportCheck(bool hybrid) {
     LIBRARY_TYPE vulkan_library = nullptr;
     VulcanFunctions vkf;
 
@@ -290,35 +290,35 @@ GPUSupportCheck::GPUSupportCheck() {
         return;
     }
 
-    if (!CheckSupportForInstance(vulkan_library, {}, vkf, m_gpu_supported, IsDeviceSupported)) {
-        UnloadVulkanLibrary(vulkan_library);
-        return;
+    if (hybrid) {
+        std::vector<char const*> extentions = {
+            VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+            VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME,
+            VK_EXT_SHADER_SUBGROUP_BALLOT_EXTENSION_NAME,
+            VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME,
+            VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+            VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+            VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
+            VK_KHR_MAINTENANCE3_EXTENSION_NAME,
+            VK_KHR_SPIRV_1_4_EXTENSION_NAME
+        };
+        if (!CheckSupportForInstance(vulkan_library, extentions, vkf, m_supported, IsDeviceHybridSupported)) {
+            UnloadVulkanLibrary(vulkan_library);
+            return;
+        }
     }
-
-    std::vector<char const*> extentions = {
-        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-        VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME,
-        VK_EXT_SHADER_SUBGROUP_BALLOT_EXTENSION_NAME,
-        VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME,
-        VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-        VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
-        VK_KHR_MAINTENANCE3_EXTENSION_NAME,
-        VK_KHR_SPIRV_1_4_EXTENSION_NAME
-    };
-    if (!CheckSupportForInstance(vulkan_library, extentions, vkf, m_gpu_hybrid_supported, IsDeviceHybridSupported)) {
-        UnloadVulkanLibrary(vulkan_library);
-        return;
+    else {
+        if (!CheckSupportForInstance(vulkan_library, {}, vkf, m_supported, IsDeviceSupported)) {
+            UnloadVulkanLibrary(vulkan_library);
+            return;
+        }
     }
     
     UnloadVulkanLibrary(vulkan_library);
 }
 
 bool GPUSupportCheck::GPUSupported(size_t index) {
-    return index < m_gpu_supported.size() ? m_gpu_supported[index] : false;
+    return index < m_supported.size() ? m_supported[index] : false;
 }
 
-bool GPUSupportCheck::GPUHybridSupported(size_t index) {
-    return index < m_gpu_hybrid_supported.size() ? m_gpu_hybrid_supported[index] : false;
-}

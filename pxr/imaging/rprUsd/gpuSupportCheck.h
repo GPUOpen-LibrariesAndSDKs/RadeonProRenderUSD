@@ -15,10 +15,8 @@ limitations under the License.
 
 class GPUSupportCheck {
 public:
-    GPUSupportCheck();
+    GPUSupportCheck(bool hybrid);
     bool GPUSupported(size_t index);
-    bool GPUHybridSupported(size_t index);
 private:
-    std::vector<bool> m_gpu_supported;
-    std::vector<bool> m_gpu_hybrid_supported;
+    std::vector<bool> m_supported;
 };
