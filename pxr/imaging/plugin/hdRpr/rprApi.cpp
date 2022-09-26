@@ -1500,7 +1500,7 @@ public:
     }
 
     GfMatrix4d GetCameraViewMatrix() const {
-        return m_hdCamera ? m_hdCamera->GetTransform().GetInverse() : GfMatrix4d(1.0);
+        return m_hdCamera ? (m_hdCamera->GetTransform() * m_unitSizeTransform).GetInverse() : GfMatrix4d(1.0);
     }
 
     const GfMatrix4d& GetCameraProjectionMatrix() const {
