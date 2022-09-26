@@ -384,9 +384,18 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         auto rprMaterial = material->GetRprMaterialObject();
 
         auto uvPrimvarName = &rprMaterial->GetUvPrimvarName();
+        // This will currently be empty for MaterialX.
         if (uvPrimvarName->IsEmpty()) {
             static TfToken st("st", TfToken::Immortal);
             uvPrimvarName = &st;
+
+            // If "st" doesn't exist then search for any other primvar with "texcoord2?" role.
+            if (!HdRprIsPrimvarExists(st, primvarDescsPerInterpolation)) {
+                if (const auto texcoordPrimvar = HdRprFindFirstPrimvarRole(primvarDescsPerInterpolation, "textureCoordinate"))
+                {
+                    uvPrimvarName = &texcoordPrimvar->name;
+                }
+            }
         }
 
         if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, *uvPrimvarName)) {

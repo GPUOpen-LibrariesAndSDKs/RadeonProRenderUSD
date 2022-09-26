@@ -24,6 +24,10 @@ void HdRprFillPrimvarDescsPerInterpolation(
     HdSceneDelegate* sceneDelegate, SdfPath const& id,
     std::map<HdInterpolation, HdPrimvarDescriptorVector>* primvarDescsPerInterpolation);
 
+const HdPrimvarDescriptor* HdRprFindFirstPrimvarRole(
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
+    const std::string& role);
+
 bool HdRprIsPrimvarExists(
     TfToken const& primvarName,
     std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
