@@ -580,19 +580,37 @@ void HdRprApiComputedAov::Resize(int width, int height, HdFormat format) {
 HdRprApiDepthAov::HdRprApiDepthAov(
     int width, int height, HdFormat format,
     std::shared_ptr<HdRprApiAov> worldCoordinateAov,
+    std::shared_ptr<HdRprApiAov> opacityAov,
     rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
     : HdRprApiComputedAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true), width, height, format)
-    , m_retainedWorldCoordinateAov(worldCoordinateAov) {
+    , m_retainedWorldCoordinateAov(worldCoordinateAov)
+    , m_retainedOpacityAov(opacityAov){
+
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create depth AOV: RIF context required");
     }
 
-    m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, rifContext);
-    m_ndcFilter = m_filter.get();
+    m_retainedNDCFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, rifContext);
+    m_ndcFilter = m_retainedNDCFilter.get();
+
+    m_filter= rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, rifContext);
+
+    auto opacityComposingKernelCode = std::string(R"(
+                            int2 coord;
+                            GET_COORD_OR_RETURN(coord, GET_BUFFER_SIZE(inputImage));
+                            vec4 alpha = ReadPixelTyped(alphaImage, coord.x, coord.y);
+                            vec4 color = ReadPixelTyped(inputImage, coord.x, coord.y);
+                            if (alpha.x == 0) {
+                                color = make_vec4(1.f, 1.f, 1.f, 1.f);
+                            }
+                            WritePixelTyped(outputImage, coord.x, coord.y, color);
+                        )");
+    m_filter->SetParam("code", opacityComposingKernelCode);
+    m_opacityFilter = m_filter.get();
     m_remapFilter = nullptr;
 
 #if PXR_VERSION >= 2002
-    m_retainedFilter = std::move(m_filter);
+    m_retainedOpacityFilter = std::move(m_filter);
 
     m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext);
     m_filter->SetParam("srcRangeAuto", 0);
@@ -608,15 +626,15 @@ void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     if (m_dirtyBits & ChangeTracker::DirtyFormat ||
         m_dirtyBits & ChangeTracker::DirtySize) {
 
+        m_ndcFilter->SetInput(rif::Color, m_retainedWorldCoordinateAov->GetResolvedFb());
+        m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+        m_opacityFilter->SetInput(rif::Color, m_ndcFilter->GetOutput());
+        m_opacityFilter->SetInput("alphaImage", m_retainedOpacityAov->GetResolvedFb());
+        m_opacityFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
         if (m_remapFilter) {
-            m_ndcFilter->SetInput(rif::Color, m_retainedWorldCoordinateAov->GetResolvedFb());
-            m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
-            m_remapFilter->SetInput(rif::Color, m_ndcFilter->GetOutput());
+            m_remapFilter->SetInput(rif::Color, m_opacityFilter->GetOutput());
             m_remapFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
-        } else {
-            m_ndcFilter->SetInput(rif::Color, m_retainedWorldCoordinateAov->GetResolvedFb());
-            m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
-        }
+        }  
     }
     m_dirtyBits = ChangeTracker::Clean;
 
@@ -624,6 +642,7 @@ void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     m_ndcFilter->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
 
     m_ndcFilter->Update();
+    m_opacityFilter->Update();
     if (m_remapFilter) {
         m_remapFilter->Update();
     }
@@ -632,6 +651,9 @@ void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
 void HdRprApiDepthAov::Resolve() {
     if (m_ndcFilter) {
         m_ndcFilter->Resolve();
+    }
+    if (m_opacityFilter) {
+        m_opacityFilter->Resolve();
     }
     if (m_remapFilter) {
         m_remapFilter->Resolve();

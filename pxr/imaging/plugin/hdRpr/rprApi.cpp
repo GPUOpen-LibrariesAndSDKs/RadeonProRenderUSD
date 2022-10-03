@@ -3780,8 +3780,13 @@ private:
                         TF_RUNTIME_ERROR("Failed to create depth AOV: can't create worldCoordinate AOV");
                         return nullptr;
                     }
+                    auto opacityAov = GetAov(HdRprAovTokens->opacity, width, height, HdFormatFloat32Vec4);
+                    if (!opacityAov) {
+                        TF_RUNTIME_ERROR("Failed to create depth AOV: can't create opacity AOV");
+                        return nullptr;
+                    }
 
-                    newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), std::move(opacityAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
                     newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                     aovCustomDestructor = [this](HdRprApiAov* aov) {
