@@ -153,6 +153,8 @@ public:
 
     void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);
 
+    void Restart();
+
     struct RenderStats {
         double percentDone;
         double averageRenderTimePerSample;

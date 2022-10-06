@@ -23,7 +23,7 @@ Image::Image(rif_image imageHandle)
 }
 
 rif_image_desc Image::GetDesc(uint32_t width, uint32_t height, HdFormat format) {
-    if (format == HdFormatInt32) {
+    if (format == HdFormatInt32Vec4) {
         // Emulate integer images using 4 component unsigned char images
         format = HdFormatUNorm8Vec4;
     }

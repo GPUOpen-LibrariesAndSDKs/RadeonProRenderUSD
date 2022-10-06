@@ -309,6 +309,18 @@ class "RprRendererSettingsAPI" (
         doc = "Controls whether in interactive mode resolution should be downscaled or no."
     )
 
+    uniform token rpr:hybrid:tonemapping = "None" (
+        allowedTokens = ["None", "Filmic", "Aces", "Reinhard"]
+        displayName = "Hybrid Tonemapping"
+        displayGroup = "Hybrid|Postprocessing"
+    )
+
+    uniform token rpr:hybrid:denoising = "None" (
+        allowedTokens = ["None", "SVGF", "ASVGF"]
+        displayName = "Hybrid Denoising"
+        displayGroup = "Hybrid|Postprocessing"
+    )
+
     uniform bool rpr:tonemapping:enable = false (
         displayName = "Enable Tonemapping"
         displayGroup = "Postprocessing|Tonemapping"

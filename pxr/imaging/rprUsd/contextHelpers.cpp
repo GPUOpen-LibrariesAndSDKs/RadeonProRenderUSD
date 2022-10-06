@@ -112,13 +112,14 @@ std::string GetRprSdkPath() {
 
 void SetupRprTracing() {
     if (RprUsdIsTracingEnabled()) {
-        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(nullptr, RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
-
+        // Trace dir must be set before enabling tracing
         auto tracingDir = TfGetEnvSetting(RPRUSD_TRACING_DIR);
         if (!tracingDir.empty()) {
             printf("RPR tracing directory: %s\n", tracingDir.c_str());
         }
         RPR_ERROR_CHECK(rprContextSetParameterByKeyString(nullptr, RPR_CONTEXT_TRACING_PATH, tracingDir.c_str()), "Failed to set tracing directory parameter");
+
+        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(nullptr, RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
     }
 }
 
@@ -152,6 +153,7 @@ const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
     {kPluginNorthstar, "libNorthstar64.so"},
     {kPluginTahoe, "libTahoe64.so"},
     {kPluginHybrid, "Hybrid.so"},
+    {kPluginHybridPro, "HybridPro.so"},
 #elif defined __APPLE__
     {kPluginTahoe, "libTahoe64.dylib"},
     {kPluginNorthstar, "libNorthstar64.dylib"},
@@ -448,8 +450,8 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     if (RprUsdIsHybrid(pluginType)) {
         ret.cpu.numThreads = 0;
 
-        HybridSupportCheck check;
-        if (check.supported(0)) {
+        // HybridSupportCheck check;
+        if (true /*check.supported(0)*/) {
             std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
             if (!name.empty()) {
                 ret.gpus.push_back({ 0, name });

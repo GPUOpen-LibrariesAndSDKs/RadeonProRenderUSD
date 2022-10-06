@@ -1947,6 +1947,70 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RENDER_QUALITY), hybridRenderQuality), "Fail to set context hybrid render quality");
             }
         }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyHybrid) || force) {
+            auto value = preferences.GetHybridTonemapping();
+            if (value == HdRprHybridTonemappingTokens->None) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_NONE), "Failed to set tonemapping");
+            } else if (value == HdRprHybridTonemappingTokens->Filmic) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_FILMIC), "Failed to set tonemapping");
+            } else if (value == HdRprHybridTonemappingTokens->Aces) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_ACES), "Failed to set tonemapping");
+            } else if (value == HdRprHybridTonemappingTokens->Reinhard) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_REINHARD), "Failed to set tonemapping");
+            }
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyHybrid) || force) {
+            auto value = preferences.GetHybridDenoising();
+            if (value == HdRprHybridDenoisingTokens->None) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_NONE), "Failed to set denoiser");
+            } else if (value == HdRprHybridDenoisingTokens->SVGF) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_SVGF), "Failed to set denoiser");
+            } else if (value == HdRprHybridDenoisingTokens->ASVGF) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_ASVGF), "Failed to set denoiser");
+            }
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, preferences.GetQualityRayDepth()), "Failed to set max recursion");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetQualityRayDepthDiffuse()), "Failed to set max depth diffuse");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetQualityRayDepthGlossy()), "Failed to set max depth glossy");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetQualityRayDepthRefraction()), "Failed to set max depth refraction");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_SHADOW, preferences.GetQualityRayDepthShadow()), "Failed to set max depth shadow");
+
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPSILON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
+            auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+
+        if ((preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) ||
+            preferences.IsDirty(HdRprConfig::DirtyInteractiveQuality)) || force) {
+            m_isInteractive = preferences.GetInteractiveMode();
+            auto maxRayDepth = m_isInteractive ? preferences.GetQualityInteractiveRayDepth() : preferences.GetQualityRayDepth();
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
+
+            if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                int downscale = 0;
+                if (m_isInteractive) {
+                    downscale = preferences.GetQualityInteractiveDownscaleResolution();
+                }
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
+            } else {
+                bool enableDownscale = m_isInteractive && preferences.GetQualityInteractiveDownscaleEnable();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(enableDownscale)), "Failed to set preview mode");
+            }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+        }
+
+
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_DISPLAY_GAMMA, 2.2f), "Failed to set display gamma");
     }
 
     void UpdateSettings(HdRprConfig const& preferences, bool force = false) {
@@ -3375,6 +3439,10 @@ Don't show this message again?
         return nullptr;
     }
 
+    void Restart() {
+        m_numSamples = 0;
+    }
+
 private:
     static RprUsdPluginType GetPluginType(TfToken const& renderQuality) {
         if (renderQuality == HdRprCoreRenderQualityTokens->Full) {
@@ -3836,6 +3904,7 @@ private:
     }
 
     std::shared_ptr<HdRprApiAov> CreateAov(TfToken const& aovName, int width, int height, HdFormat format) {
+        if ((aovName.GetString() == "depth") || (aovName.GetString() == "worldCoordinate")) return nullptr;
         if (!m_rprContext ||
             width < 0 || height < 0 ||
             format == HdFormatInvalid || HdDataSizeOfFormat(format) == 0) {
@@ -3903,7 +3972,7 @@ private:
                         baseAovName = HdRprAovTokens->objectGroupId;
                     }
 
-                    auto baseAov = GetAov(baseAovName, width, height, HdFormatInt32);
+                    auto baseAov = GetAov(baseAovName, width, height, (baseAovName == HdAovTokens->primId) ? HdFormatInt32Vec4 : HdFormatInt32);
                     if (!baseAov) {
                         TF_RUNTIME_ERROR("Failed to create %s AOV: cant create %s AOV", aovName.GetText(), baseAovName.GetText());
                         return nullptr;
@@ -4608,6 +4677,11 @@ void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presen
 
     // Temporary should be force inited here, because otherwise has issues with GPU synchronization
     m_impl->InitIfNeeded();
+}
+
+void HdRprApi::Restart()
+{
+    m_impl->Restart();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

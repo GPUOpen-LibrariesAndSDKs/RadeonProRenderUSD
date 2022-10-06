@@ -10,7 +10,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
-
+#include <iostream>
 #include "pxr/imaging/rprUsd/util.h"
 #include "pxr/imaging/rprUsd/materialRegistry.h"
 #include "pxr/imaging/rprUsd/imageCache.h"
@@ -32,6 +32,7 @@ limitations under the License.
 #include "pxr/usd/usd/schemaBase.h"
 #include "pxr/usd/usdShade/tokens.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
+#include <pxr/base/arch/env.h>
 
 #include "materialNodes/usdNode.h"
 #include "materialNodes/mtlxNode.h"
@@ -427,13 +428,19 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     if (materialXStdlibPath->empty()) {
         const TfType schemaBaseType = TfType::Find<UsdSchemaBase>();
         PlugPluginPtr usdPlugin = PlugRegistry::GetInstance().GetPluginForType(schemaBaseType);
-        if (usdPlugin) {
-            std::string usdLibPath = usdPlugin->GetPath();
+        std::string usdLibPath = usdPlugin->GetPath();
+        if (!usdLibPath.empty()) {
             std::string usdDir = TfNormPath(TfGetPathName(usdLibPath) + "..");
             *materialXStdlibPath = usdDir;
         }
     }
-    
+
+    if (materialXStdlibPath->empty()) {
+        // rprUsd in USD builds resides in: USD/plugin/usd/rprUsd, so USD folder 3 folders upper from plugin
+        std::string usdDir = TfNormPath(PLUG_THIS_PLUGIN->GetPath() + "/../../../");
+        *materialXStdlibPath = usdDir;
+    }
+
     mx::DocumentPtr stdLibraries = mx::createDocument();
 
     if (!materialXStdlibPath->empty()) {

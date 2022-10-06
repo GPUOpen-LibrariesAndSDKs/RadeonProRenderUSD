@@ -391,6 +391,7 @@ bool HdRprDelegate::Stop() {
 }
 
 bool HdRprDelegate::Restart() {
+    m_rprApi->Restart();
     m_renderParam->RestartRender();
     m_renderThread.StartRender();
     return true;

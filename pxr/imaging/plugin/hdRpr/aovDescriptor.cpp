@@ -77,7 +77,7 @@ HdRprAovRegistry::HdRprAovRegistry() {
     m_aovDescriptors[RPR_AOV_UV] = HdRprAovDescriptor(RPR_AOV_UV, false, HdFormatFloat32Vec3);
     m_aovDescriptors[RPR_AOV_SHADING_NORMAL] = HdRprAovDescriptor(RPR_AOV_SHADING_NORMAL, false, HdFormatFloat32Vec3);
     m_aovDescriptors[RPR_AOV_GEOMETRIC_NORMAL] = HdRprAovDescriptor(RPR_AOV_GEOMETRIC_NORMAL, false);
-    m_aovDescriptors[RPR_AOV_OBJECT_ID] = HdRprAovDescriptor(RPR_AOV_OBJECT_ID, false, HdFormatInt32, idClearValue);
+    m_aovDescriptors[RPR_AOV_OBJECT_ID] = HdRprAovDescriptor(RPR_AOV_OBJECT_ID, false, HdFormatInt32Vec4, idClearValue);
     m_aovDescriptors[RPR_AOV_MATERIAL_ID] = HdRprAovDescriptor(RPR_AOV_MATERIAL_ID, false, HdFormatInt32, idClearValue);
     m_aovDescriptors[RPR_AOV_OBJECT_GROUP_ID] = HdRprAovDescriptor(RPR_AOV_OBJECT_GROUP_ID, false, HdFormatInt32, idClearValue);
     m_aovDescriptors[RPR_AOV_WORLD_COORDINATE] = HdRprAovDescriptor(RPR_AOV_WORLD_COORDINATE, false);

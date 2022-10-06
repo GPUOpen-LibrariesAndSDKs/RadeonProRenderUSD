@@ -177,6 +177,7 @@ HdRprApiFramebuffer* HdRprApiAov::GetResolvedFb() {
 void HdRprApiAov::OnFormatChange(rif::Context* rifContext) {
     m_filter = nullptr;
     if (rifContext && m_format != HdFormatFloat32Vec4) {
+        return;
         m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
         m_filter->SetParam("interpOperator", (int) RIF_IMAGE_INTERPOLATION_NEAREST);
 
