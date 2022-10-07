@@ -3174,7 +3174,7 @@ Don't show this message again?
             int numPixels = m_viewportSize[0] * m_viewportSize[1];
             progress = std::max(progress, double(numPixels - m_activePixels) / numPixels);
         } else if (m_isRenderUpdateCallbackEnabled && m_rucData.previousProgress > 0.0f) {
-            progress += m_rucData.previousProgress * (double(m_numSamplesPerIter) / m_maxSamples);
+            progress = std::min(progress + m_rucData.previousProgress * (double(m_numSamplesPerIter) / m_maxSamples), 1.0);
         }
         stats.percentDone = 100.0 * progress;
 
