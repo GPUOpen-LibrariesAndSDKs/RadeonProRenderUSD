@@ -24,6 +24,7 @@ limitations under the License.
 #include "pxr/usd/sdf/assetPath.h"
 #include "pxr/base/gf/matrix3f.h"
 #include "pxr/base/gf/vec2f.h"
+#include "pxr/usd/usdShade/tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -174,7 +175,7 @@ bool RprUsd_UsdPreviewSurface::SetInput(
 }
 
 VtValue RprUsd_UsdPreviewSurface::GetOutput(TfToken const& outputId) {
-    if (HdMaterialTerminalTokens->surface == outputId) {
+    if (UsdShadeTokens->surface == outputId) {
         if (m_useSpecular) {
             RPR_ERROR_CHECK(m_rprNode->SetInput(RPR_MATERIAL_INPUT_UBER_REFLECTION_MODE, RPR_UBER_MATERIAL_IOR_MODE_PBR), "Failed to set material input");
             SetRprInput(m_rprNode.get(), RPR_MATERIAL_INPUT_UBER_REFLECTION_COLOR, m_reflection);
@@ -184,7 +185,7 @@ VtValue RprUsd_UsdPreviewSurface::GetOutput(TfToken const& outputId) {
         }
 
         return RprUsd_BaseRuntimeNode::GetOutput(outputId);
-    } else if (HdMaterialTerminalTokens->displacement == outputId) {
+    } else if (UsdShadeTokens->displacement == outputId) {
         return m_displacementOutput;
     }
 

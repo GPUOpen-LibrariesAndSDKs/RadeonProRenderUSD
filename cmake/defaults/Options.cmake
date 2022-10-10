@@ -31,6 +31,8 @@ option(RPR_ENABLE_VULKAN_INTEROP_SUPPORT OFF "Build hdRpr with Vulkan interop su
 
 option(PXR_SYMLINK_HEADER_FILES "Symlink the header files from, ie, pxr/base/lib/tf to CMAKE_DIR/pxr/base/tf, instead of copying; ensures that you may edit the header file in either location, and improves experience in IDEs which find normally the \"copied\" header, ie, CLion; has no effect on windows" OFF)
 
+option(MAYAUSD_OPENEXR_STATIC "Make static linking of OpenEXR for Maya USD" OFF)
+
 # Precompiled headers are a win on Windows, not on gcc.
 set(pxr_enable_pch "OFF")
 if(MSVC)
@@ -70,14 +72,24 @@ set(PXR_OBJECT_LIBS ""
     "Aggregation of all core libraries built as OBJECT libraries."
 )
 
-set(PXR_LIB_PREFIX ${CMAKE_SHARED_LIBRARY_PREFIX}
-    CACHE
-    STRING
-    "Prefix for build library name"
-)
+if(PXR_VERSION GREATER_EQUAL 2111)
+  set(PXR_LIB_PREFIX "${CMAKE_SHARED_LIBRARY_PREFIX}usd_"
+      CACHE
+      STRING
+      "Prefix for build library name"
+  )
+else()
+  set(PXR_LIB_PREFIX "${CMAKE_SHARED_LIBRARY_PREFIX}"
+      CACHE
+      STRING
+      "Prefix for build library name"
+  )
+endif()
 
 option(BUILD_SHARED_LIBS "Build shared libraries." ON)
 option(PXR_BUILD_MONOLITHIC "Build a monolithic library." OFF)
 
 option(MATERIALX_BUILD_PYTHON "Build the MaterialX Python package from C++ bindings. Requires Python 2.7 or greater." OFF)
 option(MATERIALX_INSTALL_PYTHON "Install the MaterialX Python package as a third-party library when the install target is built." OFF)
+
+option(USE_USDSHADE_MTLX "Use UsdShade during material parsing" ON)

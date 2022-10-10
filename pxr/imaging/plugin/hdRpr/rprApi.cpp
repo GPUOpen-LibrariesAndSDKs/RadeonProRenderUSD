@@ -49,12 +49,13 @@ using json = nlohmann::json;
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/usd/usdRender/tokens.h"
 #include "pxr/usd/usdGeom/tokens.h"
-#include "pxr/base/tf/envSetting.h"
 #include "pxr/base/tf/fileUtils.h"
 #include "pxr/base/tf/pathUtils.h"
 #include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/work/loops.h"
+#include "pxr/base/arch/env.h"
+#include "pxr/base/tf/envSetting.h"
 
 #include "notify/message.h"
 
@@ -69,6 +70,8 @@ using json = nlohmann::json;
 #include <ImfOutputFile.h>
 #include <ImfChannelList.h>
 #include <ImfStringAttribute.h>
+#include <ImfFrameBuffer.h>
+#include <ImfHeader.h>
 #endif // RPR_EXR_EXPORT_ENABLED
 
 #ifdef BUILD_AS_HOUDINI_PLUGIN
@@ -101,10 +104,15 @@ std::string const& GetPath(SdfAssetPath const& path) {
 
 TfToken GetRenderQuality(HdRprConfig const& config) {
     std::string renderQualityOverride = TfGetEnvSetting(HDRPR_RENDER_QUALITY_OVERRIDE);
+    std::string renderQualityUsdviewEnvSetting = ArchGetEnv("HDRPR_USDVIEW_RENDER_QUALITY");
 
     auto& tokens = HdRprCoreRenderQualityTokens->allTokens;
     if (std::find(tokens.begin(), tokens.end(), renderQualityOverride) != tokens.end()) {
         return TfToken(renderQualityOverride);
+    }
+    
+    if (std::find(tokens.begin(), tokens.end(), renderQualityUsdviewEnvSetting) != tokens.end()) {
+        return TfToken(renderQualityUsdviewEnvSetting);
     }
 
     return config.GetCoreRenderQuality();
@@ -369,6 +377,11 @@ public:
             TF_RUNTIME_ERROR("%s", e.what());
             m_state = kStateInvalid;
         }
+
+        // Try to get scene unit size from delegate. Default value is 1 meter per unit
+        static const TfToken metersPerUnitToken("stageMetersPerUnit", TfToken::Immortal);
+        double unitSize = m_delegate->GetRenderSetting<double>(metersPerUnitToken, 1.0);
+        m_unitSizeTransform[0][0] = m_unitSizeTransform[1][1] = m_unitSizeTransform[2][2] = unitSize;
     }
 
     rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndices,
@@ -585,7 +598,11 @@ public:
         }
 
         if (dirty) {
-            if (RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(level), "Failed to set mesh subdividion level")) return;
+            uint64_t normalCount;
+            if (RPR_ERROR_CHECK(rprMeshGetInfo(GetRprObject(mesh), RPR_MESH_NORMAL_COUNT, sizeof(normalCount), &normalCount, nullptr), "Failed to get normal count")) return;
+            if (normalCount != 0) {
+                if (RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(level), "Failed to set mesh subdividion level")) return;
+            }
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
@@ -729,6 +746,54 @@ public:
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
+    }
+
+    bool SetMeshVertexColor(rpr::Shape* mesh, VtArray<VtVec3fArray> const& primvarSamples, HdInterpolation interpolation) {
+
+        // We use zero primvar channel to store vertex colors
+        const int colorPrimvarKey = 0;
+
+        if (primvarSamples.empty()) {
+            return false;
+        }
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            LockGuard rprLock(m_rprContext->GetMutex());
+
+            rpr::PrimvarInterpolationType rprInterpolation;
+
+            switch (interpolation)
+            {
+            case HdInterpolationConstant:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_CONSTANT;
+                break;
+            case HdInterpolationUniform:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_UNIFORM;
+                break;
+            case HdInterpolationVertex:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_VERTEX;
+                break;
+            case HdInterpolationVarying:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_FACEVARYING_NORMAL;
+                break;
+            case HdInterpolationFaceVarying:
+                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_FACEVARYING_UV;
+                break;
+            default:
+                // Rpr does not support HdInterpolationInstance
+                return false;
+            }
+            try {
+                RPR_ERROR_CHECK_THROW(mesh->SetPrimvar(colorPrimvarKey, (rpr_float const*)primvarSamples[0].cdata(), primvarSamples[0].size() * 3, 3, rprInterpolation), "Failed to set color primvars");
+            }
+            catch (RprUsdError& e) {
+                TF_RUNTIME_ERROR("Failed to set vertex color: %s", e.what());
+                return false;
+            }
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+            return true;
+        }
+        return false;
     }
 
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve) {
@@ -1017,7 +1082,11 @@ public:
 
     void SetTransform(rpr::SceneObject* object, GfMatrix4f const& transform) {
         LockGuard rprLock(m_rprContext->GetMutex());
-        if (!RPR_ERROR_CHECK(object->SetTransform(transform.GetArray(), false), "Fail set object transform")) {
+
+        // apply scene units size
+        auto finalTransform = transform * GfMatrix4f(m_unitSizeTransform);
+
+        if (!RPR_ERROR_CHECK(object->SetTransform(finalTransform.GetArray(), false), "Fail set object transform")) {
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
@@ -1131,8 +1200,8 @@ public:
         }
 
         // XXX (RPR): for the moment, RPR supports only 1 motion matrix
-        auto& startTransform = transformSamples[0];
-        auto& endTransform = transformSamples[numSamples - 1];
+        auto startTransform = transformSamples[0] * m_unitSizeTransform;
+        auto endTransform = transformSamples[numSamples - 1] * m_unitSizeTransform;
 
         auto rprStartTransform = GfMatrix4f(startTransform);
 
@@ -1227,6 +1296,54 @@ public:
         try {
             return new HdRprApiPointsMaterial(colors, m_rprContext.get());
         } catch (RprUsdError& e) {
+            TF_RUNTIME_ERROR("Failed to create points material: %s", e.what());
+            return nullptr;
+        }
+    }
+
+    RprUsdMaterial* CreatePrimvarColorLookupMaterial() {
+        if (!m_rprContext) {
+            return nullptr;
+        }
+
+        LockGuard rprLock(m_rprContext->GetMutex());
+
+        class HdRprApiPrimvarColorLookupMaterial : public RprUsdMaterial {
+        public:
+            HdRprApiPrimvarColorLookupMaterial(rpr::Context* context) {
+                rpr::Status status;
+
+                m_primvarLookupNode.reset(context->CreateMaterialNode(RPR_MATERIAL_NODE_PRIMVAR_LOOKUP, &status));
+                if (!m_primvarLookupNode) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to create primvar lookup node");
+                }
+
+                // we use zero primvar channel to store vertex color values
+                status = m_primvarLookupNode->SetInput(RPR_MATERIAL_INPUT_VALUE, (rpr_uint) 0);
+                if (status != RPR_SUCCESS) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to set lookup node input value");
+                }
+
+                m_uberNode.reset(context->CreateMaterialNode(RPR_MATERIAL_NODE_UBERV2, &status));
+                if (!m_uberNode) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to create uber node");
+                }
+                RPR_ERROR_CHECK_THROW(m_uberNode->SetInput(RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR, m_primvarLookupNode.get()), "Failed to set root material diffuse color");
+
+                m_surfaceNode = m_uberNode.get();
+            };
+
+            ~HdRprApiPrimvarColorLookupMaterial() final = default;
+
+        private:
+            std::unique_ptr<rpr::MaterialNode> m_primvarLookupNode;
+            std::unique_ptr<rpr::MaterialNode> m_uberNode;
+        };
+
+        try {
+            return new HdRprApiPrimvarColorLookupMaterial(m_rprContext.get());
+        }
+        catch (RprUsdError& e) {
             TF_RUNTIME_ERROR("Failed to create points material: %s", e.what());
             return nullptr;
         }
@@ -1330,7 +1447,7 @@ public:
     }
 
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform) {
-        auto t = transform * volume->voxelsTransform;
+        auto t = transform * volume->voxelsTransform * GfMatrix4f(m_unitSizeTransform);
 
         LockGuard rprLock(m_rprContext->GetMutex());
         RPR_ERROR_CHECK(volume->cubeMesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
@@ -1383,7 +1500,7 @@ public:
     }
 
     GfMatrix4d GetCameraViewMatrix() const {
-        return m_hdCamera ? m_hdCamera->GetViewMatrix() : GfMatrix4d(1.0);
+        return m_hdCamera ? (m_hdCamera->GetTransform() * m_unitSizeTransform).GetInverse() : GfMatrix4d(1.0);
     }
 
     const GfMatrix4d& GetCameraProjectionMatrix() const {
@@ -1566,7 +1683,6 @@ public:
 
             if (config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 m_currentRenderQuality = GetRenderQuality(*config);
-
                 auto newPlugin = GetPluginType(m_currentRenderQuality);
                 auto activePlugin = m_rprContextMetadata.pluginType;
                 m_state = (newPlugin != activePlugin) ? kStateRestartRequired : kStateRender;
@@ -1578,6 +1694,8 @@ public:
                     activeRenderQuality = HdRprCoreRenderQualityTokens->Full;
                 } else if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
                     activeRenderQuality = HdRprCoreRenderQualityTokens->Northstar;
+                } else if (m_rprContextMetadata.pluginType == kPluginHybridPro) {
+                    activeRenderQuality = HdRprCoreRenderQualityTokens->HybridPro;
                 } else {
                     rpr_uint currentHybridQuality = RPR_RENDER_QUALITY_HIGH;
                     size_t dummy;
@@ -1711,9 +1829,11 @@ public:
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_SHADOW, preferences.GetQualityRayDepthShadow()), "Failed to set max depth shadow");
 
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPSILON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
             auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_IMAGE_FILTER_RADIUS, preferences.GetQualityImageFilterRadius()), "Failed to set Pixel filter width");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
@@ -1794,7 +1914,7 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetQualityRayDepthRefraction()), "Failed to set max depth refraction");
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
 
-                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPISLON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPSILON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
                 auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
 
@@ -1950,8 +2070,8 @@ public:
             auto& transformSamples = m_hdCamera->GetTransformSamples();
 
             // XXX (RPR): there is no way to sample all transforms via current RPR API
-            auto& startTransform = transformSamples.values.front();
-            auto& endTransform = transformSamples.values.back();
+            auto startTransform = transformSamples.values.front() * m_unitSizeTransform;
+            auto endTransform = transformSamples.values.back() * m_unitSizeTransform;
 
             GfVec3f linearMotion, scaleMotion, rotateAxis;
             float rotateAngle;
@@ -1961,13 +2081,19 @@ public:
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(linearMotion[0], linearMotion[1], linearMotion[2]), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(rotateAxis[0], rotateAxis[1], rotateAxis[2], rotateAngle), "Failed to set camera angular motion");
         } else {
-            setCameraLookAt(m_hdCamera->GetViewMatrix(), m_hdCamera->GetViewInverseMatrix());
+            setCameraLookAt(m_hdCamera->GetTransform().GetInverse() * m_unitSizeTransform, m_hdCamera->GetTransform() * m_unitSizeTransform);
             RPR_ERROR_CHECK(m_camera->SetLinearMotion(0.0f, 0.0f, 0.0f), "Failed to set camera linear motion");
             RPR_ERROR_CHECK(m_camera->SetAngularMotion(1.0f, 0.0f, 0.0f, 0.0f), "Failed to set camera angular motion");
         }
 
         auto aspectRatio = double(m_viewportSize[0]) / m_viewportSize[1];
-        m_cameraProjectionMatrix = CameraUtilConformedWindow(m_hdCamera->GetProjectionMatrix(), m_hdCamera->GetWindowPolicy(), aspectRatio);
+
+#if PXR_VERSION >= 2203
+        GfMatrix4d projectionMatrix = m_hdCamera->ComputeProjectionMatrix();
+#else
+        GfMatrix4d projectionMatrix = m_hdCamera->GetProjectionMatrix();
+#endif
+        m_cameraProjectionMatrix = CameraUtilConformedWindow(projectionMatrix, m_hdCamera->GetWindowPolicy(), aspectRatio);
 
         float sensorWidth;
         float sensorHeight;
@@ -2014,14 +2140,15 @@ public:
             }
         }
 
+		// we need to scale far plane, near plane and focus distance using scene units scale coefficient
         GfRange1f clippingRange(0.01f, 100000000.0f);
         if (m_hdCamera->GetClippingRange(&clippingRange)) {
-            RPR_ERROR_CHECK(m_camera->SetNearPlane(clippingRange.GetMin()), "Failed to set camera near plane");
-            RPR_ERROR_CHECK(m_camera->SetFarPlane(clippingRange.GetMax()), "Failed to set camera far plane");
+            RPR_ERROR_CHECK(m_camera->SetNearPlane(clippingRange.GetMin() * m_unitSizeTransform[0][0]), "Failed to set camera near plane");
+            RPR_ERROR_CHECK(m_camera->SetFarPlane(clippingRange.GetMax() * m_unitSizeTransform[0][0]), "Failed to set camera far plane");
         }
         else {
-            RPR_ERROR_CHECK(m_camera->SetNearPlane(nearPlane), "Failed to set camera near plane");
-            RPR_ERROR_CHECK(m_camera->SetFarPlane(farPlane), "Failed to set camera far plane");
+            RPR_ERROR_CHECK(m_camera->SetNearPlane(nearPlane * m_unitSizeTransform[0][0]), "Failed to set camera near plane");
+            RPR_ERROR_CHECK(m_camera->SetFarPlane(farPlane * m_unitSizeTransform[0][0]), "Failed to set camera far plane");
         }
 
         RPR_ERROR_CHECK(m_camera->SetLensShift(apertureOffset[0], apertureOffset[1]), "Failed to set camera lens shift");
@@ -2039,7 +2166,7 @@ public:
             float focusDistance = 1.0f;
             m_hdCamera->GetFocusDistance(&focusDistance);
             if (focusDistance > 0.0f) {
-                RPR_ERROR_CHECK(m_camera->SetFocusDistance(focusDistance), "Failed to set camera focus distance");
+                RPR_ERROR_CHECK(m_camera->SetFocusDistance(focusDistance * m_unitSizeTransform[0][0]), "Failed to set camera focus distance");
             }
 
             float fstop = 0.0f;
@@ -2726,8 +2853,6 @@ public:
                 }
             }
 
-            m_numSamples += m_numSamplesPerIter;
-
             auto startTime = std::chrono::high_resolution_clock::now();
 
             m_rucData.previousProgress = -1.0f;
@@ -2757,7 +2882,7 @@ public:
 
                     // Always force denoise on the last sample because it's quite hard to match
                     // the max amount of samples and denoise controls (min iter and iter step)
-                    if (m_numSamples == m_maxSamples) {
+                    if (m_numSamples + m_numSamplesPerIter == m_maxSamples) {
                         doDenoisedResolve = true;
                     }
                 }
@@ -2777,6 +2902,8 @@ public:
 
             // As soon as the first sample has been rendered, we enable aborting
             m_isAbortingEnabled.store(true);
+
+            m_numSamples += m_numSamplesPerIter;
         }
     }
 
@@ -4170,6 +4297,8 @@ private:
     std::condition_variable* m_presentedConditionVariable = nullptr;
     bool* m_presentedCondition = nullptr;
     rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
+
+    GfMatrix4d m_unitSizeTransform = GfMatrix4d(1.0);
 };
 
 HdRprApi::HdRprApi(HdRprDelegate* delegate) : m_impl(new HdRprApiImpl(delegate)) {
@@ -4314,6 +4443,11 @@ RprUsdMaterial* HdRprApi::CreateDiffuseMaterial(GfVec3f const& color) {
     });
 }
 
+RprUsdMaterial* HdRprApi::CreatePrimvarColorLookupMaterial(){
+    m_impl->InitIfNeeded();
+    return m_impl->CreatePrimvarColorLookupMaterial();
+}
+
 void HdRprApi::SetMeshRefineLevel(rpr::Shape* mesh, int level) {
     m_impl->SetMeshRefineLevel(mesh, level);
 }
@@ -4336,6 +4470,10 @@ void HdRprApi::SetMeshId(rpr::Shape* mesh, uint32_t id) {
 
 void HdRprApi::SetMeshIgnoreContour(rpr::Shape* mesh, bool ignoreContour) {
     m_impl->SetMeshIgnoreContour(mesh, ignoreContour);
+}
+
+bool HdRprApi::SetMeshVertexColor(rpr::Shape* mesh, VtArray<VtVec3fArray> const& primvarSamples, HdInterpolation interpolation) {
+    return m_impl->SetMeshVertexColor(mesh, primvarSamples, interpolation);
 }
 
 void HdRprApi::SetCurveMaterial(rpr::Curve* curve, RprUsdMaterial const* material) {

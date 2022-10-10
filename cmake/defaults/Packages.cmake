@@ -110,6 +110,11 @@ if(HoudiniUSD_FOUND)
 else()
     # We are using python to generate source files
     find_package(PythonInterp 3.7)
+
+    # If it's not provided externally, consider that it's default USD build and OpenEXR could be found at root
+    if (NOT OPENEXR_LOCATION)
+        set(OPENEXR_LOCATION ${USD_INCLUDE_DIR}/../)
+    endif()
 endif()
 
 if (NOT PXR_MALLOC_LIBRARY)
@@ -126,9 +131,7 @@ if(MaterialX_FOUND)
     set(RPR_DISABLE_CUSTOM_MATERIALX_LOADER ON)
 endif()
 
-if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
-    find_package(Vulkan REQUIRED)
-endif()
+find_package(Vulkan REQUIRED)
 
 # Third Party Plugin Package Requirements
 # ----------------------------------------------
@@ -154,17 +157,29 @@ macro(find_exr)
     endif()
 endmacro()
 
-find_exr(Half IlmImf Iex)
-
-set(RPR_EXR_EXPORT_ENABLED TRUE)
-if(NOT OpenEXR_FOUND)
-    set(RPR_EXR_EXPORT_ENABLED FALSE)
+if (NOT MAYAUSD_OPENEXR_STATIC)
+    find_exr(Half IlmImf Iex)
+else()
+    find_exr(Half IlmImf Iex IlmThread zlib)
 endif()
 
-find_exr(Half)
+set(RPR_EXR_EXPORT_ENABLED TRUE)
+
+if(HoudiniUSD_FOUND)
+    find_exr(OpenEXR OpenEXRCore Iex)
+endif()
 
 if(NOT OpenEXR_FOUND)
-    message(FATAL_ERROR "Failed to find Half library")
+    find_exr(Half IlmImf Iex)
+    if(NOT OpenEXR_FOUND)
+        set(RPR_EXR_EXPORT_ENABLED FALSE)
+    endif()
+
+    find_exr(Half)
+
+    if(NOT OpenEXR_FOUND)
+        message(FATAL_ERROR "Failed to find Half library")
+    endif()
 endif()
 
 # ----------------------------------------------

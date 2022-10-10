@@ -149,8 +149,8 @@ class "RprRendererSettingsAPI" (
               """
     )
 
-    uniform token rpr:core:cameraMode = "Default" (
-        allowedTokens = ["Default", "Latitude Longitude 360", "Latitude Longitude Stereo", "Cubemap", "Cubemap Stereo", "Fisheye"]
+    uniform token rpr:core:cameraMode = "default" (
+        allowedTokens = ["default", "Latitude Longitude 360", "Latitude Longitude Stereo", "Cubemap", "Cubemap Stereo", "Fisheye"]
         displayName = "Camera Mode"
         displayGroup = "General"
     )
@@ -159,6 +159,12 @@ class "RprRendererSettingsAPI" (
         displayName = "Enable Color Alpha"
         displayGroup = "General"
         doc = ""
+    )
+	
+    uniform double stageMetersPerUnit = 1.0 (
+        displayName = "Meters Per Unit"
+        displayGroup = "General"
+	doc = "Scene unit size in meters"
     )
 
     # Northstar only
@@ -269,6 +275,15 @@ class "RprRendererSettingsAPI" (
         doc = "Limits the intensity, or the maximum brightness, of samples in the scene. Greater clamp radiance values produce more brightness. Set to 0.0 ot disable clamping."
         rprMinValue = 0.0
         rprMaxValue = 1000000
+    )
+
+    # northstar only
+    uniform float rpr:quality:imageFilterRadius = 1.5 (
+        displayGroup = "Quality"
+        displayName = "Pixel filter width"
+        doc = "Determines Pixel filter width (anti-aliasing)."
+        rprMinValue = 0.0
+        rprMaxValue = 5.0
     )
 
     # not for hybrid

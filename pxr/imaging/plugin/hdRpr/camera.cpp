@@ -113,7 +113,11 @@ void HdRprCamera::Sync(HdSceneDelegate* sceneDelegate,
         EvalCameraParam(&m_apertureBlades, RprUsdTokens->rprCameraBlades, sceneDelegate, id, 16u);
     }
 
+#if PXR_VERSION >= 2102
+    if (*dirtyBits & HdCamera::DirtyTransform) {
+#else
     if (*dirtyBits & HdCamera::DirtyViewMatrix) {
+#endif
         sceneDelegate->SampleTransform(GetId(), &m_transform);
     }
 

@@ -48,8 +48,12 @@ struct RprUsdMaterialNodeDesc {
 #ifdef USE_USDSHADE_MTLX
 using RprUsd_MaterialNetworkConnection = HdMaterialConnection2;
 using RprUsd_MaterialNetwork = HdMaterialNetwork2;
-inline void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(HdMaterialNetworkMap const& hdNetworkMap, RprUsd_MaterialNetwork* result, bool* isVolume = nullptr) {
-    HdMaterialNetwork2ConvertFromHdMaterialNetworkMap(hdNetworkMap, result, isVolume);
+inline void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(HdMaterialNetworkMap const& hdNetworkMap, RprUsd_MaterialNetwork& result, bool* isVolume = nullptr) {
+#if PXR_VERSION >= 2205
+    result = HdConvertToHdMaterialNetwork2(hdNetworkMap, isVolume);
+#else
+    HdMaterialNetwork2ConvertFromHdMaterialNetworkMap(hdNetworkMap, &result, isVolume);
+#endif
 }
 #else
 struct RprUsd_MaterialNetworkConnection {
@@ -69,7 +73,7 @@ struct RprUsd_MaterialNetwork {
 };
 void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
     HdMaterialNetworkMap const& hdNetworkMap,
-    RprUsd_MaterialNetwork* result,
+    RprUsd_MaterialNetwork& result,
     bool* isVolume = nullptr);
 #endif // USE_USDSHADE_MTLX
 

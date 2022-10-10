@@ -402,6 +402,14 @@ render_setting_categories = [
                 'defaultValue': 0.0,
                 'minValue': 0.0,
                 'maxValue': 1e6
+            },
+            {
+                'name': 'quality:imageFilterRadius',
+                'ui_name': 'Pixel filter width',
+                'help': 'Determines Pixel filter width (anti-aliasing).',
+                'defaultValue': 1.5,
+                'minValue': 0.0,
+                'maxValue': 5.0
             }
         ]
     },
