@@ -448,8 +448,8 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     if (RprUsdIsHybrid(pluginType)) {
         ret.cpu.numThreads = 0;
 
-        HybridSupportCheck check;
-        if (check.supported(0)) {
+        //HybridSupportCheck check;
+        if (true) {
             std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
             if (!name.empty()) {
                 ret.gpus.push_back({ 0, name });
