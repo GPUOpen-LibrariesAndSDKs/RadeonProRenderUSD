@@ -363,7 +363,7 @@ class _PluginConfigurationWidget(BorderWidget):
 
 
 class _DevicesConfigurationDialog(QtWidgets.QDialog):
-    def __init__(self, configuration, show_restart_warning):
+    def __init__(self, configuration, show_restart_warning, isModal):
         super(_DevicesConfigurationDialog, self).__init__()
 
         self.configuration = configuration
@@ -400,6 +400,8 @@ class _DevicesConfigurationDialog(QtWidgets.QDialog):
         self.button_box.accepted.connect(self.on_accept)
         self.button_box.rejected.connect(self.on_reject)
         self.main_layout.addWidget(self.button_box)
+        if isModal:
+            self.setModal(True)
 
         self.show()
 
@@ -424,7 +426,7 @@ class _DevicesConfigurationDialog(QtWidgets.QDialog):
                 self.restart_warning_label.hide()
 
 
-def open_window(parent=None, parent_flags=QtCore.Qt.Widget, show_restart_warning=True):
+def open_window(parent=None, parent_flags=QtCore.Qt.Widget, show_restart_warning=True, isModal=False):
     _setup_devices_info()
 
     class Context:
@@ -443,7 +445,7 @@ def open_window(parent=None, parent_flags=QtCore.Qt.Widget, show_restart_warning
     configuration_filepath = RprUsd.Config.GetDeviceConfigurationFilepath()
     configuration = _Configuration.load(Context(parent, parent_flags), configuration_filepath)
 
-    dialog = _DevicesConfigurationDialog(configuration, show_restart_warning)
+    dialog = _DevicesConfigurationDialog(configuration, show_restart_warning, isModal)
     dialog.exec_()
 
     if dialog.should_update_configuration:
