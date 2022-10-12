@@ -267,6 +267,13 @@ fs::path GetHoudiniUserPrefDir(const char* hver) {
     return {};
 }
 
+fs::path GetHoudiniScriptsDir() {
+    if (auto prefDirCstr = std::getenv("HH")) {
+        return fs::path(prefDirCstr) / "scripts";
+    }
+    return {};
+}
+
 int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<const char*, const char*>> const& env) {
     auto houdiniUserPrefDir = GetHoudiniUserPrefDir("@HOUDINI_MAJOR_MINOR_VERSION@");
     if (houdiniUserPrefDir.empty()) {
@@ -317,6 +324,20 @@ int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<c
     if (packageJson.fail()) {
         std::cout << "Failed to write output file: " << packageJsonFilepath << '\n' << std::endl;
         return EXIT_FAILURE;
+    }
+
+    auto scriptsDir = GetHoudiniScriptsDir();
+    if (!scriptsDir.empty()) {
+        std::error_code ec;
+        auto src = fs::path(package) / "plugin" / "usd" / "hdRpr" / "resources" / "scripts" / "rendersettings_OnLoaded.py";
+        auto dest = scriptsDir / "lop" / "rendersettings_OnLoaded.py";
+        fs::copy(src, dest, fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            std::cout << "Cannot copy render settings update script: " << ec.message() << std::endl;
+            std::cout << "You might need root/administrator rights to install it" << std::endl;
+        }
+    } else {
+        std::cout << "Can not determine HH. Please check your environment. Render settings update script not installed" << std::endl;
     }
 
     std::cout << "Successfully activated the plugin" << std::endl;

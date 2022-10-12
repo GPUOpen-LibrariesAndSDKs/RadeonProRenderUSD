@@ -25,6 +25,8 @@ Add a new Houdini package with such configuration json:
 ```
 where `path-to-the-package` depends on where do you unzip hdRpr package and should point to the directory that contains INSTALL.md (this file)
 
+To setup the render settings update script, copy `<path-to-the-package>/plugin/usd/hdRpr/resources/scripts/rendersettings_OnLoaded.py` into `<houdini-root>/houdini/scripts/lop`
+
 More info here https://www.sidefx.com/docs/houdini/ref/plugins.html
 
 #### Automatic
