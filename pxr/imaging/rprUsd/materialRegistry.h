@@ -20,6 +20,8 @@ limitations under the License.
 #include "pxr/base/arch/demangle.h"
 #include "pxr/base/tf/singleton.h"
 
+#include <MaterialXCore/Document.h>
+
 #include <RadeonProRender.hpp>
 
 class RPRMtlxLoader;
@@ -145,7 +147,7 @@ private:
     std::unique_ptr<RPRMtlxLoader> m_mtlxLoader;
 #endif
 
-    std::string m_materialXStdlibPath;
+    MaterialX::DocumentPtr m_stdLibraries;
 
     std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
     bool m_mtlxDefsDirty = true;
