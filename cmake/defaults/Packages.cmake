@@ -131,7 +131,9 @@ if(MaterialX_FOUND)
     set(RPR_DISABLE_CUSTOM_MATERIALX_LOADER ON)
 endif()
 
-find_package(Vulkan REQUIRED)
+if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
+    find_package(Vulkan REQUIRED)
+endif()
 
 # Third Party Plugin Package Requirements
 # ----------------------------------------------
