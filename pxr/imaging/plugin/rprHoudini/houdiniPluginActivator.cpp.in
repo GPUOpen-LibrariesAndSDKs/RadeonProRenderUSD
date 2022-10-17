@@ -267,11 +267,42 @@ fs::path GetHoudiniUserPrefDir(const char* hver) {
     return {};
 }
 
-fs::path GetHoudiniScriptsDir() {
-    if (auto prefDirCstr = std::getenv("HH")) {
-        return fs::path(prefDirCstr) / "scripts";
+fs::path GetLopScriptsDir(const char* hver) {
+#if defined(__linux__)
+    auto scriptsPath = fs::path("/opt/hfs" + std::string(hver) + "/houdini/scripts/lop");
+#elif defined(__APPLE__)
+    auto searchPath = fs::path("/Applications/Houdini");
+    std::string searchPattern = "Houdini" + std::string(hver);
+#elif defined(_WIN32) || defined(_WIN64)
+    auto searchPath = fs::path("c:\\Program Files\\Side Effects Software");
+    std::string searchPattern = "Houdini " + std::string(hver);
+#endif
+#if defined(__APPLE__) || defined(_WIN32) || defined(_WIN64)
+    std::vector<fs::path> subdirs;
+    std::error_code ec;
+    for (auto& p : fs::directory_iterator(searchPath, fs::directory_options::skip_permission_denied, ec)) {
+        if (p.path().stem().string() == searchPattern) {
+            subdirs.push_back(p.path());
+        }
     }
-    return {};
+    if (subdirs.size() != 1) {
+        return {};
+    }
+    auto scriptsPath = subdirs[0] / "houdini" / "scripts" / "lop";
+#endif
+    if (exists(scriptsPath)) {
+        return scriptsPath;
+    }
+
+    std::cout << "Can not determine houdini installation. To copy render settings update script enter the path to houdini directory" << std::endl << ">";
+    std::string userInput;
+    std::getline(std::cin, userInput);
+    scriptsPath = fs::path(userInput) / "houdini" / "scripts" / "lop";
+    if (!exists(scriptsPath)) {
+        std::cout << "Path not found: " << scriptsPath << std::endl;
+        return {};
+    }
+    return scriptsPath;
 }
 
 int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<const char*, const char*>> const& env) {
@@ -326,18 +357,18 @@ int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<c
         return EXIT_FAILURE;
     }
 
-    auto scriptsDir = GetHoudiniScriptsDir();
+    auto scriptsDir = GetLopScriptsDir("@HOUDINI_MAJOR_MINOR_VERSION@");
     if (!scriptsDir.empty()) {
         std::error_code ec;
         auto src = fs::path(package) / "plugin" / "usd" / "hdRpr" / "resources" / "scripts" / "rendersettings_OnLoaded.py";
-        auto dest = scriptsDir / "lop" / "rendersettings_OnLoaded.py";
+        auto dest = scriptsDir / "rendersettings_OnLoaded.py";
         fs::copy(src, dest, fs::copy_options::overwrite_existing, ec);
         if (ec) {
             std::cout << "Cannot copy render settings update script: " << ec.message() << std::endl;
             std::cout << "You might need root/administrator rights to install it" << std::endl;
         }
     } else {
-        std::cout << "Can not determine HH. Please check your environment. Render settings update script not installed" << std::endl;
+        std::cout << "Can not determine scripts directory. Please check your environment. Render settings update script not installed" << std::endl;
     }
 
     std::cout << "Successfully activated the plugin" << std::endl;
