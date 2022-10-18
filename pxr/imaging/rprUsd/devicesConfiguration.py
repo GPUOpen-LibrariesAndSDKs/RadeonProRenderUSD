@@ -183,7 +183,7 @@ class _Configuration:
     @staticmethod
     def default(context):
         plugin_configurations = list()
-        for plugin_type in [RprUsd.kPluginNorthstar, RprUsd.kPluginTahoe, RprUsd.kPluginHybrid]:
+        for plugin_type in [RprUsd.kPluginNorthstar, RprUsd.kPluginHybridPro, RprUsd.kPluginHybrid]:
             if plugin_type in _devices_info:
                 plugin_configurations.append(_PluginConfiguration.default(plugin_type, _devices_info[plugin_type]))
         return _Configuration(context=context, plugin_configurations=plugin_configurations)
@@ -315,8 +315,8 @@ class _PluginConfigurationWidget(BorderWidget):
         self.plugin_type = plugin_configuration.plugin_type
         if self.plugin_type == RprUsd.kPluginHybrid:
             plugin_qualities = 'Low-High Qualities'
-        elif self.plugin_type == RprUsd.kPluginTahoe:
-            plugin_qualities = 'Full (Legacy) Quality'
+        elif self.plugin_type == RprUsd.kPluginHybridPro:
+            plugin_qualities = 'Hybrid Pro Quality'
         elif self.plugin_type == RprUsd.kPluginNorthstar:
             plugin_qualities = 'Full Quality'
 

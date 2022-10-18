@@ -74,7 +74,6 @@ render_setting_categories = [
                     SettingValue('Medium', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
                     SettingValue('High', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
                     SettingValue('HybridPro', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
-                    SettingValue('Full', 'Full (Legacy)'),
                     SettingValue('Northstar', 'Full')
                 ]
             }
