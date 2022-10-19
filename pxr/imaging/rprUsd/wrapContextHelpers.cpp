@@ -32,6 +32,7 @@ TF_REGISTRY_FUNCTION(TfEnum) {
     TF_ADD_ENUM_NAME(kPluginTahoe);
     TF_ADD_ENUM_NAME(kPluginNorthstar);
     TF_ADD_ENUM_NAME(kPluginHybrid);
+    TF_ADD_ENUM_NAME(kPluginHybridPro);
 }
 
 void wrapContextHelpers() {
