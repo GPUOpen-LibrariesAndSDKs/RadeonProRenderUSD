@@ -1690,9 +1690,7 @@ public:
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
                 TfToken activeRenderQuality;
-                if (m_rprContextMetadata.pluginType == kPluginTahoe) {
-                    activeRenderQuality = HdRprCoreRenderQualityTokens->Full;
-                } else if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
                     activeRenderQuality = HdRprCoreRenderQualityTokens->Northstar;
                 } else if (m_rprContextMetadata.pluginType == kPluginHybridPro) {
                     activeRenderQuality = HdRprCoreRenderQualityTokens->HybridPro;
@@ -3377,9 +3375,7 @@ Don't show this message again?
 
 private:
     static RprUsdPluginType GetPluginType(TfToken const& renderQuality) {
-        if (renderQuality == HdRprCoreRenderQualityTokens->Full) {
-            return kPluginTahoe;
-        } else if (renderQuality == HdRprCoreRenderQualityTokens->Northstar) {
+        if (renderQuality == HdRprCoreRenderQualityTokens->Northstar) {
             return kPluginNorthstar;
         } else if (renderQuality == HdRprCoreRenderQualityTokens->HybridPro) {
             return kPluginHybridPro;
