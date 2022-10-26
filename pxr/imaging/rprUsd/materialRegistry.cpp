@@ -424,6 +424,7 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
         return nullptr;
     }
 
+    // TODO: move lib initialization to class constructor
     if (!stdLibraries) {
         std::string materialXStdlibPath;
 
