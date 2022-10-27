@@ -5,8 +5,9 @@ int main() {
         {"HOUDINI_PATH", "/houdini"},
         {"PYTHONPATH", "/lib/python"},
 #if defined(_WIN32) || defined(_WIN64)
-        {"PATH", "/lib"}
+        {"PATH", "/lib"},
 #endif
+        {"USE_GPU", "True"}
     });
 
 #if defined(_WIN32) || defined(_WIN64)

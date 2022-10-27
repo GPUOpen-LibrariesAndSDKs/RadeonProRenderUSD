@@ -437,13 +437,19 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     } else {
         ret.cpu.numThreads = std::thread::hardware_concurrency();
 
-        ForEachGpu(pluginID, cachePath.c_str(),
-            [&ret](int index, rpr::CreationFlags, std::string const& name) {
+        char* envUseGpu = std::getenv("USE_GPU");
+        std::string envUseGpuStr = envUseGpu ? std::string(envUseGpu) : "";
+        bool useGpu = !(envUseGpuStr == "False" || envUseGpuStr == "false");
+
+        if (useGpu) {
+            ForEachGpu(pluginID, cachePath.c_str(),
+                [&ret](int index, rpr::CreationFlags, std::string const& name) {
                 if (!name.empty()) {
-                    ret.gpus.push_back({index, name});
+                    ret.gpus.push_back({ index, name });
                 }
             }
-        );
+            );
+        }
     }
 
     return ret;
