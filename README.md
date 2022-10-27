@@ -1,6 +1,6 @@
 AMD Radeon ProRender USD Hydra delegate
 ===========================
-
+ 
 This plugin allows fast GPU or CPU accelerated viewport rendering on all OpenCL 1.2 hardware for the open source USD and Hydra system
 
 You can build this plugin as usdview plugin or as houdini plugin.
