@@ -400,7 +400,7 @@ void DumpMaterialNetwork(HdMaterialNetworkMap const& networkMap) {
 RprUsdMaterial* CreateMaterialXFromUsdShade(
     SdfPath const& materialPath,
     RprUsd_MaterialBuilderContext const& context,
-    std::string* materialXStdlibPath) {
+    mx::DocumentPtr& stdLibraries) {
 
 #ifdef USE_USDSHADE_MTLX
     auto terminalIt = context.materialNetwork->terminals.find(UsdShadeTokens->surface);
@@ -424,23 +424,26 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
         return nullptr;
     }
 
-    if (materialXStdlibPath->empty()) {
+    // TODO: move lib initialization to class constructor
+    if (!stdLibraries) {
+        std::string materialXStdlibPath;
+
         const TfType schemaBaseType = TfType::Find<UsdSchemaBase>();
         PlugPluginPtr usdPlugin = PlugRegistry::GetInstance().GetPluginForType(schemaBaseType);
         if (usdPlugin) {
             std::string usdLibPath = usdPlugin->GetPath();
             std::string usdDir = TfNormPath(TfGetPathName(usdLibPath) + "..");
-            *materialXStdlibPath = usdDir;
+            materialXStdlibPath = usdDir;
         }
-    }
-    
-    mx::DocumentPtr stdLibraries = mx::createDocument();
 
-    if (!materialXStdlibPath->empty()) {
-        mx::FilePathVec libraryFolders = {"libraries"};
-        mx::FileSearchPath searchPath;
-        searchPath.append(mx::FilePath(*materialXStdlibPath));
-        mx::loadLibraries(libraryFolders, searchPath, stdLibraries);
+        stdLibraries = mx::createDocument();
+
+        if (!materialXStdlibPath.empty()) {
+            mx::FilePathVec libraryFolders = {"libraries"};
+            mx::FileSearchPath searchPath;
+            searchPath.append(mx::FilePath(materialXStdlibPath));
+            mx::loadLibraries(libraryFolders, searchPath, stdLibraries);
+        }
     }
 
     MaterialX::StringMap textureMap;
@@ -512,7 +515,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
 #endif // USE_CUSTOM_MATERIALX_LOADER
 
     if (!isVolume) {
-        if (auto usdShadeMtlxMaterial = CreateMaterialXFromUsdShade(materialId, context, &m_materialXStdlibPath)) {
+        if (auto usdShadeMtlxMaterial = CreateMaterialXFromUsdShade(materialId, context, m_stdLibraries)) {
             return usdShadeMtlxMaterial;
         }
     }
