@@ -2009,7 +2009,7 @@ public:
             }
         }
 
-        RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESERVOIR_SAMPLING), 2), "Failed to set reservoir sampling");
+        // RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESERVOIR_SAMPLING), 2), "Failed to set reservoir sampling");
         RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_DISPLAY_GAMMA, 2.2f), "Failed to set display gamma");
     }
 
