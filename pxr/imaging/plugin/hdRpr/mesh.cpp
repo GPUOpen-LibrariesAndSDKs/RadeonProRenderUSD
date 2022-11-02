@@ -758,13 +758,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             for (auto& rprMesh : m_rprMeshes) {
                 rprApi->SetMeshId(rprMesh, id);
             }
-            auto instanceIndices = sceneDelegate->GetInstanceIndices(GetInstancerId(), GetId());
-            HdTimeSampleArray<VtValue, 2> ids;
-            sceneDelegate->SamplePrimvar(GetInstancerId(), HdTokens->primID, &ids);
             for (auto& instances : m_rprMeshInstances) {
-                if (instances.size() != instanceIndices.size()) {
-                    continue;
-                }
                 for (int instanceNum = 0; instanceNum < instances.size(); instanceNum++) {
                     rprApi->SetMeshId(instances[instanceNum], instanceNum);
                 } 
