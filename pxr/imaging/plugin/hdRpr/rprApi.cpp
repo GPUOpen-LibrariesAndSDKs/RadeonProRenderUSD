@@ -334,6 +334,53 @@ struct HdRprApiEnvironmentLight {
     } state = kDetached;
 };
 
+class CameraData {
+public:
+    void Store(const std::unique_ptr<rpr::Camera>& camera) {
+        size_t dummy;
+        RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_LENS_SHIFT, dummy, m_CameraLens, nullptr), "Failed to get lens shift");
+        RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_SENSOR_SIZE, dummy, m_SensorSize, nullptr), "Failed to get  sensor size");
+        RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_MODE, dummy, &m_Mode, nullptr), "Failed to get camera mode");
+        RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_ORTHO_WIDTH, dummy, &m_OrthoWidth, nullptr), "Failed to get ortho width");
+        RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_ORTHO_HEIGHT, dummy, &m_OrthoHeight, nullptr), "Failed to get ortho height");
+    }
+
+    void Restore(std::unique_ptr<rpr::Camera>& camera) {
+        RPR_ERROR_CHECK(camera->SetLensShift(m_CameraLens[0], m_CameraLens[1]), "Failed to set lens shift");
+        RPR_ERROR_CHECK(camera->SetSensorSize(m_SensorSize[0], m_SensorSize[1]), "Failed to set sensor size");
+        RPR_ERROR_CHECK(camera->SetOrthoWidth(m_OrthoWidth), "Failed to set ortho width");
+        RPR_ERROR_CHECK(camera->SetOrthoHeight(m_OrthoHeight), "Failed to set ortho height");
+    }
+
+    void SetForTile(std::unique_ptr<rpr::Camera>& camera, const GfVec4f& tile) {
+        float tileSizeX = tile[2] - tile[0];
+        float tileSizeY = tile[3] - tile[1];
+        float lensShiftX = (m_CameraLens[0] + tile[0] + tileSizeX * 0.5 - 0.5) / tileSizeX;
+        float lensShiftY = (m_CameraLens[1] + tile[1] + tileSizeY * 0.5 - 0.5) / tileSizeY;
+        RPR_ERROR_CHECK(camera->SetLensShift(lensShiftX, lensShiftY), "Failed to set lens shift");
+        if (m_Mode == RPR_CAMERA_MODE_PERSPECTIVE) {
+            RPR_ERROR_CHECK(camera->SetSensorSize(
+                m_SensorSize[0] * tileSizeX * (tileSizeY < tileSizeX ? tileSizeY / tileSizeX : 1),
+                m_SensorSize[1] * tileSizeY * (tileSizeX < tileSizeY ? tileSizeX / tileSizeY : 1)),
+                "Failed to set sensor size");
+        } 
+        else if (m_Mode == RPR_CAMERA_MODE_ORTHOGRAPHIC) {
+            RPR_ERROR_CHECK(camera->SetOrthoWidth(m_OrthoWidth * tileSizeX * (tileSizeY < tileSizeX ? tileSizeY / tileSizeX : 1)), "Failed to set ortho width");
+            RPR_ERROR_CHECK(camera->SetOrthoHeight(m_OrthoHeight * tileSizeY * (tileSizeX < tileSizeY ? tileSizeX / tileSizeY : 1)), "Failed to set ortho height");
+        }
+        else if (m_Mode == RPR_CAMERA_MODE_LATITUDE_LONGITUDE_360) {
+            // do nothing
+        }
+
+    }
+private:
+    float m_CameraLens[2];
+    float m_SensorSize[2];
+    rpr_camera_mode m_Mode;
+    float m_OrthoWidth;
+    float m_OrthoHeight;
+};
+
 class HdRprApiImpl {
 public:
     HdRprApiImpl(HdRprDelegate* delegate)
@@ -2819,6 +2866,15 @@ public:
         auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
         int iteration = 0;
 
+        CameraData cd;
+        static const TfToken wndToken("dataWindowNDC", TfToken::Immortal);
+        auto windowNDC = m_delegate->GetRenderSetting<GfVec4f>(wndToken, GfVec4f(0.0f, 0.0f, 1.0f, 1.0f));
+        bool tilingOn = windowNDC != GfVec4f(0.0f, 0.0f, 1.0f, 1.0f);
+        if (tilingOn) {
+            cd.Store(m_camera);
+            cd.SetForTile(m_camera, windowNDC);
+        }
+
         while (!IsConverged()) {
             // In interactive mode, always render at least one frame, otherwise
             // disturbing full-screen-flickering will be visible or
@@ -2904,6 +2960,9 @@ public:
             m_isAbortingEnabled.store(true);
 
             m_numSamples += m_numSamplesPerIter;
+        }
+        if (tilingOn) {
+            cd.Restore(m_camera);
         }
     }
 
