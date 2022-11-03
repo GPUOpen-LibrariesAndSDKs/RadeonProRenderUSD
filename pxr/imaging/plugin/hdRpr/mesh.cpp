@@ -759,9 +759,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 rprApi->SetMeshId(rprMesh, id);
             }
             for (auto& instances : m_rprMeshInstances) {
-                for (auto& rprMesh : instances) {
-                    rprApi->SetMeshId(rprMesh, id);
-                }
+                for (int instanceNum = 0; instanceNum < instances.size(); instanceNum++) {
+                    rprApi->SetMeshId(instances[instanceNum], instanceNum);
+                } 
             }
         }
 

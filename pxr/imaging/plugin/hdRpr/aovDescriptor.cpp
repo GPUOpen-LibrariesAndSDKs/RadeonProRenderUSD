@@ -25,7 +25,7 @@ TF_INSTANTIATE_SINGLETON(HdRprAovRegistry);
 TF_DEFINE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_AOV_TOKENS);
 
 HdRprAovRegistry::HdRprAovRegistry() {
-    const auto rprAovMax = RPR_AOV_CRYPTOMATTE_OBJ2 + 1;
+    const auto rprAovMax = RPR_AOV_MESH_ID + 1;
     const GfVec4f idClearValue(255.0f, 255.0f, 255.0f, 0.0f);
 
     m_aovDescriptors.resize(rprAovMax);
@@ -78,6 +78,7 @@ HdRprAovRegistry::HdRprAovRegistry() {
     m_aovDescriptors[RPR_AOV_SHADING_NORMAL] = HdRprAovDescriptor(RPR_AOV_SHADING_NORMAL, false, HdFormatFloat32Vec3);
     m_aovDescriptors[RPR_AOV_GEOMETRIC_NORMAL] = HdRprAovDescriptor(RPR_AOV_GEOMETRIC_NORMAL, false);
     m_aovDescriptors[RPR_AOV_OBJECT_ID] = HdRprAovDescriptor(RPR_AOV_OBJECT_ID, false, HdFormatInt32, idClearValue);
+    m_aovDescriptors[RPR_AOV_MESH_ID] = HdRprAovDescriptor(RPR_AOV_MESH_ID, false, HdFormatInt32, idClearValue);
     m_aovDescriptors[RPR_AOV_MATERIAL_ID] = HdRprAovDescriptor(RPR_AOV_MATERIAL_ID, false, HdFormatInt32, idClearValue);
     m_aovDescriptors[RPR_AOV_OBJECT_GROUP_ID] = HdRprAovDescriptor(RPR_AOV_OBJECT_GROUP_ID, false, HdFormatInt32, idClearValue);
     m_aovDescriptors[RPR_AOV_WORLD_COORDINATE] = HdRprAovDescriptor(RPR_AOV_WORLD_COORDINATE, false);
@@ -102,7 +103,8 @@ HdRprAovRegistry::HdRprAovRegistry() {
 
     addAovNameLookup(HdAovTokens->color, m_computedAovDescriptors[kColorAlpha]);
     addAovNameLookup(HdAovTokens->normal, m_aovDescriptors[RPR_AOV_SHADING_NORMAL]);
-    addAovNameLookup(HdAovTokens->primId, m_aovDescriptors[RPR_AOV_OBJECT_ID]);
+    addAovNameLookup(HdAovTokens->primId, m_aovDescriptors[RPR_AOV_MESH_ID]);
+    addAovNameLookup(HdAovTokens->instanceId, m_aovDescriptors[RPR_AOV_OBJECT_ID]);
     addAovNameLookup(HdAovTokens->Neye, m_aovDescriptors[RPR_AOV_VIEW_SHADING_NORMAL]);
     addAovNameLookup(HdAovTokens->depth, m_computedAovDescriptors[kNdcDepth]);
     addAovNameLookup(HdRprGetCameraDepthAovName(), m_aovDescriptors[RPR_AOV_DEPTH]);
