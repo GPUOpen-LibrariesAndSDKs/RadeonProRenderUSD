@@ -1797,7 +1797,7 @@ public:
         }
     }
 
-    void UpdateTahoeSettings(HdRprConfig const& preferences, bool force) {
+    void UpdateNorthstarSettings(HdRprConfig const& preferences, bool force) {
         if (preferences.IsDirty(HdRprConfig::DirtyAdaptiveSampling) || force) {
             m_varianceThreshold = preferences.GetAdaptiveSamplingNoiseTreshold();
             m_minSamples = preferences.GetAdaptiveSamplingMinSamples();
@@ -1956,9 +1956,8 @@ public:
             }
         }
 
-        if (m_rprContextMetadata.pluginType == kPluginTahoe ||
-            m_rprContextMetadata.pluginType == kPluginNorthstar) {
-            UpdateTahoeSettings(preferences, force);
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            UpdateNorthstarSettings(preferences, force);
         } else if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             UpdateHybridSettings(preferences, force);
         }
@@ -2392,14 +2391,6 @@ public:
 
         uint32_t frameCount = m_frameCount++;
 
-        // XXX: When adaptive sampling is enabled,
-        // Tahoe requires RPR_CONTEXT_FRAMECOUNT to be set to 0 on the very first sample,
-        // otherwise internal adaptive sampling buffers is never reset
-        if (m_rprContextMetadata.pluginType == kPluginTahoe &&
-            isAdaptiveSamplingEnabled && m_numSamples == 0) {
-            frameCount = 0;
-        }
-
         RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_FRAMECOUNT, frameCount), "Failed to set framecount");
     }
 
@@ -2684,7 +2675,6 @@ public:
         // and after that, if needed, render 1 sample at a time because we want to check the current amount of
         // active pixels as often as possible
         const bool isAdaptiveSamplingEnabled = IsAdaptiveSamplingEnabled();
-        const bool isActivePixelCountCheckRequired = isAdaptiveSamplingEnabled && m_rprContextMetadata.pluginType == kPluginTahoe;
 
         // In a batch session, we do denoise once at the end
         auto rprApi = static_cast<HdRprRenderParam*>(m_delegate->GetRenderParam())->GetRprApi();
@@ -2736,21 +2726,11 @@ public:
                 // When singlesampled AOVs already rendered, we can fire up rendering of as many samples as possible
                 if (m_numSamples == 1) {
                     // Render as many samples as possible per Render call
-                    if (isActivePixelCountCheckRequired) {
-                        m_numSamplesPerIter = m_minSamples - m_numSamples;
-                    } else {
-                        m_numSamplesPerIter = m_maxSamples - m_numSamples;
-                    }
+                    m_numSamplesPerIter = m_maxSamples - m_numSamples;
 
                     // And disable resolves after render if possible
                     if (m_isRenderUpdateCallbackEnabled) {
                         m_resolveMode = kResolveInRenderUpdateCallback;
-                    }
-                } else {
-                    // When adaptive sampling is enabled, after reaching m_minSamples we want query RPR_CONTEXT_ACTIVE_PIXEL_COUNT each sample
-                    if (isActivePixelCountCheckRequired && m_numSamples == m_minSamples) {
-                        m_numSamplesPerIter = 1;
-                        isMaximizingContextIterations = false;
                     }
                 }
 
@@ -2762,11 +2742,6 @@ public:
                         RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
                     }
                 }
-            }
-
-            if (isActivePixelCountCheckRequired && m_numSamples >= m_minSamples &&
-                RPR_ERROR_CHECK(m_rprContext->GetInfo(RPR_CONTEXT_ACTIVE_PIXEL_COUNT, sizeof(m_activePixels), &m_activePixels, NULL), "Failed to query active pixels")) {
-                m_activePixels = -1;
             }
         }
 
@@ -3328,8 +3303,7 @@ Don't show this message again?
     }
 
     bool IsAdaptiveSamplingEnabled() const {
-        return m_rprContext && m_varianceThreshold > 0.0f &&
-              (m_rprContextMetadata.pluginType == kPluginTahoe || m_rprContextMetadata.pluginType == kPluginNorthstar);
+        return m_rprContext && m_varianceThreshold > 0.0f && m_rprContextMetadata.pluginType == kPluginNorthstar;
     }
 
     bool IsGlInteropEnabled() const {

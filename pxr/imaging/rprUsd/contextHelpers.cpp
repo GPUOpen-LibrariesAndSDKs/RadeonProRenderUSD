@@ -143,16 +143,13 @@ const int kMaxNumGpus = sizeof(kGpuCreationFlags) / sizeof(kGpuCreationFlags[0])
 
 const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
 #ifdef WIN32
-    {kPluginTahoe, "Tahoe64.dll"},
     {kPluginNorthstar, "Northstar64.dll"},
     {kPluginHybrid, "Hybrid.dll"},
     {kPluginHybridPro, "HybridPro.dll"},
 #elif defined __linux__
     {kPluginNorthstar, "libNorthstar64.so"},
-    {kPluginTahoe, "libTahoe64.so"},
     {kPluginHybrid, "Hybrid.so"},
 #elif defined __APPLE__
-    {kPluginTahoe, "libTahoe64.dylib"},
     {kPluginNorthstar, "libNorthstar64.dylib"},
 #endif
 };

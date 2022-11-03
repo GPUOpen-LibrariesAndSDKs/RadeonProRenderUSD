@@ -23,7 +23,6 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 enum RprUsdPluginType {
     kPluginInvalid = -1,
-    kPluginTahoe,
     kPluginNorthstar,
     kPluginHybrid,
     kPluginHybridPro,
