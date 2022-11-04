@@ -3306,6 +3306,9 @@ Don't show this message again?
     HdRprApi::RenderStats GetRenderStats() const {
         HdRprApi::RenderStats stats = {};
 
+		//m_contextmetadata
+
+
         // rprsExport has no progress callback
         if (!m_rprSceneExportPath.empty()) {
             return stats;
@@ -3384,6 +3387,20 @@ Don't show this message again?
     TfToken const& GetCurrentRenderQuality() const {
         return m_currentRenderQuality;
     }
+
+	std::vector<std::string> GetGpuUsedNames() const {
+		std::vector<std::string> gpuNamesUsed;
+
+		for (RprUsdDevicesInfo::GPU gpu : m_rprContextMetadata.devicesActuallyUsed.gpus) {
+			gpuNamesUsed.push_back(gpu.name);
+		}
+
+		return gpuNamesUsed;
+	}
+
+	int GetCpuThreadCountUsed() const {
+		return m_rprContextMetadata.devicesActuallyUsed.cpu.numThreads;
+	}
 
     void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
@@ -4642,6 +4659,14 @@ void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presen
 
     // Temporary should be force inited here, because otherwise has issues with GPU synchronization
     m_impl->InitIfNeeded();
+}
+
+std::vector<std::string> HdRprApi::GetGpuUsedNames() const {
+	return m_impl->GetGpuUsedNames();
+}
+
+int HdRprApi::GetCpuThreadCountUsed() const {
+	return m_impl->GetCpuThreadCountUsed();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

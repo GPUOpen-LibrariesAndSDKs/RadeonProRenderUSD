@@ -222,18 +222,13 @@ void ForEachGpu(rpr_int pluginID, const char* cachePath, Func&& func) {
 #undef GPU_ACTION
 }
 
-struct DevicesConfiguration {
-    int numCpuThreads;
-    std::vector<int> gpus;
-};
-
-DevicesConfiguration LoadDevicesConfiguration(RprUsdPluginType pluginType, std::string const& deviceConfigurationFilepath) {
+RprUsdDevicesInfo LoadDevicesConfiguration(RprUsdPluginType pluginType, std::string const& deviceConfigurationFilepath) {
     RprUsdDevicesInfo devicesInfo = RprUsdGetDevicesInfo(pluginType);
     if (!devicesInfo.IsValid()) {
         return {};
     }
 
-    DevicesConfiguration ret = {};
+	RprUsdDevicesInfo ret;
 
     auto isLoaded = [&]() {
         try {
@@ -265,7 +260,7 @@ DevicesConfiguration LoadDevicesConfiguration(RprUsdPluginType pluginType, std::
                 return false;
             }
 
-            cpuConfig.at("num_active_threads").get_to(ret.numCpuThreads);
+            cpuConfig.at("num_active_threads").get_to(ret.cpu.numThreads);
 
             for (auto& gpuConfig : pluginDevicesConfig.at("gpu_configs")) {
                 auto& configGpuInfo = gpuConfig.at("gpu_info");
@@ -275,7 +270,7 @@ DevicesConfiguration LoadDevicesConfiguration(RprUsdPluginType pluginType, std::
                 }
 
                 if (gpuConfig.at("is_enabled").get<bool>()) {
-                    ret.gpus.push_back(gpuInfo.index);
+                    ret.gpus.push_back(gpuInfo);
                 }
             }
 
@@ -287,13 +282,13 @@ DevicesConfiguration LoadDevicesConfiguration(RprUsdPluginType pluginType, std::
     }();
 
     if (!isLoaded ||
-        (ret.numCpuThreads == 0 && ret.gpus.empty())) {
+        (ret.cpu.numThreads == 0 && ret.gpus.empty())) {
         // Setup default configuration: either use the first GPU or, if it is not available, CPU
         ret = {};
         if (devicesInfo.gpus.empty()) {
-            ret.numCpuThreads = devicesInfo.cpu.numThreads;
+            ret.cpu.numThreads = devicesInfo.cpu.numThreads;
         } else {
-            ret.gpus.push_back(devicesInfo.gpus.front().index);
+            ret.gpus.push_back(devicesInfo.gpus.front());
         }
     }
 
@@ -322,7 +317,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         return nullptr;
     }
 
-    DevicesConfiguration devicesConfiguration = LoadDevicesConfiguration(metadata->pluginType, deviceConfigurationFilepath);
+	RprUsdDevicesInfo devicesConfiguration = LoadDevicesConfiguration(metadata->pluginType, deviceConfigurationFilepath);
 
     std::vector<rpr_context_properties> contextProperties;
     auto appendContextProperty = [&contextProperties](uint64_t propertyKey, void* propertyValue) {
@@ -331,14 +326,14 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
     };
 
     rpr::CreationFlags creationFlags = 0;
-    for (int gpuIndex : devicesConfiguration.gpus) {
-        if (gpuIndex >= 0 && gpuIndex < kMaxNumGpus) {
-            creationFlags |= kGpuCreationFlags[gpuIndex];
+    for (RprUsdDevicesInfo::GPU gpu : devicesConfiguration.gpus) {
+        if (gpu.index >= 0 && gpu.index < kMaxNumGpus) {
+            creationFlags |= kGpuCreationFlags[gpu.index];
         }
     }
-    if (devicesConfiguration.numCpuThreads > 0) {
+    if (devicesConfiguration.cpu.numThreads > 0) {
         creationFlags |= RPR_CREATION_FLAGS_ENABLE_CPU;
-        appendContextProperty(RPR_CONTEXT_CPU_THREAD_LIMIT, (void*)(size_t)devicesConfiguration.numCpuThreads);
+        appendContextProperty(RPR_CONTEXT_CPU_THREAD_LIMIT, (void*)(size_t)devicesConfiguration.cpu.numThreads);
     }
 
     if (creationFlags == 0) {
@@ -403,6 +398,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, textureCachePath.c_str()), "Failed to set texture cache path");
 
         metadata->creationFlags = creationFlags;
+		metadata->devicesActuallyUsed = devicesConfiguration;
     } else {
         RPR_ERROR_CHECK(status, "Failed to create RPR context");
     }
