@@ -44,13 +44,10 @@ def hidewhen_render_quality(operator, quality, render_setting_categories=None):
         raise ValueError('Operator "{}" not implemented'.format(operator))
 
 def hidewhen_hybrid(render_setting_categories):
-    return hidewhen_render_quality('<', 'Full', render_setting_categories)
+    return hidewhen_render_quality('<', 'Northstar', render_setting_categories)
 
 def hidewhen_not_northstar(render_setting_categories):
     return hidewhen_render_quality('!=', 'Northstar', render_setting_categories)
-
-def hidewhen_not_tahoe(render_setting_categories):
-    return hidewhen_render_quality('!=', 'Full', render_setting_categories)
 
 def houdini_parm_name(name):
     import hou
@@ -441,10 +438,7 @@ render_setting_categories = [
                 'name': 'quality:interactive:downscale:enable',
                 'ui_name': 'Downscale Resolution When Interactive',
                 'help': 'Controls whether in interactive mode resolution should be downscaled or no.',
-                'defaultValue': True,
-                'houdini': {
-                    'hidewhen': hidewhen_not_tahoe
-                }
+                'defaultValue': True
             }
         ]
     },
