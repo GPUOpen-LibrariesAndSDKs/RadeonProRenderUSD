@@ -53,6 +53,11 @@ class "RprRendererSettingsAPI" (
         displayGroup = "General|Render Mode"
     )
 
+    uniform bool rpr:core:flipVertical = false (
+        displayName = "Flip Vertical"
+        displayGroup = "General"
+    )
+
     # tahoe only
     uniform float rpr:ambientOcclusion:radius = 1.0 (
         displayName = "Ambient Occlusion Radius"
@@ -110,6 +115,25 @@ class "RprRendererSettingsAPI" (
         rprMinValue = 0.0
         rprMaxValue = 100.0
     )
+    uniform bool rpr:contour:useUv = true (
+        displayName = "Use UV"
+        displayGroup = "General|Render Mode|Contour"
+        doc = "Whether to use UV for edge detection or not"
+    )
+    uniform float rpr:contour:linewidthUv = 1.0 (
+        displayName = "Linewidth UV"
+        displayGroup = "General|Render Mode|Contour"
+        doc = "Linewidth of edges detected via UV."
+        rprMinValue = 0.0
+        rprMaxValue = 100.0
+    )
+    uniform float rpr:contour:uvThreshold = 1.0 (
+        displayName = "Normal Threshold"
+        displayGroup = "General|Render Mode|Contour"
+        doc = "Threshold of edges detected via UV."
+        rprMinValue = 0.0
+        rprMaxValue = 100.0
+    )
     uniform bool rpr:contour:debug = false (
         displayName = "Debug"
         displayGroup = "General|Render Mode|Contour"
@@ -125,10 +149,22 @@ class "RprRendererSettingsAPI" (
               """
     )
 
-    uniform bool rpr:alpha:enable = true (
+    uniform token rpr:core:cameraMode = "default" (
+        allowedTokens = ["default", "Latitude Longitude 360", "Latitude Longitude Stereo", "Cubemap", "Cubemap Stereo", "Fisheye"]
+        displayName = "Camera Mode"
+        displayGroup = "General"
+    )
+
+    uniform bool rpr:alpha:enable = false (
         displayName = "Enable Color Alpha"
         displayGroup = "General"
         doc = ""
+    )
+	
+    uniform double stageMetersPerUnit = 1.0 (
+        displayName = "Meters Per Unit"
+        displayGroup = "General"
+	doc = "Scene unit size in meters"
     )
 
     # Northstar only
@@ -239,6 +275,15 @@ class "RprRendererSettingsAPI" (
         doc = "Limits the intensity, or the maximum brightness, of samples in the scene. Greater clamp radiance values produce more brightness. Set to 0.0 ot disable clamping."
         rprMinValue = 0.0
         rprMaxValue = 1000000
+    )
+
+    # northstar only
+    uniform float rpr:quality:imageFilterRadius = 1.5 (
+        displayGroup = "Quality"
+        displayName = "Pixel filter width"
+        doc = "Determines Pixel filter width (anti-aliasing)."
+        rprMinValue = 0.0
+        rprMaxValue = 5.0
     )
 
     # not for hybrid
@@ -657,6 +702,90 @@ class "RprMaterialSettingsAPI" (
         displayGroup = "Material"
         displayName = "Asset Name"
         doc = "Asset name for cryptomatte asset pass"
+    )
+}
+
+class "RprLightSettingsAPI" (
+    customData= {
+        string className = "LightSettingsAPI"
+        token apiSchemaType = "singleApply"
+        token[] apiSchemaAutoApplyTo = ["SphereLight", "DiskLight", "RectLight", "CylinderLight"]
+    }
+    inherits = </APISchemaBase>
+)
+{
+    uniform bool rpr:object:visibility:camera = false (
+        customData = {
+            string apiName = "objectVisibilityCamera"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Camera"
+        doc = """ Used to show or hide an object from the camera.
+                  Disabling camera visibility is the most optimized way to hide an object from the camera but still have it cast shadows, be visible in reflections, etc.
+              """
+    )
+
+    uniform bool rpr:object:visibility:diffuse = true (
+        customData = {
+            string apiName = "objectVisibilityDiffuse"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Diffuse"
+        doc = "Diffuse visibility affects indirect diffuse rays and makes an object visible or invisible in reflections on diffuse surfaces."
+    )
+
+    uniform bool rpr:object:visibility:shadow = false (
+        customData = {
+            string apiName = "objectVisibilityShadow"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Shadow"
+        doc = "Shadow visibility controls whether to show or to hide shadows cast by the object onto other surfaces (including reflected shadows and shadows seen through transparent objects). You might need this option to hide shadows that darken other objects in the scene or create unwanted effects."
+    )
+
+    uniform bool rpr:object:visibility:reflection = true (
+        customData = {
+            string apiName = "objectVisibilityReflection"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Reflection"
+        doc = "Reflection visibility makes an object visible or invisible in reflections on specular surfaces. Note that hiding an object from specular reflections keeps its shadows (including reflected shadows) visible."
+    )
+
+    uniform bool rpr:object:visibility:glossyReflection = true (
+        customData = {
+            string apiName = "objectVisibilityGlossyReflection"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Glossy Reflection"
+        doc = ""
+    )
+
+    uniform bool rpr:object:visibility:refraction = true (
+        customData = {
+            string apiName = "objectVisibilityRefraction"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Refraction"
+        doc = "Refraction visibility makes an object visible or invisible when seen through transparent objects. Note that hiding an object from refractive rays keeps its shadows (including refracted shadows) visible."
+    )
+
+    uniform bool rpr:object:visibility:glossyRefraction = true (
+        customData = {
+            string apiName = "objectVisibilityGlossyRefraction"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Glossy Refraction"
+        doc = ""
+    )
+
+    uniform bool rpr:object:visibility:transparent = true (
+        customData = {
+            string apiName = "objectVisibilityTransparent"
+        }
+        displayGroup = "Visibility"
+        displayName = "Visibility Transparent"
+        doc = ""
     )
 }
 

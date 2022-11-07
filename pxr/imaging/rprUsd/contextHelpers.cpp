@@ -143,16 +143,13 @@ const int kMaxNumGpus = sizeof(kGpuCreationFlags) / sizeof(kGpuCreationFlags[0])
 
 const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
 #ifdef WIN32
-    {kPluginTahoe, "Tahoe64.dll"},
     {kPluginNorthstar, "Northstar64.dll"},
     {kPluginHybrid, "Hybrid.dll"},
     {kPluginHybridPro, "HybridPro.dll"},
 #elif defined __linux__
     {kPluginNorthstar, "libNorthstar64.so"},
-    {kPluginTahoe, "libTahoe64.so"},
     {kPluginHybrid, "Hybrid.so"},
 #elif defined __APPLE__
-    {kPluginTahoe, "libTahoe64.dylib"},
     {kPluginNorthstar, "libNorthstar64.dylib"},
 #endif
 };
@@ -427,13 +424,12 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     }
 
     RprUsdDevicesInfo ret = {};
-
-    if (pluginType == kPluginHybrid) {
+    if (RprUsdIsHybrid(pluginType)) {
         ret.cpu.numThreads = 0;
 
         std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
         if (!name.empty()) {
-            ret.gpus.push_back({0, name});
+            ret.gpus.push_back({ 0, name });
         }
     } else {
         ret.cpu.numThreads = std::thread::hardware_concurrency();

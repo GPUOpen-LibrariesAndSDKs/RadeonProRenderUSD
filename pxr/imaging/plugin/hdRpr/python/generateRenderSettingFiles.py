@@ -44,13 +44,10 @@ def hidewhen_render_quality(operator, quality, render_setting_categories=None):
         raise ValueError('Operator "{}" not implemented'.format(operator))
 
 def hidewhen_hybrid(render_setting_categories):
-    return hidewhen_render_quality('<', 'Full', render_setting_categories)
+    return hidewhen_render_quality('<', 'Northstar', render_setting_categories)
 
 def hidewhen_not_northstar(render_setting_categories):
     return hidewhen_render_quality('!=', 'Northstar', render_setting_categories)
-
-def hidewhen_not_tahoe(render_setting_categories):
-    return hidewhen_render_quality('!=', 'Full', render_setting_categories)
 
 def houdini_parm_name(name):
     import hou
@@ -58,6 +55,7 @@ def houdini_parm_name(name):
 
 HYBRID_IS_AVAILABLE_PY_CONDITION = lambda: 'platform.system() != "Darwin"'
 NORTHSTAR_ENABLED_PY_CONDITION = lambda: 'hou.pwd().parm("{}").evalAsString() == "Northstar"'.format(houdini_parm_name('core:renderQuality'))
+NOT_NORTHSTAR_ENABLED_PY_CONDITION = lambda: 'hou.pwd().parm("{}").evalAsString() != "Northstar"'.format(houdini_parm_name('core:renderQuality'))
 
 render_setting_categories = [
     {
@@ -73,7 +71,6 @@ render_setting_categories = [
                     SettingValue('Medium', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
                     SettingValue('High', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
                     SettingValue('HybridPro', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
-                    SettingValue('Full', 'Full (Legacy)'),
                     SettingValue('Northstar', 'Full')
                 ]
             }
@@ -106,13 +103,13 @@ render_setting_categories = [
                 'minValue': 0.0,
                 'maxValue': 100.0,
                 'houdini': {
-                    'hidewhen': 'coreRenderMode != "AmbientOcclusion"'
+                    'hidewhen': 'core:renderMode != "AmbientOcclusion"'
                 }
             },
             {
                 'folder': 'Contour Settings',
                 'houdini': {
-                    'hidewhen': 'coreRenderMode != "Contour"'
+                    'hidewhen': 'core:renderMode != "Contour"'
                 },
                 'settings': [
                     {
@@ -122,7 +119,7 @@ render_setting_categories = [
                         'minValue': 0.0,
                         'maxValue': 1.0,
                         'houdini': {
-                            'hidewhen': 'coreRenderMode != "Contour"'
+                            'hidewhen': 'core:renderMode != "Contour"'
                         }
                     },
                     {
@@ -131,7 +128,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use geometry normals for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'coreRenderMode != "Contour"'
+                            'hidewhen': 'core:renderMode != "Contour"'
                         }
                     },
                     {
@@ -142,7 +139,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via normals',
                         'houdini': {
-                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseNormal == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useNormal == 0']
                         }
                     },
                     {
@@ -152,7 +149,7 @@ render_setting_categories = [
                         'minValue': 0.0,
                         'maxValue': 180.0,
                         'houdini': {
-                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseNormal == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useNormal == 0']
                         }
                     },
                     {
@@ -161,7 +158,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use primitive Id for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'coreRenderMode != "Contour"'
+                            'hidewhen': 'core:renderMode != "Contour"'
                         }
                     },
                     {
@@ -172,7 +169,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via primitive Id',
                         'houdini': {
-                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUsePrimId == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:usePrimId == 0']
                         }
                     },
                     {
@@ -181,7 +178,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use material Id for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'coreRenderMode != "Contour"'
+                            'hidewhen': 'core:renderMode != "Contour"'
                         }
                     },
                     {
@@ -192,7 +189,7 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via material Id',
                         'houdini': {
-                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseMaterialId == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useMaterialId == 0']
                         }
                     },
                     {
@@ -201,7 +198,7 @@ render_setting_categories = [
                         'defaultValue': True,
                         'help': 'Whether to use UV for edge detection or not',
                         'houdini': {
-                            'hidewhen': 'coreRenderMode != "Contour"'
+                            'hidewhen': 'core:renderMode != "Contour"'
                         }
                     },
                     {
@@ -212,17 +209,18 @@ render_setting_categories = [
                         'maxValue': 100.0,
                         'help': 'Linewidth of edges detected via UV',
                         'houdini': {
-                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseUv == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useUv == 0']
                         }
                     },
                     {
                         'name': 'contour:uvThreshold',
+                        'ui_name': 'UV Threshold',
                         'defaultValue': 1.0,
                         'minValue': 0.0,
-                        'maxValue': 100.0,
+                        'maxValue': 1.0,
                         'help': 'Threshold of edges detected via UV',
                         'houdini': {
-                            'hidewhen': ['coreRenderMode != "Contour"', 'contourUseUv == 0']
+                            'hidewhen': ['core:renderMode != "Contour"', 'contour:useUv == 0']
                         }
                     },
                     {
@@ -239,7 +237,7 @@ render_setting_categories = [
                                 ' * cyan - material Id + normal\\n'
                                 ' * black - all',
                         'houdini': {
-                            'hidewhen': 'coreRenderMode != "Contour"'
+                            'hidewhen': 'core:renderMode != "Contour"'
                         }
                     }
                 ]
@@ -400,6 +398,14 @@ render_setting_categories = [
                 'defaultValue': 0.0,
                 'minValue': 0.0,
                 'maxValue': 1e6
+            },
+            {
+                'name': 'quality:imageFilterRadius',
+                'ui_name': 'Pixel filter width',
+                'help': 'Determines Pixel filter width (anti-aliasing).',
+                'defaultValue': 1.5,
+                'minValue': 0.0,
+                'maxValue': 5.0
             }
         ]
     },
@@ -433,9 +439,6 @@ render_setting_categories = [
                 'ui_name': 'Downscale Resolution When Interactive',
                 'help': 'Controls whether in interactive mode resolution should be downscaled or no.',
                 'defaultValue': True,
-                'houdini': {
-                    'hidewhen': hidewhen_not_tahoe
-                }
             }
         ]
     },
@@ -522,7 +525,7 @@ render_setting_categories = [
             {
                 'name': 'alpha:enable',
                 'ui_name': 'Enable Color Alpha',
-                'defaultValue': True
+                'defaultValue': False
             }
         ]
     },
@@ -547,7 +550,7 @@ render_setting_categories = [
                 'name': 'ocio:configPath',
                 'ui_name': 'OpenColorIO Config Path',
                 'defaultValue': '',
-                'c_type': 'std::string',
+                'c_type': 'SdfAssetPath',
                 'help': 'The file path of the OpenColorIO config file to be used. Overrides any value specified in OCIO environment variable.',
                 'houdini': {
                     'type': 'file',
@@ -585,7 +588,7 @@ render_setting_categories = [
                 'name': 'cryptomatte:outputPath',
                 'ui_name': 'Cryptomatte Output Path',
                 'defaultValue': '',
-                'c_type': 'std::string',
+                'c_type': 'SdfAssetPath',
                 'help': 'Controls where cryptomatte should be saved. Use \'Cryptomatte Output Mode\' to control when cryptomatte is saved.',
                 'houdini': {
                     'type': 'file'
@@ -601,7 +604,7 @@ render_setting_categories = [
                 ],
                 'help': 'Batch - save cryptomatte only in the batch rendering mode (USD Render ROP, husk). Interactive - same as the Batch but also save cryptomatte in the non-batch rendering mode. Cryptomatte always saved after \'Max Samples\' is reached.',
                 'houdini': {
-                    'hidewhen': 'cryptomatteOutputPath == ""',
+                    'hidewhen': 'cryptomatte:outputPath == ""',
                 }
             },
             {
@@ -610,7 +613,7 @@ render_setting_categories = [
                 'defaultValue': False,
                 'help': 'Whether to generate cryptomatte preview layer or not. Whether you need it depends on the software you are planning to use cryptomatte in. For example, Houdini\'s COP Cryptomatte requires it, Nuke, on contrary, does not.',
                 'houdini': {
-                    'hidewhen': 'cryptomatteOutputPath == ""',
+                    'hidewhen': 'cryptomatte:outputPath == ""',
                 }
 
             }
@@ -618,6 +621,24 @@ render_setting_categories = [
         'houdini': {
             'hidewhen': hidewhen_not_northstar
         }
+    },
+    {
+        'name': 'Camera',
+        'settings': [
+            {
+                'name': 'core:cameraMode',
+                'ui_name': 'Camera Mode',
+                'defaultValue': 'Default',
+                'values': [
+                    SettingValue('Default'),
+                    SettingValue('Latitude Longitude 360'),
+                    SettingValue('Latitude Longitude Stereo'),
+                    SettingValue('Cubemap', enable_py_condition=NOT_NORTHSTAR_ENABLED_PY_CONDITION),
+                    SettingValue('Cubemap Stereo', enable_py_condition=NOT_NORTHSTAR_ENABLED_PY_CONDITION),
+                    SettingValue('Fisheye'),
+                ]
+            }
+        ]
     },
     {
         'name': 'UsdNativeCamera',
@@ -638,7 +659,7 @@ render_setting_categories = [
             {
                 'name': 'export:path',
                 'defaultValue': '',
-                'c_type': 'std::string'
+                'c_type': 'SdfAssetPath'
             },
             {
                 'name': 'export:asSingleFile',
@@ -671,7 +692,7 @@ render_setting_categories = [
         'name': 'ImageTransformation',
         'settings': [
             {
-                'name': 'flipVertical',
+                'name': 'core:flipVertical',
                 'defaultValue': False
             }
         ]
@@ -689,6 +710,7 @@ def generate_render_setting_files(install_path, generate_ds_files):
 
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/renderDelegate.h"
+#include "pxr/usd/sdf/assetPath.h"
 
 #include <mutex>
 

@@ -20,6 +20,8 @@ limitations under the License.
 #include "pxr/base/arch/demangle.h"
 #include "pxr/base/tf/singleton.h"
 
+#include <MaterialXCore/Document.h>
+
 #include <RadeonProRender.hpp>
 
 class RPRMtlxLoader;
@@ -48,8 +50,12 @@ struct RprUsdMaterialNodeDesc {
 #ifdef USE_USDSHADE_MTLX
 using RprUsd_MaterialNetworkConnection = HdMaterialConnection2;
 using RprUsd_MaterialNetwork = HdMaterialNetwork2;
-inline void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(HdMaterialNetworkMap const& hdNetworkMap, RprUsd_MaterialNetwork* result, bool* isVolume = nullptr) {
-    HdMaterialNetwork2ConvertFromHdMaterialNetworkMap(hdNetworkMap, result, isVolume);
+inline void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(HdMaterialNetworkMap const& hdNetworkMap, RprUsd_MaterialNetwork& result, bool* isVolume = nullptr) {
+#if PXR_VERSION >= 2205
+    result = HdConvertToHdMaterialNetwork2(hdNetworkMap, isVolume);
+#else
+    HdMaterialNetwork2ConvertFromHdMaterialNetworkMap(hdNetworkMap, &result, isVolume);
+#endif
 }
 #else
 struct RprUsd_MaterialNetworkConnection {
@@ -69,7 +75,7 @@ struct RprUsd_MaterialNetwork {
 };
 void RprUsd_MaterialNetworkFromHdMaterialNetworkMap(
     HdMaterialNetworkMap const& hdNetworkMap,
-    RprUsd_MaterialNetwork* result,
+    RprUsd_MaterialNetwork& result,
     bool* isVolume = nullptr);
 #endif // USE_USDSHADE_MTLX
 
@@ -114,14 +120,17 @@ public:
         RprUsdMaterialNodeFactoryFnc factory,
         RprUsdMaterialNodeInfo const* info = nullptr);
 
-    struct TextureCommit {
+    struct TextureLoadRequest {
         std::string filepath;
         std::string colorspace;
         rpr::ImageWrapType wrapType;
         uint32_t numComponentsRequired = 0;
 
-        std::function<void(std::shared_ptr<RprUsdCoreImage> const&)> setTextureCallback;
+        std::function<void(std::shared_ptr<RprUsdCoreImage> const&)> onDidLoadTexture;
     };
+
+    RPRUSD_API
+    void EnqueueTextureLoadRequest(std::weak_ptr<TextureLoadRequest> textureLoadRequest);
 
     RPRUSD_API
     void CommitResources(RprUsdImageCache* imageCache);
@@ -138,7 +147,7 @@ private:
     std::unique_ptr<RPRMtlxLoader> m_mtlxLoader;
 #endif
 
-    std::string m_materialXStdlibPath;
+    MaterialX::DocumentPtr m_stdLibraries;
 
     std::vector<std::unique_ptr<RprUsd_MtlxNodeInfo>> m_mtlxInfos;
     bool m_mtlxDefsDirty = true;
@@ -146,11 +155,15 @@ private:
     std::vector<RprUsdMaterialNodeDesc> m_registeredNodes;
     std::map<TfToken, size_t> m_registeredNodesLookup;
 
-    std::vector<TextureCommit> m_textureCommits;
+    std::vector<std::weak_ptr<TextureLoadRequest>> m_textureLoadRequests;
 };
 
 class RprUsdMaterialNodeInput;
 class RprUsdMaterialNodeElement;
+
+struct RprUsdMaterialNodeStateProvider {
+    virtual VtValue GetValue(const char* name) = 0;
+};
 
 /// \class RprUsdMaterialNodeInfo
 ///
@@ -170,6 +183,20 @@ public:
 
     virtual const char* GetUIName() const = 0;
     virtual const char* GetUIFolder() const { return nullptr; };
+
+    virtual bool HasDynamicVisibility() const { return false; }
+    struct VisibilityUpdate {
+        struct Visibility {
+            const char* name;
+            bool isVisible;
+        };
+        std::vector<Visibility> parmsVisibility;
+
+        void Add(bool isVisible, const char* name) {
+            parmsVisibility.push_back({ name, isVisible });
+        }
+    };
+    virtual VisibilityUpdate GetVisibilityUpdate(const char* changedParam, RprUsdMaterialNodeStateProvider*) const { return {}; };
 };
 
 class RprUsdMaterialNodeElement {

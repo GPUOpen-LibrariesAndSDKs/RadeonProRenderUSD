@@ -9,7 +9,9 @@ find_path(USD_INCLUDE_DIR pxr/pxr.h
     NO_SYSTEM_ENVIRONMENT_PATH)
 
 find_path(USD_LIBRARY_DIR
-    NAMES "${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
+    NAMES 
+        "${PXR_LIB_PREFIX}usd_usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        "${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}" # Backward compatibility
     PATHS ${pxr_DIR}/lib
           $ENV{pxr_DIR}/lib
     DOC "USD Libraries directory"
@@ -18,8 +20,10 @@ find_path(USD_LIBRARY_DIR
 
 find_library(USD_MONOLITHIC_LIBRARY
     NAMES
-        usd_ms # Windows requires raw library name to find
-        ${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX} # Linux requires prefix and suffix
+        usd_usd_ms # Windows requires raw library name to find
+        ${PXR_LIB_PREFIX}usd_usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX} # Linux requires prefix and suffix
+        usd_ms # Backward compatibility
+        ${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX} # Backward compatibility
     PATHS ${USD_LIBRARY_DIR}
     NO_DEFAULT_PATH
     NO_SYSTEM_ENVIRONMENT_PATH)
@@ -75,32 +79,46 @@ if(USDMonolithic_FOUND)
         )
     endif()
 
-    add_library(usd_ms SHARED IMPORTED)
-    set_property(TARGET usd_ms APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+    add_library(usd_monolithic SHARED IMPORTED)
+    set_property(TARGET usd_monolithic APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
 
-    target_compile_definitions(usd_ms INTERFACE
+    target_compile_definitions(usd_monolithic INTERFACE
         -DPXR_PYTHON_ENABLED=1)
-    target_link_libraries(usd_ms INTERFACE
+    target_link_libraries(usd_monolithic INTERFACE
         ${USD_MONOLITHIC_LIBRARY}
         ${Boost_LIBRARIES}
         ${PYTHON_LIBRARIES})
-    target_link_directories(usd_ms INTERFACE
+    target_link_directories(usd_monolithic INTERFACE
         ${USD_LIBRARY_DIR})
-    target_include_directories(usd_ms INTERFACE
+    target_include_directories(usd_monolithic INTERFACE
         ${USD_INCLUDE_DIR}
         ${Boost_INCLUDE_DIRS})
-    set_target_properties(usd_ms PROPERTIES
-      IMPORTED_IMPLIB_RELEASE "${USD_MONOLITHIC_LIBRARY}"
-      IMPORTED_LOCATION_RELEASE "${USD_LIBRARY_DIR}/${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
-    )
+
+    set(version_file ${USD_INCLUDE_DIR}/pxr/pxr.h)
+    file(STRINGS "${version_file}" PXR_VERSION
+         REGEX "^#define[\t ]+PXR_VERSION[\t ]+.*")
+    string(REGEX REPLACE "^.*PXR_VERSION[\t ]+([0-9]*).*$" "\\1"
+           PXR_VERSION "${PXR_VERSION}")
+
+    if(PXR_VERSION GREATER_EQUAL 2111)
+        set_target_properties(usd_monolithic PROPERTIES
+            IMPORTED_IMPLIB_RELEASE "${USD_MONOLITHIC_LIBRARY}"
+            IMPORTED_LOCATION_RELEASE "${USD_LIBRARY_DIR}/${PXR_LIB_PREFIX}usd_usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+    else()
+        set_target_properties(usd_monolithic PROPERTIES
+          IMPORTED_IMPLIB_RELEASE "${USD_MONOLITHIC_LIBRARY}"
+          IMPORTED_LOCATION_RELEASE "${USD_LIBRARY_DIR}/${PXR_LIB_PREFIX}usd_ms${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+    endif()
 
     foreach(targetName
         arch tf gf js trace work plug vt ar kind sdf ndr sdr pcp usd usdGeom
         usdVol usdLux usdMedia usdShade usdRender usdHydra usdRi usdSkel usdUI
         usdUtils garch hf hio cameraUtil pxOsd glf hgi hgiGL hd hdSt hdx
         usdImaging usdImagingGL usdRiImaging usdSkelImaging usdVolImaging
-        usdAppUtils usdviewq)
+        usdAppUtils usdviewq hdMtlx)
         add_library(${targetName} INTERFACE)
-        target_link_libraries(${targetName} INTERFACE usd_ms)
+        target_link_libraries(${targetName} INTERFACE usd_monolithic)
     endforeach()
 endif()

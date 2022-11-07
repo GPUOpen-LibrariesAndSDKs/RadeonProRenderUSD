@@ -104,6 +104,21 @@ void HdRprFillPrimvarDescsPerInterpolation(
     }
 }
 
+const HdPrimvarDescriptor* HdRprFindFirstPrimvarRole(
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
+    const std::string& role)
+{
+    for (const auto& primvarDescs : primvarDescsPerInterpolation) {
+        for (const auto& primvar : primvarDescs.second) {
+            if (primvar.role == role) {
+                // Just take the first one.
+                return &primvar;
+            }
+        }
+    }
+    return nullptr;
+}
+
 bool HdRprIsPrimvarExists(
     TfToken const& primvarName,
     std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,

@@ -165,7 +165,7 @@ HdMtlxConvertToString(VtValue const& hdParameterValue)
         return valStream.str();
     }
     else if (hdParameterValue.IsHolding<SdfAssetPath>()) {
-        return hdParameterValue.UncheckedGet<SdfAssetPath>().GetAssetPath();
+        return hdParameterValue.UncheckedGet<SdfAssetPath>().GetResolvedPath();
     }
     else if (hdParameterValue.IsHolding<std::string>()) {
         return hdParameterValue.UncheckedGet<std::string>();

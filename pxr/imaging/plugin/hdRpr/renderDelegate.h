@@ -94,7 +94,11 @@ public:
 
 #if PXR_VERSION >= 2005
     bool IsStopSupported() const override;
+#if PXR_VERSION >= 2203
+    bool Stop(bool blocking = true) override;
+#else
     bool Stop() override;
+#endif
     bool Restart() override;
     void SetDrivers(HdDriverVector const& drivers) override;
 #endif // PXR_VERSION >= 2005
@@ -103,14 +107,6 @@ public:
         static std::mutex instanceMutex;
         *outConfig = &m_configInstance;
         return std::unique_lock<std::mutex>(instanceMutex);
-    }
-
-    static HdRprDelegate* GetLastCreatedInstance() {
-        if (m_lastCreatedInstance == nullptr) {
-            throw std::runtime_error("HdRprDelegate::GetLastCreatedInstance() was nullptr");
-        }
-
-        return m_lastCreatedInstance;
     }
 
 private:

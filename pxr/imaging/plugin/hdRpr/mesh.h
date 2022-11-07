@@ -27,6 +27,7 @@ namespace rpr { class Shape; }
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
+class HdRprInstancer;
 class RprUsdMaterial;
 
 class HdRprMesh final : public HdRprBaseRprim<HdMesh> {
@@ -57,6 +58,8 @@ private:
         HdDirtyBits dirtyBits,
         std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation);
 
+    void ReleaseInstances(HdRprApi* rprApi);
+
 private:
     std::vector<rpr::Shape*> m_rprMeshes;
     std::vector<std::vector<rpr::Shape*>> m_rprMeshInstances;
@@ -81,6 +84,11 @@ private:
     bool m_authoredNormals = false;
     bool m_smoothNormals = false;
 
+    VtArray<VtVec3fArray> m_colorSamples;
+    HdInterpolation m_colorInterpolation;
+    bool m_authoredColors = false;
+    bool m_colorsSet = false;
+
     VtArray<VtVec2fArray> m_uvSamples;
     VtIntArray m_uvIndices;
 
@@ -91,6 +99,8 @@ private:
     bool m_ignoreContour;
     std::string m_cryptomatteName;
     size_t m_numGeometrySamples = 1;
+
+    HdRprInstancer* m_instancer = nullptr;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

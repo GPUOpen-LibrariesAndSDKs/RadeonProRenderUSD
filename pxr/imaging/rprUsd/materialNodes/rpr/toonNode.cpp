@@ -45,10 +45,7 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (ThreeColors)
     (FiveColors)
 
-    (transparencyMode)
     (transparency)
-    (DisableTransparency)
-    (EnableTransparency)
     
     (interpolationMode)
     (Linear)
@@ -93,7 +90,7 @@ public:
     ~RprUsd_RprToonNode() override = default;
 
     VtValue GetOutput(TfToken const& outputId) override {
-        if (m_TransparencyEnabled) {
+        if (m_blendNode) {
             return VtValue(m_blendNode);
         } else {
             return VtValue(m_toonClosureNode);
@@ -157,18 +154,10 @@ public:
             return false;
         } else if (id == _tokens->transparency) {
             if (value.IsHolding<float>()) {
-                float transparency = value.UncheckedGet<float>();
-                return m_blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, transparency, transparency, transparency, transparency) == RPR_SUCCESS;
-            }
-            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `float`", id.GetText(), value.GetTypeName().c_str());
-            return false;
-        } else if (id == _tokens->transparencyMode) {
-            if (value.IsHolding<int>()) {
-                int transparencyModeInt = value.UncheckedGet<int>();
-                SetTransparencyEnabled(static_cast<bool>(transparencyModeInt));
+                UpdateTransparency(value.UncheckedGet<float>());
                 return true;
             }
-            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `int`", id.GetText(), value.GetTypeName().c_str());
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `float`", id.GetText(), value.GetTypeName().c_str());
             return false;
         }
 
@@ -176,13 +165,32 @@ public:
         return false;
     }
 
-    static RprUsd_RprNodeInfo* GetInfo() {
-        static RprUsd_RprNodeInfo* ret = nullptr;
+    struct RprUsd_ToonNodeInfo : public RprUsd_RprNodeInfo {
+        bool HasDynamicVisibility() const override { return true; }
+        VisibilityUpdate GetVisibilityUpdate(const char* changedParam, RprUsdMaterialNodeStateProvider* stateProvider) const override {
+            VisibilityUpdate visibilityUpdate;
+
+            if (_tokens->colorsMode == changedParam) {
+                bool isFiveColorMode = stateProvider->GetValue(changedParam).GetWithDefault(0) != 0;
+                visibilityUpdate.Add(isFiveColorMode, _tokens->shadowTint2.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->highlightTint2.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->shadowLevel.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->shadowLevelMix.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->highlightLevel2.GetText());
+                visibilityUpdate.Add(isFiveColorMode, _tokens->highlightLevelMix2.GetText());
+            }
+
+            return visibilityUpdate;
+        };
+    };
+
+    static RprUsd_ToonNodeInfo* GetInfo() {
+        static RprUsd_ToonNodeInfo* ret = nullptr;
         if (ret) {
             return ret;
         }
 
-        ret = new RprUsd_RprNodeInfo;
+        ret = new RprUsd_ToonNodeInfo;
         auto& nodeInfo = *ret;
 
         nodeInfo.name = "rpr_toon";
@@ -212,11 +220,7 @@ public:
         nodeInfo.inputs.emplace_back(_tokens->highlightLevelMix, 0.05f);
         nodeInfo.inputs.emplace_back(_tokens->highlightLevelMix2, 0.05f);
 
-        RprUsd_RprNodeInput transparencyModeInput(_tokens->transparencyMode, _tokens->DisableTransparency);
-        transparencyModeInput.value = VtValue(0);
-        transparencyModeInput.tokenValues = { _tokens->DisableTransparency, _tokens->EnableTransparency };
-        nodeInfo.inputs.push_back(transparencyModeInput);
-        nodeInfo.inputs.emplace_back(_tokens->transparency, 0.5f);
+        nodeInfo.inputs.emplace_back(_tokens->transparency, 0.0f);
 
         RprUsd_RprNodeInput interpolationModeInput(_tokens->interpolationMode, _tokens->None);
         interpolationModeInput.value = VtValue(0);
@@ -239,43 +243,49 @@ private:
     std::shared_ptr<rpr::MaterialNode> m_blendNode;
     std::shared_ptr<rpr::MaterialNode> m_toonClosureNode;
 
-    bool m_TransparencyEnabled = false;
     rpr::Context* m_rprContext = nullptr;
 
-    void SetTransparencyEnabled(bool value) {
-        if (value) {
+    void UpdateTransparency(float transparency) {
+        if (transparency > 0.0f) {
             rpr::Status status;
-
-            m_transparentNode.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_TRANSPARENT, &status));
-            if (!m_transparentNode) {
-                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to create transparent node", m_rprContext));
-            }
-
-            m_blendNode.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_BLEND, &status));
             if (!m_blendNode) {
-                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to create blend node", m_rprContext));
-            }
+                std::unique_ptr<rpr::MaterialNode> blendNode(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_BLEND, &status));
+                if (!blendNode) {
+                    throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to create blend node", m_rprContext));
+                }
 
-            status = m_blendNode->SetInput(RPR_MATERIAL_INPUT_COLOR0, m_transparentNode.get());
-            if (status != RPR_SUCCESS) {
-                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set color1 input of blend node", m_rprContext));
-            }
+                std::unique_ptr<rpr::MaterialNode> transparentNode(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_TRANSPARENT, &status));
+                if (!transparentNode) {
+                    throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to create transparent node", m_rprContext));
+                }
 
-            status = m_blendNode->SetInput(RPR_MATERIAL_INPUT_COLOR1, m_toonClosureNode.get());
-            if (status != RPR_SUCCESS) {
-                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set color0 input of blend node", m_rprContext));
-            }
+                status = blendNode->SetInput(RPR_MATERIAL_INPUT_COLOR0, m_toonClosureNode.get());
+                if (status != RPR_SUCCESS) {
+                    throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set color1 input of blend node", m_rprContext));
+                }
 
-            status = m_blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, 0.5f);
-            if (status != RPR_SUCCESS) {
-                throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set weight input of blend node", m_rprContext));
+                status = blendNode->SetInput(RPR_MATERIAL_INPUT_COLOR1, transparentNode.get());
+                if (status != RPR_SUCCESS) {
+                    throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set color0 input of blend node", m_rprContext));
+                }
+
+                status = blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, transparency, transparency, transparency, transparency);
+                if (status != RPR_SUCCESS) {
+                    throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set weight input of blend node", m_rprContext));
+                }
+
+                m_blendNode = std::move(blendNode);
+                m_transparentNode = std::move(transparentNode);
+            } else {
+                status = m_blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, transparency, transparency, transparency, transparency);
+                if (status != RPR_SUCCESS) {
+                    throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set weight input of blend node", m_rprContext));
+                }
             }
         } else {
             m_blendNode.reset();
             m_transparentNode.reset();
         }
-
-        m_TransparencyEnabled = value;
     }
 };
 

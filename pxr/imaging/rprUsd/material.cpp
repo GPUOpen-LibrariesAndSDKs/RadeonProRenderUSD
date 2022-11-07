@@ -34,8 +34,13 @@ bool RprUsdMaterial::AttachTo(rpr::Shape* mesh, bool displacementEnabled) const 
 
         if (subdFactor == 0) {
             TF_WARN("Displacement material requires subdivision to be enabled. The subdivision will be enabled with refine level of 1");
-            if (!RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(1), "Failed to set mesh subdividion")) {
-                subdFactor = 1;
+            uint64_t normalCount;
+            if (!RPR_ERROR_CHECK(rprMeshGetInfo(GetRprObject(mesh), RPR_MESH_NORMAL_COUNT, sizeof(normalCount), &normalCount, nullptr), "Failed to get normal count")) {
+                if (normalCount != 0) {
+                    if (!RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(1), "Failed to set mesh subdividion")) {
+                        subdFactor = 1;
+                    }
+                }
             }
         }
         if (subdFactor > 0) {

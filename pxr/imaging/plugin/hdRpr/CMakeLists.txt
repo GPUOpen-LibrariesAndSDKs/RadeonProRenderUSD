@@ -21,9 +21,11 @@ if(HoudiniUSD_FOUND)
     add_definitions(-DENABLE_MULTITHREADED_RENDER_BUFFER)
     add_definitions(-DHDRPR_DEFAULT_MATERIAL_NETWORK_SELECTOR="karma")
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Houdini.png${_sep}images/restartRequired.png)
+    set(SCRIPT_RESOURCE_FILES scripts/rendersettings_OnLoaded.py${_sep}scripts/rendersettings_OnLoaded.py)
 else(HoudiniUSD_FOUND)
     add_definitions(-DHDRPR_DEFAULT_MATERIAL_NETWORK_SELECTOR="rpr")
     set(RESTART_REQUIRED_RESOURCE_FILE images/restartRequired_Usdview.png${_sep}images/restartRequired.png)
+    set(SCRIPT_RESOURCE_FILES)
 endif(HoudiniUSD_FOUND)
 
 set(GEN_SCRIPT_PYTHON ${PYTHON_EXECUTABLE})
@@ -145,6 +147,7 @@ pxr_plugin(hdRpr
         plugInfo.json
         ${RESTART_REQUIRED_RESOURCE_FILE}
         ${RIF_MODEL_RESOURCE_FILES}
+        ${SCRIPT_RESOURCE_FILES}
 
     CPPFILES
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
