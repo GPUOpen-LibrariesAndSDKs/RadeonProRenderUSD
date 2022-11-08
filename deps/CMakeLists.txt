@@ -88,5 +88,6 @@ add_library(murmurhash STATIC
     ${MURMURHASH_DIR}/MurmurHash3.h
     ${MURMURHASH_DIR}/MurmurHash3.cpp)
 target_include_directories(murmurhash PUBLIC ${MURMURHASH_DIR})
+set_target_properties(murmurhash PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # ----------------------------------------------
