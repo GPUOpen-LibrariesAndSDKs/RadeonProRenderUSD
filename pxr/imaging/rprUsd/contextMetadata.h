@@ -60,7 +60,7 @@ struct RprUsdContextMetadata {
     void* interopInfo = nullptr;
     rpr::CreationFlags creationFlags = 0;
 
-	// additional info about hardware actually used in render context creation
+    // additional info about hardware actually used in render context creation
     RprUsdDevicesInfo devicesActuallyUsed;
 };
 

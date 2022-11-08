@@ -3400,7 +3400,7 @@ Don't show this message again?
             gpuNamesUsed.push_back(gpu.name);
         }
 
-	    return gpuNamesUsed;
+        return gpuNamesUsed;
     }
 
     int GetCpuThreadCountUsed() const {
