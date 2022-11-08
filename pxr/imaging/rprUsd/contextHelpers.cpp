@@ -228,7 +228,7 @@ RprUsdDevicesInfo LoadDevicesConfiguration(RprUsdPluginType pluginType, std::str
         return {};
     }
 
-	RprUsdDevicesInfo ret;
+    RprUsdDevicesInfo ret;
 
     auto isLoaded = [&]() {
         try {

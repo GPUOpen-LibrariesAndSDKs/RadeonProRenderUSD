@@ -3398,7 +3398,7 @@ Don't show this message again?
 
         for (RprUsdDevicesInfo::GPU gpu : m_rprContextMetadata.devicesActuallyUsed.gpus) {
             gpuNamesUsed.push_back(gpu.name);
-	    }
+        }
 
 	    return gpuNamesUsed;
     }
@@ -4184,7 +4184,7 @@ private:
     RprUsdContextMetadata m_rprContextMetadata;
     bool m_isOutputFlipped;
 
-	float m_firstIterationRenderTime = 0.0f;
+    float m_firstIterationRenderTime = 0.0f;
 
     std::unique_ptr<rif::Context> m_rifContext;
 
