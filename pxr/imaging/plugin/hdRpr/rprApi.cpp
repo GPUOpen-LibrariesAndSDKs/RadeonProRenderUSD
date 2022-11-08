@@ -2418,8 +2418,8 @@ public:
         RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_FUNC, (void*)rucFunc), "Failed to set northstar RUC func");
         RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_DATA, &m_rucData), "Failed to set northstar RUC data");
 
-		RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_FIRST_ITERATION_TIME_CALLBACK_FUNC, (void*)FirstIterationRenderCallback), "Failed to set first iteration callback func");
-		RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_FIRST_ITERATION_TIME_CALLBACK_DATA, &m_firstIterationRenderTime), "Failed to set first iteration callback data");
+        RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_FIRST_ITERATION_TIME_CALLBACK_FUNC, (void*)FirstIterationRenderCallback), "Failed to set first iteration callback func");
+        RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_FIRST_ITERATION_TIME_CALLBACK_DATA, &m_firstIterationRenderTime), "Failed to set first iteration callback data");
 
         m_isRenderUpdateCallbackEnabled = true;
     }
@@ -3314,9 +3314,6 @@ Don't show this message again?
     HdRprApi::RenderStats GetRenderStats() const {
         HdRprApi::RenderStats stats = {};
 
-		//m_contextmetadata
-
-
         // rprsExport has no progress callback
         if (!m_rprSceneExportPath.empty()) {
             return stats;
@@ -3396,23 +3393,23 @@ Don't show this message again?
         return m_currentRenderQuality;
     }
 
-	std::vector<std::string> GetGpuUsedNames() const {
-		std::vector<std::string> gpuNamesUsed;
+    std::vector<std::string> GetGpuUsedNames() const {
+        std::vector<std::string> gpuNamesUsed;
 
-		for (RprUsdDevicesInfo::GPU gpu : m_rprContextMetadata.devicesActuallyUsed.gpus) {
-			gpuNamesUsed.push_back(gpu.name);
-		}
+        for (RprUsdDevicesInfo::GPU gpu : m_rprContextMetadata.devicesActuallyUsed.gpus) {
+            gpuNamesUsed.push_back(gpu.name);
+	    }
 
-		return gpuNamesUsed;
-	}
+	    return gpuNamesUsed;
+    }
 
-	int GetCpuThreadCountUsed() const {
-		return m_rprContextMetadata.devicesActuallyUsed.cpu.numThreads;
-	}
+    int GetCpuThreadCountUsed() const {
+        return m_rprContextMetadata.devicesActuallyUsed.cpu.numThreads;
+    }
 
-	float GetFirstIterationRenerTime() const {
-		return m_firstIterationRenderTime;
-	}
+    float GetFirstIterationRenerTime() const {
+        return m_firstIterationRenderTime;
+    }
 
     void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
@@ -4676,15 +4673,15 @@ void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presen
 }
 
 std::vector<std::string> HdRprApi::GetGpuUsedNames() const {
-	return m_impl->GetGpuUsedNames();
+    return m_impl->GetGpuUsedNames();
 }
 
 int HdRprApi::GetCpuThreadCountUsed() const {
-	return m_impl->GetCpuThreadCountUsed();
+    return m_impl->GetCpuThreadCountUsed();
 }
 
 float HdRprApi::GetFirstIterationRenerTime() const {
-	return m_impl->GetFirstIterationRenerTime();
+    return m_impl->GetFirstIterationRenerTime();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

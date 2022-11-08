@@ -317,7 +317,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         return nullptr;
     }
 
-	RprUsdDevicesInfo devicesConfiguration = LoadDevicesConfiguration(metadata->pluginType, deviceConfigurationFilepath);
+    RprUsdDevicesInfo devicesConfiguration = LoadDevicesConfiguration(metadata->pluginType, deviceConfigurationFilepath);
 
     std::vector<rpr_context_properties> contextProperties;
     auto appendContextProperty = [&contextProperties](uint64_t propertyKey, void* propertyValue) {
@@ -398,7 +398,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, textureCachePath.c_str()), "Failed to set texture cache path");
 
         metadata->creationFlags = creationFlags;
-		metadata->devicesActuallyUsed = devicesConfiguration;
+        metadata->devicesActuallyUsed = devicesConfiguration;
     } else {
         RPR_ERROR_CHECK(status, "Failed to create RPR context");
     }

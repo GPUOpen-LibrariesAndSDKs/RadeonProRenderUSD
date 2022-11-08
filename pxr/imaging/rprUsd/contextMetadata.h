@@ -34,24 +34,24 @@ enum RprUsdPluginType {
 };
 
 struct RprUsdDevicesInfo {
-	struct CPU {
-		int numThreads;
-		CPU(int numThreads = 0) : numThreads(numThreads) {}
-		bool operator==(CPU const& rhs) { return numThreads == rhs.numThreads; }
-	};
-	CPU cpu;
+    struct CPU {
+	    int numThreads;
+	    CPU(int numThreads = 0) : numThreads(numThreads) {}
+	    bool operator==(CPU const& rhs) { return numThreads == rhs.numThreads; }
+    };
+    CPU cpu;
 
-	struct GPU {
-		int index;
-		std::string name;
-		GPU(int index = -1, std::string name = {}) : index(index), name(name) {}
-		bool operator==(GPU const& rhs) { return index == rhs.index && name == rhs.name; }
-	};
-	std::vector<GPU> gpus;
+    struct GPU {
+        int index;
+        std::string name;
+        GPU(int index = -1, std::string name = {}) : index(index), name(name) {}
+        bool operator==(GPU const& rhs) { return index == rhs.index && name == rhs.name; }
+    };
+    std::vector<GPU> gpus;
 
-	bool IsValid() const {
-		return cpu.numThreads > 0 || !gpus.empty();
-	}
+    bool IsValid() const {
+        return cpu.numThreads > 0 || !gpus.empty();
+    }
 };
 
 struct RprUsdContextMetadata {
@@ -61,7 +61,7 @@ struct RprUsdContextMetadata {
     rpr::CreationFlags creationFlags = 0;
 
 	// additional info about hardware actually used in render context creation
-	RprUsdDevicesInfo devicesActuallyUsed;
+    RprUsdDevicesInfo devicesActuallyUsed;
 };
 
 RPRUSD_API
