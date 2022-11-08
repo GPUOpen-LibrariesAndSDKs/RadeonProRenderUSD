@@ -2417,6 +2417,10 @@ public:
         m_rucData.rprApi = this;
         RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_FUNC, (void*)rucFunc), "Failed to set northstar RUC func");
         RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_UPDATE_CALLBACK_DATA, &m_rucData), "Failed to set northstar RUC data");
+
+		RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_FIRST_ITERATION_TIME_CALLBACK_FUNC, (void*)FirstIterationRenderCallback), "Failed to set first iteration callback func");
+		RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_FIRST_ITERATION_TIME_CALLBACK_DATA, &m_firstIterationRenderTime), "Failed to set first iteration callback data");
+
         m_isRenderUpdateCallbackEnabled = true;
     }
 
@@ -2818,6 +2822,10 @@ public:
 
         data->previousProgress = progress;
     }
+
+	static void FirstIterationRenderCallback(float firstIterationTimeMs, void* dataPtr) {
+		*(float*)(dataPtr) = firstIterationTimeMs;
+	}
 
     void RenderImpl(HdRprRenderThread* renderThread) {
         if (!CommonRenderImplPrologue()) {
@@ -3400,6 +3408,10 @@ Don't show this message again?
 
 	int GetCpuThreadCountUsed() const {
 		return m_rprContextMetadata.devicesActuallyUsed.cpu.numThreads;
+	}
+
+	float GetFirstIterationRenerTime() const {
+		return m_firstIterationRenderTime;
 	}
 
     void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
@@ -4175,6 +4187,8 @@ private:
     RprUsdContextMetadata m_rprContextMetadata;
     bool m_isOutputFlipped;
 
+	float m_firstIterationRenderTime = 0.0f;
+
     std::unique_ptr<rif::Context> m_rifContext;
 
     std::unique_ptr<rpr::Scene> m_scene;
@@ -4667,6 +4681,10 @@ std::vector<std::string> HdRprApi::GetGpuUsedNames() const {
 
 int HdRprApi::GetCpuThreadCountUsed() const {
 	return m_impl->GetCpuThreadCountUsed();
+}
+
+float HdRprApi::GetFirstIterationRenerTime() const {
+	return m_impl->GetFirstIterationRenerTime();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

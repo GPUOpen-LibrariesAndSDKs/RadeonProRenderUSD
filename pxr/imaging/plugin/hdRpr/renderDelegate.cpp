@@ -362,6 +362,8 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
 	stats["gpuUsedNames"] = m_rprApi->GetGpuUsedNames();
 	stats["threadCountUsed"] = m_rprApi->GetCpuThreadCountUsed();
 
+	stats["firstIterationRenderTime"] = m_rprApi->GetFirstIterationRenerTime();
+
     return stats;
 }
 
