@@ -3555,7 +3555,11 @@ private:
             TF_RUNTIME_ERROR("RIF version and AI models version mismatch");
         }
 
-        m_rifContext = rif::Context::Create(m_rprContext.get(), m_rprContextMetadata, modelsPath);
+        char* envUseGpu = std::getenv("USE_GPU");
+        std::string envUseGpuStr = envUseGpu ? std::string(envUseGpu) : "";
+        bool useGpu = !(envUseGpuStr == "False" || envUseGpuStr == "false");
+
+        m_rifContext = useGpu ? rif::Context::Create(m_rprContext.get(), m_rprContextMetadata, modelsPath) : nullptr;
     }
 
     void InitAovs() {
@@ -4017,6 +4021,9 @@ private:
                 return false;
             }
 
+            if (!m_rifContext) {
+                return true;
+            }
             auto rifImage = m_rifContext->CreateImage(imageDesc);
 
             void* mappedData;
