@@ -1800,7 +1800,7 @@ public:
                 if (!m_contourAovs) {
                     m_contourAovs = std::make_unique<ContourRenderModeAovs>();
                     m_contourAovs->normal = CreateAov(HdAovTokens->normal);
-                    m_contourAovs->primId = CreateAov(HdAovTokens->primId);
+                    m_contourAovs->objectId = CreateAov(HdAovTokens->instanceId); // Hydra InstanceID contains RPR_AOV_OBJECT_ID
                     m_contourAovs->materialId = CreateAov(HdRprAovTokens->materialId);
                     m_contourAovs->uv = CreateAov(HdRprAovTokens->primvarsSt);
                 }
@@ -4172,7 +4172,7 @@ private:
 
     struct ContourRenderModeAovs {
         std::shared_ptr<HdRprApiAov> normal;
-        std::shared_ptr<HdRprApiAov> primId;
+        std::shared_ptr<HdRprApiAov> objectId;
         std::shared_ptr<HdRprApiAov> materialId;
         std::shared_ptr<HdRprApiAov> uv;
     };
