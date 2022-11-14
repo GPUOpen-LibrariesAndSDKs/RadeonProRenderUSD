@@ -17,36 +17,12 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/api.h"
 #include "pxr/imaging/rprUsd/contextMetadata.h"
 
-#include <string>
-#include <vector>
-
 namespace rpr { class Context; }
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 RPRUSD_API
 rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata);
-
-struct RprUsdDevicesInfo {
-    struct CPU {
-        int numThreads;
-        CPU(int numThreads = 0) : numThreads(numThreads) {}
-        bool operator==(CPU const& rhs) { return numThreads == rhs.numThreads; }
-    };
-    CPU cpu;
-
-    struct GPU {
-        int index;
-        std::string name;
-        GPU(int index = -1, std::string name = {}) : index(index), name(name) {}
-        bool operator==(GPU const& rhs) { return index == rhs.index && name == rhs.name; }
-    };
-    std::vector<GPU> gpus;
-
-    bool IsValid() const {
-        return cpu.numThreads > 0 || !gpus.empty();
-    }
-};
 
 RPRUSD_API
 RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType);
