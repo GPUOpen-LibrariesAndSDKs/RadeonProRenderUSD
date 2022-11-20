@@ -696,6 +696,19 @@ render_setting_categories = [
                 'defaultValue': False
             }
         ]
+    },
+    {
+        'name': 'LightVisibility',
+        'settings': [
+            {
+                'name': 'ibl:visibility',
+                'ui_name': 'IBL visibility',
+                'defaultValue': True,
+                'houdini': {
+                    'hidewhen': hidewhen_hybrid
+                }
+            }
+        ]
     }
 ]
 
