@@ -54,6 +54,9 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType);
 RPRUSD_API
 bool RprUsdIsTracingEnabled();
 
+RPRUSD_API
+bool RprUsdIsCpuOnly();
+
 PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // PXR_IMAGING_RPR_USD_CONTEXT_HELPERS_H

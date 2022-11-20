@@ -87,8 +87,6 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
     "Set this to override render quality coming from the render settings");
-TF_DEFINE_ENV_SETTING(HDRPR_DISABLE_RIF, false,
-    "Disable RIF API.  This will allow running on CPU only machines, but some AOV will no longer work.");
 
 TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (usdFilename)
@@ -409,10 +407,7 @@ public:
 
         try {
             InitRpr();
-            if (!TfGetEnvSetting(HDRPR_DISABLE_RIF))
-            {
-                InitRif();
-            }
+            InitRif();
             InitAovs();
 
             {
@@ -3580,6 +3575,9 @@ private:
     }
 
     void InitRif() {
+        if (RprUsdIsCpuOnly()) {
+            return; // We can't create RIF contet in CPU only mode
+        }
         PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
         auto modelsPath = PlugFindPluginResource(plugin, "rif_models", false);
         if (modelsPath.empty()) {
