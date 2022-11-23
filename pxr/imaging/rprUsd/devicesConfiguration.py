@@ -104,7 +104,7 @@ class _PluginConfiguration:
     @staticmethod
     def default(plugin_type, plugin_devices_info):
         gpu_configs = [_GpuConfiguration(is_enabled=idx==0, gpu_info=gpu_info) for idx, gpu_info in enumerate(plugin_devices_info.gpus)]
-        cpu_config = _CpuConfiguration(num_active_threads=plugin_devices_info.cpu.num_threads if not gpu_configs else 0, cpu_info=plugin_devices_info.cpu)
+        cpu_config = _CpuConfiguration(num_active_threads=plugin_devices_info.cpu.numThreads if not gpu_configs else 0, cpu_info=plugin_devices_info.cpu)
         return _PluginConfiguration(plugin_type=plugin_type, cpu_config=cpu_config, gpu_configs=gpu_configs)
 
     def serialize(self):
@@ -141,7 +141,9 @@ class _Configuration:
 
     def is_outdated(self):
         for plugin_configuration in self.plugin_configurations:
-            devices_info = _devices_info[plugin_configuration.plugin_type]
+            devices_info = _devices_info.get(plugin_configuration.plugin_type)
+            if not devices_info:
+                continue
 
             config_gpu_infos = [gpu_config.gpu_info for gpu_config in plugin_configuration.gpu_configs]
             if plugin_configuration.cpu_config.cpu_info == devices_info.cpu and \
@@ -181,7 +183,7 @@ class _Configuration:
     @staticmethod
     def default(context):
         plugin_configurations = list()
-        for plugin_type in [RprUsd.kPluginNorthstar, RprUsd.kPluginTahoe, RprUsd.kPluginHybrid]:
+        for plugin_type in [RprUsd.kPluginHybridPro, RprUsd.kPluginNorthstar, RprUsd.kPluginHybrid]:
             if plugin_type in _devices_info:
                 plugin_configurations.append(_PluginConfiguration.default(plugin_type, _devices_info[plugin_type]))
         return _Configuration(context=context, plugin_configurations=plugin_configurations)
@@ -311,12 +313,12 @@ class _PluginConfigurationWidget(BorderWidget):
             self.main_layout.contentsMargins().bottom() // 2)
 
         self.plugin_type = plugin_configuration.plugin_type
-        if self.plugin_type == RprUsd.kPluginHybrid:
-            plugin_qualities = 'Low-High Qualities'
-        elif self.plugin_type == RprUsd.kPluginTahoe:
-            plugin_qualities = 'Full (Legacy) Quality'
+        if self.plugin_type == RprUsd.kPluginHybridPro:
+            plugin_qualities = 'HybridPro'
         elif self.plugin_type == RprUsd.kPluginNorthstar:
-            plugin_qualities = 'Full Quality'
+            plugin_qualities = 'Northstar'
+        elif self.plugin_type == RprUsd.kPluginHybrid:
+            plugin_qualities = 'Low-High Qualities'
 
         self.labels_widget = QtWidgets.QWidget(self)
         self.main_layout.addWidget(self.labels_widget)
@@ -359,7 +361,7 @@ class _PluginConfigurationWidget(BorderWidget):
 
 
 class _DevicesConfigurationDialog(QtWidgets.QDialog):
-    def __init__(self, configuration, show_restart_warning):
+    def __init__(self, configuration, show_restart_warning, is_modal):
         super(_DevicesConfigurationDialog, self).__init__()
 
         self.configuration = configuration
@@ -396,6 +398,8 @@ class _DevicesConfigurationDialog(QtWidgets.QDialog):
         self.button_box.accepted.connect(self.on_accept)
         self.button_box.rejected.connect(self.on_reject)
         self.main_layout.addWidget(self.button_box)
+        if is_modal:
+            self.setModal(True)
 
         self.show()
 
@@ -420,7 +424,7 @@ class _DevicesConfigurationDialog(QtWidgets.QDialog):
                 self.restart_warning_label.hide()
 
 
-def open_window(parent=None, parent_flags=QtCore.Qt.Widget, show_restart_warning=True):
+def open_window(parent=None, parent_flags=QtCore.Qt.Widget, show_restart_warning=True, is_modal=False):
     _setup_devices_info()
 
     class Context:
@@ -439,7 +443,7 @@ def open_window(parent=None, parent_flags=QtCore.Qt.Widget, show_restart_warning
     configuration_filepath = RprUsd.Config.GetDeviceConfigurationFilepath()
     configuration = _Configuration.load(Context(parent, parent_flags), configuration_filepath)
 
-    dialog = _DevicesConfigurationDialog(configuration, show_restart_warning)
+    dialog = _DevicesConfigurationDialog(configuration, show_restart_warning, is_modal)
     dialog.exec_()
 
     if dialog.should_update_configuration:

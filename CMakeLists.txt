@@ -1,6 +1,6 @@
 project(hdRpr)
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.15)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
                       ${CMAKE_SOURCE_DIR}/cmake/modules

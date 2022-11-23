@@ -18,6 +18,7 @@ limitations under the License.
 #include "pxr/imaging/hd/extComputation.h"
 #include "pxr/base/tf/diagnosticMgr.h"
 #include "pxr/base/tf/getenv.h"
+#include "pxr/base/arch/env.h"
 
 #include "camera.h"
 #include "config.h"
@@ -357,6 +358,12 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     stats[_tokens->percentDone.GetString()] = rprStats.percentDone;
     stats["averageRenderTimePerSample"] = rprStats.averageRenderTimePerSample;
     stats["averageResolveTimePerSample"] = rprStats.averageResolveTimePerSample;
+
+    stats["gpuUsedNames"] = m_rprApi->GetGpuUsedNames();
+    stats["threadCountUsed"] = m_rprApi->GetCpuThreadCountUsed();
+
+    stats["firstIterationRenderTime"] = m_rprApi->GetFirstIterationRenerTime();
+
     return stats;
 }
 
@@ -380,7 +387,11 @@ bool HdRprDelegate::IsStopSupported() const {
     return true;
 }
 
+#if PXR_VERSION >= 2203
+bool HdRprDelegate::Stop(bool blocking) {
+#else
 bool HdRprDelegate::Stop() {
+#endif
     m_renderThread.StopRender();
     return true;
 }
@@ -426,9 +437,9 @@ void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
 PXR_NAMESPACE_CLOSE_SCOPE
 
 void HdRprSetRenderQuality(const char* quality) {
-    PXR_INTERNAL_NS::HdRprConfig* config;
-    auto configInstanceLock = PXR_INTERNAL_NS::HdRprDelegate::GetLastCreatedInstance()->LockConfigInstance(&config);
-    config->SetCoreRenderQuality(PXR_INTERNAL_NS::TfToken(quality));
+    // Set environment variable that would outlive render delegate dll, because config is destroyed on plugin reload
+    // HDRPR_RENDER_QUALITY_OVERRIDE env setting wasn't used because it seems not possible to declare it in .h file
+    PXR_INTERNAL_NS::ArchSetEnv("HDRPR_USDVIEW_RENDER_QUALITY", quality, true);
 }
 
 char* HdRprGetRenderQuality() {

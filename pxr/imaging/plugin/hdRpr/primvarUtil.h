@@ -24,6 +24,10 @@ void HdRprFillPrimvarDescsPerInterpolation(
     HdSceneDelegate* sceneDelegate, SdfPath const& id,
     std::map<HdInterpolation, HdPrimvarDescriptorVector>* primvarDescsPerInterpolation);
 
+const HdPrimvarDescriptor* HdRprFindFirstPrimvarRole(
+    std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
+    const std::string& role);
+
 bool HdRprIsPrimvarExists(
     TfToken const& primvarName,
     std::map<HdInterpolation, HdPrimvarDescriptorVector> const& primvarDescsPerInterpolation,
@@ -171,13 +175,24 @@ inline VtValue HdRpr_GetParam(HdSceneDelegate* sceneDelegate, SdfPath id, TfToke
     // TODO: This is not Get() Because of the reasons listed here:
     // https://groups.google.com/g/usd-interest/c/k-N05Ac7SRk/m/RtK5HvglAQAJ
     // We may need to fix this in newer versions of USD
-#if PXR_VERSION < 2108
-    return sceneDelegate->GetLightParamValue(id, name);
-#elif PXR_VERSION < 2111
-    return sceneDelegate->GetCameraParamValue(id, name);
-#else
-    return sceneDelegate->GetLightParamValue(id, name);
-#endif
+
+    // Order here is important
+    // GetCameraParamValue works with deprecated schema and required work backward compatibility
+    //
+    // GetLightParamValue works with new schema, but if it wouldn't find any value
+    // it would return default value (But real value might be stored in GetCameraParamValue)
+
+    VtValue cameraValue = sceneDelegate->GetCameraParamValue(id, name);
+    if (!cameraValue.IsEmpty()) {
+        return cameraValue;
+    }
+
+    VtValue lightValue = sceneDelegate->GetLightParamValue(id, name);
+    if (!lightValue.IsEmpty()) {
+        return lightValue;
+    }
+
+    return VtValue();
 }
 
 template<typename T>

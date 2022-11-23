@@ -197,6 +197,7 @@ class HdRprApiDepthAov : public HdRprApiComputedAov {
 public:
     HdRprApiDepthAov(int width, int height, HdFormat format,
                      std::shared_ptr<HdRprApiAov> worldCoordinateAov,
+                     std::shared_ptr<HdRprApiAov> opacityAov,
                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     ~HdRprApiDepthAov() override = default;
 
@@ -204,12 +205,15 @@ public:
     void Resolve() override;
 
 private:
-    std::unique_ptr<rif::Filter> m_retainedFilter;
+    std::unique_ptr<rif::Filter> m_retainedNDCFilter;
+    std::unique_ptr<rif::Filter> m_retainedOpacityFilter;
 
     rif::Filter* m_ndcFilter;
+    rif::Filter* m_opacityFilter;
     rif::Filter* m_remapFilter;
 
     std::shared_ptr<HdRprApiAov> m_retainedWorldCoordinateAov;
+    std::shared_ptr<HdRprApiAov> m_retainedOpacityAov;
 };
 
 class HdRprApiIdMaskAov : public HdRprApiComputedAov {

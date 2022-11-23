@@ -1,6 +1,25 @@
 set(PXR_PREFIX pxr/imaging)
 set(PXR_PACKAGE rprUsd)
 
+function(SetPxrVersion configFileName)
+    if(NOT EXISTS ${configFileName})
+        return()
+    endif()
+    file(READ "${configFileName}" fileContents)
+    string(REPLACE "\\\n" "" fileContents ${fileContents})
+    string(REPLACE "\n" ";" fileLines ${fileContents})
+    list(REMOVE_ITEM fileLines "")
+    foreach(line ${fileLines})
+    string(REGEX MATCH "set.PXR_VERSION +.([0-9]*).." _ ${line})
+    if(CMAKE_MATCH_1)
+        set(PXR_VERSION ${CMAKE_MATCH_1} PARENT_SCOPE)
+        return()
+    endif()
+    endforeach()
+endfunction()
+
+SetPxrVersion(${pxr_DIR}/pxrConfig.cmake)
+
 set(RPRUSD_SCHEMA_PYMODULE_CPPFILES
     wrapTokens.cpp
     wrapRendererSettingsAPI.cpp
@@ -33,16 +52,22 @@ list(TRANSFORM RPRUSD_SCHEMA_RESOURCE_FILES PREPEND ${RPRUSD_SCHEMA_DIR})
 
 # TODO: validate on UNIX
 set(USD_SCHEMA_PXR_PLUGINPATH_NAME $ENV{PXR_PLUGINPATH_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/metadataPlugin)
-set(USD_SCHEMA_ENV "\"PXR_PLUGINPATH_NAME=${USD_SCHEMA_PXR_PLUGINPATH_NAME}\"")
+if (UNIX)
+    set(USD_SCHEMA_ENV "PXR_PLUGINPATH_NAME=${USD_SCHEMA_PXR_PLUGINPATH_NAME}")
+else()
+    set(USD_SCHEMA_ENV "\"PXR_PLUGINPATH_NAME=${USD_SCHEMA_PXR_PLUGINPATH_NAME}\"")	
+endif()
 if(NOT HoudiniUSD_FOUND)
     set(USD_SCHEMA_ENV_PATH "${pxr_DIR}/bin" "${pxr_DIR}/lib" $ENV{PATH})
     set(USD_SCHEMA_ENV_PYTHONPATH "${pxr_DIR}/lib/python" $ENV{PYTHONPATH})
     if (UNIX)
         string(REPLACE ";" ":" USD_SCHEMA_ENV_PATH "${USD_SCHEMA_ENV_PATH}")
         string(REPLACE ";" ":" USD_SCHEMA_ENV_PYTHONPATH "${USD_SCHEMA_ENV_PYTHONPATH}")
+        set(USD_SCHEMA_ENV "${USD_SCHEMA_ENV}" "PATH=${USD_SCHEMA_ENV_PATH}" "PYTHONPATH=${USD_SCHEMA_ENV_PYTHONPATH}")
+    else()
+        get_filename_component(PYTHON_ROOT_DIR ${PYTHON_EXECUTABLE} DIRECTORY)
+        set(USD_SCHEMA_ENV "${USD_SCHEMA_ENV} \"PATH=${PYTHON_ROOT_DIR};${USD_SCHEMA_ENV_PATH}\" \"PYTHONPATH=${USD_SCHEMA_ENV_PYTHONPATH}\"")
     endif()
-
-    set(USD_SCHEMA_ENV "${USD_SCHEMA_ENV} \"PATH=${USD_SCHEMA_ENV_PATH}\" \"PYTHONPATH=${USD_SCHEMA_ENV_PYTHONPATH}\"")
 endif()
 
 set(USD_SCHEMA_OUTPUT ${RPRUSD_SCHEMA_PUBLIC_HEADERS} ${RPRUSD_SCHEMA_SOURCES} ${RPRUSD_SCHEMA_PYMODULE_CPPFILES} ${RPRUSD_SCHEMA_RESOURCE_FILES})
@@ -82,6 +107,7 @@ pxr_library(rprUsd
         plug
         arch
         garch
+        usdShade
         work
         cpprpr
         json
@@ -124,7 +150,9 @@ pxr_library(rprUsd
 
 if(PXR_VERSION GREATER_EQUAL 2108)
     target_sources(rprUsd PRIVATE hdMtlxFixed.cpp)
-    target_link_libraries(rprUsd hdMtlx)
+    if(PXR_BUILD_MONOLITHIC STREQUAL "OFF")
+        target_link_libraries(rprUsd hdMtlx)
+    endif()
     target_compile_definitions(rprUsd PRIVATE USE_USDSHADE_MTLX)
 endif()
 

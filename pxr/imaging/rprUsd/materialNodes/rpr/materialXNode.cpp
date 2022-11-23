@@ -20,6 +20,7 @@ limitations under the License.
 #include "pxr/base/arch/attributes.h"
 #include "pxr/imaging/rprUsd/error.h"
 #include "pxr/imaging/rprUsd/coreImage.h"
+#include "pxr/usd/usdShade/tokens.h"
 
 #include <fstream>
 
@@ -71,11 +72,11 @@ public:
             UpdateNodeOutput();
         }
 
-        if (outputId == HdMaterialTerminalTokens->surface) {
+        if (outputId == UsdShadeTokens->surface) {
             if (m_surfaceNode) {
                 return VtValue(m_surfaceNode);
             }
-        } else if (outputId == HdMaterialTerminalTokens->displacement) {
+        } else if (outputId == UsdShadeTokens->displacement) {
             if (m_displacementNode) {
                 return VtValue(m_displacementNode);
             }

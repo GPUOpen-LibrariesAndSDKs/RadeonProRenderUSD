@@ -31,7 +31,7 @@ include(Options)
 set(_PXR_GCC_CLANG_SHARED_CXX_FLAGS "${_PXR_GCC_CLANG_SHARED_CXX_FLAGS} -std=c++11")
 
 # Enable all warnings.
-set(_PXR_GCC_CLANG_SHARED_CXX_FLAGS "${_PXR_GCC_CLANG_SHARED_CXX_FLAGS} -Wall")
+set(_PXR_GCC_CLANG_SHARED_CXX_FLAGS "${_PXR_GCC_CLANG_SHARED_CXX_FLAGS} -Wall -Wformat-security")
 
 # Errors are warnings in strict build mode.
 if (${PXR_STRICT_BUILD_MODE})

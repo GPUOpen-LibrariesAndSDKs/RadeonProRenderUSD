@@ -1,5 +1,29 @@
 # Change Log
 
+## Version 2.3
+### New Features:
+- Support for Houdini 19.5 has been added.
+- Support for USD 22.05 has been added.
+- The RPR Interactive mode has been improved with the following developments:
+  - Better support for more shader node types;
+  - Even faster rendering with optimized settings out of the box;
+  - Hair rendering support;
+  - More AOVs supported;
+  - Support for OpenColorIO texture spaces;
+  - Now supported on Linux.
+- Instance and Object ID AOVs are now supported.
+
+### Bugs Fixed:
+- The RPR Interactive mode’s ray depths settings are now correctly applied when rendering. 
+- Files that have relative paths to textures are now processed correctly.
+- A setting for Pixel Filter (antialiasing) has been added.
+- The USD setting for scene units is now supported correctly This is applied to transforms and the Depth AOV. In Houdini the compositing with the background grid in the viewport is now correct.
+- Vertex color primitive variables are now supported, in particular the “Display Color” setting.
+- The first UV channel (even if not named “st”) is now exported and used.
+- The speed of exporting MaterialX files has been improved greatly.
+- Tiled rendering with Perspective Cameras now works correctly.
+
+
 ## Version 2.2
 ### New Features:
 - Support of Houdini 19.  Houdini 19 adds MaterialX nodes which Radeon ProRender supports through the plug-in.

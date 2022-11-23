@@ -328,13 +328,7 @@ std::unique_ptr<Context> Context::Create(rpr::Context* rprContext, RprUsdContext
 
     try {
         std::unique_ptr<Context> rifContext;
-        if (HasGpuContext(contextFlags) &&
-            rprContextMetadata.pluginType == kPluginTahoe &&
-            !(contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL)) {
-            rifContext.reset(new ContextOpenCL(rprContext, modelPath));
-        } else {
-            rifContext.reset(new ContextCPU(rprContext, modelPath));
-        }
+        rifContext.reset(new ContextCPU(rprContext, modelPath));
 
         RIF_ERROR_CHECK_THROW(rifContextCreateCommandQueue(rifContext->m_context, &rifContext->m_commandQueue), "Failed to create RIF command queue");
 

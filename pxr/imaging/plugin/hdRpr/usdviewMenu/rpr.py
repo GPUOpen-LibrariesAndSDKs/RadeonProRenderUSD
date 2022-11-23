@@ -87,6 +87,8 @@ def setRenderQuality(usdviewApi, quality):
                 return 'Tahoe'
             elif quality == b'Northstar':
                 return 'Northstar'
+            elif quality == b'HybridPro':
+                return 'HybridPro'
             else:
                 return 'Hybrid'
 
@@ -107,6 +109,8 @@ def SetRenderFullQuality(usdviewApi):
     setRenderQuality(usdviewApi, b'Full')
 def SetRenderNorthstarQuality(usdviewApi):
     setRenderQuality(usdviewApi, b'Northstar')
+def SetRenderHybridProQuality(usdviewApi):
+    setRenderQuality(usdviewApi, b'HybridPro')
 
 class RprPluginContainer(PluginContainer):
 
@@ -134,8 +138,12 @@ class RprPluginContainer(PluginContainer):
             SetRenderFullQuality)
         self.setRenderNorthstarQuality = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.setRenderNorthstarQuality",
-            "Full 2.0 (Beta)",
+            "Northstar",
             SetRenderNorthstarQuality)
+        self.setRenderHybridProQuality = plugRegistry.registerCommandPlugin(
+            "RprPluginContainer.setRenderHybridProQuality",
+            "HybridPro",
+            SetRenderHybridProQuality)
 
         self.setTextureCacheDir = plugRegistry.registerCommandPlugin(
             "RprPluginContainer.setTextureCacheDir",
@@ -172,6 +180,7 @@ class RprPluginContainer(PluginContainer):
         renderQualityMenu.addItem(self.setRenderHighQuality)
         renderQualityMenu.addItem(self.setRenderFullQuality)
         renderQualityMenu.addItem(self.setRenderNorthstarQuality)
+        renderQualityMenu.addItem(self.setRenderHybridProQuality)
 
         cacheMenu = rprMenu.findOrCreateSubmenu('Cache')
         cacheMenu.addItem(self.setTextureCacheDir)

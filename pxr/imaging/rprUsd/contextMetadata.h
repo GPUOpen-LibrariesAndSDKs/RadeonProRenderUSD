@@ -19,15 +19,39 @@ limitations under the License.
 
 #include <RadeonProRender.hpp>
 
+#include <string>
+#include <vector>
+
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 enum RprUsdPluginType {
     kPluginInvalid = -1,
-    kPluginTahoe,
     kPluginNorthstar,
     kPluginHybrid,
     kPluginHybridPro,
     kPluginsCount
+};
+
+struct RprUsdDevicesInfo {
+    struct CPU {
+	    int numThreads;
+	    CPU(int numThreads = 0) : numThreads(numThreads) {}
+	    bool operator==(CPU const& rhs) { return numThreads == rhs.numThreads; }
+    };
+    CPU cpu;
+
+    struct GPU {
+        int index;
+        std::string name;
+        GPU(int index = -1, std::string name = {}) : index(index), name(name) {}
+        bool operator==(GPU const& rhs) { return index == rhs.index && name == rhs.name; }
+    };
+    std::vector<GPU> gpus;
+
+    bool IsValid() const {
+        return cpu.numThreads > 0 || !gpus.empty();
+    }
 };
 
 struct RprUsdContextMetadata {
@@ -35,6 +59,9 @@ struct RprUsdContextMetadata {
     bool isGlInteropEnabled = false;
     void* interopInfo = nullptr;
     rpr::CreationFlags creationFlags = 0;
+
+    // additional info about hardware actually used in render context creation
+    RprUsdDevicesInfo devicesActuallyUsed;
 };
 
 RPRUSD_API

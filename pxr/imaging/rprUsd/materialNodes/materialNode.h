@@ -39,8 +39,6 @@ struct RprUsd_MaterialBuilderContext {
     VtValue displacementScale;
 
     RPRMtlxLoader* mtlxLoader;
-
-    std::vector<RprUsdMaterialRegistry::TextureCommit> textureCommits;
 };
 
 class RprUsd_MaterialNode {

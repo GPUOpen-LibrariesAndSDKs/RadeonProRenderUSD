@@ -72,6 +72,9 @@ public:
     VOP_Type getShaderType() const override;
 #endif
 
+    void opChanged(OP_EventType reason, void* data) override;
+    void onCreated() override;
+
 protected:
     /// Returns the internal name of an input parameter.
     void getInputNameSubclass(UT_String &in, int i_idx) const override;
@@ -109,6 +112,7 @@ public:
 
     void opChanged(OP_EventType reason, void* data) override;
     bool runCreateScript() override;
+    void onCreated() override { VOP_Node::onCreated(); }
 
 private:
     static void ElementChoiceGenFunc(void* op, PRM_Name* choices, int maxChoicesSize, const PRM_SpareData*, const PRM_Parm*);
