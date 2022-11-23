@@ -3542,6 +3542,11 @@ private:
 
             m_currentRenderQuality = GetRenderQuality(*config);
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
+
+            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE] = config->GetHybridAccelerationMemorySizeMb() * 1024u * 1024u;
+            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_MESH_MEMORY_SIZE] = config->GetHybridMeshMemorySizeMb() * 1024u * 1024u;
+            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE] = config->GetHybridStagingMemorySizeMb() * 1024u * 1024u;
+            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_SCRATCH_MEMORY_SIZE] = config->GetHybridScratchMemorySizeMb() * 1024u * 1024u;
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);

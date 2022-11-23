@@ -14,6 +14,8 @@ limitations under the License.
 #ifndef PXR_IMAGING_RPR_USD_CONTEXT_METADATA_H
 #define PXR_IMAGING_RPR_USD_CONTEXT_METADATA_H
 
+#include <map>
+
 #include "pxr/pxr.h"
 #include "pxr/imaging/rprUsd/api.h"
 
@@ -35,6 +37,7 @@ struct RprUsdContextMetadata {
     bool isGlInteropEnabled = false;
     void* interopInfo = nullptr;
     rpr::CreationFlags creationFlags = 0;
+    std::map<std::uint64_t, std::uint32_t> additionalIntProperties;
 };
 
 RPRUSD_API

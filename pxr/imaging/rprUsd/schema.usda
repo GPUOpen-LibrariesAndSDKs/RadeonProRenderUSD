@@ -321,6 +321,34 @@ class "RprRendererSettingsAPI" (
         displayGroup = "Hybrid|Postprocessing"
     )
 
+    uniform uint rpr:hybrid:acceleration_memory_size_mb = 2048 (
+        displayName = "Hybrid Acceleration Memory Size Mb"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 0
+        rprMaxValue = 4096
+    )
+
+    uniform uint rpr:hybrid:mesh_memory_size_mb = 1024 (
+        displayName = "Hybrid Mesh Memory Size Mb"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 0
+        rprMaxValue = 4096
+    )
+
+    uniform uint rpr:hybrid:staging_memory_size_mb = 512 (
+        displayName = "Hybrid Staging Memory Size Mb"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 0
+        rprMaxValue = 4096
+    )
+
+    uniform uint rpr:hybrid:scratch_memory_size_mb = 246 (
+        displayName = "Hybrid Scratch Memory Size Mb"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 0
+        rprMaxValue = 4096
+    )
+
     uniform bool rpr:tonemapping:enable = false (
         displayName = "Enable Tonemapping"
         displayGroup = "Postprocessing|Tonemapping"

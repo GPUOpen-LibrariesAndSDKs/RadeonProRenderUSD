@@ -494,6 +494,34 @@ render_setting_categories = [
                     SettingValue('SVGF'),
                     SettingValue('ASVGF')
                 ]
+            },
+            {
+                'name': 'hybrid:accelerationMemorySizeMb',
+                'ui_name': 'Hybrid Acceleration Memory Size (Mb)',
+                'defaultValue': 2048,
+                'minValue': 0,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:meshMemorySizeMb',
+                'ui_name': 'Hybrid Mesh Memory Size (Mb)',
+                'defaultValue': 1024,
+                'minValue': 0,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:stagingMemorySizeMb',
+                'ui_name': 'Hybrid Staging Memory Size (Mb)',
+                'defaultValue': 512,
+                'minValue': 0,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:scratchMemorySizeMb',
+                'ui_name': 'Hybrid Scratch Memory Size (Mb)',
+                'defaultValue': 246,
+                'minValue': 0,
+                'maxValue': 4096
             }
         ]
     },
