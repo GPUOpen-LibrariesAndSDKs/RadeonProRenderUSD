@@ -3865,9 +3865,17 @@ private:
             useGmon = config->GetCoreUseGmon();
             m_rprContextMetadata.isGlInteropEnabled = config->GetOpenglInteroperability();
             m_rprContextMetadata.useOpenCL = config->GetCoreUseOpenCL();
+
+            m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
+
+            if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
+                m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE] = config->GetHybridAccelerationMemorySizeMb() * 1024u * 1024u;
+                m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_MESH_MEMORY_SIZE] = config->GetHybridMeshMemorySizeMb() * 1024u * 1024u;
+                m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE] = config->GetHybridStagingMemorySizeMb() * 1024u * 1024u;
+                m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_SCRATCH_MEMORY_SIZE] = config->GetHybridScratchMemorySizeMb() * 1024u * 1024u;
+            }
         }
 
-        m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
         m_rprContext = RprContextPtr(RprUsdCreateContext(&m_rprContextMetadata), RprContextDeleter);
         if (!m_rprContext) {
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
