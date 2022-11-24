@@ -75,6 +75,7 @@ PXR_NAMESPACE_OPEN_SCOPE
     (materialIdMask) \
     (objectIdMask) \
     (objectGroupIdMask) \
+    (scTransparentBackground) \
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_AOV_TOKENS);
 
@@ -86,6 +87,7 @@ enum ComputedAovs {
     kMaterialIdMask,
     kObjectIdMask,
     kObjectGroupIdMask,
+    kScTransparentBackground,
     kComputedAovsCount
 };
 

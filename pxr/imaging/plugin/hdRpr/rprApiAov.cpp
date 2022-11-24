@@ -711,4 +711,20 @@ void HdRprApiIdMaskAov::Update(HdRprApi const* rprApi, rif::Context* rifContext)
     }
 }
 
+HdRprApiScCompositeAOV::HdRprApiScCompositeAOV(int width, int height, HdFormat format,
+    std::shared_ptr<HdRprApiAov> rawColorAov,
+    std::shared_ptr<HdRprApiAov> opacityAov,
+    std::shared_ptr<HdRprApiAov> scAov,
+    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
+    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kScTransparentBackground), true), format)
+    , m_retainedRawColorAov(rawColorAov)
+    , m_retainedOpacityAov(opacityAov)
+    , m_retainedScAov(scAov)
+{
+} 
+
+bool HdRprApiScCompositeAOV::GetData(void* dstBuffer, size_t dstBufferSize) {
+    return m_retainedRawColorAov->GetData(dstBuffer, dstBufferSize);
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -93,6 +93,7 @@ HdRprAovRegistry::HdRprAovRegistry() {
     m_computedAovDescriptors[kMaterialIdMask] = HdRprAovDescriptor(kMaterialIdMask, false, HdFormatFloat32Vec4, GfVec4f(0.0f), true);
     m_computedAovDescriptors[kObjectIdMask] = HdRprAovDescriptor(kObjectIdMask, false, HdFormatFloat32Vec4, GfVec4f(0.0f), true);
     m_computedAovDescriptors[kObjectGroupIdMask] = HdRprAovDescriptor(kObjectGroupIdMask, false, HdFormatFloat32Vec4, GfVec4f(0.0f), true);
+    m_computedAovDescriptors[kScTransparentBackground] = HdRprAovDescriptor(kScTransparentBackground, true, HdFormatFloat32Vec4, GfVec4f(0.0f), true);
 
     auto addAovNameLookup = [this](TfToken const& name, HdRprAovDescriptor const& descriptor) {
         auto status = m_aovNameLookup.emplace(name, AovNameLookupValue(descriptor.id, descriptor.computed));
@@ -157,6 +158,7 @@ HdRprAovRegistry::HdRprAovRegistry() {
     addAovNameLookup(HdRprAovTokens->materialIdMask, m_computedAovDescriptors[kMaterialIdMask]);
     addAovNameLookup(HdRprAovTokens->objectIdMask, m_computedAovDescriptors[kObjectIdMask]);
     addAovNameLookup(HdRprAovTokens->objectGroupIdMask, m_computedAovDescriptors[kObjectGroupIdMask]);
+    addAovNameLookup(HdRprAovTokens->scTransparentBackground, m_computedAovDescriptors[kScTransparentBackground]);
 }
 
 HdRprAovDescriptor const& HdRprAovRegistry::GetAovDesc(TfToken const& name) {

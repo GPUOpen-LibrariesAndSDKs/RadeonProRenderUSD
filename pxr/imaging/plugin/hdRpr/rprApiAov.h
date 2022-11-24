@@ -229,6 +229,22 @@ private:
     std::shared_ptr<HdRprApiAov> m_baseIdAov;
 };
 
+class HdRprApiScCompositeAOV : public HdRprApiAov {
+public:
+    HdRprApiScCompositeAOV(int width, int height, HdFormat format,
+                         std::shared_ptr<HdRprApiAov> rawColorAov,
+                         std::shared_ptr<HdRprApiAov> opacityAov,
+                         std::shared_ptr<HdRprApiAov> scAov,
+                         rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+
+    bool GetData(void* dstBuffer, size_t dstBufferSize) override;
+
+private:
+    std::shared_ptr<HdRprApiAov> m_retainedRawColorAov;
+    std::shared_ptr<HdRprApiAov> m_retainedOpacityAov;
+    std::shared_ptr<HdRprApiAov> m_retainedScAov;
+};
+
 PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // HDRPR_RPR_API_AOV_H
