@@ -723,8 +723,8 @@ HdRprApiScCompositeAOV::HdRprApiScCompositeAOV(int width, int height, HdFormat f
 {
 } 
 
-bool HdRprApiScCompositeAOV::GetData(void* dstBuffer, size_t dstBufferSize) {
-    return m_retainedRawColorAov->GetData(dstBuffer, dstBufferSize);
+bool HdRprApiScCompositeAOV::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
+    return m_retainedRawColorAov->GetDataImpl(dstBuffer, dstBufferSize);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
