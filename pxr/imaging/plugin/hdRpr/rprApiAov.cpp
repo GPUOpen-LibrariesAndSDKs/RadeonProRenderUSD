@@ -724,7 +724,25 @@ HdRprApiScCompositeAOV::HdRprApiScCompositeAOV(int width, int height, HdFormat f
 } 
 
 bool HdRprApiScCompositeAOV::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
-    return m_retainedRawColorAov->GetDataImpl(dstBuffer, dstBufferSize);
+    if (m_tempCombinationBuffer.size() < dstBufferSize) {
+        m_tempCombinationBuffer.resize(dstBufferSize);
+    }
+    
+    float* convertedDstBuffer = (float*)dstBuffer;
+    float* convertedTempBuffer = (float*)m_tempCombinationBuffer.data();
+
+    if (!m_retainedRawColorAov->GetDataImpl(dstBuffer, dstBufferSize)) {
+        return false;
+    }
+    if (!m_retainedOpacityAov->GetDataImpl(m_tempCombinationBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+
+    for (int i = 0; i < dstBufferSize / 4; i++) {  // on this stage format is always HdFormatFloat32Vec4
+        convertedDstBuffer[i*4+3] = convertedTempBuffer[i*4];  // in opacity AOV third elemet always is 1.0 and first three element contains same value
+    }
+
+    return true;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
