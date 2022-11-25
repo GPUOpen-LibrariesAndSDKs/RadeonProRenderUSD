@@ -1913,43 +1913,40 @@ public:
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
-        if (preferences.IsDirty(HdRprConfig::DirtyMotionBlur) || force) {
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_BEAUTY_MOTION_BLUR, uint32_t(preferences.GetBeautyMotionBlurEnable())), "Failed to set beauty motion blur");
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
-        }
-
-        if (preferences.IsDirty(HdRprConfig::DirtyOCIO) || force) {
-            std::string ocioConfigPath;
-
-            // OpenColorIO doc recommends to use `OCIO` environment variable to
-            // globally define path to OCIO config. See the docs for details about the motivation for this.
-            // Houdini handles it in the same while leaving possibility to override it through UI.
-            // We allow the OCIO config path to be overridden through render settings.
-            if (!GetPath(preferences.GetOcioConfigPath()).empty()) {
-                ocioConfigPath = GetPath(preferences.GetOcioConfigPath());
-            } else {
-                ocioConfigPath = TfGetenv("OCIO");
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            if (preferences.IsDirty(HdRprConfig::DirtyMotionBlur) || force) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_BEAUTY_MOTION_BLUR, uint32_t(preferences.GetBeautyMotionBlurEnable())), "Failed to set beauty motion blur");
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
 
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_CONFIG_PATH, ocioConfigPath.c_str()), "Faled to set OCIO config path");
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_RENDERING_COLOR_SPACE, preferences.GetOcioRenderingColorSpace().c_str()), "Faled to set OCIO rendering color space");
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
-        }
+            if (preferences.IsDirty(HdRprConfig::DirtyOCIO) || force) {
+                std::string ocioConfigPath;
 
-        if (preferences.IsDirty(HdRprConfig::DirtyCryptomatte) || force) {
+                // OpenColorIO doc recommends to use `OCIO` environment variable to
+                // globally define path to OCIO config. See the docs for details about the motivation for this.
+                // Houdini handles it in the same while leaving possibility to override it through UI.
+                // We allow the OCIO config path to be overridden through render settings.
+                if (!GetPath(preferences.GetOcioConfigPath()).empty()) {
+                    ocioConfigPath = GetPath(preferences.GetOcioConfigPath());
+                } else {
+                    ocioConfigPath = TfGetenv("OCIO");
+                }
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_CONFIG_PATH, ocioConfigPath.c_str()), "Faled to set OCIO config path");
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_OCIO_RENDERING_COLOR_SPACE, preferences.GetOcioRenderingColorSpace().c_str()), "Faled to set OCIO rendering color space");
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyCryptomatte) || force) {
 #ifdef RPR_EXR_EXPORT_ENABLED
-            m_cryptomatteOutputPath = GetPath(preferences.GetCryptomatteOutputPath());
-            m_cryptomattePreviewLayer = preferences.GetCryptomattePreviewLayer();
+                m_cryptomatteOutputPath = GetPath(preferences.GetCryptomatteOutputPath());
+                m_cryptomattePreviewLayer = preferences.GetCryptomattePreviewLayer();
 #else
-            if (!preferences.GetCryptomatteOutputPath().empty()) {
-                fprintf(stderr, "Cryptomatte export is not supported: hdRpr compiled without .exr support\n");
-            }
+                if (!preferences.GetCryptomatteOutputPath().empty()) {
+                    fprintf(stderr, "Cryptomatte export is not supported: hdRpr compiled without .exr support\n");
+                }
 #endif // RPR_EXR_EXPORT_ENABLED
-        }
-
-        if (preferences.IsDirty(HdRprConfig::DirtyLightVisibility) || force) {
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_IBL_DISPLAY, uint32_t(preferences.GetIblVisibility())), "Failed to set IBL visibility");
-            m_dirtyFlags |= ChangeTracker::DirtyScene;
+            }
         }
     }
 

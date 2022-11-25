@@ -399,11 +399,6 @@ class "RprRendererSettingsAPI" (
         displayGroup = "Export .rpr"
         rprHidden = 1
     )
-	uniform bool rpr:ibl:visibility = true (
-        displayName = "IBL visibility"
-        displayGroup = "General"
-        doc = "Enable visibility of IBL (Dome) lights"
-    )
 }
 
 class "RprObjectSettingsAPI" (
