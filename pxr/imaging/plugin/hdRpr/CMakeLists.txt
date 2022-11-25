@@ -15,6 +15,13 @@ if(OpenVDB_FOUND)
     set(OptClass ${OptClass} field volume)
 endif(OpenVDB_FOUND)
 
+find_package(OpenMP)
+if (OPENMP_FOUND)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
+
 set(_sep ${PXR_RESOURCE_FILE_SRC_DST_SEPARATOR})
 if(HoudiniUSD_FOUND)
     list(APPEND OptLibs Houdini)

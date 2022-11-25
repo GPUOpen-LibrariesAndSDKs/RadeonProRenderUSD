@@ -746,6 +746,7 @@ bool HdRprApiScCompositeAOV::GetDataImpl(void* dstBuffer, size_t dstBufferSize) 
 
     auto dstValue = reinterpret_cast<GfVec4f*>(dstBuffer);
 
+    #pragma omp parallel for
     for (int i = 0; i < dstBufferSize / sizeof(GfVec4f); i++) {  // on this stage format is always HdFormatFloat32Vec4
         float opacity = m_tempOpacityBuffer[i][0];
         float sc = m_tempScBuffer[i][0];
