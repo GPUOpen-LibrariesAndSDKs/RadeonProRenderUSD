@@ -243,7 +243,9 @@ private:
     std::shared_ptr<HdRprApiAov> m_retainedOpacityAov;
     std::shared_ptr<HdRprApiAov> m_retainedScAov;
 
-    std::vector<char> m_tempCombinationBuffer;
+    std::vector<GfVec4f> m_tempColorBuffer;
+    std::vector<GfVec4f> m_tempOpacityBuffer;
+    std::vector<GfVec4f> m_tempScBuffer;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

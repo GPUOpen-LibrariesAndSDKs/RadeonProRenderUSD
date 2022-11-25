@@ -724,22 +724,45 @@ HdRprApiScCompositeAOV::HdRprApiScCompositeAOV(int width, int height, HdFormat f
 } 
 
 bool HdRprApiScCompositeAOV::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
-    if (m_tempCombinationBuffer.size() < dstBufferSize) {
-        m_tempCombinationBuffer.resize(dstBufferSize);
+    if (m_tempColorBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
+        m_tempColorBuffer.resize(dstBufferSize / sizeof(GfVec4f));
     }
-    
-    float* convertedDstBuffer = (float*)dstBuffer;
-    float* convertedTempBuffer = (float*)m_tempCombinationBuffer.data();
-
-    if (!m_retainedRawColorAov->GetDataImpl(dstBuffer, dstBufferSize)) {
-        return false;
+    if (m_tempOpacityBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
+        m_tempOpacityBuffer.resize(dstBufferSize / sizeof(GfVec4f));
     }
-    if (!m_retainedOpacityAov->GetDataImpl(m_tempCombinationBuffer.data(), dstBufferSize)) {
-        return false;
+    if (m_tempScBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
+        m_tempScBuffer.resize(dstBufferSize / sizeof(GfVec4f));
     }
 
-    for (int i = 0; i < dstBufferSize / 4; i++) {  // on this stage format is always HdFormatFloat32Vec4
-        convertedDstBuffer[i*4+3] = convertedTempBuffer[i*4];  // in opacity AOV third elemet always is 1.0 and first three element contains same value
+    if (!m_retainedRawColorAov->GetDataImpl((void*)m_tempColorBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+    if (!m_retainedOpacityAov->GetDataImpl((void*)m_tempOpacityBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+    if (!m_retainedScAov->GetDataImpl((void*)m_tempScBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+
+    auto dstValue = reinterpret_cast<GfVec4f*>(dstBuffer);
+
+    for (int i = 0; i < dstBufferSize / sizeof(GfVec4f); i++) {  // on this stage format is always HdFormatFloat32Vec4
+        float opacity = m_tempOpacityBuffer[i][0];
+        float sc = m_tempScBuffer[i][0];
+
+        if (opacity > 0) {
+            dstValue[i] = {m_tempColorBuffer[i][0], m_tempColorBuffer[i][1], m_tempColorBuffer[i][2], opacity};
+        }
+        else
+        {
+            if (sc > 0) {
+                dstValue[i] = {(1.f - sc), (1.f - sc), (1.f - sc), sc};
+            }
+            else
+            {
+                dstValue[i] = { 0, 0, 0, 0 }; // Make background black and transparent
+            }
+        }
     }
 
     return true;
