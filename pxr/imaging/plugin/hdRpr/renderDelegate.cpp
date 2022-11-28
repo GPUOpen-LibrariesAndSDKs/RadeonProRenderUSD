@@ -358,6 +358,12 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     stats[_tokens->percentDone.GetString()] = rprStats.percentDone;
     stats["averageRenderTimePerSample"] = rprStats.averageRenderTimePerSample;
     stats["averageResolveTimePerSample"] = rprStats.averageResolveTimePerSample;
+
+    stats["gpuUsedNames"] = m_rprApi->GetGpuUsedNames();
+    stats["threadCountUsed"] = m_rprApi->GetCpuThreadCountUsed();
+
+    stats["firstIterationRenderTime"] = m_rprApi->GetFirstIterationRenerTime();
+
     return stats;
 }
 
