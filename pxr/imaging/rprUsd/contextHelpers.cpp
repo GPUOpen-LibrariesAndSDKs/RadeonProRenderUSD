@@ -28,9 +28,9 @@ using json = nlohmann::json;
 
 #include <RadeonProRender.hpp>
 
+#include <RadeonProRender_Baikal.h>
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 #include <RadeonProRender_VK.h>
-#include <RadeonProRender_Baikal.h>
 #include <vulkan/vulkan.h>
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
@@ -378,6 +378,12 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, &sbuf_size);
     }
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+	bool isHybridPro = metadata->pluginType == RprUsdPluginType::kPluginHybridPro;
+	if (isHybridPro)
+	{ 
+		appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_ENABLE_PER_FACE_MATERIALS, &isHybridPro);
+	}
 
     contextProperties.push_back(nullptr);
 
