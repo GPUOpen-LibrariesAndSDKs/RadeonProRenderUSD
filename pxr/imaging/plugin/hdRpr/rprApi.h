@@ -160,6 +160,10 @@ public:
     };
     RenderStats GetRenderStats() const;
 
+    std::vector<std::string> GetGpuUsedNames() const;
+    int GetCpuThreadCountUsed() const;
+    float GetFirstIterationRenerTime() const;
+
     void CommitResources();
     void Resolve(SdfPath const& aovId);
     void Render(HdRprRenderThread* renderThread);
