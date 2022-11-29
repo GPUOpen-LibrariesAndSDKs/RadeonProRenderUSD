@@ -52,7 +52,7 @@ protected:
 
     virtual void OnFormatChange(rif::Context* rifContext);
     virtual void OnSizeChange(rif::Context* rifContext);
-
+    virtual bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
 protected:
     HdRprAovDescriptor const& m_aovDescriptor;
     HdFormat m_format;
@@ -68,9 +68,6 @@ protected:
         DirtyFormat = 1 << 1,
     };
     uint32_t m_dirtyBits = AllDirty;
-
-private:
-    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
 };
 
 class HdRprApiColorAov : public HdRprApiAov {
@@ -180,6 +177,18 @@ protected:
     void OnSizeChange(rif::Context* rifContext) override;
 };
 
+class HdRprApiCpuNormalAov : public HdRprApiAov {
+public:
+    HdRprApiCpuNormalAov(int width, int height, HdFormat format,
+        rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+    ~HdRprApiCpuNormalAov() override = default;
+protected:
+    void OnFormatChange(rif::Context* rifContext) override;
+    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
+private:
+    std::vector<float> m_cpuFilterBuffer;
+};
+
 class HdRprApiComputedAov : public HdRprApiAov {
 public:
     HdRprApiComputedAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format)
@@ -227,6 +236,26 @@ public:
 
 private:
     std::shared_ptr<HdRprApiAov> m_baseIdAov;
+};
+
+class HdRprApiCpuDepthAov : public HdRprApiComputedAov {
+public:
+    HdRprApiCpuDepthAov(int width, int height, HdFormat format,
+        std::shared_ptr<HdRprApiAov> worldCoordinateAov,
+        std::shared_ptr<HdRprApiAov> opacityAov,
+        rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata);
+    ~HdRprApiCpuDepthAov() override = default;
+
+    void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+protected:
+    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
+private:
+    inline size_t cpuFilterBufferSize() const { return m_width * m_height * 4; }    // Vec4f for each pixel
+
+    std::shared_ptr<HdRprApiAov> m_retainedWorldCoordinateAov;
+    std::shared_ptr<HdRprApiAov> m_retainedOpacityAov;
+    GfMatrix4f m_viewProjectionMatrix;
+    std::vector<float> m_cpuFilterBuffer;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

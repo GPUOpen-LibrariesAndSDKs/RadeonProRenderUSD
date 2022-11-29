@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/contextMetadata.h"
 #include "pxr/imaging/rprUsd/error.h"
+#include "pxr/base/work/loops.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -53,6 +54,49 @@ bool ReadRifImage(rif_image image, void* dstBuffer, size_t dstBufferSize) {
 
 } // namespace anonymous
 
+void CpuRemapFilter(float* src, float* dest, size_t length, float srcLo, float srcHi, float dstLo, float dstHi) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (size_t i = begin; i < end; ++i) {
+            dest[i] = ((src[i] - srcLo) / (srcHi - srcLo)) * (dstHi - dstLo) + dstLo;
+        }});
+}
+
+void CpuVec4toVec3Filter(float* src, float* dest, size_t length) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (int i = 0; i < length; ++i) {
+            dest[i * 3] = src[i * 4];
+            dest[i * 3 + 1] = src[i * 4 + 1];
+            dest[i * 3 + 2] = src[i * 4 + 2];
+        }
+    });
+}
+
+void CpuNdcFilter(float* src, float* dest, size_t length, const GfMatrix4f& viewProjectionMatrix) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (int i = begin; i < end; ++i) {
+            float norm = std::max(src[i * 4 + 3], 1.0f);
+            GfVec4f pos(src[i * 4] / norm, src[i * 4 + 1] / norm, src[i * 4 + 2] / norm, 1.0f);
+            GfVec4f posResult = viewProjectionMatrix * pos;
+            dest[i] = posResult[2] / posResult[3];
+        }
+    });
+}
+
+void CpuOpacityFilter(float* opacity, float* srcdest, size_t length) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (int i = 0; i < length; ++i) {
+            float op = opacity[i * 4];
+            if (op == 0.0f) {
+                srcdest[i] = 1.0f;
+            }
+        }
+    });
+}
+
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
                          rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter)
     : m_aovDescriptor(HdRprAovRegistry::GetInstance().GetAovDesc(rprAovType, false))
@@ -76,6 +120,10 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
     : HdRprApiAov(rprAovType, width, height, format, rprContext, rprContextMetadata, [format, rifContext]() -> std::unique_ptr<rif::Filter> {
         if (format == HdFormatFloat32Vec4) {
             // RPR framebuffers by default with such format
+            return nullptr;
+        }
+
+        if (!rifContext) {
             return nullptr;
         }
 
@@ -564,6 +612,37 @@ void HdRprApiNormalAov::OnSizeChange(rif::Context* rifContext) {
     m_filter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width, fbDesc.fb_height, m_format));
 }
 
+HdRprApiCpuNormalAov::HdRprApiCpuNormalAov(
+    int width, int height, HdFormat format,
+    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
+    : HdRprApiAov(RPR_AOV_SHADING_NORMAL, width, height, format, rprContext, rprContextMetadata, nullptr) {
+}
+
+void HdRprApiCpuNormalAov::OnFormatChange(rif::Context* rifContext) {
+    m_dirtyBits |= ChangeTracker::DirtySize;
+}
+
+bool HdRprApiCpuNormalAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
+    auto fbDesc = m_aov->GetDesc();
+    if (fbDesc.fb_width * fbDesc.fb_height * 4 != m_cpuFilterBuffer.size()) {
+        m_cpuFilterBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4);
+    }
+    static size_t numPixels = dstBufferSize / (3 * sizeof(float));
+    if (m_cpuFilterBuffer.size() / 4 != numPixels)
+    {
+        return false;
+    }
+
+    auto resolvedFb = GetResolvedFb();
+    if (!resolvedFb || !resolvedFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
+        return false;
+    }
+
+    CpuVec4toVec3Filter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels);
+    CpuRemapFilter((float*)dstBuffer, (float*)dstBuffer, numPixels * 3, 0.0, 1.0, -1.0, 1.0);
+    return true;
+}
+
 void HdRprApiComputedAov::Resize(int width, int height, HdFormat format) {
     if (m_format != format) {
         m_format = format;
@@ -709,6 +788,48 @@ void HdRprApiIdMaskAov::Update(HdRprApi const* rprApi, rif::Context* rifContext)
     if (m_filter) {
         m_filter->Update();
     }
+}
+
+HdRprApiCpuDepthAov::HdRprApiCpuDepthAov(int width, int height, HdFormat format,
+    std::shared_ptr<HdRprApiAov> worldCoordinateAov,
+    std::shared_ptr<HdRprApiAov> opacityAov,
+    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata)
+    : HdRprApiComputedAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true), width, height, format)
+    , m_retainedWorldCoordinateAov(worldCoordinateAov)
+    , m_retainedOpacityAov(opacityAov)
+    , m_viewProjectionMatrix(GfMatrix4f()) {
+    m_cpuFilterBuffer.resize(cpuFilterBufferSize());
+}
+
+void HdRprApiCpuDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
+    m_viewProjectionMatrix = GfMatrix4f(rprApi->GetCameraViewMatrix() * rprApi->GetCameraProjectionMatrix()).GetTranspose();
+}
+
+bool HdRprApiCpuDepthAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
+    if (cpuFilterBufferSize() != m_cpuFilterBuffer.size()) {
+        m_cpuFilterBuffer.resize(cpuFilterBufferSize());
+    }
+    static size_t numPixels = dstBufferSize / sizeof(float);
+    if (m_cpuFilterBuffer.size() / 4 != numPixels)
+    {
+        return false;
+    }
+
+    auto coordinateFb = m_retainedWorldCoordinateAov->GetResolvedFb();
+    if (!coordinateFb || !coordinateFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
+        return false;
+    }
+    
+    CpuNdcFilter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels, m_viewProjectionMatrix);
+    
+    auto opacityFb = m_retainedOpacityAov->GetResolvedFb();
+    if (!opacityFb || !opacityFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
+        return false;
+    }
+    
+    CpuOpacityFilter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels);
+    CpuRemapFilter((float*)dstBuffer, (float*)dstBuffer, numPixels, -1, 1, 0, 1.0);
+    return true;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
