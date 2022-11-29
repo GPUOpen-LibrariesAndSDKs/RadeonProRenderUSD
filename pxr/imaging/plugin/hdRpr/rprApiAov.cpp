@@ -746,23 +746,22 @@ bool HdRprApiScCompositeAOV::GetDataImpl(void* dstBuffer, size_t dstBufferSize) 
 
     auto dstValue = reinterpret_cast<GfVec4f*>(dstBuffer);
 
+    // On this stage format is always HdFormatFloat32Vec4
     #pragma omp parallel for
-    for (int i = 0; i < dstBufferSize / sizeof(GfVec4f); i++) {  // on this stage format is always HdFormatFloat32Vec4
+    for (int i = 0; i < dstBufferSize / sizeof(GfVec4f); i++) 
+    {  
         float opacity = m_tempOpacityBuffer[i][0];
         float sc = m_tempScBuffer[i][0];
+        constexpr float OneMinusEpsilon = 1.0f - 1e-5f;
 
-        if (opacity > 0) {
-            dstValue[i] = {m_tempColorBuffer[i][0], m_tempColorBuffer[i][1], m_tempColorBuffer[i][2], opacity};
-        }
+        if (opacity > OneMinusEpsilon)
+        {
+            dstValue[i] = { m_tempColorBuffer[i][0], m_tempColorBuffer[i][1], m_tempColorBuffer[i][2], opacity };
+		}
         else
         {
-            if (sc > 0) {
-                dstValue[i] = {(1.f - sc), (1.f - sc), (1.f - sc), sc};
-            }
-            else
-            {
-                dstValue[i] = { 0, 0, 0, 0 }; // Make background black and transparent
-            }
+            // Add shadows from the shadow catcher to the final image + Make the background transparent;
+            dstValue[i] = { 0.0f, 0.0f, 0.0f, sc };         
         }
     }
 
