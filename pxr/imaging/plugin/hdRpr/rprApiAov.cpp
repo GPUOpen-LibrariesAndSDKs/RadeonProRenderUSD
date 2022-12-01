@@ -78,6 +78,16 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
             // RPR framebuffers by default with such format
             return nullptr;
         }
+        if (!rifContext)
+        {
+            if (format == HdFormatFloat32) {
+                return nullptr;
+            }
+            if (format == HdFormatInt32) {
+                return nullptr;
+            }
+            RPR_THROW_ERROR_MSG("Only Float32Vec4, Float32, and Int32 data types are supported without rifContext.");
+        }
 
         auto filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
         if (!filter) {
@@ -121,8 +131,68 @@ bool HdRprApiAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
 }
 
 bool HdRprApiAov::GetData(void* dstBuffer, size_t dstBufferSize) {
-    if (GetDataImpl(dstBuffer, dstBufferSize)) {
-        if (m_format == HdFormatInt32) {
+    auto getBuffer = dstBuffer;
+    if (!m_filter)
+    {
+        bool needTmpBuffer = true;
+        // Rpr always renders to HdFormatFloat32Vec4
+        // If RIF is enabled then m_filter will cast to the desired type.
+        // But if RIF isn't enabled we must do the cast ourselves here.
+        //
+        // When this function is called dstBufferSize is set to the desired format buffer size.
+        // We must allocate m_tmpBuffer to size of a HdFormatFloat32Vec4 buffer.
+        // For both Float32 and Int32 we do this by multiplying the desired format buffer size by 4.
+        if (m_format == HdFormatFloat32) {
+            dstBufferSize = dstBufferSize * 4;
+        }
+        else if (m_format == HdFormatInt32) {
+            dstBufferSize = dstBufferSize * 4;
+        }
+        else {
+            needTmpBuffer = false;
+        }
+        if (needTmpBuffer)
+        {
+            if (m_tmpBuffer.size() < dstBufferSize)
+            {
+                m_tmpBuffer.resize(dstBufferSize);
+            }
+            getBuffer = m_tmpBuffer.data();
+        }
+    }
+    if (GetDataImpl(getBuffer, dstBufferSize)) {
+        if (!m_filter)
+        {
+            if (m_format == HdFormatFloat32) {
+                auto srcData = reinterpret_cast<const GfVec4f*>(getBuffer);
+                auto dstData = reinterpret_cast<float*>(dstBuffer);
+                for (size_t i = 0; i < dstBufferSize / sizeof(GfVec4f); ++i) {
+                    dstData[i] = srcData[i][0];
+                }
+            }
+            if (m_format == HdFormatInt32) {
+                auto srcData = reinterpret_cast<const float*>(getBuffer);
+                auto dstData = reinterpret_cast<char*>(dstBuffer);
+                for (size_t i = 0; i < dstBufferSize / sizeof(float); ++i)
+                {
+                    if (i % 4 == 3)
+                    {
+                        dstData[i] = 0;
+                    }
+                    else
+                    {
+                        dstData[i] = (char)(srcData[i] * 255 + 0.5f);
+                    }
+                }
+
+                auto primIdData = reinterpret_cast<int*>(dstBuffer);
+                for (size_t i = 0; i < dstBufferSize / sizeof(GfVec4f); ++i)
+                {
+                    primIdData[i] -= 1;
+                }
+            }
+        }
+        else if (m_format == HdFormatInt32) {
             // RPR store integer ID values to RGB images using such formula:
             // c[i].x = i;
             // c[i].y = i/256;
@@ -709,6 +779,63 @@ void HdRprApiIdMaskAov::Update(HdRprApi const* rprApi, rif::Context* rifContext)
     if (m_filter) {
         m_filter->Update();
     }
+}
+
+HdRprApiScCompositeAOV::HdRprApiScCompositeAOV(int width, int height, HdFormat format,
+    std::shared_ptr<HdRprApiAov> rawColorAov,
+    std::shared_ptr<HdRprApiAov> opacityAov,
+    std::shared_ptr<HdRprApiAov> scAov,
+    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
+    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kScTransparentBackground), true), format)
+    , m_retainedRawColorAov(rawColorAov)
+    , m_retainedOpacityAov(opacityAov)
+    , m_retainedScAov(scAov)
+{
+} 
+
+bool HdRprApiScCompositeAOV::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
+    if (m_tempColorBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
+        m_tempColorBuffer.resize(dstBufferSize / sizeof(GfVec4f));
+    }
+    if (m_tempOpacityBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
+        m_tempOpacityBuffer.resize(dstBufferSize / sizeof(GfVec4f));
+    }
+    if (m_tempScBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
+        m_tempScBuffer.resize(dstBufferSize / sizeof(GfVec4f));
+    }
+
+    if (!m_retainedRawColorAov->GetDataImpl((void*)m_tempColorBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+    if (!m_retainedOpacityAov->GetDataImpl((void*)m_tempOpacityBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+    if (!m_retainedScAov->GetDataImpl((void*)m_tempScBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+
+    auto dstValue = reinterpret_cast<GfVec4f*>(dstBuffer);
+
+    // On this stage format is always HdFormatFloat32Vec4
+    #pragma omp parallel for
+    for (int i = 0; i < dstBufferSize / sizeof(GfVec4f); i++) 
+    {  
+        float opacity = m_tempOpacityBuffer[i][0];
+        float sc = m_tempScBuffer[i][0];
+        constexpr float OneMinusEpsilon = 1.0f - 1e-5f;
+
+        if (opacity > OneMinusEpsilon)
+        {
+            dstValue[i] = { m_tempColorBuffer[i][0], m_tempColorBuffer[i][1], m_tempColorBuffer[i][2], opacity };
+		}
+        else
+        {
+            // Add shadows from the shadow catcher to the final image + Make the background transparent;
+            dstValue[i] = { 0.0f, 0.0f, 0.0f, sc };         
+        }
+    }
+
+    return true;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
