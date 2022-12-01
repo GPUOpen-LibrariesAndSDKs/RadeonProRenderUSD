@@ -62,6 +62,7 @@ protected:
     std::unique_ptr<HdRprApiFramebuffer> m_aov;
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
     std::unique_ptr<rif::Filter> m_filter;
+    std::vector<char> m_tmpBuffer;
 
     enum ChangeTracker {
         Clean = 0,

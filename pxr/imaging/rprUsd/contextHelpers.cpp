@@ -53,6 +53,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_ENV_SETTING(RPRUSD_ENABLE_TRACING, false, "Enable tracing of RPR core");
 TF_DEFINE_ENV_SETTING(RPRUSD_TRACING_DIR, "", "Where to store RPR core tracing files. Must be a path to valid directory");
+TF_DEFINE_ENV_SETTING(RPRUSD_CPU_ONLY, false,
+    "Disable RIF API and GPU context creation.  This will allow running on CPU only machines, but some AOV will no longer work");
 
 namespace {
 
@@ -423,20 +425,24 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     if (RprUsdIsHybrid(pluginType)) {
         ret.cpu.numThreads = 0;
 
-        std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
-        if (!name.empty()) {
-            ret.gpus.push_back({ 0, name });
+        if (!RprUsdIsCpuOnly()) {
+            std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
+            if (!name.empty()) {
+                ret.gpus.push_back({ 0, name });
+            }
         }
     } else {
         ret.cpu.numThreads = std::thread::hardware_concurrency();
 
-        ForEachGpu(pluginID, cachePath.c_str(),
-            [&ret](int index, rpr::CreationFlags, std::string const& name) {
+        if (!RprUsdIsCpuOnly()) {
+            ForEachGpu(pluginID, cachePath.c_str(),
+                [&ret](int index, rpr::CreationFlags, std::string const& name) {
                 if (!name.empty()) {
                     ret.gpus.push_back({index, name});
                 }
             }
-        );
+            );
+        }
     }
 
     return ret;
@@ -444,6 +450,10 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
 
 bool RprUsdIsTracingEnabled() {
     return TfGetEnvSetting(RPRUSD_ENABLE_TRACING);
+}
+
+bool RprUsdIsCpuOnly() {
+    return TfGetEnvSetting(RPRUSD_CPU_ONLY);
 }
 
 bool RprUsdIsGpuUsed(RprUsdContextMetadata const& contextMetadata) {

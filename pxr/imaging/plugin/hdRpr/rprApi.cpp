@@ -3601,6 +3601,9 @@ private:
     }
 
     void InitRif() {
+        if (RprUsdIsCpuOnly()) {
+            return; // We can't create RIF context in CPU only mode
+        }
         PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
         auto modelsPath = PlugFindPluginResource(plugin, "rif_models", false);
         if (modelsPath.empty()) {
