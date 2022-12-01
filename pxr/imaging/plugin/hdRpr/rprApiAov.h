@@ -46,6 +46,8 @@ public:
     HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); };
     HdRprApiFramebuffer* GetResolvedFb();
 
+    virtual bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
+
 protected:
     HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
         : m_aovDescriptor(aovDescriptor), m_format(format) {};
@@ -68,9 +70,6 @@ protected:
         DirtyFormat = 1 << 1,
     };
     uint32_t m_dirtyBits = AllDirty;
-
-private:
-    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
 };
 
 class HdRprApiColorAov : public HdRprApiAov {
@@ -227,6 +226,26 @@ public:
 
 private:
     std::shared_ptr<HdRprApiAov> m_baseIdAov;
+};
+
+class HdRprApiScCompositeAOV : public HdRprApiAov {
+public:
+    HdRprApiScCompositeAOV(int width, int height, HdFormat format,
+                         std::shared_ptr<HdRprApiAov> rawColorAov,
+                         std::shared_ptr<HdRprApiAov> opacityAov,
+                         std::shared_ptr<HdRprApiAov> scAov,
+                         rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+
+    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
+
+private:
+    std::shared_ptr<HdRprApiAov> m_retainedRawColorAov;
+    std::shared_ptr<HdRprApiAov> m_retainedOpacityAov;
+    std::shared_ptr<HdRprApiAov> m_retainedScAov;
+
+    std::vector<GfVec4f> m_tempColorBuffer;
+    std::vector<GfVec4f> m_tempOpacityBuffer;
+    std::vector<GfVec4f> m_tempScBuffer;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

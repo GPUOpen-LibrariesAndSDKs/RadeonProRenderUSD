@@ -3942,6 +3942,26 @@ private:
                     }
 
                     newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), std::move(opacityAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                }
+                else if (aovName == HdRprAovTokens->scTransparentBackground) {
+                    auto rawColorAov = GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4);
+                    if (!rawColorAov) {
+                        TF_RUNTIME_ERROR("Failed to create scTransparentBackground AOV: can't create rawColor AOV");
+                        return nullptr;
+                    }
+                    auto opacityAov = GetAov(HdRprAovTokens->opacity, width, height, HdFormatFloat32Vec4);
+                    if (!opacityAov) {
+                        TF_RUNTIME_ERROR("Failed to create scTransparentBackground AOV: can't create opacity AOV");
+                        return nullptr;
+                    }
+                    auto shadowCatcherAov = GetAov(HdRprAovTokens->shadowCatcher, width, height, HdFormatFloat32Vec4);
+                    if (!shadowCatcherAov) {
+                        TF_RUNTIME_ERROR("Failed to create scTransparentBackground AOV: can't create shadowCatcher AOV");
+                        return nullptr;
+                    }
+
+                    newAov = new HdRprApiScCompositeAOV(width, height, format, std::move(rawColorAov), std::move(opacityAov), std::move(shadowCatcherAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+
                 } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
                     newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                     aovCustomDestructor = [this](HdRprApiAov* aov) {

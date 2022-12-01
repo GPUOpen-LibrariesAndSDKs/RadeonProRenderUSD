@@ -711,4 +711,61 @@ void HdRprApiIdMaskAov::Update(HdRprApi const* rprApi, rif::Context* rifContext)
     }
 }
 
+HdRprApiScCompositeAOV::HdRprApiScCompositeAOV(int width, int height, HdFormat format,
+    std::shared_ptr<HdRprApiAov> rawColorAov,
+    std::shared_ptr<HdRprApiAov> opacityAov,
+    std::shared_ptr<HdRprApiAov> scAov,
+    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
+    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kScTransparentBackground), true), format)
+    , m_retainedRawColorAov(rawColorAov)
+    , m_retainedOpacityAov(opacityAov)
+    , m_retainedScAov(scAov)
+{
+} 
+
+bool HdRprApiScCompositeAOV::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
+    if (m_tempColorBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
+        m_tempColorBuffer.resize(dstBufferSize / sizeof(GfVec4f));
+    }
+    if (m_tempOpacityBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
+        m_tempOpacityBuffer.resize(dstBufferSize / sizeof(GfVec4f));
+    }
+    if (m_tempScBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
+        m_tempScBuffer.resize(dstBufferSize / sizeof(GfVec4f));
+    }
+
+    if (!m_retainedRawColorAov->GetDataImpl((void*)m_tempColorBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+    if (!m_retainedOpacityAov->GetDataImpl((void*)m_tempOpacityBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+    if (!m_retainedScAov->GetDataImpl((void*)m_tempScBuffer.data(), dstBufferSize)) {
+        return false;
+    }
+
+    auto dstValue = reinterpret_cast<GfVec4f*>(dstBuffer);
+
+    // On this stage format is always HdFormatFloat32Vec4
+    #pragma omp parallel for
+    for (int i = 0; i < dstBufferSize / sizeof(GfVec4f); i++) 
+    {  
+        float opacity = m_tempOpacityBuffer[i][0];
+        float sc = m_tempScBuffer[i][0];
+        constexpr float OneMinusEpsilon = 1.0f - 1e-5f;
+
+        if (opacity > OneMinusEpsilon)
+        {
+            dstValue[i] = { m_tempColorBuffer[i][0], m_tempColorBuffer[i][1], m_tempColorBuffer[i][2], opacity };
+		}
+        else
+        {
+            // Add shadows from the shadow catcher to the final image + Make the background transparent;
+            dstValue[i] = { 0.0f, 0.0f, 0.0f, sc };         
+        }
+    }
+
+    return true;
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE
