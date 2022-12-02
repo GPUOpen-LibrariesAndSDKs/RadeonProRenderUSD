@@ -3551,12 +3551,6 @@ private:
                 static_cast<std::uint32_t>(config->GetHybridStagingMemorySizeMb()) << 20;
             m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_SCRATCH_MEMORY_SIZE] = 
                 static_cast<std::uint32_t>(config->GetHybridScratchMemorySizeMb()) << 20;
-
-            std::cout << "-----------------------------\n";
-            std::cout << config->GetHybridAccelerationMemorySizeMb() << std::endl;
-            std::cout << config->GetHybridMeshMemorySizeMb() << std::endl;
-            std::cout << config->GetHybridStagingMemorySizeMb() << std::endl;
-            std::cout << config->GetHybridScratchMemorySizeMb() << std::endl;
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
