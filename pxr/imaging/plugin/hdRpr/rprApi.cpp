@@ -3543,10 +3543,20 @@ private:
             m_currentRenderQuality = GetRenderQuality(*config);
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
 
-            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE] = config->GetHybridAccelerationMemorySize();
-            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_MESH_MEMORY_SIZE] = config->GetHybridMeshMemorySize();
-            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE] = config->GetHybridStagingMemorySize();
-            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_SCRATCH_MEMORY_SIZE] = config->GetHybridScratchMemorySize();
+            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE] = 
+                static_cast<std::uint32_t>(config->GetHybridAccelerationMemorySizeMb()) << 20;
+            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_MESH_MEMORY_SIZE] = 
+                static_cast<std::uint32_t>(config->GetHybridMeshMemorySizeMb()) << 20;
+            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE] = 
+                static_cast<std::uint32_t>(config->GetHybridStagingMemorySizeMb()) << 20;
+            m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_SCRATCH_MEMORY_SIZE] = 
+                static_cast<std::uint32_t>(config->GetHybridScratchMemorySizeMb()) << 20;
+
+            std::cout << "-----------------------------\n";
+            std::cout << config->GetHybridAccelerationMemorySizeMb() << std::endl;
+            std::cout << config->GetHybridMeshMemorySizeMb() << std::endl;
+            std::cout << config->GetHybridStagingMemorySizeMb() << std::endl;
+            std::cout << config->GetHybridScratchMemorySizeMb() << std::endl;
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);

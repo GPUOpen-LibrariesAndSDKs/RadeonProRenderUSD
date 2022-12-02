@@ -496,32 +496,32 @@ render_setting_categories = [
                 ]
             },
             {
-                'name': 'hybrid:accelerationMemorySize',
-                'ui_name': 'Hybrid Acceleration Memory Size',
-                'defaultValue': 2147483648,
+                'name': 'hybrid:accelerationMemorySizeMb',
+                'ui_name': 'Hybrid Acceleration Memory Size (MB)',
+                'defaultValue': 2048,
                 'minValue': 1,
-                'maxValue': 4294967296
+                'maxValue': 4096
             },
             {
-                'name': 'hybrid:meshMemorySize',
-                'ui_name': 'Hybrid Mesh Memory Size',
-                'defaultValue': 1073741824,
+                'name': 'hybrid:meshMemorySizeMb',
+                'ui_name': 'Hybrid Mesh Memory Size (MB)',
+                'defaultValue': 1024,
                 'minValue': 1,
-                'maxValue': 4294967296
+                'maxValue': 4096
             },
             {
-                'name': 'hybrid:stagingMemorySize',
-                'ui_name': 'Hybrid Staging Memory Size',
-                'defaultValue': 536870912,
+                'name': 'hybrid:stagingMemorySizeMb',
+                'ui_name': 'Hybrid Staging Memory Size (MB)',
+                'defaultValue': 512,
                 'minValue': 1,
-                'maxValue': 4294967296
+                'maxValue': 4096
             },
             {
-                'name': 'hybrid:scratchMemorySize',
-                'ui_name': 'Hybrid Scratch Memory Size',
-                'defaultValue': 257949696,
+                'name': 'hybrid:scratchMemorySizeMb',
+                'ui_name': 'Hybrid Scratch Memory Size (MB)',
+                'defaultValue': 256,
                 'minValue': 1,
-                'maxValue': 4294967296
+                'maxValue': 4096
             }
         ]
     },
