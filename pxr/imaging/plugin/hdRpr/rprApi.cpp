@@ -3285,6 +3285,8 @@ Don't show this message again?
     }
 
     void Render(HdRprRenderThread* renderThread) {
+        Duration totalRenderTime;
+        auto startTime = std::chrono::high_resolution_clock::now();
         RenderFrame(renderThread);
 
         for (auto& aovBinding : m_aovBindings) {
@@ -3292,6 +3294,9 @@ Don't show this message again?
                 rb->SetConverged(true);
             }
         }
+        totalRenderTime = std::chrono::high_resolution_clock::now() - startTime;
+        fprintf(stdout, "Total plugin render timme: %.6f sec; render time: %.6f sec; callback time: %.6f sec;\n", 
+            (double)totalRenderTime.count() / 1000000000.0, (double)m_frameRenderTotalTime.count() / 1000000000.0, (double)m_frameResolveTotalTime.count() / 1000000000.0);
     }
 
     void AbortRender() {
