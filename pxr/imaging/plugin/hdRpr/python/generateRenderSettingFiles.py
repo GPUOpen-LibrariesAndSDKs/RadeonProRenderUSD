@@ -428,7 +428,7 @@ render_setting_categories = [
                 'help': 'Determines Pixel filter width (anti-aliasing).',
                 'defaultValue': 1.5,
                 'minValue': 0.0,
-                'maxValue': 5.0,
+                'maxValue': 1.5,
                 'houdini': {
                     'hidewhen': hidewhen_hybrid
                 }
@@ -531,6 +531,61 @@ render_setting_categories = [
                 'defaultValue': 1.0,
                 'minValue': 0.0,
                 'maxValue': 5.0
+            }
+        ]
+    },
+    {
+        'name': 'Hybrid',
+        'settings': [
+            {
+                'name': 'hybrid:tonemapping',
+                'ui_name': 'Hybrid Tonemapping',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('Filmic'),
+                    SettingValue('Aces'),
+                    SettingValue('Reinhard'),
+                    SettingValue('Photolinear')
+                ]
+            },
+            {
+                'name': 'hybrid:denoising',
+                'ui_name': 'Hybrid Denoising',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('SVGF'),
+                    SettingValue('ASVGF')
+                ]
+            },
+            {
+                'name': 'hybrid:accelerationMemorySizeMb',
+                'ui_name': 'Hybrid Acceleration Structure Memory Size (MB)',
+                'defaultValue': 2048,
+                'minValue': 1,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:meshMemorySizeMb',
+                'ui_name': 'Hybrid Mesh Memory Size (MB)',
+                'defaultValue': 1024,
+                'minValue': 1,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:stagingMemorySizeMb',
+                'ui_name': 'Hybrid Staging Memory Size (MB)',
+                'defaultValue': 512,
+                'minValue': 1,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:scratchMemorySizeMb',
+                'ui_name': 'Hybrid Scratch Memory Size (MB)',
+                'defaultValue': 256,
+                'minValue': 1,
+                'maxValue': 4096
             }
         ]
     },
