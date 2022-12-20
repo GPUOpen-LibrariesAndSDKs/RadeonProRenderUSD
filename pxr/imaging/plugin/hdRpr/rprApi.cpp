@@ -3598,10 +3598,11 @@ private:
             // Conversion is currently implemented like this:
             //   * convert float4 texture to uchar4 using RIF
             //   * reinterpret uchar4 data as int32_t (works on little-endian CPU only)
-            m_rprContext->SetAOVindexLookup(rpr_int(i),
-                float(((i + 1) >> 0) & 0xFF) / 255.0f,
-                float(((i + 1) >> 8) & 0xFF) / 255.0f,
-                0.0f, 0.0f);
+
+            // 
+            // TODO: Do NOT MERGE INTO DEVELOP IT WOULD BREAK ANYTHING
+            //
+            m_rprContext->SetAOVindexLookup(rpr_int(i), float(i+1), 0.0f, 0.0f, 0.0f);
         }
 
         m_imageCache.reset(new RprUsdImageCache(m_rprContext.get()));
