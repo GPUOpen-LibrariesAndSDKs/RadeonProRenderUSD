@@ -361,6 +361,8 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     // We are loading mesh UVs only when it has material
+	std::string dbgPath = m_materialId.GetAsString();
+
     auto material = static_cast<const HdRprMaterial*>(
         sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_materialId)
     );
@@ -652,7 +654,15 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             } else {
                 if (m_geomSubsets.size() == m_rprMeshes.size()) {
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
-                        auto material = getMeshMaterial(m_geomSubsets[i].materialId);
+						// geomSubset has only relative material path. Relative to mesh.
+						// materials however are stored by full material path
+						// so when relative material path is passed material is not found
+						// thus we have to get full material path to get pointer to material
+						SdfPath parentMesh = this->GetId().GetParentPath();
+						SdfPath relativeMaterialPath = m_geomSubsets[i].materialId.MakeRelativePath(SdfPath::AbsoluteRootPath());
+						SdfPath fullMaterialPath = parentMesh.AppendPath(relativeMaterialPath);
+
+                        auto material = getMeshMaterial(fullMaterialPath);
                         rprApi->SetMeshMaterial(m_rprMeshes[i], material, m_displayStyle.displacementEnabled);
                     }
                 } else {
