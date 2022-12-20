@@ -1958,6 +1958,8 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_ACES), "Failed to set tonemapping");
             } else if (value == HdRprHybridTonemappingTokens->Reinhard) {
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_REINHARD), "Failed to set tonemapping");
+            } else if (value == HdRprHybridTonemappingTokens->Photolinear) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_PHOTO_LINEAR), "Failed to set tonemapping");
             }
         }
 
@@ -2971,31 +2973,48 @@ public:
         }
     }
 
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     void InteropRenderImpl(HdRprRenderThread* renderThread) {
         if (!RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             TF_CODING_ERROR("InteropRenderImpl should be called for Hybrid plugin only");
             return;
         }
+        bool isRendered = false;
+        while (true) {
+            // In interactive mode, always render at least one frame, otherwise
+            // disturbing full-screen-flickering will be visible or
+            // viewport will not update because of fast exit due to abort
+            const bool forceRender = m_isInteractive && m_numSamples == 0;
 
-        // For now render 5 frames before each present
-        for (int i = 0; i < 5; i++) {
-            rpr::Status status = m_rprContext->Render();
-            if (status != rpr::Status::RPR_SUCCESS) {
-                TF_WARN("rprContextRender returns: %d", status);
+            renderThread->WaitUntilPaused();
+            if (renderThread->IsStopRequested() && !forceRender) {
+                break;
+            }
+
+            if (!m_vulkanInteropBufferReady)
+            {
+                m_rucData.previousProgress = -1.0f;
+                rpr::Status status = m_rprContext->Render();
+                if (rpr::Status::RPR_SUCCESS == status) {
+                    m_numSamples += m_numSamplesPerIter;
+                    rpr_int status = m_rprContextFlushFrameBuffers(rpr::GetRprObject(m_rprContext.get()));
+                    if (RPR_SUCCESS == status) {
+                        m_vulkanInteropBufferReady = true;
+                    }
+                    else {
+                        TF_WARN("rprContextFlushFrameBuffers returns: %d", status);
+                    }
+                }
+                else {
+                    TF_WARN("rprContextRender returns: %d", status);
+                }
+            }
+            else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
-
-        // Next frame couldn't be flushed before previous was presented. We should wait for presenter
-        std::unique_lock<std::mutex> lock(m_rprContext->GetMutex());
-        m_presentedConditionVariable->wait(lock, [this] { return *m_presentedCondition == true; });
-
-        rpr_int status = m_rprContextFlushFrameBuffers(rpr::GetRprObject(m_rprContext.get()));
-        if (status != RPR_SUCCESS) {
-            TF_WARN("rprContextFlushFrameBuffers returns: %d", status);
-        }
-
-        *m_presentedCondition = false;
     }
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     void RenderFrame(HdRprRenderThread* renderThread) {
         if (!m_rprContext) {
@@ -3028,7 +3047,9 @@ public:
                 } else {
                     if (RprUsdIsHybrid(m_rprContextMetadata.pluginType) &&
                         m_rprContextMetadata.interopInfo) {
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
                         InteropRenderImpl(renderThread);
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
                     } else {
                         RenderImpl(renderThread);
                     }
@@ -3390,7 +3411,7 @@ Don't show this message again?
             return m_numSamples == 1;
         }
 
-        return m_numSamples >= m_maxSamples || m_activePixels == 0;
+        return (m_numSamples >= m_maxSamples) || (m_activePixels == 0);
     }
 
     bool IsAdaptiveSamplingEnabled() const {
@@ -3438,6 +3459,42 @@ Don't show this message again?
 
         return nullptr;
     }
+
+    rpr::FrameBuffer* GetPrimIdFramebuffer() {
+        auto it = m_aovRegistry.find(HdAovTokens->primId);
+        if (it != m_aovRegistry.end()) {
+            if (auto aov = it->second.lock()) {
+                if (auto fb = aov->GetAovFb()) {
+                    return fb->GetRprObject();
+                }
+            }
+        }
+
+        return nullptr;
+    }
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+    bool GetInteropSemaphore(VkSemaphore& rInteropSemaphore, uint32_t& rInteropSemaphoreIndex) {
+        rInteropSemaphore = VK_NULL_HANDLE;
+
+        while (!m_vulkanInteropBufferReady) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        m_rprContext->GetInfo(static_cast<rpr::ContextInfo>(RPR_CONTEXT_INTEROP_SEMAPHORE_INDEX), sizeof(rInteropSemaphoreIndex), &rInteropSemaphoreIndex, nullptr);
+
+        const unsigned int interopSemaphoreCount = 3; // Awful, has to be "global" constant
+        if (rInteropSemaphoreIndex < interopSemaphoreCount) {
+            VkSemaphore interopSemaphoreArray[interopSemaphoreCount];
+            m_rprContext->GetInfo(static_cast<rpr::ContextInfo>(RPR_CONTEXT_FRAMEBUFFERS_READY_SEMAPHORES), sizeof(interopSemaphoreArray), (void*)&interopSemaphoreArray, nullptr);
+            rInteropSemaphore = interopSemaphoreArray[rInteropSemaphoreIndex];
+        }
+
+        m_vulkanInteropBufferReady = false;
+
+        return (VK_NULL_HANDLE != rInteropSemaphore);
+    }
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     void Restart() {
         m_numSamples = 0;
@@ -4376,6 +4433,9 @@ private:
     std::condition_variable* m_presentedConditionVariable = nullptr;
     bool* m_presentedCondition = nullptr;
     rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+    bool m_vulkanInteropBufferReady = false;
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     GfMatrix4d m_unitSizeTransform = GfMatrix4d(1.0);
 };
@@ -4682,12 +4742,22 @@ rpr::FrameBuffer* HdRprApi::GetRawColorFramebuffer() {
     return m_impl->GetRawColorFramebuffer();
 }
 
+rpr::FrameBuffer* HdRprApi::GetPrimIdFramebuffer() {
+    return m_impl->GetPrimIdFramebuffer();
+}
+
 void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
     m_impl->SetInteropInfo(interopInfo, presentedConditionVariable, presentedCondition);
 
     // Temporary should be force inited here, because otherwise has issues with GPU synchronization
     m_impl->InitIfNeeded();
 }
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+bool HdRprApi::GetInteropSemaphore(VkSemaphore& rInteropSemaphore, uint32_t& rInteropSemaphoreIndex) {
+    return m_impl->GetInteropSemaphore(rInteropSemaphore, rInteropSemaphoreIndex);
+}
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
 void HdRprApi::Restart()
 {

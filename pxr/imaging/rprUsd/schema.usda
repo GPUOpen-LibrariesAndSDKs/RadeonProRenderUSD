@@ -310,7 +310,7 @@ class "RprRendererSettingsAPI" (
     )
 
     uniform token rpr:hybrid:tonemapping = "None" (
-        allowedTokens = ["None", "Filmic", "Aces", "Reinhard"]
+        allowedTokens = ["None", "Filmic", "Aces", "Reinhard", "Photolinear"]
         displayName = "Hybrid Tonemapping"
         displayGroup = "Hybrid|Postprocessing"
     )

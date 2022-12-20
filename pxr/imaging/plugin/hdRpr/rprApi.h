@@ -35,6 +35,12 @@ limitations under the License.
 #include <string>
 #include <condition_variable>
 
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+#include <RadeonProRender_VK.h>
+#include <RadeonProRender_Baikal.h>
+#include <vulkan/vulkan.h>
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprDelegate;
@@ -153,6 +159,10 @@ public:
 
     void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);
 
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+    bool GetInteropSemaphore(VkSemaphore& rInteropSemaphore, uint32_t& rInteropSemaphoreIndex);
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
     void Restart();
 
     struct RenderStats {
@@ -174,6 +184,7 @@ public:
     bool IsSphereAndDiskLightSupported() const;
     TfToken const& GetCurrentRenderQuality() const;
     rpr::FrameBuffer* GetRawColorFramebuffer();
+    rpr::FrameBuffer* GetPrimIdFramebuffer();
 
 private:
     HdRprApiImpl* m_impl = nullptr;

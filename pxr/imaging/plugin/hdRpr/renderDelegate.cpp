@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/materialRegistry.h"
 #include "pxr/imaging/hd/extComputation.h"
+#include "pxr/imaging/hgi/tokens.h"
 #include "pxr/base/tf/diagnosticMgr.h"
 #include "pxr/base/tf/getenv.h"
 #include "pxr/base/arch/env.h"
@@ -399,11 +400,19 @@ bool HdRprDelegate::Restart() {
 
 void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
     for (HdDriver* hdDriver : drivers) {
-        if (hdDriver->name == _tokens->RPR && hdDriver->driver.IsHolding<VtDictionary>()) {
+        if (hdDriver->name == HgiTokens->Vulkan && hdDriver->driver.IsHolding<VtDictionary>()) {
             VtDictionary dictionary = hdDriver->driver.UncheckedGet<VtDictionary>();
 
             // Interop info is used to create context
-            void* interopInfo = dictionary["interop_info"].Get<void*>();
+            static VkInteropInfo::VkInstance vkInstance;
+            static VkInteropInfo vkInteropInfo;
+            vkInteropInfo.instance_count = 1;
+            vkInteropInfo.main_instance_index = 0;
+            vkInteropInfo.frames_in_flight = dictionary["interop_info_frames_in_flight"].Get<unsigned int>();
+            vkInteropInfo.framebuffers_release_semaphores = dictionary["interop_info_semaphore_array"].Get<void*>();
+            vkInteropInfo.instances = &vkInstance;
+            vkInteropInfo.instances->physical_device = dictionary["interop_info_physicalDevice"].Get<void*>();
+            vkInteropInfo.instances->device = dictionary["interop_info_device"].Get<void*>();
 
             // Condition variable is used to prevent this issue:
             // [Plugin] Render_Frame_1 & Flush_Frame_1
@@ -419,9 +428,9 @@ void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
             bool* presentedCondition = dictionary["presented_condition"].Get<bool*>();
 
             // Set condition to true to render first frame
-            *presentedCondition = true;
+            //*presentedCondition = true;
 
-            m_rprApi->SetInteropInfo(interopInfo, presentedConditionVariable, presentedCondition);
+            m_rprApi->SetInteropInfo(&vkInteropInfo, presentedConditionVariable, presentedCondition);
             break;
         }
     }

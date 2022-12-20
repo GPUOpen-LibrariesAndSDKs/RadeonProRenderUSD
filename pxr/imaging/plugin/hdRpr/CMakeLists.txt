@@ -156,6 +156,12 @@ if(RPR_EXR_EXPORT_ENABLED)
     target_compile_definitions(hdRpr PRIVATE -DRPR_EXR_EXPORT_ENABLED)
 endif()
 
+if(RPR_ENABLE_VULKAN_INTEROP_SUPPORT)
+    target_link_libraries(hdRpr ${Vulkan_LIBRARY})
+    target_include_directories(hdRpr PRIVATE ${Vulkan_INCLUDE_DIR})
+    target_compile_definitions(hdRpr PUBLIC HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT)
+endif()
+
 target_sources(hdRpr PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.h)
 if(APPLE)

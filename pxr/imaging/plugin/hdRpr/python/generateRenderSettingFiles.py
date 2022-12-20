@@ -407,9 +407,9 @@ render_setting_categories = [
                 'name': 'quality:imageFilterRadius',
                 'ui_name': 'Pixel filter width',
                 'help': 'Determines Pixel filter width (anti-aliasing).',
-                'defaultValue': 1.5,
+                'defaultValue': 1e6,
                 'minValue': 0.0,
-                'maxValue': 5.0
+                'maxValue': 1e6
             }
         ]
     },
@@ -482,7 +482,8 @@ render_setting_categories = [
                     SettingValue('None'),
                     SettingValue('Filmic'),
                     SettingValue('Aces'),
-                    SettingValue('Reinhard')
+                    SettingValue('Reinhard'),
+                    SettingValue('Photolinear')
                 ]
             },
             {
