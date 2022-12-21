@@ -654,6 +654,9 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             } else {
                 if (m_geomSubsets.size() == m_rprMeshes.size()) {
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
+						bool hasMaterialByShortPath
+							= (sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_geomSubsets[i].materialId)) != nullptr;
+
 						// geomSubset has only relative material path. Relative to mesh.
 						// materials however are stored by full material path
 						// so when relative material path is passed material is not found
@@ -662,7 +665,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 						SdfPath relativeMaterialPath = m_geomSubsets[i].materialId.MakeRelativePath(SdfPath::AbsoluteRootPath());
 						SdfPath fullMaterialPath = parentMesh.AppendPath(relativeMaterialPath);
 
-                        auto material = getMeshMaterial(fullMaterialPath);
+						auto material = hasMaterialByShortPath ? getMeshMaterial(m_geomSubsets[i].materialId) : getMeshMaterial(fullMaterialPath);
                         rprApi->SetMeshMaterial(m_rprMeshes[i], material, m_displayStyle.displacementEnabled);
                     }
                 } else {
