@@ -21,7 +21,13 @@ TF_INSTANTIATE_SINGLETON(RprUsdLightRegistry);
 
 void RprUsdLightRegistry::Register(const SdfPath& id, rpr::Light* light) {
     RprUsdLightRegistry& self = RprUsdLightRegistry::GetInstance();
-    self.m_Registry.insert_or_assign(id.GetString(), light);
+    auto rit = self.m_Registry.find(id.GetString());
+    if (rit != self.m_Registry.end()) {
+        (*rit).second = light;
+    }
+    else {
+        self.m_Registry.emplace(id.GetString(), light);
+    }
     
     auto cit = self.m_Clients.find(id.GetString());
     if (cit != self.m_Clients.end()) {
@@ -53,12 +59,18 @@ rpr::Light* RprUsdLightRegistry::Get(const std::string& id, std::function<void(r
     if (cit != self.m_Clients.end())
     {
         auto clientsAndCallbacks = (*cit).second;
-        clientsAndCallbacks.insert_or_assign(client, callback);
+        auto cbit = clientsAndCallbacks.find(client);
+        if (cbit != clientsAndCallbacks.end()) {
+            (*cbit).second = callback;
+        }
+        else {
+            clientsAndCallbacks.emplace(client, callback);
+        }
     }
     else {
         std::map<void*, std::function<void(rpr::Light*)>> clientsAndCallbacks;
-        clientsAndCallbacks.insert_or_assign(client, callback);
-        self.m_Clients.insert_or_assign(id, clientsAndCallbacks);
+        clientsAndCallbacks.emplace(client, callback);
+        self.m_Clients.emplace(id, clientsAndCallbacks);
     }
 
     auto rit = self.m_Registry.find(id);
