@@ -268,7 +268,7 @@ public:
 
         RprUsd_RprNodeInput lightInput(RprUsdMaterialNodeElement::kString);
         lightInput.name = _tokens->light;
-        lightInput.uiName = "light";
+        lightInput.uiName = "LinkedLight";
         lightInput.valueString = "";
         nodeInfo.inputs.push_back(lightInput);
         
