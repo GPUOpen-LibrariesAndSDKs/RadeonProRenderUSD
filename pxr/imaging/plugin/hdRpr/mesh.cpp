@@ -576,7 +576,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                         if (!m_colorSamples.empty()) {
                             if (newPoint) {
-                                for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
+                                for (int sampleIndex = 0; sampleIndex < m_colorSamples.size(); ++sampleIndex) {
                                     subsetColorSamples[sampleIndex].push_back(m_colorSamples[sampleIndex][pointIndex]);
                                 }
                             }
