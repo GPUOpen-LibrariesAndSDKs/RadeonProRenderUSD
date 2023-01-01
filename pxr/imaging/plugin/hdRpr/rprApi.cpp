@@ -345,7 +345,7 @@ public:
         RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_ORTHO_HEIGHT, dummy, &m_orthoHeight, nullptr), "Failed to get ortho height");
         RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_LINEAR_MOTION, dummy, &m_linearMotion, nullptr), "Failed to get linear motion");
         RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_ANGULAR_MOTION, dummy, &m_angularMotion, nullptr), "Failed to get angular motion");
-        RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_TRANSFORM, dummy, m_Transform.GetArray(), nullptr), "Failed to get camera transform");
+        RPR_ERROR_CHECK(camera->GetInfo(RPR_CAMERA_TRANSFORM, dummy, m_transform.GetArray(), nullptr), "Failed to get camera transform");
     }
 
     void Restore(std::unique_ptr<rpr::Camera>& camera) {
@@ -355,7 +355,7 @@ public:
         RPR_ERROR_CHECK(camera->SetOrthoHeight(m_orthoHeight), "Failed to set ortho height");
         RPR_ERROR_CHECK(camera->SetLinearMotion(m_linearMotion[0], m_linearMotion[1], m_linearMotion[2]), "Failed to set camera linear motion");
         RPR_ERROR_CHECK(camera->SetAngularMotion(m_angularMotion[0], m_angularMotion[1], m_angularMotion[2], m_angularMotion[3]), "Failed to set camera linear motion");
-        RPR_ERROR_CHECK(camera->SetTransform(m_Transform.GetArray(), false), "Failed to set camera transform");
+        RPR_ERROR_CHECK(camera->SetTransform(m_transform.GetArray(), false), "Failed to set camera transform");
     }
 
     void SetForTile(std::unique_ptr<rpr::Camera>& camera, HdRprCamera const* hdCamera, const GfVec4f& tile) {
@@ -378,7 +378,7 @@ public:
             double shiftY = tile[1] + tileSizeY * 0.5 - 0.5;
             GfMatrix4f transform;
             transform.SetIdentity().SetTranslate(GfVec3f(hdCamera->GetHorizontalAperture() * shiftX, hdCamera->GetVerticalAperture() * shiftY, 0));
-            transform *= m_Transform;
+            transform *= m_transform;
             transform.Orthonormalize();
             RPR_ERROR_CHECK(camera->SetTransform(transform.GetArray(), false), "Failed to set camera transform");
             RPR_ERROR_CHECK(camera->SetOrthoWidth(m_orthoWidth * tileSizeX * (tileSizeY < tileSizeX ? tileSizeY / tileSizeX : 1)), "Failed to set ortho width");
@@ -397,7 +397,7 @@ private:
     rpr_camera_mode m_mode;
     float m_orthoWidth;
     float m_orthoHeight;
-    GfMatrix4f m_Transform;
+    GfMatrix4f m_transform;
     float m_linearMotion[3];
     float m_angularMotion[4];
 };
