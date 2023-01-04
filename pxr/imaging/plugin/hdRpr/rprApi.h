@@ -157,6 +157,9 @@ public:
         double percentDone;
         double averageRenderTimePerSample;
         double averageResolveTimePerSample;
+        double totalRenderTime;
+        double frameRenderTotalTime;
+        double frameResolveTotalTime;
     };
     RenderStats GetRenderStats() const;
 

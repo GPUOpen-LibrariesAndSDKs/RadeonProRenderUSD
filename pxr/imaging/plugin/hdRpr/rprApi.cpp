@@ -3285,19 +3285,12 @@ Don't show this message again?
     }
 
     void Render(HdRprRenderThread* renderThread) {
-        Duration totalRenderTime;
-        auto startTime = std::chrono::high_resolution_clock::now();
         RenderFrame(renderThread);
 
         for (auto& aovBinding : m_aovBindings) {
             if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
                 rb->SetConverged(true);
             }
-        }
-        if (TfGetenv("PERF_INFO") != "") {
-            totalRenderTime = std::chrono::high_resolution_clock::now() - startTime;
-            fprintf(stdout, "Total plugin render timme: %.6f sec; render time: %.6f sec; callback time: %.6f sec;\n",
-                (double)totalRenderTime.count() / 1000000000.0, (double)m_frameRenderTotalTime.count() / 1000000000.0, (double)m_frameResolveTotalTime.count() / 1000000000.0);
         }
     }
 
@@ -3344,6 +3337,10 @@ Don't show this message again?
             stats.averageRenderTimePerSample = std::chrono::duration_cast<FloatingPointSecond>(renderTime).count();
             stats.averageResolveTimePerSample = std::chrono::duration_cast<FloatingPointSecond>(resolveTime).count();
         }
+
+        stats.frameRenderTotalTime = (double)m_frameRenderTotalTime.count() / 1000000000.0;
+        stats.frameResolveTotalTime = (double)m_frameResolveTotalTime.count() / 1000000000.0;
+        stats.totalRenderTime = (double)(std::chrono::high_resolution_clock::now() - m_startTime).count() / 1000000000.0;
 
         return stats;
     }
@@ -4329,6 +4326,7 @@ private:
     using Duration = std::chrono::high_resolution_clock::duration;
     Duration m_frameRenderTotalTime;
     Duration m_frameResolveTotalTime;
+    std::chrono::steady_clock::time_point m_startTime;
 
     struct RenderUpdateCallbackData {
         HdRprApiImpl* rprApi = nullptr;
