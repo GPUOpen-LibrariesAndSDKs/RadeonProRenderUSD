@@ -361,8 +361,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     }
 
     // We are loading mesh UVs only when it has material
-	std::string dbgPath = m_materialId.GetAsString();
-
     auto material = static_cast<const HdRprMaterial*>(
         sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_materialId)
     );
@@ -657,15 +655,21 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 						bool hasMaterialByShortPath
 							= (sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_geomSubsets[i].materialId)) != nullptr;
 
-						// geomSubset has only relative material path. Relative to mesh.
-						// materials however are stored by full material path
-						// so when relative material path is passed material is not found
-						// thus we have to get full material path to get pointer to material
-						SdfPath parentMesh = this->GetId().GetParentPath();
-						SdfPath relativeMaterialPath = m_geomSubsets[i].materialId.MakeRelativePath(SdfPath::AbsoluteRootPath());
-						SdfPath fullMaterialPath = parentMesh.AppendPath(relativeMaterialPath);
+						RprUsdMaterial const* material;
+						if (!hasMaterialByShortPath) {
+							// geomSubset has only relative material path. Relative to mesh.
+							// materials however are stored by full material path
+							// so when relative material path is passed material is not found
+							// thus we have to get full material path to get pointer to material
+							SdfPath parentMesh = this->GetId().GetParentPath();
+							SdfPath relativeMaterialPath = m_geomSubsets[i].materialId.MakeRelativePath(SdfPath::AbsoluteRootPath());
+							SdfPath fullMaterialPath = parentMesh.AppendPath(relativeMaterialPath);
+							material = getMeshMaterial(fullMaterialPath);
+						}
+						else {
+							material = getMeshMaterial(m_geomSubsets[i].materialId);
+						}
 
-						auto material = hasMaterialByShortPath ? getMeshMaterial(m_geomSubsets[i].materialId) : getMeshMaterial(fullMaterialPath);
                         rprApi->SetMeshMaterial(m_rprMeshes[i], material, m_displayStyle.displacementEnabled);
                     }
                 } else {
