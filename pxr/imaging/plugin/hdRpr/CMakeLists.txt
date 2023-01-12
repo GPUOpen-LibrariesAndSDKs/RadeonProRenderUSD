@@ -52,6 +52,7 @@ if(HoudiniUSD_FOUND)
     set(GENERATED_FILES ${GENERATED_FILES}
         ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Light.ds
         ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
+        ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Viewport.ds
         ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds)
     set(GENERATION_DEPENDENT_FILES ${GENERATION_DEPENDENT_FILES}
         ${GENERATION_SCRIPTS_DIR}/houdiniDsGenerator.py)
@@ -60,6 +61,7 @@ if(HoudiniUSD_FOUND)
         FILES
             ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Light.ds
             ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Global.ds
+            ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Viewport.ds
             ${CMAKE_CURRENT_BINARY_DIR}/HdRprPlugin_Geometry.ds
         DESTINATION "houdini/soho/parameters")
 

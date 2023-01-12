@@ -1009,7 +1009,11 @@ void HdRprConfig::Set{name_title}({c_type} {c_name}) {{
         rs_validate_values=''.join(rs_validate_values)))
 
     if generate_ds_files:
-        generate_houdini_ds(install_path, 'Global', render_setting_categories)
+        generate_houdini_ds(install_path, 'Global', render_setting_categories)        
+        viewport_render_setting_categories = [category for category in render_setting_categories if category['name'] == 'Sampling' or category['name'] == 'AdaptiveSampling']
+        for category in viewport_render_setting_categories:
+            del category['houdini']
+        generate_houdini_ds(install_path, 'Viewport', viewport_render_setting_categories)
 
 
 def generate(install, generate_ds_files):
