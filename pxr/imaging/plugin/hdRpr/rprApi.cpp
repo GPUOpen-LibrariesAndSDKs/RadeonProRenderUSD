@@ -1660,7 +1660,7 @@ public:
 
         m_isFirstSample = false;
 
-        auto resolveTime = std::chrono::high_resolution_clock::now() - startTime;
+        auto resolveTime = std::chrono::high_resolution_clock::now().time_since_epoch() - startTime.time_since_epoch();
         m_frameResolveTotalTime += resolveTime;
 
         if (m_resolveMode == kResolveInRenderUpdateCallback) {
@@ -2746,7 +2746,7 @@ public:
             auto status = m_rprContext->Render();
             m_rucData.previousProgress = -1.0f;
 
-            m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
+            m_frameRenderTotalTime += std::chrono::high_resolution_clock::now().time_since_epoch() - startTime.time_since_epoch();
 
             if (status != RPR_SUCCESS && status != RPR_ERROR_ABORTED) {
                 RPR_ERROR_CHECK(status, "Failed to render", m_rprContext.get());
@@ -2895,7 +2895,7 @@ public:
             m_rucData.previousProgress = -1.0f;
             auto status = m_rprContext->Render();
 
-            m_frameRenderTotalTime += std::chrono::high_resolution_clock::now() - startTime;
+            m_frameRenderTotalTime += std::chrono::high_resolution_clock::now().time_since_epoch() - startTime.time_since_epoch();
 
             if (status != RPR_SUCCESS && status != RPR_ERROR_ABORTED) {
                 RPR_ERROR_CHECK(status, "Failed to render", m_rprContext.get());
@@ -3340,7 +3340,7 @@ Don't show this message again?
 
         stats.frameRenderTotalTime = (double)m_frameRenderTotalTime.count() / 1000000000.0;
         stats.frameResolveTotalTime = (double)m_frameResolveTotalTime.count() / 1000000000.0;
-        stats.totalRenderTime = (double)(std::chrono::high_resolution_clock::now() - m_startTime).count() / 1000000000.0;
+        stats.totalRenderTime = (double)(std::chrono::high_resolution_clock::now().time_since_epoch() - m_startTime.time_since_epoch()).count() / 1000000000.0;
 
         return stats;
     }
