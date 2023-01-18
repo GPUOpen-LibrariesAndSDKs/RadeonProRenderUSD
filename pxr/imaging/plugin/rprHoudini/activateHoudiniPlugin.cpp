@@ -15,7 +15,7 @@ int main() {
         versionFile >> coreVersion;
         versionFile >> pluginVersion;
         std::string findString = "plugin:";
-        pluginVersion = pluginVersion.substr(pluginVersion.find(findString) + findString.length(), pluginVersion.length() - findString.length());
+        pluginVersion = pluginVersion.substr(findString.length(), pluginVersion.length() - findString.length());
         version = pluginVersion.c_str();
     }
     
