@@ -17,6 +17,7 @@ int main() {
         std::string findString = "plugin:";
         pluginVersion = pluginVersion.substr(findString.length(), pluginVersion.length() - findString.length());
         version = pluginVersion.c_str();
+        versionFile.close();
     }
     
     int exitCode = ActivateHoudiniPlugin("RPR_for_Houdini", {
