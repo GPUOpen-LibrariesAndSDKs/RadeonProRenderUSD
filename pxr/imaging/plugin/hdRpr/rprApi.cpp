@@ -3946,7 +3946,7 @@ private:
 
                     newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), std::move(opacityAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 }
-                else if (aovName == HdRprAovTokens->scTransparentBackground) {
+                else if (aovName == HdRprAovTokens->colorWithTransparency) {
                     auto rawColorAov = GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4);
                     if (!rawColorAov) {
                         TF_RUNTIME_ERROR("Failed to create scTransparentBackground AOV: can't create rawColor AOV");

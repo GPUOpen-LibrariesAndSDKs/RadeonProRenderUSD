@@ -124,6 +124,7 @@ pxr_library(rprUsd
         material
         materialMappings
         materialRegistry
+        lightRegistry
 
     PUBLIC_HEADERS
         contextMetadata.h
