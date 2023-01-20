@@ -19,6 +19,8 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/rprUsd/tokens.h"
 
+#include "pxr/imaging/rprUsd/lightRegistry.h"
+
 #include "pxr/base/tf/envSetting.h"
 #include "pxr/base/gf/rotation.h"
 #include "pxr/base/gf/matrix4d.h"
@@ -427,13 +429,16 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         bool newLight = false;
+        rpr::Light* lightPtr = nullptr;
         auto iesFile = HdRpr_GetParam(sceneDelegate, id, USD_LUX_TOKEN_SHAPING_IES_FILE);
         if (iesFile.IsHolding<SdfAssetPath>()) {
             auto& path = iesFile.UncheckedGet<SdfAssetPath>();
             if (!path.GetResolvedPath().empty()) {
                 if (auto light = rprApi->CreateIESLight(path.GetResolvedPath())) {
+                    m_localTransform *= GfMatrix4f(1.0).SetRotate(GfRotation(GfVec3d(1, 0, 0), 90));
                     m_light = light;
                     newLight = true;
+                    lightPtr = light;
                 }
             }
         } else {
@@ -443,11 +448,13 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
                 if (auto light = rprApi->CreateSpotLight(coneAngle.UncheckedGet<float>(), coneSoftness.UncheckedGet<float>())) {
                     m_light = light;
                     newLight = true;
+                    lightPtr = light;
                 }
             } else if (HdRpr_GetParam(sceneDelegate, id, UsdLuxTokens->treatAsPoint).GetWithDefault(false)) {
                 if (auto light = rprApi->CreatePointLight()) {
                     m_light = light;
                     newLight = true;
+                    lightPtr = light;
                 }
             } else {
                 if (rprApi->IsSphereAndDiskLightSupported() &&
@@ -460,6 +467,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
 
                             m_light = light;
                             newLight = true;
+                            lightPtr = light;
                         }
                     } else {
                         if (auto light = rprApi->CreateDiskLight()) {
@@ -468,6 +476,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
 
                             m_light = light;
                             newLight = true;
+                            lightPtr = light;
                         }
                     }
 
@@ -510,6 +519,10 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
         if (newLight && RprUsdIsLeakCheckEnabled()) {
             BOOST_NS::apply_visitor(LightNameSetter{rprApi, id.GetText()}, m_light);
         }
+
+        if (newLight) {
+            RprUsdLightRegistry::Register(id, lightPtr);
+        }
     }
 
     if (bits & (DirtyTransform | DirtyParams)) {
@@ -544,6 +557,7 @@ struct HdRprLight::LightReleaser : public BOOST_NS::static_visitor<> {
 };
 
 void HdRprLight::ReleaseLight(HdRprApi* rprApi) {
+    RprUsdLightRegistry::Release(GetId());
     BOOST_NS::apply_visitor(LightReleaser{rprApi}, m_light);
     m_light = LightVariantEmpty{};
 }

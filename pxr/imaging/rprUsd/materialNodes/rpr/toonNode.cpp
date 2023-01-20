@@ -15,6 +15,7 @@ limitations under the License.
 #include "nodeInfo.h"
 
 #include "pxr/imaging/rprUsd/materialHelpers.h"
+#include "pxr/imaging/rprUsd/lightRegistry.h"
 #include "pxr/base/arch/attributes.h"
 #include "pxr/base/gf/vec3f.h"
 
@@ -50,6 +51,12 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (interpolationMode)
     (Linear)
     (None)
+
+    (albedoMode)
+    (BaseColor)
+    (MidColor)
+
+    (light)
 );
 
 template <typename ExpectedType, typename SmartPtr>
@@ -87,7 +94,9 @@ public:
 
         m_rprContext = ctx->rprContext;
     }
-    ~RprUsd_RprToonNode() override = default;
+    ~RprUsd_RprToonNode() override {
+        RprUsdLightRegistry::ReleaseClient(this);
+    }
 
     VtValue GetOutput(TfToken const& outputId) override {
         if (m_blendNode) {
@@ -160,6 +169,28 @@ public:
             TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `float`", id.GetText(), value.GetTypeName().c_str());
             return false;
         }
+        else if (id == _tokens->albedoMode) {
+            if (value.IsHolding<int>()) {
+                int albedoMode = value.UncheckedGet<int>();
+                return m_toonClosureNode->SetInput(RPR_MATERIAL_INPUT_MID_IS_ALBEDO, albedoMode) == RPR_SUCCESS;
+            }
+            TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `int`", id.GetText(), value.GetTypeName().c_str());
+            return false;
+        }
+        else if (id == _tokens->light) {
+            if (value.IsHolding<std::string>()) {
+                std::weak_ptr<rpr::MaterialNode> toonClosureNodeWptr = m_toonClosureNode;
+                auto lightUpdateCallback = [toonClosureNodeWptr](rpr::Light* light) {
+                    std::shared_ptr<rpr::MaterialNode> toonClosureNode = toonClosureNodeWptr.lock();
+                    if (toonClosureNode) {
+                        toonClosureNode->SetInput(RPR_MATERIAL_INPUT_LIGHT, light);
+                    }
+                };
+                rpr::Light* light = RprUsdLightRegistry::Get(value.UncheckedGet<std::string>(), lightUpdateCallback, this);
+                return m_toonClosureNode->SetInput(RPR_MATERIAL_INPUT_LIGHT, light) == RPR_SUCCESS;
+            }
+            return true;    // possibly empty string
+        }
 
         TF_RUNTIME_ERROR("Unknown input `%s` for RPR Toon node", id.GetText());
         return false;
@@ -230,6 +261,17 @@ public:
         nodeInfo.inputs.emplace_back(_tokens->roughness, 1.0f);
         nodeInfo.inputs.emplace_back(_tokens->normal, GfVec3f(0.0f), RprUsdMaterialNodeElement::kVector3, "");
 
+        RprUsd_RprNodeInput albedoModeInput(_tokens->albedoMode, _tokens->BaseColor);
+        albedoModeInput.value = VtValue(0);
+        albedoModeInput.tokenValues = { _tokens->BaseColor, _tokens->MidColor };
+        nodeInfo.inputs.push_back(albedoModeInput);
+
+        RprUsd_RprNodeInput lightInput(RprUsdMaterialNodeElement::kString);
+        lightInput.name = _tokens->light;
+        lightInput.uiName = "LinkedLight";
+        lightInput.valueString = "";
+        nodeInfo.inputs.push_back(lightInput);
+        
         RprUsd_RprNodeOutput output(RprUsdMaterialNodeElement::kSurfaceShader);
         output.name = "surface";
         nodeInfo.outputs.push_back(output);

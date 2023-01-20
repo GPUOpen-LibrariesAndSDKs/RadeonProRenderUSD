@@ -22,6 +22,10 @@
 # language governing permissions and limitations under the Apache License.
 #
 
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(PATH_PARAMS NO_DEFAULT_PATH NO_SYSTEM_ENVIRONMENT_PATH)
+endif()
+
 find_path(OPENEXR_INCLUDE_DIR
 NAMES
     OpenEXR/half.h
@@ -33,8 +37,7 @@ PATH_SUFFIXES
     include/
 DOC
     "OpenEXR headers path"
-NO_DEFAULT_PATH
-NO_SYSTEM_ENVIRONMENT_PATH)
+${PATH_PARAMS})
 
 if(OPENEXR_INCLUDE_DIR)
   set(openexr_config_file "${OPENEXR_INCLUDE_DIR}/OpenEXR/OpenEXRConfig.h")
@@ -89,8 +92,7 @@ foreach(OPENEXR_LIB ${OpenEXR_FIND_COMPONENTS})
             lib/
         DOC
             "OPENEXR's ${OPENEXR_LIB} library path"
-        NO_DEFAULT_PATH
-        NO_SYSTEM_ENVIRONMENT_PATH)
+        ${PATH_PARAMS})
 
     list(APPEND OPENEXR_LIBRARY_VARS OPENEXR_${OPENEXR_LIB}_LIBRARY)
     list(APPEND OPENEXR_LIBRARIES ${OPENEXR_${OPENEXR_LIB}_LIBRARY})
