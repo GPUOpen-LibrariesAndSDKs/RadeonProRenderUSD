@@ -38,6 +38,7 @@ public:
     virtual void Resolve();
 
     virtual bool GetData(void* dstBuffer, size_t dstBufferSize);
+    bool GetUpscaledData(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext);
     void Clear();
 
     HdFormat GetFormat() const { return m_format; }
@@ -46,15 +47,20 @@ public:
     HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); };
     HdRprApiFramebuffer* GetResolvedFb();
 
-    virtual bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
-
 protected:
-    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
-        : m_aovDescriptor(aovDescriptor), m_format(format) {};
+    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format)
+        : m_aovDescriptor(aovDescriptor), m_width(width), m_height(height), m_format(format) {};
 
     virtual void OnFormatChange(rif::Context* rifContext);
     virtual void OnSizeChange(rif::Context* rifContext);
 
+    void SetUpSizeAndBuffer(void*& dstBuffer, size_t& dstBufferSize);
+    void ApplyFormatToOutput(void* getBuffer, void* dstBuffer, size_t dstBufferSize);
+    virtual bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
+    virtual bool GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext);
+    bool initUpscaleFilter(rif::Context* rifContext);
+
+    friend class HdRprApiScCompositeAOV;
 protected:
     HdRprAovDescriptor const& m_aovDescriptor;
     HdFormat m_format;
@@ -63,6 +69,10 @@ protected:
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
     std::unique_ptr<rif::Filter> m_filter;
     std::vector<char> m_tmpBuffer;
+    std::unique_ptr<rif::Filter> m_upscaleFilter;
+
+    int m_width = 0;
+    int m_height = 0;
 
     enum ChangeTracker {
         Clean = 0,
@@ -132,6 +142,7 @@ protected:
     void OnFormatChange(rif::Context* rifContext) override;
     void OnSizeChange(rif::Context* rifContext) override;
 
+    bool GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext) override;
 private:
     enum Filter {
         kFilterNone = 0,
@@ -165,9 +176,6 @@ private:
 
     TonemapParams m_tonemap;
     GammaParams m_gamma;
-
-    int m_width = 0;
-    int m_height = 0;
 };
 
 class HdRprApiNormalAov : public HdRprApiAov {
@@ -183,14 +191,10 @@ protected:
 class HdRprApiComputedAov : public HdRprApiAov {
 public:
     HdRprApiComputedAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format)
-        : HdRprApiAov(aovDescriptor, format), m_width(width), m_height(height) {}
+        : HdRprApiAov(aovDescriptor, width, height, format) {}
     ~HdRprApiComputedAov() override = default;
 
     void Resize(int width, int height, HdFormat format) override final;
-
-protected:
-    int m_width = -1;
-    int m_height = -1;
 };
 
 class HdRprApiDepthAov : public HdRprApiComputedAov {
@@ -237,8 +241,9 @@ public:
                          std::shared_ptr<HdRprApiAov> scAov,
                          rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
 
+protected:
     bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
-
+    bool GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext) override;
 private:
     std::shared_ptr<HdRprApiAov> m_retainedRawColorAov;
     std::shared_ptr<HdRprApiAov> m_retainedOpacityAov;
