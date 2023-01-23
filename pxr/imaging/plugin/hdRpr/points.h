@@ -15,6 +15,7 @@ limitations under the License.
 #define HDRPR_POINTS_H
 
 #include "renderDelegate.h"
+#include "baseRprim.h"
 
 #include "pxr/imaging/hd/points.h"
 
@@ -26,7 +27,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 class RprUsdMaterial;
 
-class HdRprPoints : public HdPoints {
+class HdRprPoints : public HdRprBaseRprim<HdPoints> {
 public:
     HdRprPoints(SdfPath const& id HDRPR_INSTANCER_ID_ARG_DECL);
 
