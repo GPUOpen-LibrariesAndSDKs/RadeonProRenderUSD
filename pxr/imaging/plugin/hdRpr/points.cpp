@@ -153,7 +153,7 @@ void HdRprPoints::Sync(
             auto& topology = UsdImagingGetUnitSphereMeshTopology();
             auto& points = UsdImagingGetUnitSphereMeshPoints();
 
-            m_prototypeMesh = rprApi->CreateMesh(points, topology.GetFaceVertexIndices(), VtVec3fArray(), VtIntArray(), VtVec2fArray(), VtIntArray(), topology.GetFaceVertexCounts(), topology.GetOrientation());
+            m_prototypeMesh = rprApi->CreateMesh(points, topology.GetFaceVertexIndices(), points, topology.GetFaceVertexIndices(), VtVec2fArray(), VtIntArray(), topology.GetFaceVertexCounts(), topology.GetOrientation());
             rprApi->SetMeshVisibility(m_prototypeMesh, kInvisible);
             rprApi->SetMeshRefineLevel(m_prototypeMesh, m_subdivisionLevel);
 
