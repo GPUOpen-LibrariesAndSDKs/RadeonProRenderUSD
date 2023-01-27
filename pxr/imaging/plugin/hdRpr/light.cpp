@@ -435,6 +435,7 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
             auto& path = iesFile.UncheckedGet<SdfAssetPath>();
             if (!path.GetResolvedPath().empty()) {
                 if (auto light = rprApi->CreateIESLight(path.GetResolvedPath())) {
+                    m_localTransform *= GfMatrix4f(1.0).SetRotate(GfRotation(GfVec3d(1, 0, 0), 90));
                     m_light = light;
                     newLight = true;
                     lightPtr = light;

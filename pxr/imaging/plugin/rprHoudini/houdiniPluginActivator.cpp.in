@@ -305,7 +305,7 @@ fs::path GetLopScriptsDir(const char* hver) {
     return scriptsPath;
 }
 
-int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<const char*, const char*>> const& env) {
+int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<const char*, const char*>> const& env, const char* version=nullptr) {
     auto houdiniUserPrefDir = GetHoudiniUserPrefDir("@HOUDINI_MAJOR_MINOR_VERSION@");
     if (houdiniUserPrefDir.empty()) {
         std::cout << "Can not determine HOUDINI_USER_PREF_DIR. Please check your environment and specify HOUDINI_USER_PREF_DIR" << std::endl;
@@ -334,6 +334,12 @@ int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<c
     }
 
     packageJson << '{';
+	if(version) {
+		packageJson << '\"' << "version" << '\"';
+		packageJson << ':';
+		packageJson << '\"' << version << '\"';
+		packageJson << ',';
+	}
     packageJson << '\"' << "env" << '\"';
     packageJson << ':';
     packageJson << '[';
