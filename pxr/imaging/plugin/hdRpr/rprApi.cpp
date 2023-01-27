@@ -2060,7 +2060,12 @@ public:
                 m_cryptomatteAovs = nullptr;
             }
         }
-        m_upscale = preferences.GetViewportUpscaling();
+
+        if (preferences.IsDirty(HdRprConfig::DirtyViewportSettings) || force) {
+            m_upscale = preferences.GetViewportUpscaling();
+            m_dirtyFlags |= (ChangeTracker::DirtyScene | ChangeTracker::DirtyViewport);
+            UpdateColorAlpha(m_colorAov.get());
+        }
     }
 
     bool GetRprCameraMode(TfToken const& mode, rpr_camera_mode* out) {
@@ -3539,6 +3544,7 @@ private:
 
             m_currentRenderQuality = GetRenderQuality(*config);
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
+            m_rprContextMetadata.isGlInteropEnabled = config->GetOpenglInteroperability();
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
@@ -3880,7 +3886,7 @@ private:
             }
         }
 
-        if (m_isAlphaEnabled) {
+        if (m_isAlphaEnabled || m_upscale) {
             auto opacityAov = GetAov(HdRprAovTokens->opacity, m_viewportSize[0], m_viewportSize[1], HdFormatFloat32Vec4);
             if (opacityAov) {
                 colorAov->SetOpacityAov(opacityAov);
