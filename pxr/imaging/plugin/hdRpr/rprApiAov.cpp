@@ -153,10 +153,9 @@ bool HdRprApiAov::GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif
         else {
             m_upscaleFilter->SetInput(rif::Color, GetResolvedFb());
         }
-
-        m_upscaleFilter->Update();
-        m_upscaleFilter->Resolve();
     }
+    m_upscaleFilter->Update();
+    m_upscaleFilter->Resolve();
     return ReadRifImage(m_upscaleFilter->GetOutput(), dstBuffer, dstBufferSize);
 }
 
@@ -616,10 +615,9 @@ bool HdRprApiColorAov::GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize
                 return false;
             }
         }
-
-        m_upscaleFilter->Update();
-        m_upscaleFilter->Resolve();
     }
+    m_upscaleFilter->Update();
+    m_upscaleFilter->Resolve();
     return ReadRifImage(m_upscaleFilter->GetOutput(), dstBuffer, dstBufferSize);
 }
 
