@@ -577,6 +577,10 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         if (!m_colorSamples.empty()) {
                             if (newPoint) {
                                 for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
+                                    if (sampleIndex >= m_colorSamples.size() || pointIndex >= m_colorSamples[sampleIndex].size()) {
+                                        TF_WARN("Failed verification sampleIndex >= m_colorSamples.size() || pointIndex >= m_colorSamples[sampleIndex].size()");
+                                        continue;
+                                    }
                                     subsetColorSamples[sampleIndex].push_back(m_colorSamples[sampleIndex][pointIndex]);
                                 }
                             }
