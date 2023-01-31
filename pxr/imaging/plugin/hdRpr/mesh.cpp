@@ -576,7 +576,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                         if (!m_colorSamples.empty()) {
                             if (newPoint) {
-                                for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
+                                for (int sampleIndex = 0; sampleIndex < m_colorSamples.size(); ++sampleIndex) {
                                     subsetColorSamples[sampleIndex].push_back(m_colorSamples[sampleIndex][pointIndex]);
                                 }
                             }
@@ -652,7 +652,24 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             } else {
                 if (m_geomSubsets.size() == m_rprMeshes.size()) {
                     for (int i = 0; i < m_rprMeshes.size(); ++i) {
-                        auto material = getMeshMaterial(m_geomSubsets[i].materialId);
+						bool hasMaterialByShortPath
+							= (sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_geomSubsets[i].materialId)) != nullptr;
+
+						RprUsdMaterial const* material;
+						if (!hasMaterialByShortPath) {
+							// geomSubset has only relative material path. Relative to mesh.
+							// materials however are stored by full material path
+							// so when relative material path is passed material is not found
+							// thus we have to get full material path to get pointer to material
+							SdfPath parentMesh = this->GetId().GetParentPath();
+							SdfPath relativeMaterialPath = m_geomSubsets[i].materialId.MakeRelativePath(SdfPath::AbsoluteRootPath());
+							SdfPath fullMaterialPath = parentMesh.AppendPath(relativeMaterialPath);
+							material = getMeshMaterial(fullMaterialPath);
+						}
+						else {
+							material = getMeshMaterial(m_geomSubsets[i].materialId);
+						}
+
                         rprApi->SetMeshMaterial(m_rprMeshes[i], material, m_displayStyle.displacementEnabled);
                     }
                 } else {
