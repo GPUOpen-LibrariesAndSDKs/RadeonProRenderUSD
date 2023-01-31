@@ -3587,7 +3587,7 @@ private:
 
         if (!RprUsdIsTracingEnabled()) {
             // We need it for correct rendering of ID AOVs (e.g. RPR_AOV_OBJECT_ID)
-            // XXX: only up to 2^16 indices, internal LUT limit. Each index is set as 4 float values
+            // XXX: only up to 2^16 indices, internal LUT limit
             std::vector<GfVec4f> values;
             values.reserve(1 << 16);
             for (uint32_t i = 0; i < (1 << 16); ++i) {
@@ -3601,7 +3601,7 @@ private:
                     float(((i + 1) >> 8) & 0xFF) / 255.0f,
                     0.0f, 0.0f));
             }
-            m_rprContext->SetAOVindicesLookup(0, (1 << 16), (float*)values.data());
+            m_rprContext->SetAOVindicesLookup(0, (1 << 16), (float*) values.data());
         }
 
         m_imageCache.reset(new RprUsdImageCache(m_rprContext.get()));
