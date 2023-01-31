@@ -703,13 +703,13 @@ render_setting_categories = [
         'settings': [
             {
                 'name': 'openglInteroperability',
-                'ui_name': 'OpenGL interoperability',
+                'ui_name': 'OpenGL interoperability (Needs render restart)',
                 'help': '',
                 'defaultValue': False,
             },
             {
                 'name': 'viewportUpscaling',
-                'ui_name': 'Viewport Upscaling',
+                'ui_name': 'Viewport Upscaling (Needs render restart)',
                 'help': '',
                 'defaultValue': False,
             },
