@@ -18,7 +18,8 @@ import shutil
 from hutil.Qt import QtCore, QtGui, QtWidgets, QtUiTools
 from . materialLibraryClient import MatlibClient
 
-material_library=None
+client=None
+num = 0
 
 HELP_TEXT = '''
 To import a material click on a corresponding swatch. The material is always imported as a separate "Material Library" LOP node.
@@ -36,4 +37,13 @@ def recursive_mkdir(path):
             raise
 
 def import_material():
-    print("Matlib init")
+    global client
+    global num
+    if not client:
+        client = MatlibClient()
+    categories = client.categories.get_list(client.categories.count())
+    params = {"category":categories[num]["title"]}
+    materials = client.materials.get_list(limit=client.materials.count(params=params), params=params)
+    num +=1 
+    for material in materials:
+        print(material["title"])
