@@ -25,6 +25,10 @@ limitations under the License.
 #include "pxr/usd/sdf/assetPath.h"
 #include "pxr/usd/usdLux/blackbody.h"
 #include "pxr/base/gf/matrix4d.h"
+#include "pxr/base/arch/env.h"
+
+#include <ghc/filesystem.hpp>
+namespace fs = ghc::filesystem;
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -41,10 +45,60 @@ static float computeLightIntensity(float intensity, float exposure) {
     return intensity * exp2(exposure);
 }
 
+// RPR does not support .rat files, so we have to convert them to .exr and replace the path
+// this function runs conversion and changes the 'path' argument if needed; returns true on success
+bool ResolveRat(std::string& path) {
+    auto originalPath = fs::path(path);
+    if (originalPath.extension() != ".rat") {
+        return true;
+    }
+    else {
+        auto convertedName = originalPath.replace_extension(".exr");
+        auto targetPathInCache = fs::path(ArchGetEnv("HDRPR_CACHE_PATH_OVERRIDE")) / "convertedrat";
+        auto convertedNameInCache = targetPathInCache / convertedName.filename();
+        // at first, looking for converted file in the location of the original one
+        if (fs::exists(convertedName)) {
+            path = convertedName.string();
+            return true;
+        }
+        // looking for converted file in cache directory
+        else if (fs::exists(convertedNameInCache)) {
+            path = convertedNameInCache.string();
+            return true;
+        }
+        // concersion needed
+        else {
+            auto houbin = ArchGetEnv("HB");
+            if (houbin.empty()) {
+                return false;
+            }
+            auto convertor = fs::path(houbin) / "iconvert";
+            std::string command = convertor.string() + " " + path + " " + convertedName.string();
+            // trying to write converted file in the location of the original one
+            if (system(command.c_str()) != 0)
+            {
+                // original file directory could be read only, in this case trying to write into cache directory
+                if (!(fs::is_directory(targetPathInCache) && fs::exists(targetPathInCache))) {
+                    if (!fs::create_directory(targetPathInCache)) {
+                        return false;
+                    }
+                }
+                convertedName = convertedNameInCache;
+                command = convertor.string() + " " + path + " " + convertedName.string();
+                if (system(command.c_str()) != 0)
+                {
+                    return false;
+                }
+            }
+            path = convertedName.string();
+            return true;
+        }
+    }
+}
+
 void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
                           HdRenderParam* renderParam,
                           HdDirtyBits* dirtyBits) {
-
     auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
     auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
@@ -90,11 +144,13 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
             } else {
                 texturePath = assetPath.GetResolvedPath();
             }
+            ResolveRat(texturePath);
             // XXX: Why?
             removeFirstSlash(texturePath);
         } else if (texturePathValue.IsHolding<std::string>()) {
             // XXX: Is it even possible?
             texturePath = texturePathValue.UncheckedGet<std::string>();
+            ResolveRat(texturePath);
         }
 
         if (texturePath.empty()) {

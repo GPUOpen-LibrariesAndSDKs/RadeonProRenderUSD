@@ -108,6 +108,7 @@ pxr_plugin(hdRpr
         rprUsd
         json
         murmurhash
+        ghc_filesystem
         ${RIF_LIBRARY}
         ${OPENEXR_LIBRARIES}
 
