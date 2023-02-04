@@ -210,9 +210,10 @@ std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::C
         }
     } catch (RprUsdError& e) {
         PRINT_CONTEXT_CREATION_DEBUG_INFO("Failed to get gpu name: %s", e.what());
+        return "";
     }
     
-    return {};
+    return "Default";
 }
 
 template <typename Func>
