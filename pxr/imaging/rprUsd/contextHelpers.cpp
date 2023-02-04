@@ -181,6 +181,7 @@ rpr_int GetPluginID(RprUsdPluginType pluginType) {
 
 bool CheckCompatibility(const std::string& name) {
     // the purpouse of this check is to avoid some "virtual" GPUs for witch contect could be created, but crashes when used
+    std::cout << "Checking GPU compatibility for name: " << name << std::endl;
     std::string lowercaseName = name;
     std::transform(lowercaseName.begin(), lowercaseName.end(), lowercaseName.begin(), [](unsigned char c) { return std::tolower(c); });
     
