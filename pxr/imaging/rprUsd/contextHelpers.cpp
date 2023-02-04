@@ -196,16 +196,21 @@ bool CheckCompatibility(const std::string& name) {
 
 std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
     rpr::CreationFlags additionalFlags = 0x0;
-
+    std::cout << 1 << std::endl;
 #if defined(__APPLE__)
     additionalFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
 #endif
 
     try {
+        std::cout << 2 << std::endl;
         rpr::Status status;
+        std::cout << 3 << std::endl;
         std::unique_ptr<rpr::Context> context(rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlag | additionalFlags, nullptr, cachePath, &status));
+        std::cout << 4 << std::endl;
         if (context) {
+            std::cout << 5 << std::endl;
             std::string name = RprUsdGetStringInfo(context.get(), gpuNameId);
+            std::cout << 6 << std::endl;
             if (CheckCompatibility(name)) {
                 return name;
             }
