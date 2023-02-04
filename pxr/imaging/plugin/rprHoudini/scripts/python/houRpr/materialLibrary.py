@@ -18,7 +18,6 @@ import shutil
 from hutil.Qt import QtCore, QtGui, QtWidgets, QtUiTools
 from . materialLibraryClient import MatlibClient
 
-client=None
 num = 0
 
 HELP_TEXT = '''
@@ -36,14 +35,127 @@ def recursive_mkdir(path):
         if errno.EEXIST != e.errno:
             raise
 
-def import_material():
-    global client
+def IsMouseOnWidget(widget):
+    mouse_pos_global = QtGui.QCursor.pos()
+    mouse_pos_local = widget.mapFromGlobal(mouse_pos_global)
+    return widget.rect().contains(mouse_pos_local)
+
+
+class LibraryListWidget(QtWidgets.QListWidget):
+    def __init__(self, parent):
+        super(LibraryListWidget, self).__init__(parent)
+        self.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.setDropIndicatorShown(False)
+        self.setIconSize(QtCore.QSize(PREVIEW_SIZE, PREVIEW_SIZE))
+        self.setFlow(QtWidgets.QListView.LeftToRight)
+        self.setResizeMode(QtWidgets.QListView.Adjust)
+        self.setSpacing(5)
+        self.setViewMode(QtWidgets.QListView.IconMode)
+        self.setWordWrap(True)
+        self.setSelectionRectVisible(False)
+        self.setAttribute(QtCore.Qt.WA_Hover)
+
+        #self._previewWindow = parent._fullPreviewWindow
+
+    def mouseMoveEvent(self, mouse_event):
+        if self._previewWindow.isVisible():
+            # if not IsMouseOnWidget(self):
+            #     self._previewWindow.hide()
+            # else:
+            #     self._previewWindow.mouseMoveEvent(mouse_event)
+            pass
+
+        super(LibraryListWidget, self).mouseMoveEvent(mouse_event)
+
+    def leaveEvent(self, event):
+        if self._previewWindow.isVisible():
+            if not IsMouseOnWidget(self):
+                # self._previewWindow.hide()
+                pass
+
+        super(LibraryListWidget, self).leaveEvent(event)
+        self._listWidget = LibraryListWidget(self)
+        self._ui.verticalLayout_3.insertWidget(0, self._listWidget)
+
+class MaterialLibraryWidget(QtWidgets.QWidget):
+    def __init__(self):
+        super(MaterialLibraryWidget, self).__init__()
+
+        self._matlib_client = MatlibClient()
+        self._prev_category = None
+
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        ui_filepath = os.path.join(script_dir, 'materialLibrary.ui')
+        self._ui = QtUiTools.QUiLoader().load(ui_filepath, parentWidget=self)
+
+        self._materialsView = QtWidgets.QListWidget(self)
+        self._ui.verticalLayout_3.insertWidget(0, self._materialsView)
+
+        self._ui.helpButton.clicked.connect(self._helpButtonClicked)
+
+        self._initCategoryList()
+
+        self._layout = QtWidgets.QVBoxLayout()
+        self.setLayout(self._layout)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.addWidget(self._ui)
+
+    def _initCategoryList(self):
+        category_count = self._matlib_client.categories.count()
+        categories = self._matlib_client.categories.get_list(limit=category_count)
+        for i in range(category_count):
+            self._ui.categoryView.insertItem(i, categories[i]["title"])
+        self._ui.categoryView.setCurrentItem(self._ui.categoryView.item(0))
+        self._ui.categoryView.clicked.connect(self._updateMaterialList)
+        self._updateMaterialList()
+
+    def _updateMaterialList(self):
+        category = self._ui.categoryView.currentItem().text()
+        if(category == self._prev_category): # skip updating because click was on same category
+            return
+        self._prev_category = category
+        params = {"category": category}
+        material_count = self._matlib_client.materials.count(params=params)
+        materials = self._matlib_client.materials.get_list(limit=material_count, params=params)
+
+        self._materialsView.clear()
+        for i in range(material_count):
+            self._materialsView.insertItem(i, materials[i]["title"])
+
+    def _helpButtonClicked(self):
+        QtWidgets.QMessageBox.question(self, 'Help', HELP_TEXT, QtWidgets.QMessageBox.Ok)
+
+
+class MaterialLibraryWindow(QtWidgets.QMainWindow):
+    def __init__(self):
+        super(MaterialLibraryWindow, self).__init__()
+
+        matLibWidget = MaterialLibraryWidget()
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(matLibWidget)
+
+        central_widget = QtWidgets.QWidget()
+        central_widget.setLayout(layout)
+
+        self.setCentralWidget(central_widget)
+        self.setParent(hou.qt.mainWindow(), QtCore.Qt.Window)
+        self.setWindowTitle('RPR Material Library')
+
+        desktop_widget = QtWidgets.QDesktopWidget()
+        primary_screen = desktop_widget.screen(desktop_widget.primaryScreen())
+        self.resize(primary_screen.width() // 3, int(primary_screen.height() * 0.8))
+
+def foo():
     global num
-    if not client:
-        client = MatlibClient()
+    client = MatlibClient()
     categories = client.categories.get_list(client.categories.count())
-    params = {"category":categories[num]["title"]}
+    params = {"category": categories[num]["title"]}
     materials = client.materials.get_list(limit=client.materials.count(params=params), params=params)
-    num +=1 
+    num += 1
     for material in materials:
         print(material["title"])
+
+def import_material():
+    window = MaterialLibraryWindow()
+    window.show()

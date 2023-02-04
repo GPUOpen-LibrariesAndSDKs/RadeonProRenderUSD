@@ -61,7 +61,7 @@
         <number>0</number>
        </property>
        <item>
-        <widget class="QTreeView" name="treeView">
+        <widget class="QListWidget" name="categoryView">
          <property name="minimumSize">
           <size>
            <width>255</width>
@@ -124,9 +124,6 @@
        <property name="bottomMargin">
         <number>0</number>
        </property>
-       <item>
-        <widget class="QLineEdit" name="filter"/>
-       </item>
       </layout>
      </widget>
     </widget>
