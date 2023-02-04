@@ -46,6 +46,7 @@ using json = nlohmann::json;
 #include <fstream>
 #include <thread>
 #include <map>
+#include <iostream>
 
 #define PRINT_CONTEXT_CREATION_DEBUG_INFO(format, ...) \
     if (!TfDebug::IsEnabled(RPR_USD_DEBUG_CORE_UNSUPPORTED_ERROR)) /* empty */; else TfDebug::Helper().Msg(format, ##__VA_ARGS__)
