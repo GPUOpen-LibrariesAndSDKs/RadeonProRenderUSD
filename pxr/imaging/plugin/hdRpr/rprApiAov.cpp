@@ -108,6 +108,9 @@ void HdRprApiAov::Resolve() {
     if (m_filter) {
         m_filter->Resolve();
     }
+    if (m_upscaleFilter) {
+        m_upscaleFilter->Resolve();
+    }
 }
 
 void HdRprApiAov::Clear() {
@@ -146,14 +149,15 @@ bool HdRprApiAov::GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif
         if (!initUpscaleFilter(rifContext)) {
             return false;
         }
-
-        if (m_filter) {
-            m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
-        }
-        else {
-            m_upscaleFilter->SetInput(rif::Color, GetResolvedFb());
-        }
     }
+
+    if (m_filter) {
+        m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
+    }
+    else {
+        m_upscaleFilter->SetInput(rif::Color, GetResolvedFb());
+    }
+
     m_upscaleFilter->Update();
     m_upscaleFilter->Resolve();
     return ReadRifImage(m_upscaleFilter->GetOutput(), dstBuffer, dstBufferSize);
@@ -288,6 +292,10 @@ void HdRprApiAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
     if (m_filter) {
         m_filter->Update();
     }
+
+    if (m_upscaleFilter) {
+        m_upscaleFilter->Update();
+    }
 }
 
 HdRprApiFramebuffer* HdRprApiAov::GetResolvedFb() {
@@ -312,6 +320,17 @@ void HdRprApiAov::OnSizeChange(rif::Context* rifContext) {
         m_filter->SetInput(rif::Color, GetResolvedFb());
         m_filter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width, fbDesc.fb_height, m_format));
         m_filter->SetParam("outSize", GfVec2i(fbDesc.fb_width, fbDesc.fb_height));
+    }
+    if (m_upscaleFilter) {
+        auto fbDesc = m_aov->GetDesc();
+        m_upscaleFilter->Resize(fbDesc.fb_width, fbDesc.fb_height);
+        if (m_filter) {
+            m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
+        }
+        else {
+            m_upscaleFilter->SetInput(rif::Color, GetResolvedFb());
+        }
+        m_upscaleFilter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width * 2, fbDesc.fb_height * 2, m_format));
     }
 }
 
@@ -584,6 +603,9 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     if (m_filter) {
         m_filter->Update();
     }
+    if (m_upscaleFilter) {
+        m_upscaleFilter->Update();
+    }
 }
 
 bool HdRprApiColorAov::GetData(void* dstBuffer, size_t dstBufferSize) {
@@ -603,19 +625,20 @@ bool HdRprApiColorAov::GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize
         if (!initUpscaleFilter(rifContext)) {
             return false;
         }
+    }
 
-        if (m_filter) {
-            m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
+    if (m_filter) {
+        m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
+    }
+    else {
+        if (auto resolvedRawColorFb = m_retainedRawColor->GetResolvedFb()) {
+            m_upscaleFilter->SetInput(rif::Color, resolvedRawColorFb);
         }
         else {
-            if (auto resolvedRawColorFb = m_retainedRawColor->GetResolvedFb()) {
-                m_upscaleFilter->SetInput(rif::Color, resolvedRawColorFb);
-            }
-            else {
-                return false;
-            }
+            return false;
         }
     }
+
     m_upscaleFilter->Update();
     m_upscaleFilter->Resolve();
     return ReadRifImage(m_upscaleFilter->GetOutput(), dstBuffer, dstBufferSize);
@@ -670,7 +693,7 @@ void HdRprApiColorAov::OnSizeChange(rif::Context* rifContext) {
     } else {
         // Ideally we would use "Filter combining" functionality, but it does not work with user-defined filter
         // So we attach each filter separately
-
+        
         auto filter = m_auxFilters.front().second.get();
         ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters.front().first, filter, m_retainedRawColor->GetResolvedFb());
         for (int i = 1; i < m_auxFilters.size(); ++i) {
@@ -678,6 +701,11 @@ void HdRprApiColorAov::OnSizeChange(rif::Context* rifContext) {
             ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters[i].first, m_auxFilters[i].second.get(), filterInput);
         }
         ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_mainFilterType, m_filter.get(), m_auxFilters.back().second->GetOutput());
+    }
+
+    if (m_upscaleFilter) {
+        m_upscaleFilter->Resize(fbDesc.fb_width, fbDesc.fb_height);
+        m_upscaleFilter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width * 2, fbDesc.fb_height * 2, m_format));
     }
 }
 
