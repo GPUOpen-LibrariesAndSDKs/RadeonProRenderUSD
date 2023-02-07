@@ -54,7 +54,8 @@ bool ResolveRat(std::string& path) {
     }
     else {
         auto convertedName = originalPath.replace_extension(".exr");
-        auto targetPathInCache = fs::path(ArchGetEnv("HDRPR_CACHE_PATH_OVERRIDE")) / "convertedrat";
+        auto cachePath = ArchGetEnv("HDRPR_CACHE_PATH_OVERRIDE");
+        auto targetPathInCache = fs::path(cachePath) / "convertedrat";
         auto convertedNameInCache = targetPathInCache / convertedName.filename();
         // at first, looking for converted file in the location of the original one
         if (fs::exists(convertedName)) {
@@ -77,6 +78,9 @@ bool ResolveRat(std::string& path) {
             // trying to write converted file in the location of the original one
             if (system(command.c_str()) != 0)
             {
+                if (cachePath.empty()) {
+                    return false;
+                }
                 // original file directory could be read only, in this case trying to write into cache directory
                 if (!(fs::is_directory(targetPathInCache) && fs::exists(targetPathInCache))) {
                     if (!fs::create_directory(targetPathInCache)) {
