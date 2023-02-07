@@ -192,16 +192,35 @@ bool CheckCompatibility(const std::string& name) {
         ) != patterns.end();
 }
 
-std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
+std::string GetGpuName(RprUsdPluginType pluginType, rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
     rpr::CreationFlags additionalFlags = 0x0;
 
 #if defined(__APPLE__)
     additionalFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
 #endif
 
+    std::vector<rpr_context_properties> properties;
+
+    // This fix is required since for 4GB VRAM default Hybrid allocation might be too big
+    std::size_t allocation = 1024 * 1024; // 1 MB for each buffer
+    
+    if (RprUsdIsHybrid(pluginType)) {
+        for (const std::size_t property: { 
+            RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE, 
+            RPR_CONTEXT_CREATEPROP_HYBRID_MESH_MEMORY_SIZE, 
+            RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, 
+            RPR_CONTEXT_CREATEPROP_HYBRID_SCRATCH_MEMORY_SIZE }) 
+        {
+            properties.push_back((rpr_context_properties)property);
+            properties.push_back((rpr_context_properties)const_cast<void*>(reinterpret_cast<const void*>(&allocation)));
+        }
+    }
+
+    properties.push_back(nullptr);
+
     try {
         rpr::Status status;
-        std::unique_ptr<rpr::Context> context(rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlag | additionalFlags, nullptr, cachePath, &status));
+        std::unique_ptr<rpr::Context> context(rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlag | additionalFlags, properties.data(), cachePath, &status));
         if (context) {
             std::string name = RprUsdGetStringInfo(context.get(), gpuNameId);
             if (CheckCompatibility(name)) {
@@ -216,11 +235,11 @@ std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::C
 }
 
 template <typename Func>
-void ForEachGpu(rpr_int pluginID, const char* cachePath, Func&& func) {
+void ForEachGpu(RprUsdPluginType pluginType, rpr_int pluginID, const char* cachePath, Func&& func) {
 #define GPU_ACTION(index) \
     do { \
         rpr::CreationFlags gpuFlag = RPR_CREATION_FLAGS_ENABLE_GPU ## index; \
-        std::string name = GetGpuName(pluginID, gpuFlag, RPR_CONTEXT_GPU ## index ## _NAME, cachePath); \
+        std::string name = GetGpuName(pluginType, pluginID, gpuFlag, RPR_CONTEXT_GPU ## index ## _NAME, cachePath); \
         func(index, gpuFlag, name); \
     } while (0);
 
@@ -444,7 +463,7 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
 
         // HybridSupportCheck check;
         if (true /*check.supported(0)*/) {
-            std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
+            std::string name = GetGpuName(pluginType, pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
             if (!name.empty()) {
                 ret.gpus.push_back({ 0, name });
             }
@@ -452,7 +471,7 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     } else {
         ret.cpu.numThreads = std::thread::hardware_concurrency();
 
-        ForEachGpu(pluginID, cachePath.c_str(),
+        ForEachGpu(pluginType, pluginID, cachePath.c_str(),
             [&ret](int index, rpr::CreationFlags, std::string const& name) {
                 if (!name.empty()) {
                     ret.gpus.push_back({index, name});
