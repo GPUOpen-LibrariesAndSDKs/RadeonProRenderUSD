@@ -119,7 +119,6 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         super(MaterialLibraryWidget, self).__init__()
 
         self._matlib_client = MatlibClient()
-        self._prev_category = None
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
         ui_filepath = os.path.join(script_dir, 'materialLibrary.ui')
@@ -139,18 +138,20 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
 
     def _initCategoryList(self):
         categories = self._matlib_client.categories.get_list(limit=maxElementCount)
-        for i in range(len(categories)):
-            self._ui.categoryView.insertItem(i, categories[i]["title"])
+        item = QtWidgets.QListWidgetItem("All (" + str(sum([category["materials"] for category in categories])) + ")")
+        item.value = None
+        self._ui.categoryView.addItem(item)
+        for category in categories:
+            item = QtWidgets.QListWidgetItem("    " + category["title"] + " (" + str(category["materials"]) + ")")
+            item.value = category["title"]
+            self._ui.categoryView.addItem(item)
         self._ui.categoryView.setCurrentItem(self._ui.categoryView.item(0))
         self._ui.categoryView.clicked.connect(self._updateMaterialList)
         self._updateMaterialList()
 
     def _updateMaterialList(self):
-        category = self._ui.categoryView.currentItem().text()
-        if(category == self._prev_category): # skip updating because click was on same category
-            return
-        self._prev_category = category
-        params = {"category": category}
+        category = self._ui.categoryView.currentItem().value
+        params = {"category": category} if category is not None else None
         materials = self._matlib_client.materials.get_list(limit=maxElementCount, params=params)
 
         self._progress_dialog = QtWidgets.QProgressDialog('Loading thumbnails', None, 0, len(materials), self)
