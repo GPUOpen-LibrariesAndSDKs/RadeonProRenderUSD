@@ -16,7 +16,7 @@ import json
 import errno
 import shutil
 from hutil.Qt import QtCore, QtGui, QtWidgets, QtUiTools
-from PIL import Image, ImageQt
+from time import sleep
 from . materialLibraryClient import MatlibClient
 
 maxElementCount = 10000
@@ -77,34 +77,48 @@ class LibraryListWidget(QtWidgets.QListWidget):
     #     self._listWidget = LibraryListWidget(self)
     #     self._ui.verticalLayout_3.insertWidget(0, self._listWidget)
 
-class ThumbnailLoader:
-    def __init__(self, matlib_client):
+class ThumbnailLoader(QtCore.QRunnable):
+    
+    class ThumbnailLoaderSignals(QtCore.QObject):
+        finished = QtCore.Signal(object)
+
+    def __init__(self, matlib_client, material):
+        super(ThumbnailLoader, self).__init__()
         self._matlib_client = matlib_client
+        self._material = material
+        self.signals = ThumbnailLoader.ThumbnailLoaderSignals()
         script_dir = os.path.realpath(os.path.dirname(__file__))
         self._cache_dir = os.path.abspath(os.path.join(script_dir, "..", "..", "..", "..", "plugin", "usd", "rprUsd", "resources", "cache", "matlib", "thumbnails"))
         if not os.path.isdir(self._cache_dir):
             os.makedirs(self._cache_dir)
 
-    def get_thumbnail_path(self, id):
-        cached_thumbnail_path = str(os.path.join(self._cache_dir, id))
+    def run(self):
+        thumbnail_id = self._material["renders_order"][0]
+        cached_thumbnail_path = str(os.path.join(self._cache_dir, thumbnail_id))
+        thumbnail_path = ""
         if(os.path.isfile(cached_thumbnail_path+"_thumbnail.jpeg")):
-            return cached_thumbnail_path+"_thumbnail.jpeg"
+            thumbnail_path = cached_thumbnail_path+"_thumbnail.jpeg"
         elif(os.path.isfile(cached_thumbnail_path+"_thumbnail.jpg")):
-            return cached_thumbnail_path + "_thumbnail.jpg"
+            thumbnail_path = cached_thumbnail_path + "_thumbnail.jpg"
         elif (os.path.isfile(cached_thumbnail_path + "_thumbnail.png")):
-            return cached_thumbnail_path + "_thumbnail.png"
-        render_info = self._matlib_client.renders.get(id)
-        thumbnail_path = os.path.join(self._cache_dir, render_info["thumbnail"])
-        self._matlib_client.renders.download_thumbnail(id, self._cache_dir)
-        return thumbnail_path
-        
+            thumbnail_path = cached_thumbnail_path + "_thumbnail.png"
+        else:
+            while thumbnail_path == "":
+                try:
+                    render_info = self._matlib_client.renders.get(thumbnail_id)
+                    self._matlib_client.renders.download_thumbnail(thumbnail_id, self._cache_dir)
+                    thumbnail_path = os.path.join(self._cache_dir, render_info["thumbnail"])
+                except:
+                    print("loading failed")
+                    sleep(1)
+        self.signals.finished.emit({"title": self._material["title"], "thumbnail": thumbnail_path})
+
 
 class MaterialLibraryWidget(QtWidgets.QWidget):
     def __init__(self):
         super(MaterialLibraryWidget, self).__init__()
 
         self._matlib_client = MatlibClient()
-        self._thumbnail_loader = ThumbnailLoader(self._matlib_client)
         self._prev_category = None
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -139,14 +153,23 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         params = {"category": category}
         materials = self._matlib_client.materials.get_list(limit=maxElementCount, params=params)
 
+        self._progress_dialog = QtWidgets.QProgressDialog('Loading thumbnails', None, 0, len(materials), self)
+        self._progress = 0
+        self._progress_dialog.setValue(0)
         self._materialsView.clear()
-        for i in range(len(materials)):
-            thumbnail_id = materials[i]["renders_order"][0]
-            thumbnail_path = self._thumbnail_loader.get_thumbnail_path(thumbnail_id)
-            icon = QtGui.QIcon(QtGui.QPixmap(thumbnail_path))
-            material_item = QtWidgets.QListWidgetItem(materials[i]["title"], self._materialsView)
-            material_item.setIcon(icon)
-            self._materialsView.insertItem(i, material_item)
+
+        for material in materials:
+            loader = ThumbnailLoader(self._matlib_client, material)
+            loader.signals.finished.connect(self._onThumbnailLoaded)
+            QtCore.QThreadPool.globalInstance().start(loader)
+
+    def _onThumbnailLoaded(self, result):
+        icon = QtGui.QIcon(QtGui.QPixmap(result["thumbnail"]))
+        material_item = QtWidgets.QListWidgetItem(result["title"], self._materialsView)
+        material_item.setIcon(icon)
+        self._materialsView.addItem(material_item)
+        self._progress += 1
+        self._progress_dialog.setValue(self._progress)
 
     def _helpButtonClicked(self):
         QtWidgets.QMessageBox.question(self, 'Help', HELP_TEXT, QtWidgets.QMessageBox.Ok)
