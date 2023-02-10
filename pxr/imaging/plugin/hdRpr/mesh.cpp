@@ -488,9 +488,12 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_rprMeshes.clear();
 
         if (m_geomSubsets.empty()) {
-            if (auto rprMesh = rprApi->CreateMesh(m_pointSamples, m_faceVertexIndices, m_normalSamples, m_normalIndices, m_uvSamples, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
-                m_colorsSet = rprApi->SetMeshVertexColor(rprMesh, m_colorSamples, m_colorInterpolation);
-                m_rprMeshes.push_back(rprMesh);
+            // HybridPro will return non-nullptr mesh even in case if points are empty, it will lead to crash subsequently, so let's avoid mesh creation in case if there no vertices present.
+            if (m_pointSamples.size() > 0) {
+                if (auto rprMesh = rprApi->CreateMesh(m_pointSamples, m_faceVertexIndices, m_normalSamples, m_normalIndices, m_uvSamples, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
+                    m_colorsSet = rprApi->SetMeshVertexColor(rprMesh, m_colorSamples, m_colorInterpolation);
+                    m_rprMeshes.push_back(rprMesh);
+                }
             }
         } else {
             // GeomSubset may reference face subset in any given order so we need to be able to
