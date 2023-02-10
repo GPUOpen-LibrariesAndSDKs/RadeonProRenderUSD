@@ -128,6 +128,7 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._ui.verticalLayout_3.insertWidget(0, self._materialsView)
 
         self._ui.helpButton.clicked.connect(self._helpButtonClicked)
+        self._ui.filter.textChanged.connect(self._updateMaterialList)
 
         self._initCategoryList()
 
@@ -151,7 +152,12 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
 
     def _updateMaterialList(self):
         category = self._ui.categoryView.currentItem().value
-        params = {"category": category} if category is not None else None
+        search_string = self._ui.filter.text()
+        params = {}
+        if category is not None:
+            params["category"] = category
+        if search_string != "":
+            params["search"] = search_string
         materials = self._matlib_client.materials.get_list(limit=maxElementCount, params=params)
 
         self._progress_dialog = QtWidgets.QProgressDialog('Loading thumbnails', None, 0, len(materials), self)
