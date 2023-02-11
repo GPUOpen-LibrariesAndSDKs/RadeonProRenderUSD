@@ -128,7 +128,7 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._ui.verticalLayout_3.insertWidget(0, self._materialsView)
 
         self._ui.helpButton.clicked.connect(self._helpButtonClicked)
-        self._ui.filter.textChanged.connect(self._updateMaterialList)
+        self._ui.searchButton.clicked.connect(self._updateMaterialList)
 
         self._initCategoryList()
 
