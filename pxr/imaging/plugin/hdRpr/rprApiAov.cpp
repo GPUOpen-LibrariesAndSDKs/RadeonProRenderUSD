@@ -57,6 +57,7 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
                          rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter)
     : m_aovDescriptor(HdRprAovRegistry::GetInstance().GetAovDesc(rprAovType, false))
     , m_filter(std::move(filter))
+    , m_upscaleFilter(nullptr)
     , m_format(format), m_width(width), m_height(height) {
     if (rif::Image::GetDesc(0, 0, format).type == 0) {
         RIF_THROW_ERROR_MSG("Unsupported format: " + TfEnum::GetName(format));
@@ -96,8 +97,7 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
 
         filter->SetParam("interpOperator", (int) RIF_IMAGE_INTERPOLATION_NEAREST);
         return filter;
-    }())
-    {
+    }()) {
 }
 
 void HdRprApiAov::Resolve() {
@@ -133,7 +133,13 @@ bool HdRprApiAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
     return resolvedFb->GetData(dstBuffer, dstBufferSize);
 }
 
-bool HdRprApiAov::initUpscaleFilter(rif::Context* rifContext) {
+bool HdRprApiAov::InitUpscaleFilter(rif::Context* rifContext) {
+    if (!rifContext) {
+        return false;
+    }
+    if (m_upscaleFilter) {
+        return true;
+    }
     m_upscaleFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_AI_UPSCALE, rifContext);
     if (!m_upscaleFilter) {
         return false;
@@ -146,20 +152,11 @@ bool HdRprApiAov::initUpscaleFilter(rif::Context* rifContext) {
 
 bool HdRprApiAov::GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext) {
     if (!m_upscaleFilter) {
-        if (!initUpscaleFilter(rifContext)) {
+        if (!InitUpscaleFilter(rifContext)) {
             return false;
         }
     }
 
-    if (m_filter) {
-        m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
-    }
-    else {
-        m_upscaleFilter->SetInput(rif::Color, GetResolvedFb());
-    }
-
-    m_upscaleFilter->Update();
-    m_upscaleFilter->Resolve();
     return ReadRifImage(m_upscaleFilter->GetOutput(), dstBuffer, dstBufferSize);
 }
 
@@ -604,6 +601,15 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
         m_filter->Update();
     }
     if (m_upscaleFilter) {
+        if (m_filter) {
+            m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
+        }
+        else {
+            if (auto resolvedRawColorFb = m_retainedRawColor->GetResolvedFb()) {
+                m_upscaleFilter->SetInput(rif::Color, resolvedRawColorFb);
+            }
+        }
+        m_upscaleFilter->SetOutput(rif::Image::GetDesc(m_width * 2, m_height * 2, m_format));
         m_upscaleFilter->Update();
     }
 }
@@ -618,30 +624,6 @@ bool HdRprApiColorAov::GetData(void* dstBuffer, size_t dstBufferSize) {
     } else {
         return HdRprApiAov::GetData(dstBuffer, dstBufferSize);
     }
-}
-
-bool HdRprApiColorAov::GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext) {
-    if (!m_upscaleFilter) {
-        if (!initUpscaleFilter(rifContext)) {
-            return false;
-        }
-    }
-
-    if (m_filter) {
-        m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
-    }
-    else {
-        if (auto resolvedRawColorFb = m_retainedRawColor->GetResolvedFb()) {
-            m_upscaleFilter->SetInput(rif::Color, resolvedRawColorFb);
-        }
-        else {
-            return false;
-        }
-    }
-
-    m_upscaleFilter->Update();
-    m_upscaleFilter->Resolve();
-    return ReadRifImage(m_upscaleFilter->GetOutput(), dstBuffer, dstBufferSize);
 }
 
 void HdRprApiColorAov::Resolve() {
@@ -731,6 +713,12 @@ void HdRprApiNormalAov::OnSizeChange(rif::Context* rifContext) {
     m_filter->Resize(fbDesc.fb_width, fbDesc.fb_height);
     m_filter->SetInput(rif::Color, GetResolvedFb());
     m_filter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width, fbDesc.fb_height, m_format));
+
+    if (m_upscaleFilter) {
+        m_upscaleFilter->Resize(fbDesc.fb_width, fbDesc.fb_height);
+        m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
+        m_upscaleFilter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width * 2, fbDesc.fb_height * 2, m_format));
+    }
 }
 
 void HdRprApiComputedAov::Resize(int width, int height, HdFormat format) {
@@ -803,7 +791,7 @@ void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
         if (m_remapFilter) {
             m_remapFilter->SetInput(rif::Color, m_opacityFilter->GetOutput());
             m_remapFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
-        }  
+        }
     }
     m_dirtyBits = ChangeTracker::Clean;
 
@@ -814,6 +802,11 @@ void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     m_opacityFilter->Update();
     if (m_remapFilter) {
         m_remapFilter->Update();
+    }
+    if (m_upscaleFilter) {
+        m_upscaleFilter->SetInput(rif::Color, m_filter->GetOutput());
+        m_upscaleFilter->SetOutput(rif::Image::GetDesc(m_width * 2, m_height * 2, m_format));
+        m_upscaleFilter->Update();
     }
 }
 
@@ -826,6 +819,9 @@ void HdRprApiDepthAov::Resolve() {
     }
     if (m_remapFilter) {
         m_remapFilter->Resolve();
+    }
+    if (m_upscaleFilter) {
+        m_upscaleFilter->Resolve();
     }
 }
 
@@ -935,6 +931,15 @@ bool HdRprApiScCompositeAOV::GetDataImpl(void* dstBuffer, size_t dstBufferSize) 
     }
 
     return true;
+}
+
+bool HdRprApiScCompositeAOV::InitUpscaleFilter(rif::Context* rifContext) {
+    if (!m_retainedRawColorAov || !m_retainedOpacityAov || !m_retainedScAov) {
+        return false;
+    }
+    return m_retainedRawColorAov->InitUpscaleFilter(rifContext)
+        && m_retainedOpacityAov->InitUpscaleFilter(rifContext)
+        && m_retainedScAov->InitUpscaleFilter(rifContext);
 }
 
 bool HdRprApiScCompositeAOV::GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext) {

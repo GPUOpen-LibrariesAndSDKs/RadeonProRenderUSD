@@ -1641,6 +1641,9 @@ public:
                 RPR_ERROR_CHECK(outRb.rprAov->GetAovFb()->GetRprObject()->SetLPE(outRb.lpe.c_str()), "Failed to set LPE")) {
                 return nullptr;
             }
+            if (m_upscale) {
+                outRb.rprAov->InitUpscaleFilter(m_rifContext.get());
+            }
 
             m_outputRenderBuffers.push_back(std::move(outRb));
             return &m_outputRenderBuffers.back();
@@ -3655,6 +3658,9 @@ private:
 
     void InitAovs() {
         m_colorAov = std::static_pointer_cast<HdRprApiColorAov>(CreateAov(HdAovTokens->color));
+        if (m_upscale) {
+            m_colorAov->InitUpscaleFilter(m_rifContext.get());
+        }
 
         m_lpeAovPool.clear();
         m_lpeAovPool.insert(m_lpeAovPool.begin(), {

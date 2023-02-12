@@ -47,6 +47,7 @@ public:
     HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); };
     HdRprApiFramebuffer* GetResolvedFb();
 
+    virtual bool InitUpscaleFilter(rif::Context* rifContext);
 protected:
     HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format)
         : m_aovDescriptor(aovDescriptor), m_width(width), m_height(height), m_format(format) {};
@@ -58,7 +59,6 @@ protected:
     void ApplyFormatToOutput(void* getBuffer, void* dstBuffer, size_t dstBufferSize);
     virtual bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
     virtual bool GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext);
-    bool initUpscaleFilter(rif::Context* rifContext);
 
     friend class HdRprApiScCompositeAOV;
 protected:
@@ -141,8 +141,6 @@ public:
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
     void OnSizeChange(rif::Context* rifContext) override;
-
-    bool GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext) override;
 private:
     enum Filter {
         kFilterNone = 0,
@@ -240,7 +238,7 @@ public:
                          std::shared_ptr<HdRprApiAov> opacityAov,
                          std::shared_ptr<HdRprApiAov> scAov,
                          rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
-
+    bool InitUpscaleFilter(rif::Context* rifContext) override;
 protected:
     bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
     bool GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext) override;
