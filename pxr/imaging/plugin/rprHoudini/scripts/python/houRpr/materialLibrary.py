@@ -56,26 +56,23 @@ class LibraryListWidget(QtWidgets.QListWidget):
         self.setSelectionRectVisible(False)
         self.setAttribute(QtCore.Qt.WA_Hover)
 
-        #self._previewWindow = parent._fullPreviewWindow
+        self._previewWindow = parent._fullPreviewWindow
 
-    # def mouseMoveEvent(self, mouse_event):
-    #     #if self._previewWindow.isVisible():
-    #         # if not IsMouseOnWidget(self):
-    #         #     self._previewWindow.hide()
-    #         # else:
-    #         #     self._previewWindow.mouseMoveEvent(mouse_event)
-    #
-    #     super(LibraryListWidget, self).mouseMoveEvent(mouse_event)
+    def mouseMoveEvent(self, mouse_event):
+        if self._previewWindow.isVisible():
+            if not IsMouseOnWidget(self):
+                self._previewWindow.hide()
+            else:
+                self._previewWindow.mouseMoveEvent(mouse_event)
 
-    # def leaveEvent(self, event):
-    #     #if self._previewWindow.isVisible():
-    #         #if not IsMouseOnWidget(self):
-    #             # self._previewWindow.hide()
-    #             pass
-    #
-    #     super(LibraryListWidget, self).leaveEvent(event)
-    #     self._listWidget = LibraryListWidget(self)
-    #     self._ui.verticalLayout_3.insertWidget(0, self._listWidget)
+        super(LibraryListWidget, self).mouseMoveEvent(mouse_event)
+
+    def leaveEvent(self, event):
+        if self._previewWindow.isVisible():
+            if not IsMouseOnWidget(self):
+                self._previewWindow.hide()
+
+        super(LibraryListWidget, self).leaveEvent(event)
 
 class ThumbnailLoader(QtCore.QRunnable):
     
@@ -114,21 +111,64 @@ class ThumbnailLoader(QtCore.QRunnable):
         self.signals.finished.emit({"title": self._material["title"], "thumbnail": thumbnail_path})
 
 
+class FullPreviewWindow(QtWidgets.QMainWindow):
+    def __init__(self):
+        super(FullPreviewWindow, self).__init__()
+        self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint)
+
+        icon_label = QtWidgets.QLabel()
+        icon_label.setAlignment(QtCore.Qt.AlignCenter)
+        icon_label.setFrameShape(QtWidgets.QFrame.Box)
+        icon_label.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        icon_label.setBackgroundRole(QtGui.QPalette.Base)
+        icon_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self.setCentralWidget(icon_label)
+
+        self.setMouseTracking(True)
+
+        self._currentIconName = ''
+        self._requiredWidget = None
+
+    def setIcon(self, icon_name, icon):
+        mouse_pos = QtGui.QCursor.pos()
+        self.move(mouse_pos.x() + 1, mouse_pos.y() + 1)
+
+        if self._currentIconName != icon_name:
+            icon_size = icon.availableSizes()[0]
+            pixmap = icon.pixmap(icon_size)
+            self.centralWidget().setPixmap(pixmap)
+
+        if not self.isVisible():
+            self.show()
+
+    def mouseMoveEvent(self, mouse_event):
+        if self.isVisible():
+            if not IsMouseOnWidget(self._requiredWidget):
+                self.hide()
+            else:
+                self.move(mouse_event.globalX() + 1, mouse_event.globalY() + 1)
+
+
 class MaterialLibraryWidget(QtWidgets.QWidget):
     def __init__(self):
         super(MaterialLibraryWidget, self).__init__()
 
         self._matlib_client = MatlibClient()
+        self._fullPreviewWindow = FullPreviewWindow()
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
         ui_filepath = os.path.join(script_dir, 'materialLibrary.ui')
         self._ui = QtUiTools.QUiLoader().load(ui_filepath, parentWidget=self)
 
         self._materialsView = LibraryListWidget(self)
+        self._fullPreviewWindow._requiredWidget = self._materialsView
         self._ui.verticalLayout_3.insertWidget(0, self._materialsView)
 
         self._ui.helpButton.clicked.connect(self._helpButtonClicked)
         self._ui.searchButton.clicked.connect(self._updateMaterialList)
+        self._materialsView.itemEntered.connect(self._materialItemEntered)
+        self._materialsView.viewportEntered.connect(self._materialViewportEntered)
+        self._materialsView.setMouseTracking(True)
 
         self._initCategoryList()
 
@@ -174,9 +214,16 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         icon = QtGui.QIcon(QtGui.QPixmap(result["thumbnail"]))
         material_item = QtWidgets.QListWidgetItem(result["title"], self._materialsView)
         material_item.setIcon(icon)
+        #material_item.value = {"icon", icon} # set icon as value to load upscaled preview
         self._materialsView.addItem(material_item)
         self._progress += 1
         self._progress_dialog.setValue(self._progress)
+
+    def _materialItemEntered(self, item):
+        self._fullPreviewWindow.setIcon(item.text(), item.icon())
+
+    def _materialViewportEntered(self):
+        self._fullPreviewWindow.hide()
 
     def _helpButtonClicked(self):
         QtWidgets.QMessageBox.question(self, 'Help', HELP_TEXT, QtWidgets.QMessageBox.Ok)
