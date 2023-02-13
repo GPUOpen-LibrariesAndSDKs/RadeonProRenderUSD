@@ -156,8 +156,20 @@ bool HdRprApiAov::GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif
             return false;
         }
     }
+    
+    if (!ReadRifImage(m_upscaleFilter->GetOutput(), dstBuffer, dstBufferSize))
+    {
+        return false;
+    }
 
-    return ReadRifImage(m_upscaleFilter->GetOutput(), dstBuffer, dstBufferSize);
+    if (m_oddWidth) {
+        size_t pixelSize = HdDataSizeOfFormat(m_format);
+        for (size_t i = (size_t)m_height * 2 - 1; i > 0; --i) {
+            memmove((char*)dstBuffer + i * ((size_t)m_width * 2 + 1) * pixelSize, (char*)dstBuffer + i * (size_t)m_width * 2 * pixelSize, (size_t)m_width * 2 * pixelSize);
+        }
+    }
+
+    return true;
 }
 
 void HdRprApiAov::SetUpSizeAndBuffer(void*& getBuffer, size_t& dstBufferSize) {
@@ -259,9 +271,10 @@ bool HdRprApiAov::GetUpscaledData(void* dstBuffer, size_t dstBufferSize, rif::Co
     return false;
 }
 
-void HdRprApiAov::Resize(int width, int height, HdFormat format) {
+void HdRprApiAov::Resize(int width, int height, HdFormat format, bool oddWidth) {
     m_width = width;
     m_height = height;
+    m_oddWidth = oddWidth;
 
     if (m_format != format) {
         m_format = format;
@@ -485,12 +498,12 @@ bool HdRprApiColorAov::CanComposeAlpha() {
     return HdGetComponentCount(m_format) == 4 && m_retainedOpacity;
 }
 
-void HdRprApiColorAov::Resize(int width, int height, HdFormat format) {
+void HdRprApiColorAov::Resize(int width, int height, HdFormat format, bool oddWidth) {
     if (m_width != width || m_height != height) {
         m_dirtyBits |= ChangeTracker::DirtySize;
     }
 
-    HdRprApiAov::Resize(width, height, format);
+    HdRprApiAov::Resize(width, height, format, oddWidth);
 }
 
 void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
@@ -721,7 +734,7 @@ void HdRprApiNormalAov::OnSizeChange(rif::Context* rifContext) {
     }
 }
 
-void HdRprApiComputedAov::Resize(int width, int height, HdFormat format) {
+void HdRprApiComputedAov::Resize(int width, int height, HdFormat format, bool oddWidth) {
     if (m_format != format) {
         m_format = format;
         m_dirtyBits |= ChangeTracker::DirtyFormat;
@@ -731,7 +744,7 @@ void HdRprApiComputedAov::Resize(int width, int height, HdFormat format) {
         m_dirtyBits |= ChangeTracker::DirtySize;
     }
 
-    HdRprApiAov::Resize(width, height, format);
+    HdRprApiAov::Resize(width, height, format, oddWidth);
 }
 
 HdRprApiDepthAov::HdRprApiDepthAov(

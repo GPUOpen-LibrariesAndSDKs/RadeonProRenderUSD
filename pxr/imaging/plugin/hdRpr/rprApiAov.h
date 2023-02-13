@@ -33,7 +33,7 @@ public:
                 rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     virtual ~HdRprApiAov() = default;
 
-    virtual void Resize(int width, int height, HdFormat format);
+    virtual void Resize(int width, int height, HdFormat format, bool oddWidth);
     virtual void Update(HdRprApi const* rprApi, rif::Context* rifContext);
     virtual void Resolve();
 
@@ -73,6 +73,7 @@ protected:
 
     int m_width = 0;
     int m_height = 0;
+    bool m_oddWidth = false;    // for upscaler
 
     enum ChangeTracker {
         Clean = 0,
@@ -88,7 +89,7 @@ public:
     HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata);
     ~HdRprApiColorAov() override = default;
 
-    void Resize(int width, int height, HdFormat format) override;
+    void Resize(int width, int height, HdFormat format, bool oddWidth) override;
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
     bool GetData(void* dstBuffer, size_t dstBufferSize) override;
     void Resolve() override;
@@ -192,7 +193,7 @@ public:
         : HdRprApiAov(aovDescriptor, width, height, format) {}
     ~HdRprApiComputedAov() override = default;
 
-    void Resize(int width, int height, HdFormat format) override final;
+    void Resize(int width, int height, HdFormat format, bool oddWidth) override final;
 };
 
 class HdRprApiDepthAov : public HdRprApiComputedAov {

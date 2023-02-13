@@ -1632,7 +1632,7 @@ public:
                 // Reuse previously created RPR AOV
                 std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
                 // Update underlying format if needed
-                outRb.rprAov->Resize(aovSize(rprRenderBuffer->GetWidth()), aovSize(rprRenderBuffer->GetHeight()), aovFormat);
+                outRb.rprAov->Resize(aovSize(rprRenderBuffer->GetWidth()), aovSize(rprRenderBuffer->GetHeight()), aovFormat, (rprRenderBuffer->GetWidth() % 2 != 0));
             }
 
             if (!outRb.rprAov) return nullptr;
@@ -2369,7 +2369,7 @@ public:
 
         if (m_dirtyFlags & ChangeTracker::DirtyViewport) {
             m_resolveData.ForAllAovs([this](ResolveData::AovEntry const& e) {
-                e.aov->Resize(aovSize(m_viewportSize[0]), aovSize(m_viewportSize[1]), e.aov->GetFormat());
+                e.aov->Resize(aovSize(m_viewportSize[0]), aovSize(m_viewportSize[1]), e.aov->GetFormat(), (m_viewportSize[0] % 2 != 0));
             });
 
             // If AOV bindings are dirty then we already committed HdRprRenderBuffers, see SetAovBindings
@@ -4059,7 +4059,7 @@ private:
                 m_aovRegistry[aovName] = aov;
                 m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
             } else {
-                aov->Resize(aovSize(width), aovSize(height), format);
+                aov->Resize(aovSize(width), aovSize(height), format, (width % 2 != 0));
             }
         } catch (std::runtime_error const& e) {
             TF_RUNTIME_ERROR("Failed to create %s AOV: %s", aovName.GetText(), e.what());
