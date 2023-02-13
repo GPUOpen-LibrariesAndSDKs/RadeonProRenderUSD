@@ -165,7 +165,7 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._ui.verticalLayout_3.insertWidget(0, self._materialsView)
 
         self._ui.helpButton.clicked.connect(self._helpButtonClicked)
-        self._ui.searchButton.clicked.connect(self._updateMaterialList)
+        self._ui.filter.textChanged.connect(self._filterChanged)
         self._materialsView.itemEntered.connect(self._materialItemEntered)
         self._materialsView.viewportEntered.connect(self._materialViewportEntered)
         self._materialsView.setMouseTracking(True)
@@ -192,12 +192,9 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
 
     def _updateMaterialList(self):
         category = self._ui.categoryView.currentItem().value
-        search_string = self._ui.filter.text()
         params = {}
         if category is not None:
             params["category"] = category
-        if search_string != "":
-            params["search"] = search_string
         materials = self._matlib_client.materials.get_list(limit=maxElementCount, params=params)
 
         self._progress_dialog = QtWidgets.QProgressDialog('Loading thumbnails', None, 0, len(materials), self)
@@ -227,6 +224,20 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
 
     def _helpButtonClicked(self):
         QtWidgets.QMessageBox.question(self, 'Help', HELP_TEXT, QtWidgets.QMessageBox.Ok)
+
+    def _filterChanged(self):
+        self._filterItems()
+
+    def _filterItems(self):
+        for i in range(self._materialsView.count()):
+            self._setItemHidden(self._materialsView.item(i))
+
+    def _setItemHidden(self, item):
+        pattern = self._ui.filter.text().lower()
+        if pattern == '':
+            item.setHidden(False)
+        else:
+            item.setHidden(not pattern in item.text().lower())
 
 
 class MaterialLibraryWindow(QtWidgets.QMainWindow):

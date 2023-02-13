@@ -127,13 +127,6 @@
 	   <item>
         <widget class="QLineEdit" name="filter"/>
        </item>
-	   <item>
-        <widget class="QPushButton" name="searchButton">
-		 <property name="text">
-         <string>Search</string>
-         </property>
-        </widget>
-	   </item>
       </layout>
      </widget>
     </widget>
