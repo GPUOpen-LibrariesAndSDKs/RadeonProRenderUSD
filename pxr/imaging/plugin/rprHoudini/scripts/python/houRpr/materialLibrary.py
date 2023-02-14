@@ -15,6 +15,7 @@ import hou
 import json
 import errno
 import shutil
+import zipfile
 from hutil.Qt import QtCore, QtGui, QtWidgets, QtUiTools
 from time import sleep
 from . materialLibraryClient import MatlibClient
@@ -40,6 +41,77 @@ def IsMouseOnWidget(widget):
     mouse_pos_global = QtGui.QCursor.pos()
     mouse_pos_local = widget.mapFromGlobal(mouse_pos_global)
     return widget.rect().contains(mouse_pos_local)
+
+
+def create_houdini_material_graph(material_name, mtlx_file):
+    MATERIAL_LIBRARY_TAG = 'hdrpr_material_library_generated'
+
+    selected_nodes = hou.selectedNodes()
+
+    if selected_nodes:
+        matlib_parent = selected_nodes[0].parent()
+    else:
+        matlib_parent = hou.node('/stage')
+
+    matlib_node = matlib_parent.createNode('materiallibrary')
+    matlib_node.setName(material_name, unique_name=True)
+    matlib_node.setComment(MATERIAL_LIBRARY_TAG)
+
+    mtlx_node = matlib_node.createNode('RPR::rpr_materialx_node')
+    mtlx_node.setName(material_name, unique_name=True)
+    mtlx_node.parm('file').set(mtlx_file)
+
+    if len(selected_nodes) == 0:
+        matlib_node.setSelected(True, clear_all_selected=True)
+
+    material_assignment = []
+    for node in selected_nodes:
+        if isinstance(node, hou.LopNode):
+            material_assignment.extend(map(str, node.lastModifiedPrims()))
+
+    if material_assignment:
+        material_assignment = ' '.join(material_assignment)
+
+        matlib_node.parm('assign1').set(True)
+        matlib_node.parm('geopath1').set(material_assignment)
+
+        viewer_node = matlib_node.network().viewerNode()
+
+        # Ideally, we want to connect our material library node directly to the selected one,
+        if len(selected_nodes) == 1:
+            connect_node = selected_nodes[0]
+        else:
+            # but in case more than one node selected, we need to traverse the whole graph and find out the deepest node.
+            # There is a lot of corner cases. It's much safer and cleaner to connect our node to the viewer node (deepest node with display flag set on).
+            # Though, this can be revisited later.
+            connect_node = viewer_node
+
+            # TODO: consider making this behavior optional: what if the user wants to create few material at once?
+            # Remove previously created material - this activates rapid change of material when scrolling through the library widget
+            if connect_node.comment() == MATERIAL_LIBRARY_TAG and \
+                    connect_node.parm('geopath1').evalAsString() == material_assignment:
+                connect_node.destroy()
+
+                viewer_node = matlib_node.network().viewerNode()
+                connect_node = viewer_node
+
+        # Insert our new node into existing connections
+        for connection in connect_node.outputConnections():
+            if connection.outputNode().comment() == MATERIAL_LIBRARY_TAG:
+                # TODO: consider making this behavior optional: what if the user wants to create few material at once?
+                # Remove previously created material - this activates rapid change of material when scrolling through the library widget
+                for subconnection in connection.outputNode().outputConnections():
+                    subconnection.outputNode().setInput(subconnection.inputIndex(), matlib_node)
+                connection.outputNode().destroy()
+            else:
+                connection.outputNode().setInput(connection.inputIndex(), matlib_node)
+
+        matlib_node.setInput(0, connect_node)
+        matlib_node.moveToGoodPosition()
+
+        if connect_node == matlib_node.network().viewerNode():
+            matlib_node.setDisplayFlag(True)
+
 
 PREVIEW_SIZE = 200
 class LibraryListWidget(QtWidgets.QListWidget):
@@ -74,6 +146,7 @@ class LibraryListWidget(QtWidgets.QListWidget):
 
         super(LibraryListWidget, self).leaveEvent(event)
 
+
 class ThumbnailLoader(QtCore.QRunnable):
     
     class ThumbnailLoaderSignals(QtCore.QObject):
@@ -106,9 +179,58 @@ class ThumbnailLoader(QtCore.QRunnable):
                     self._matlib_client.renders.download_thumbnail(thumbnail_id, self._cache_dir)
                     thumbnail_path = os.path.join(self._cache_dir, render_info["thumbnail"])
                 except:
-                    print("loading failed")
-                    sleep(1)
-        self.signals.finished.emit({"title": self._material["title"], "thumbnail": thumbnail_path})
+                    sleep(1) # pause thread and retry
+        self.signals.finished.emit({"material": self._material, "thumbnail": thumbnail_path})
+
+
+class MaterialLoader(QtCore.QRunnable):
+
+    class MaterialLoaderSignals(QtCore.QObject):
+        finished = QtCore.Signal()
+
+    def __init__(self, matlib_client, material, package):
+        super(MaterialLoader, self).__init__()
+        self._matlib_client = matlib_client
+        self._material = material
+        self._package = package
+        self.signals = MaterialLoader.MaterialLoaderSignals()
+
+    def run(self):
+        hip_dir = os.path.dirname(hou.hipFile.path())
+        dst_mtlx_dir = os.path.join(hip_dir, 'RPRMaterialLibrary', 'Materials')
+        package_dir = os.path.join(dst_mtlx_dir, self._package["file"][:-4])
+
+        if not os.path.isdir(package_dir):  # check if package is already loaded
+            if not os.path.isdir(dst_mtlx_dir):
+                os.makedirs(dst_mtlx_dir)
+            self._matlib_client.packages.download(self._package["id"], dst_mtlx_dir)
+            material_path = self._unpackZip(self._package["file"], dst_mtlx_dir)
+        mtlx_file = self._findMtlx(package_dir)
+        if mtlx_file == '':
+            print(package_dir)
+            raise Exception("MaterialX file loading error")
+        create_houdini_material_graph(self._material["title"].replace(" ", "_"), mtlx_file)
+        self.signals.finished.emit()
+
+    def _unpackZip(self, filename, dst_dir):
+        if filename.endswith('.zip'):
+            zippath = os.path.join(dst_dir, filename)
+            if not os.path.exists(zippath):
+                raise Exception("Zip file not found")
+            with zipfile.ZipFile(zippath, 'r') as zip_ref:
+                packageDir = os.path.join(dst_dir, self._package["file"][:-4])
+                zip_ref.extractall(packageDir)
+            os.remove(zippath)
+            return True
+
+    def _findMtlx(self, dir):
+        if not os.path.exists(dir):
+            return ''
+        for f in os.listdir(dir):
+            fullname = os.path.join(dir, f)
+            if os.path.isfile(fullname) and f.endswith('.mtlx'):
+                return fullname
+        return ''
 
 
 class FullPreviewWindow(QtWidgets.QMainWindow):
@@ -156,6 +278,8 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._matlib_client = MatlibClient()
         self._fullPreviewWindow = FullPreviewWindow()
 
+        self._materialIsLoading = False
+
         script_dir = os.path.dirname(os.path.abspath(__file__))
         ui_filepath = os.path.join(script_dir, 'materialLibrary.ui')
         self._ui = QtUiTools.QUiLoader().load(ui_filepath, parentWidget=self)
@@ -167,6 +291,7 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._ui.helpButton.clicked.connect(self._helpButtonClicked)
         self._ui.filter.textChanged.connect(self._filterChanged)
         self._materialsView.itemEntered.connect(self._materialItemEntered)
+        self._materialsView.clicked.connect(self._materialItemClicked)
         self._materialsView.viewportEntered.connect(self._materialViewportEntered)
         self._materialsView.setMouseTracking(True)
 
@@ -197,9 +322,9 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
             params["category"] = category
         materials = self._matlib_client.materials.get_list(limit=maxElementCount, params=params)
 
-        self._progress_dialog = QtWidgets.QProgressDialog('Loading thumbnails', None, 0, len(materials), self)
-        self._progress = 0
-        self._progress_dialog.setValue(0)
+        self._thumbnail_progress_dialog = QtWidgets.QProgressDialog('Loading thumbnails', None, 0, len(materials), self)
+        self._thumbnail_progress = 0
+        self._thumbnail_progress_dialog.setValue(0)
         self._materialsView.clear()
 
         for material in materials:
@@ -209,12 +334,45 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
 
     def _onThumbnailLoaded(self, result):
         icon = QtGui.QIcon(QtGui.QPixmap(result["thumbnail"]))
-        material_item = QtWidgets.QListWidgetItem(result["title"], self._materialsView)
+        material_item = QtWidgets.QListWidgetItem(result["material"]["title"], self._materialsView)
         material_item.setIcon(icon)
-        #material_item.value = {"icon", icon} # set icon as value to load upscaled preview
+        material_item.value = result["material"] # store material id in list item
         self._materialsView.addItem(material_item)
-        self._progress += 1
-        self._progress_dialog.setValue(self._progress)
+        self._thumbnail_progress += 1
+        self._thumbnail_progress_dialog.setValue(self._thumbnail_progress)
+        self._filterItems()
+
+    def _onMaterialLoaded(self):
+        self._material_progress_dialog.setMaximum(100)
+        self._material_progress_dialog.setValue(100)
+        self._materialIsLoading = False
+
+    def _materialItemClicked(self, index):
+        if(self._materialIsLoading):
+            print("Another material is loading now")
+            return
+        self._materialIsLoading = True  # block while current material is loading
+        self._fullPreviewWindow.hide()
+        item = self._materialsView.item(index.row())
+        quality_box = QtWidgets.QMessageBox()
+        quality_box.setWindowTitle("Textures quality")
+        quality_box.setText("Choose quality of textures")
+        quality_box.setIcon(QtWidgets.QMessageBox.Icon.Question)
+        packages = self._matlib_client.packages.get_list(params={"material": item.value["id"]})
+        for p in packages:
+            button = QtWidgets.QPushButton(p["label"], self)
+            quality_box.addButton(button, QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        quality_box.addButton(QtWidgets.QPushButton("Cancel", self), QtWidgets.QMessageBox.ButtonRole.RejectRole)
+        button_number = quality_box.exec()
+        if button_number >= len(packages):  # cancel button had been pressed
+            self._materialIsLoading = False
+            return
+        self._material_progress_dialog = QtWidgets.QProgressDialog('Loading material', None, 0, 0, self)
+        self._material_progress_dialog.setValue(0)
+        loader = MaterialLoader(self._matlib_client, item.value, packages[button_number])
+        loader.signals.finished.connect(self._onMaterialLoaded)
+        QtCore.QThreadPool.globalInstance().start(loader)
+
 
     def _materialItemEntered(self, item):
         self._fullPreviewWindow.setIcon(item.text(), item.icon())
