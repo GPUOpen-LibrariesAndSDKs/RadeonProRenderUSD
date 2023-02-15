@@ -209,7 +209,7 @@ class MaterialLoader(QtCore.QRunnable):
         if mtlx_file == '':
             print(package_dir)
             raise Exception("MaterialX file loading error")
-        create_houdini_material_graph(self._material["title"].replace(" ", "_"), mtlx_file)
+        create_houdini_material_graph(self._material["title"].replace(" ", "_").replace(":", "_"), mtlx_file)
         self.signals.finished.emit()
 
     def _unpackZip(self, filename, dst_dir):
