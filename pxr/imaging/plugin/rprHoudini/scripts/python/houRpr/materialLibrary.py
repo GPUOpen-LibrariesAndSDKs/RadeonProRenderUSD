@@ -113,6 +113,18 @@ def create_houdini_material_graph(material_name, mtlx_file):
             matlib_node.setDisplayFlag(True)
 
 
+def add_mtlx_includes(materialx_file_path): # we need to insert inlude to downloaded file
+    include_file_name = "standard_surface.mtlx"
+    script_dir = os.path.realpath(os.path.dirname(__file__))
+    include_file_path = os.path.join(script_dir, include_file_name)
+    with open(materialx_file_path, "r") as mtlx_file:
+        lines = mtlx_file.readlines()
+    lines.insert(2, "\t<xi:include href=\"" + include_file_path + "\" />\n")
+    with open(materialx_file_path, "w") as mtlx_file:
+        mtlx_file.write("".join(lines))
+
+
+
 PREVIEW_SIZE = 200
 class LibraryListWidget(QtWidgets.QListWidget):
     def __init__(self, parent):
@@ -200,15 +212,18 @@ class MaterialLoader(QtCore.QRunnable):
         dst_mtlx_dir = os.path.join(hip_dir, 'RPRMaterialLibrary', 'Materials')
         package_dir = os.path.join(dst_mtlx_dir, self._package["file"][:-4])
 
+        downloaded_now = False
         if not os.path.isdir(package_dir):  # check if package is already loaded
             if not os.path.isdir(dst_mtlx_dir):
                 os.makedirs(dst_mtlx_dir)
             self._matlib_client.packages.download(self._package["id"], dst_mtlx_dir)
-            material_path = self._unpackZip(self._package["file"], dst_mtlx_dir)
+            self._unpackZip(self._package["file"], dst_mtlx_dir)
+            downloaded_now = True
         mtlx_file = self._findMtlx(package_dir)
         if mtlx_file == '':
-            print(package_dir)
             raise Exception("MaterialX file loading error")
+        if downloaded_now:
+            add_mtlx_includes(mtlx_file)
         create_houdini_material_graph(self._material["title"].replace(" ", "_").replace(":", "_"), mtlx_file)
         self.signals.finished.emit()
 
