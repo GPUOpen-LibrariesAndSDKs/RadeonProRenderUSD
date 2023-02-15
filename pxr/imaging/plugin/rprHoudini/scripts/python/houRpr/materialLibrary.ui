@@ -124,7 +124,7 @@
        <property name="bottomMargin">
         <number>0</number>
        </property>
-	   <item>
+       <item>
         <widget class="QLineEdit" name="filter"/>
        </item>
       </layout>
