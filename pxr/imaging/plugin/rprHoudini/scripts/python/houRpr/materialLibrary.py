@@ -53,6 +53,12 @@ def create_houdini_material_graph(material_name, mtlx_file):
     else:
         matlib_parent = hou.node('/stage')
 
+    if matlib_parent.type().name() == "materiallibrary":  # call inside material library
+        mtlx_node = matlib_parent.createNode('RPR::rpr_materialx_node')
+        mtlx_node.setName(material_name, unique_name=True)
+        mtlx_node.parm('file').set(mtlx_file)
+        return
+
     matlib_node = matlib_parent.createNode('materiallibrary')
     matlib_node.setName(material_name, unique_name=True)
     matlib_node.setComment(MATERIAL_LIBRARY_TAG)
