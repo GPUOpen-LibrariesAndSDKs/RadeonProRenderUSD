@@ -131,6 +131,7 @@ class LibraryListWidget(QtWidgets.QListWidget):
         super(LibraryListWidget, self).__init__(parent)
         self.setFrameShape(QtWidgets.QFrame.NoFrame)
         self.setDropIndicatorShown(False)
+        self.setAcceptDrops(True)
         self.setIconSize(QtCore.QSize(PREVIEW_SIZE, PREVIEW_SIZE))
         self.setFlow(QtWidgets.QListView.LeftToRight)
         self.setResizeMode(QtWidgets.QListView.Adjust)
@@ -157,6 +158,12 @@ class LibraryListWidget(QtWidgets.QListWidget):
                 self._previewWindow.hide()
 
         super(LibraryListWidget, self).leaveEvent(event)
+
+    def dragEnterEvent(self, e):
+        e.accept()
+
+    def dropEvent(self, e):
+        e.accept()
 
 
 class ThumbnailLoader(QtCore.QRunnable):
