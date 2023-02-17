@@ -387,6 +387,7 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         quality_box.setText("Choose quality of textures")
         quality_box.setIcon(QtWidgets.QMessageBox.Icon.Question)
         packages = self._matlib_client.packages.get_list(params={"material": item.value["id"]})
+        packages.sort(key=lambda x: x["label"])
         for p in packages:
             button = QtWidgets.QPushButton(p["label"], self)
             quality_box.addButton(button, QtWidgets.QMessageBox.ButtonRole.AcceptRole)
