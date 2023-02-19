@@ -32,7 +32,7 @@ public:
 
     void DeleteRenderDelegate(HdRenderDelegate* renderDelegate) override;
 
-    bool IsSupported() const { return true; }
+    bool IsSupported(bool gpuEnabled = true) const override { return true; }
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
