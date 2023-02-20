@@ -121,6 +121,7 @@ pxr_plugin(hdRpr
         ${OPENEXR_INCLUDE_DIRS}
         
         ${OptIncludeDir}
+        ${PROJECT_SOURCE_DIR}/deps/ghc_filesystem/include
 
     PRIVATE_CLASSES
         aovDescriptor
