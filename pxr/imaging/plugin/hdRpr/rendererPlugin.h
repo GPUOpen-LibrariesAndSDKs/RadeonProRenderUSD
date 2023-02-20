@@ -32,7 +32,7 @@ public:
 
     void DeleteRenderDelegate(HdRenderDelegate* renderDelegate) override;
 
-    bool IsSupported() const override { return true; }
+    bool IsSupported() const { return true; }
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
