@@ -203,14 +203,16 @@ class ThumbnailLoader(QtCore.QRunnable):
         elif (os.path.isfile(cached_thumbnail_path + "_thumbnail.png")):
             thumbnail_path = cached_thumbnail_path + "_thumbnail.png"
         else:
-            while thumbnail_path == "":
+            for attempt in range(5):
                 try:
                     render_info = self._matlib_client.renders.get(thumbnail_id)
                     self._matlib_client.renders.download_thumbnail(thumbnail_id, self._cache_dir)
                     thumbnail_path = os.path.join(self._cache_dir, render_info["thumbnail"])
+                    break
                 except:
                     sleep(1) # pause thread and retry
-        self.signals.finished.emit({"material": self._material, "thumbnail": thumbnail_path})
+        if thumbnail_path != "":
+            self.signals.finished.emit({"material": self._material, "thumbnail": thumbnail_path})
 
 
 class MaterialLoader(QtCore.QRunnable):
