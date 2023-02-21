@@ -119,13 +119,18 @@ def create_houdini_material_graph(material_name, mtlx_file):
             matlib_node.setDisplayFlag(True)
 
 
-def add_mtlx_includes(materialx_file_path): # we need to insert inlude to downloaded file
+def add_mtlx_includes(materialx_file_path): # we need to insert include to downloaded file
     include_file_name = "standard_surface.mtlx"
-    script_dir = os.path.realpath(os.path.dirname(__file__))
-    include_file_path = os.path.join(script_dir, include_file_name)
+    library_root = os.path.join(os.path.dirname(materialx_file_path), "..", "..") # local library structure is like RPRMaterialLibrary/Materials/some_material, so we need copy common include file to root if needed
+    include_file_path = os.path.join(library_root, include_file_name)
+
+    if not os.path.isfile(include_file_path):
+        script_dir = os.path.realpath(os.path.dirname(__file__))
+        shutil.copyfile(os.path.join(script_dir, include_file_name), include_file_path)
+
     with open(materialx_file_path, "r") as mtlx_file:
         lines = mtlx_file.readlines()
-    lines.insert(2, "\t<xi:include href=\"" + include_file_path + "\" />\n")
+    lines.insert(2, "\t<xi:include href=\"" + os.path.join("..", "..", include_file_name) + "\" />\n") # we need to include relative path
     with open(materialx_file_path, "w") as mtlx_file:
         mtlx_file.write("".join(lines))
 
