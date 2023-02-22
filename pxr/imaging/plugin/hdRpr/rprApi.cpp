@@ -4734,4 +4734,8 @@ float HdRprApi::GetFirstIterationRenerTime() const {
     return m_impl->GetFirstIterationRenerTime();
 }
 
+rpr::EnvironmentLight* GetLightObject(HdRprApiEnvironmentLight* envLight) {
+    return envLight->light.get();
+}
+
 PXR_NAMESPACE_CLOSE_SCOPE
