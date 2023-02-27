@@ -1,0 +1,111 @@
+{
+    "../TahoeNext/Core/CuKernels/IntegratorGpuSimpleShaderKernel" : {
+        "Always" : ["ENABLE_MOTION_BLUR=1","FEATURE_AMD_MEDIA_OPS2=1","MAX_CLOSURES=6","MAX_MAT_BIN_COUNT=64","TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1"],
+        "NotAlways" : ["THN_ENABLE_VOLUME", "ENABLE_MATX=1"],
+        "Ignores" : []
+    },
+    "../TahoeNext/Core/CuKernels/IntegratorGpuContourKernel" : {
+        "Always" : ["ENABLE_MOTION_BLUR=1","FEATURE_AMD_MEDIA_OPS2=1","MAX_CLOSURES=6","MAX_MAT_BIN_COUNT=64","TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1"]
+    },
+    "../TahoeNext/Core/CuKernels/IntegratorGpuSimpleAovKernel" : {
+        "Always" : ["ENABLE_MOTION_BLUR=1","FEATURE_AMD_MEDIA_OPS2=1","MAX_CLOSURES=6","MAX_MAT_BIN_COUNT=64","TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1"],
+        "NotAlways" : ["THN_ENABLE_VOLUME"],
+        "Ignores" : ["ENABLE_MATX=1"]
+    },
+    "../TahoeNext/Core/CuKernels/IntegratorGpuSimpleKernel" : {
+        "Always" : ["ENABLE_MOTION_BLUR=1","FEATURE_AMD_MEDIA_OPS2=1","MAX_CLOSURES=6","MAX_MAT_BIN_COUNT=64","TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1"],
+        "NotAlways" : ["THN_ENABLE_VOLUME"],
+        "Ignores" : ["ENABLE_MATX=1"]
+    },
+    "../TahoeNext/Core/CuKernels/IntegratorGpuSimpleKernelFirstHit" : {
+        "Always" : ["FEATURE_AMD_MEDIA_OPS2=1","MAX_CLOSURES=6","MAX_MAT_BIN_COUNT=64","TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/IntegratorGpuSimpleLightSampleKernel" : {
+        "Always" : ["ENABLE_MOTION_BLUR=1","FEATURE_AMD_MEDIA_OPS2=1","MAX_CLOSURES=6","MAX_MAT_BIN_COUNT=64","TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1"],
+        "NotAlways" : ["THN_ENABLE_VOLUME"],
+        "Ignores" : ["ENABLE_MATX=1"]
+    },
+    "../TahoeNext/Core/CuKernels/OocCacheKernel" : {
+        "Always" : ["TH_ENABLE_HIP=1"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","ENABLE_MOTION_BLUR=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/PrefixScanKernels" : {
+        "Always" : ["FEATURE_AMD_MEDIA_OPS2=1","MAX_CLOSURES=6","MAX_MAT_BIN_COUNT=64","TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","ENABLE_MOTION_BLUR=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/RayCastCurveKernel#1" : {
+        "Always" : ["BVH_GLOBAL_STACK_SIZE=64","BVH_MAX_WORK_GROUP=5120","ENABLE_CURVE_HWI","S_CURVE_HWI_IMPLEMENTATION","TH_ENABLE_HIP=1"],
+        "NotAlways" : ["ENABLE_MOTION_BLUR=1"],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"],
+        "MinArch" : 1030
+    },
+    "../TahoeNext/Core/CuKernels/RayCastCurveKernel#2" : {
+        "Always" : ["BVH_GLOBAL_STACK_SIZE=64","BVH_MAX_WORK_GROUP=5120","S_CURVE_IMPLEMENTATION","TH_ENABLE_HIP=1"],
+        "NotAlways" : ["ENABLE_MOTION_BLUR=1"],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/RayCastHWIKernels" : {
+        "Always" : ["BVH_GLOBAL_STACK_SIZE=64","BVH_MAX_WORK_GROUP=5120","TH_ENABLE_HIP=1","WG_SIZE=64"],
+        "NotAlways" : ["ENABLE_MOTION_BLUR=1","THN_CUTTING_PLANES"],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"],
+        "MinArch" : 1030
+    },
+    "../TahoeNext/Core/CuKernels/RayCastOoc1Kernels" : {
+        "Always" : ["BVH_GLOBAL_STACK_SIZE=64","BVH_MAX_WORK_GROUP=5120","TH_ENABLE_HIP=1","USE_BVH_COMPRESSION=1"],
+        "NotAlways" : ["ENABLE_MOTION_BLUR=1","TH_CLEAR_HITS=1"],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/RayCastOocKernels" : {
+        "Always" : ["TH_ENABLE_HIP=1"],
+        "NotAlways" : ["ENABLE_MOTION_BLUR=1"],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/RayCastSimpleKernels" : {
+        "__comment__" : "USE_BVH_COMPRESSION and WG_SIZE is for non HWI",
+        "Always" : ["BVH_GLOBAL_STACK_SIZE=64","BVH_MAX_WORK_GROUP=5120","TH_ENABLE_HIP=1"],
+        "NotAlways" : ["ENABLE_MOTION_BLUR=1","THN_CUTTING_PLANES","USE_BVH_COMPRESSION=1","WG_SIZE=64"],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/LpeRegex#1" : {
+        "Always" : ["FEATURE_AMD_MEDIA_OPS2=1", "MAX_CLOSURES=6", "TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1","LOCAL_MAX_DEPTH=1"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/LpeRegex#2" : {
+        "Always" : ["FEATURE_AMD_MEDIA_OPS2=1", "MAX_CLOSURES=6", "TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1","LOCAL_MAX_DEPTH=2"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/LpeRegex#4" : {
+        "Always" : ["FEATURE_AMD_MEDIA_OPS2=1", "MAX_CLOSURES=6", "TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1","LOCAL_MAX_DEPTH=4"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/LpeRegex#8" : {
+        "Always" : ["FEATURE_AMD_MEDIA_OPS2=1", "MAX_CLOSURES=6", "TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1","LOCAL_MAX_DEPTH=8"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/LpeRegex#16" : {
+        "Always" : ["FEATURE_AMD_MEDIA_OPS2=1", "MAX_CLOSURES=6", "TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1","LOCAL_MAX_DEPTH=16"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/LpeRegex#32" : {
+        "Always" : ["FEATURE_AMD_MEDIA_OPS2=1", "MAX_CLOSURES=6", "TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1","LOCAL_MAX_DEPTH=32"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    },
+    "../TahoeNext/Core/CuKernels/LpeRegex#64" : {
+        "Always" : ["FEATURE_AMD_MEDIA_OPS2=1", "MAX_CLOSURES=6", "TH_CMJ=1","TH_ENABLE_HIP=1","TH_USE_R_2=1","LOCAL_MAX_DEPTH=64"],
+        "NotAlways" : [],
+        "Ignores" : ["ENABLE_MATX=1","THN_ENABLE_VOLUME"]
+    }
+}
+
