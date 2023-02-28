@@ -367,7 +367,12 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
     // set up HIP/CUDA support
     if (metadata->pluginType == kPluginNorthstar) {
-        appendContextProperty(RPR_CONTEXT_PRECOMPILED_BINARY_PATH, (void*)precompiledKernelsPath.c_str());
+        if (metadata->useOpenCL) {
+            creationFlags |= RPR_CREATION_FLAGS_ENABLE_OPENCL;
+        }
+        else {
+            appendContextProperty(RPR_CONTEXT_PRECOMPILED_BINARY_PATH, (void*)precompiledKernelsPath.c_str());
+        }
     }
 
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT

@@ -3588,6 +3588,7 @@ private:
 
             m_currentRenderQuality = GetRenderQuality(*config);
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
+            m_rprContextMetadata.useOpenCL = config->GetCoreUseOpenCL();
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
