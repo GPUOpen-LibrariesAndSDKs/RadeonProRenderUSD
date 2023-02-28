@@ -147,9 +147,6 @@ pxr_library(rprUsd
     PYMODULE_FILES
         __init__.py
         devicesConfiguration.py
-	
-	RESOURCE_FILES
-		${RPR_NS_KERNEL_RESOURCE_FILES}
 )
 
 if(PXR_VERSION GREATER_EQUAL 2108)
