@@ -86,13 +86,6 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
 list(APPEND RIF_MODEL_RESOURCE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
 
-
-file(GLOB_RECURSE RPR_NS_KERNEL_FILES "${RPR_NS_KERNELS_DIR}/*")
-foreach(file ${RPR_NS_KERNEL_FILES})
-    file(RELATIVE_PATH rel_file ${RPR_NS_KERNELS_DIR} ${file})
-    list(APPEND RPR_NS_KERNEL_RESOURCE_FILES "${file}${_sep}ns_kernels/${rel_file}")
-endforeach()
-
 pxr_plugin(hdRpr
     DISABLE_PRECOMPILED_HEADERS
 
@@ -163,7 +156,6 @@ pxr_plugin(hdRpr
         ${RESTART_REQUIRED_RESOURCE_FILE}
         ${RIF_MODEL_RESOURCE_FILES}
         ${SCRIPT_RESOURCE_FILES}
-		${RPR_NS_KERNEL_RESOURCE_FILES}
 
     CPPFILES
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp

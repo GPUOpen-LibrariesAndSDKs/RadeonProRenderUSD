@@ -147,6 +147,9 @@ pxr_library(rprUsd
     PYMODULE_FILES
         __init__.py
         devicesConfiguration.py
+	
+	RESOURCE_FILES
+		${RPR_NS_KERNEL_RESOURCE_FILES}
 )
 
 if(PXR_VERSION GREATER_EQUAL 2108)
@@ -203,3 +206,6 @@ install(
 install(
     FILES ${CMAKE_CURRENT_SOURCE_DIR}/metadataPlugin/plugInfo.json
     DESTINATION plugin/usd/rprUsdMetadata/resources)
+	
+file(GLOB_RECURSE RPR_NS_KERNEL_FILES "${RPR_NS_KERNELS_DIR}/*")
+install(FILES ${RPR_NS_KERNEL_FILES} DESTINATION ${CMAKE_INSTALL_PREFIX}/plugin/usd/rprUsd/resources/ns_kernels)

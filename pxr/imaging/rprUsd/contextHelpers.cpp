@@ -305,6 +305,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
     std::string cachePath;
     std::string textureCachePath;
     std::string deviceConfigurationFilepath;
+    std::string precompiledKernelsPath;
 
     {
         RprUsdConfig* config;
@@ -312,6 +313,7 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         cachePath = config->GetKernelCacheDir();
         textureCachePath = config->GetTextureCacheDir();
         deviceConfigurationFilepath = config->GetDeviceConfigurationFilepath();
+        precompiledKernelsPath = config->GetPrecompiledKernelDir();
     }
 
     rpr_int pluginID = GetPluginID(metadata->pluginType);
@@ -361,6 +363,11 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
     if (metadata->isGlInteropEnabled) {
         creationFlags |= RPR_CREATION_FLAGS_ENABLE_GL_INTEROP;
+    }
+
+    // set up HIP/CUDA support
+    if (metadata->pluginType == kPluginNorthstar) {
+        appendContextProperty(RPR_CONTEXT_PRECOMPILED_BINARY_PATH, (void*)precompiledKernelsPath.c_str());
     }
 
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
