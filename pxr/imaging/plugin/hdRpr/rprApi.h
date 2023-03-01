@@ -157,6 +157,9 @@ public:
         double percentDone;
         double averageRenderTimePerSample;
         double averageResolveTimePerSample;
+        double totalRenderTime;
+        double frameRenderTotalTime;
+        double frameResolveTotalTime;
     };
     RenderStats GetRenderStats() const;
 
@@ -180,6 +183,8 @@ public:
 private:
     HdRprApiImpl* m_impl = nullptr;
 };
+
+rpr::EnvironmentLight* GetLightObject(HdRprApiEnvironmentLight* envLight);
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
