@@ -44,6 +44,14 @@ limitations under the License.
 #include <sstream>
 #include <cstdio>
 
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+#include <HOM/HOM_Module.h>
+#include <HOM/HOM_ui.h>
+#include <HOM/HOM_SceneViewer.h>
+#include <HOM/HOM_GeometryViewport.h>
+#include <HOM/HOM_GeometryViewportSettings.h>
+#endif
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 static HdRprApi* g_rprApi = nullptr;
@@ -153,6 +161,22 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
 
 HdRprDelegate* HdRprDelegate::m_lastCreatedInstance = nullptr;
 
+bool displayBackground() {
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+    HOM_Module& hou = HOM();
+    HOM_ui& ui = hou.ui();
+    HOM_SceneViewer* sv = dynamic_cast<HOM_SceneViewer*>(ui.paneTabOfType(HOM_paneTabType::SceneViewer));
+    if (sv) {
+        HOM_GeometryViewport* v = sv->selectedViewport();
+        HOM_GeometryViewportSettings* s = v->settings();
+        return s->displayEnvironmentBackgroundImage();
+    }
+    return true;
+#else
+    return true;
+#endif
+}
+
 HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
     for (auto& entry : renderSettings) {
         SetRenderSetting(entry.first, entry.second);
@@ -172,6 +196,9 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
     m_renderThread.SetStopCallback([this]() {
         m_rprApi->AbortRender();
     });
+
+    g_rprApi->SetDisplayBackground(displayBackground());
+
     m_renderThread.StartThread();
 
     auto errorOutputFile = TfGetenv("HD_RPR_ERROR_OUTPUT_FILE");

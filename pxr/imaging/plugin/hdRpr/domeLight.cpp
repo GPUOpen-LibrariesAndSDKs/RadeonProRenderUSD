@@ -132,7 +132,7 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         HdRprApi::BackgroundOverride backgroundOverride;
-        backgroundOverride.enable = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideEnable, false);
+        backgroundOverride.enable = rprApi->DisplayBackground() ? HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideEnable, false) : true;
         backgroundOverride.color = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideColor, GfVec3f(1.0f));
 
         float intensity = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f);

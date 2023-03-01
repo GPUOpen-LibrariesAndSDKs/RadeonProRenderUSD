@@ -180,6 +180,8 @@ public:
     TfToken const& GetCurrentRenderQuality() const;
     rpr::FrameBuffer* GetRawColorFramebuffer();
 
+    void SetDisplayBackground(bool display);
+    bool DisplayBackground() const;
 private:
     HdRprApiImpl* m_impl = nullptr;
 };

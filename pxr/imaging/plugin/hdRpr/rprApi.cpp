@@ -3457,6 +3457,8 @@ Don't show this message again?
         return nullptr;
     }
 
+    bool m_displayBackground = true;
+
 private:
     static RprUsdPluginType GetPluginType(TfToken const& renderQuality) {
         if (renderQuality == HdRprCoreRenderQualityTokens->Northstar) {
@@ -4732,6 +4734,14 @@ int HdRprApi::GetCpuThreadCountUsed() const {
 
 float HdRprApi::GetFirstIterationRenerTime() const {
     return m_impl->GetFirstIterationRenerTime();
+}
+
+void HdRprApi::SetDisplayBackground(bool display) {
+    m_impl->m_displayBackground = display;
+}
+
+bool HdRprApi::DisplayBackground() const {
+    return m_impl->m_displayBackground;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
