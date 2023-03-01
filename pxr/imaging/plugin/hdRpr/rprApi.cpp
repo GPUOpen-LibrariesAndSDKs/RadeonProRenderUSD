@@ -273,6 +273,29 @@ HdFormat ConvertUsdRenderVarDataType(TfToken const& format) {
     return it->second;
 }
 
+bool usingCPU(RprUsdContextMetadata& rprContextMetadata) {
+    return rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_CPU;
+}
+
+bool usingGPU(RprUsdContextMetadata& rprContextMetadata) {
+    return (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU0)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU1)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU2)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU3)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU4)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU5)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU6)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU7)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU8)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU9)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU10)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU11)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU12)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU13)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU14)
+        || (rprContextMetadata.creationFlags & RPR_CREATION_FLAGS_ENABLE_GPU15);
+}
+
 class HdRprApiRawMaterial : public RprUsdMaterial {
 public:
     static HdRprApiRawMaterial* Create(
@@ -1815,6 +1838,17 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
 
         auto& renderMode = preferences.GetCoreRenderMode();
+
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar && renderMode == HdRprCoreRenderModeTokens->Contour && usingCPU(m_rprContextMetadata)) {
+            fprintf(stderr, "Contour mode on CPU is not supported, used Global Illumination mode instead.\n");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, (rpr_uint)RPR_RENDER_MODE_GLOBAL_ILLUMINATION), "Failed to set render mode");
+            return;
+        }
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar && renderMode == HdRprCoreRenderModeTokens->Texcoord && (usingCPU(m_rprContextMetadata) && usingGPU(m_rprContextMetadata))) {
+            fprintf(stderr, "Texcoord mode on CPU and GPU simultaneously is not supported, used Global Illumination mode instead.\n");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RENDER_MODE, (rpr_uint)RPR_RENDER_MODE_GLOBAL_ILLUMINATION), "Failed to set render mode");
+            return;
+        }
 
         if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
             if (renderMode == HdRprCoreRenderModeTokens->Contour) {
@@ -4734,6 +4768,10 @@ int HdRprApi::GetCpuThreadCountUsed() const {
 
 float HdRprApi::GetFirstIterationRenerTime() const {
     return m_impl->GetFirstIterationRenerTime();
+}
+
+rpr::EnvironmentLight* GetLightObject(HdRprApiEnvironmentLight* envLight) {
+    return envLight->light.get();
 }
 
 void HdRprApi::SetDisplayBackground(bool display) {

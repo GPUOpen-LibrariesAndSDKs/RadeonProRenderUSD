@@ -17,6 +17,7 @@ limitations under the License.
 #include "rprApi.h"
 
 #include "pxr/imaging/rprUsd/debugCodes.h"
+#include "pxr/imaging/rprUsd/lightRegistry.h"
 #include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/usd/usdLux/blackbody.h"
@@ -93,6 +94,7 @@ void HdRprDistantLight::Sync(HdSceneDelegate* sceneDelegate,
         rprApi->SetDirectionalLightAttributes(m_rprLight, color * computedIntensity, angle * (M_PI / 180.0));
 
         newLight = true;
+        RprUsdLightRegistry::Register(id, m_rprLight);
     }
 
     if (newLight || ((bits & HdLight::DirtyTransform) && m_rprLight)) {
@@ -109,6 +111,7 @@ HdDirtyBits HdRprDistantLight::GetInitialDirtyBitsMask() const {
 
 void HdRprDistantLight::Finalize(HdRenderParam* renderParam) {
     if (m_rprLight) {
+        RprUsdLightRegistry::Release(GetId());
         auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
         rprRenderParam->AcquireRprApiForEdit()->Release(m_rprLight);
         m_rprLight = nullptr;

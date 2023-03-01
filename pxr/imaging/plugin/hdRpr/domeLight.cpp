@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/rprUsd/tokens.h"
+#include "pxr/imaging/rprUsd/lightRegistry.h"
 
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/imaging/hd/light.h"
@@ -177,6 +178,7 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
             if (RprUsdIsLeakCheckEnabled()) {
                 rprApi->SetName(m_rprLight, id.GetText());
             }
+            RprUsdLightRegistry::Register(id, GetLightObject(m_rprLight));
         }
     }
 
@@ -195,6 +197,7 @@ void HdRprDomeLight::Finalize(HdRenderParam* renderParam) {
     auto rprRenderParam = static_cast<HdRprRenderParam*>(renderParam);
     
     if (m_rprLight) {
+        RprUsdLightRegistry::Release(GetId());
         rprRenderParam->AcquireRprApiForEdit()->Release(m_rprLight);
         m_rprLight = nullptr;
     }
