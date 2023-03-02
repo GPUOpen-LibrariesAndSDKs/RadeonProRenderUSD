@@ -77,6 +77,11 @@ light_settings = [
                 'name': 'rpr:object:visibility:light',
                 'ui_name': 'Light Visibility',
                 'defaultValue': True
+            },
+            {
+                'name': 'rpr:backgroundOverride:enable',
+                'ui_name': 'Background Override',
+                'defaultValue': False
             }
         ]
     }
