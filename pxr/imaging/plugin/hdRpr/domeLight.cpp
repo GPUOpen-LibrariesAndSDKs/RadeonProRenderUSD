@@ -28,6 +28,14 @@ limitations under the License.
 #include "pxr/base/gf/matrix4d.h"
 #include "pxr/base/arch/env.h"
 
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+#include <HOM/HOM_Module.h>
+#include <HOM/HOM_ui.h>
+#include <HOM/HOM_SceneViewer.h>
+#include <HOM/HOM_GeometryViewport.h>
+#include <HOM/HOM_GeometryViewportSettings.h>
+#endif
+
 #include <ghc/filesystem.hpp>
 namespace fs = ghc::filesystem;
 
@@ -44,6 +52,35 @@ static void removeFirstSlash(std::string& string) {
 
 static float computeLightIntensity(float intensity, float exposure) {
     return intensity * exp2(exposure);
+}
+
+HdRprApi::BackgroundOverride backgroundOverrideSettings() {
+    HdRprApi::BackgroundOverride result;
+    result.enable = false;
+    result.color = GfVec3f(1.0f);
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+    HOM_Module& hou = HOM();
+    HOM_ui& ui = hou.ui();
+    HOM_SceneViewer* sceneViewer = dynamic_cast<HOM_SceneViewer*>(ui.paneTabOfType(HOM_paneTabType::SceneViewer));
+    if (sceneViewer) {
+        HOM_GeometryViewport* viewport = sceneViewer->selectedViewport();
+        HOM_GeometryViewportSettings* settings = viewport->settings();
+        result.enable = !settings->displayEnvironmentBackgroundImage();
+        std::string schemeName = settings->colorScheme().name();
+        if (schemeName == "Grey") {
+            result.color = GfVec3f(0.5f);
+        }
+        else if (schemeName == "Dark") {
+            result.color = GfVec3f(0.0f);
+        }
+        else {          // Light
+            result.color = GfVec3f(1.0f);
+        }
+    }
+    return result;
+#else
+    return result;
+#endif
 }
 
 // RPR does not support .rat files, so we have to convert them to .exr and replace the path
@@ -133,8 +170,9 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         HdRprApi::BackgroundOverride backgroundOverride;
-        backgroundOverride.enable = rprApi->DisplayBackground() ? HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideEnable, false) : true;
-        backgroundOverride.color = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideColor, GfVec3f(1.0f));
+        HdRprApi::BackgroundOverride overrideSettings = backgroundOverrideSettings();
+        backgroundOverride.enable = overrideSettings.enable || HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideEnable, false);
+        backgroundOverride.color = overrideSettings.color;
 
         float intensity = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f);
         float exposure = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->exposure, 1.0f);
