@@ -44,6 +44,8 @@ limitations under the License.
 #include <sstream>
 #include <cstdio>
 
+#include "resourceWatcher.h"
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 static HdRprApi* g_rprApi = nullptr;
@@ -186,6 +188,7 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
     }
 
     m_lastCreatedInstance = this;
+    InitWatcher();
 }
 
 HdRprDelegate::~HdRprDelegate() {

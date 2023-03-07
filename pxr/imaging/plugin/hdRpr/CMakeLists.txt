@@ -150,6 +150,7 @@ pxr_plugin(hdRpr
     PRIVATE_HEADERS
         baseRprim.h
         api.h
+        resourceWatcher.h
 
     RESOURCE_FILES
         plugInfo.json
@@ -161,6 +162,7 @@ pxr_plugin(hdRpr
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
         ndrDiscoveryPlugin.cpp
         ndrParserPlugin.cpp
+        resourceWatcher.cpp
 )
 
 if(RPR_EXR_EXPORT_ENABLED)

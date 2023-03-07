@@ -58,6 +58,7 @@ using json = nlohmann::json;
 #include "pxr/base/tf/envSetting.h"
 
 #include "notify/message.h"
+#include "resourceWatcher.h"
 
 #include <RadeonProRender_MaterialX.h>
 #include <RadeonProRender_Baikal.h>
@@ -3306,6 +3307,7 @@ Don't show this message again?
     }
 
     void Render(HdRprRenderThread* renderThread) {
+        NotifyRenderStarted();
         RenderFrame(renderThread);
 
         for (auto& aovBinding : m_aovBindings) {
@@ -3313,6 +3315,7 @@ Don't show this message again?
                 rb->SetConverged(true);
             }
         }
+        NotifyRenderFinished();
     }
 
     void AbortRender() {
