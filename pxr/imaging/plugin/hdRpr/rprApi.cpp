@@ -340,6 +340,9 @@ struct HdRprApiVolume {
     std::unique_ptr<rpr::Grid> emissionGrid;
     std::unique_ptr<rpr::Shape> cubeMesh;
     std::unique_ptr<HdRprApiRawMaterial> cubeMeshMaterial;
+
+    std::unique_ptr<rpr::Shape> base_mesh;
+
     GfMatrix4f voxelsTransform;
 };
 
@@ -1470,6 +1473,7 @@ public:
         if (!cubeMesh) {
             return nullptr;
         }
+        auto baseMesh = CreateVoidMesh();
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
@@ -3907,6 +3911,29 @@ private:
         VtIntArray vpf(cubeVpfCount, 3);
 
         return CreateMesh(position, indexes, normals, VtIntArray(), VtVec2fArray(), VtIntArray(), vpf);
+    }
+
+    rpr::Shape* CreateVoidMesh() { // creates special mesh which can be used as a base for hetero volumes
+
+        rpr_mesh_info mesh_properties[16];
+        mesh_properties[0] = (rpr_mesh_info)RPR_MESH_VOLUME_FLAG;
+        mesh_properties[1] = (rpr_mesh_info)1; // enable the Volume flag for the Mesh
+        mesh_properties[2] = (rpr_mesh_info)0;
+
+        rpr::Status status;
+        auto mesh = m_rprContext->CreateShape(nullptr, 0, 0, nullptr, 0, 0, nullptr, 0, 0, 0, nullptr, nullptr,
+            nullptr, nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr, 0, mesh_properties, &status);
+        if (!mesh) {
+            RPR_ERROR_CHECK(status, "Failed to create mesh");
+            return nullptr;
+        }
+
+        if (RPR_ERROR_CHECK(m_scene->Attach(mesh), "Failed to attach mesh to scene")) {
+            delete mesh;
+            return nullptr;
+        }
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+        return mesh;
     }
 
     void UpdateColorAlpha(HdRprApiColorAov* colorAov) {
