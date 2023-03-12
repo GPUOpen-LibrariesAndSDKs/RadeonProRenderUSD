@@ -192,6 +192,7 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
 }
 
 HdRprDelegate::~HdRprDelegate() {
+    NotifyRenderFinished();
     g_rprApi = nullptr;
     m_lastCreatedInstance = nullptr;
 }

@@ -1,5 +1,6 @@
 #include "resourceWatcher.h"
 
+#ifdef BUILD_AS_HOUDINI_PLUGIN
 #include <iostream>
 #include <thread>
 #include <memory>
@@ -10,9 +11,10 @@
 #include <hboost/interprocess/mapped_region.hpp>
 #include <hboost/interprocess/sync/scoped_lock.hpp>
 
-#ifdef BUILD_AS_HOUDINI_PLUGIN
 #include <HOM/HOM_Module.h>
 #include <HOM/HOM_Node.h>
+#include <HOM/HOM_ui.h>
+#include <HOM/HOM_SceneViewer.h>
 
 #include <HOM/HOM_ChopNode.h>
 #include <HOM/HOM_CopNode.h>
@@ -22,7 +24,6 @@
 #include <HOM/HOM_SopNode.h>
 #include <HOM/HOM_TopNode.h>
 #include <HOM/HOM_VopNode.h>
-#endif // BUILD_AS_HOUDINI_PLUGIN
 
 #ifdef GET_IS_BYPASSED
 #error "GET_IS_BYPASSED is defined elsewhere"
@@ -84,26 +85,40 @@ typedef std::map<std::string, bool> NodesToRestoreSet;
 void DeActivateScene(NodesToRestoreSet& nodesToRestore) {
     nodesToRestore.clear();
     HOM_Module& hom = HOM();
+    if (hom.applicationName().rfind("houdini", 0) != 0) {
+        return;
+    }
+
     HOM_Node* root = hom.root();
     auto children = root->children();
     for (HOM_ElemPtr<HOM_Node>& c : children) {
         if (c.myPointer->name() == "stage") {
             auto schildren = c.myPointer->children();
             for (HOM_ElemPtr<HOM_Node>& sc : schildren) {
-                //fprintf(stdout, "sc %s\n", sc.myPointer->name().c_str());
                 bool hasBypassParam;
                 bool bypass;
                 GetBypassed(sc.myPointer, hasBypassParam, bypass);
                 if (hasBypassParam) {
                     nodesToRestore.emplace(sc.myPointer->name(), bypass);
+                    SetBypassed(sc.myPointer, true);
                 }
             }
         }
+    }
+
+    HOM_ui& ui = hom.ui();
+    HOM_SceneViewer* sceneViewer = dynamic_cast<HOM_SceneViewer*>(ui.paneTabOfType(HOM_paneTabType::SceneViewer));
+    if (sceneViewer) {
+        sceneViewer->restartRenderer();
     }
 }
 
 void ActivateScene(NodesToRestoreSet& nodesToRestore) {
     HOM_Module& hom = HOM();
+    if (hom.applicationName().rfind("houdini", 0) != 0) {
+        return;
+    }
+
     HOM_Node* root = hom.root();
     auto children = root->children();
     for (HOM_ElemPtr<HOM_Node>& c : children) {
@@ -136,14 +151,19 @@ struct InterprocessMessage
     bool message_in;
 };
 
+void Notify(InterprocessMessage* message, bool started);
+
 class ResourceWatcher {
 public:
     ResourceWatcher(): m_shm(open_or_create, "RprResourceWatcher", read_write), m_message(nullptr) {}
     ~ResourceWatcher() {
+        try {
+            Notify(m_message, false);
+        }
+        catch (...) {}
         if (m_message) {
             m_message->~InterprocessMessage();
         }
-        shared_memory_object::remove("RprResourceWatcher");
     }
 
     bool Init() {
@@ -173,7 +193,6 @@ static std::thread* listenerThread = nullptr;
 void Listen(InterprocessMessage* message)
 {
     static NodesToRestoreSet nodesToRestore;
-
     try {
         do {
             scoped_lock<interprocess_mutex> lock(message->mutex);
@@ -183,6 +202,7 @@ void Listen(InterprocessMessage* message)
             else {
                 if (message->content.pid != hboost::interprocess::ipcdetail::get_current_process_id()) {      // Ignore messages from the same process
                     if (message->content.started) {
+                        fprintf(stdout, "RCV\n");
                         DeActivateScene(nodesToRestore);
                     }
                     else {
@@ -199,7 +219,6 @@ void Listen(InterprocessMessage* message)
         std::cout << "Resource watcher failure: " << ex.what() << std::endl;
     }
 }
-
 
 void InitWatcher() {
     if (!listenerThread) {
@@ -235,3 +254,11 @@ void NotifyRenderStarted() {
 void NotifyRenderFinished() {
     Notify(resourceWatcher.GetInterprocMessage(), false);
 }
+
+#else
+
+void InitWatcher() {}
+void NotifyRenderStarted() {}
+void NotifyRenderFinished() {}
+
+#endif // BUILD_AS_HOUDINI_PLUGIN

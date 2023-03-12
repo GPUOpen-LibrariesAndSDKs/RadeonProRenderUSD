@@ -3315,7 +3315,6 @@ Don't show this message again?
                 rb->SetConverged(true);
             }
         }
-        NotifyRenderFinished();
     }
 
     void AbortRender() {
