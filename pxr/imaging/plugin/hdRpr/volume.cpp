@@ -422,7 +422,7 @@ void HdRprVolume::Sync(
             } else if (desc.fieldName == HdRprVolumeTokens->color) {
                 targetInfo = &albedoGridInfo;
             } else {
-                continue;
+                targetInfo = &densityGridInfo;
             }
 
             auto param = sceneDelegate->Get(desc.fieldId, UsdVolTokens->filePath);
@@ -452,6 +452,7 @@ void HdRprVolume::Sync(
                     }
                 }
             }
+            break;
         }
 
         m_fieldSubscriptions.clear();

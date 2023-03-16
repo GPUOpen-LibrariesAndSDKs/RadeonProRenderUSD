@@ -342,6 +342,8 @@ struct HdRprApiVolume {
     std::unique_ptr<HdRprApiRawMaterial> cubeMeshMaterial;
 
     std::unique_ptr<rpr::Shape> base_mesh;
+    std::unique_ptr <rpr::MaterialNode> densityGridShader;
+    std::unique_ptr <rpr::MaterialNode> volumeShader;
 
     GfMatrix4f voxelsTransform;
 };
@@ -1461,6 +1463,72 @@ public:
         }
     }
 
+    HdRprApiVolume* CreateNorthstarVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
+                                          const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
+        if (!m_rprContext) {
+            return nullptr;
+        }
+
+        LockGuard rprLock(m_rprContext->GetMutex());
+
+        auto rprApiVolume = new HdRprApiVolume;
+
+        rpr::Status status;
+
+        auto baseMesh = CreateVoidMesh();
+        if (!baseMesh) {
+            return nullptr;
+        }
+        rprApiVolume->base_mesh.reset(baseMesh);
+
+        rprApiVolume->densityGridShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_GRID_SAMPLER, &status));
+        if (!rprApiVolume->densityGridShader) {
+            return nullptr;
+        }
+
+        //Northstar does not support density lookup, so we need to compute values
+        std::vector<float> computedDensityValues;
+        computedDensityValues.resize(densityValues.size());
+
+        for (int idx = 0; idx < densityValues.size(); idx++) {
+            if (densityValues[idx] < 0) {
+                computedDensityValues[idx] = densityLUT[0][0];
+                continue;
+            }
+            if (densityValues[idx] >= 1) {
+                computedDensityValues[idx] = densityLUT.back()[0];
+                continue;
+            }
+            size_t lookupIndex = floor(densityValues[idx] * (densityLUT.size() - 1));
+            
+            //linear interpolation
+            float firstValue = densityLUT[lookupIndex][0];
+            float secondValue = densityLUT[lookupIndex + 1][0];
+            computedDensityValues[idx] = firstValue + (secondValue - firstValue) * (densityValues[idx] * densityLUT.size() - lookupIndex);
+        }
+
+        rprApiVolume->densityGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
+            &densityCoords[0], densityCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
+            &computedDensityValues[0], computedDensityValues.size() * sizeof(computedDensityValues[0]), 0, &status));
+
+        RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->densityGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->densityGrid.get())), "Failde to set density grid");
+
+        rprApiVolume->volumeShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_VOLUME, &status));
+        if (!rprApiVolume->volumeShader) {
+            return nullptr;
+        }
+        rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITYGRID, rprApiVolume->densityGridShader.get());
+        rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITY, 100.f, 1.f, 1.f, 1.f);
+
+        rprApiVolume->base_mesh.get()->SetVolumeMaterial(rprApiVolume->volumeShader.get());
+
+        rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
+        rprApiVolume->voxelsTransform.SetScale(GfCompMult(voxelSize, gridSize));
+        rprApiVolume->voxelsTransform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
+
+        return rprApiVolume;
+    }
+
     HdRprApiVolume* CreateVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
                                  VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
                                  VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
@@ -1473,7 +1541,6 @@ public:
         if (!cubeMesh) {
             return nullptr;
         }
-        auto baseMesh = CreateVoidMesh();
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
@@ -1545,8 +1612,8 @@ public:
         auto t = transform * volume->voxelsTransform * GfMatrix4f(m_unitSizeTransform);
 
         LockGuard rprLock(m_rprContext->GetMutex());
-        RPR_ERROR_CHECK(volume->cubeMesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
-        RPR_ERROR_CHECK(volume->heteroVolume->SetTransform(t.data(), false), "Failed to set heteroVolume transform");
+        RPR_ERROR_CHECK(volume->base_mesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
+        //RPR_ERROR_CHECK(volume->heteroVolume->SetTransform(t.data(), false), "Failed to set heteroVolume transform");
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
@@ -1554,7 +1621,7 @@ public:
         if (volume) {
             LockGuard rprLock(m_rprContext->GetMutex());
 
-            m_scene->Detach(volume->heteroVolume.get());
+            //m_scene->Detach(volume->heteroVolume.get());
             delete volume;
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -4591,11 +4658,14 @@ HdRprApiVolume* HdRprApi::CreateVolume(
     VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
     const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateVolume(
+    return m_impl->CreateNorthstarVolume(
         densityCoords, densityValues, densityLUT, densityScale,
-        albedoCoords, albedoValues, albedoLUT, albedoScale,
-        emissionCoords, emissionValues, emissionLUT, emissionScale,
         gridSize, voxelSize, gridBBLow);
+    //return m_impl->CreateVolume(
+        //densityCoords, densityValues, densityLUT, densityScale,
+        //albedoCoords, albedoValues, albedoLUT, albedoScale,
+        //emissionCoords, emissionValues, emissionLUT, emissionScale,
+        //gridSize, voxelSize, gridBBLow);
 }
 
 RprUsdMaterial* HdRprApi::CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
