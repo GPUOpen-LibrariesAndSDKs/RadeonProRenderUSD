@@ -34,6 +34,13 @@ limitations under the License.
 #include <HOM/HOM_SceneViewer.h>
 #include <HOM/HOM_GeometryViewport.h>
 #include <HOM/HOM_GeometryViewportSettings.h>
+
+#include <HOM/HOM_Node.h>
+#include <HOM/HOM_ToggleParmTemplate.h>
+#include <HOM/HOM_FloatParmTemplate.h>
+#include <HOM/HOM_StringParmTemplate.h>
+#include <HOM/HOM_ParmTemplateGroup.h>
+#include <HOM/HOM_Parm.h>
 #endif
 
 #include <ghc/filesystem.hpp>
@@ -54,30 +61,122 @@ static float computeLightIntensity(float intensity, float exposure) {
     return intensity * exp2(exposure);
 }
 
-HdRprApi::BackgroundOverride backgroundOverrideSettings() {
+HOM_Node* FindNodeById(HOM_Node* node, const std::string& id) {
+    auto schildren = node->children();
+    for (HOM_ElemPtr<HOM_Node>& sc : schildren) {
+        HOM_Parm* p = sc.myPointer->parm("primpath");
+        if (p && p->evalAsString() == id) {
+            return sc.myPointer;
+        }
+
+        HOM_Node* foundInSubnodes = FindNodeById(sc.myPointer, id);
+        if (foundInSubnodes) {
+            return foundInSubnodes;
+        }
+    }
+    return nullptr;
+}
+
+HOM_Node* FindNodeById(HOM_Module& hou, const std::string& id) {
+    HOM_Node* sceneNode = hou.node("/stage");
+    return FindNodeById(sceneNode, id);
+}
+
+void CreateSceneBackgroundOverrideParms(HOM_Module& hou, HOM_Node* node) {
+    HOM_StdMapStringString enableTags;
+    enableTags.insert(std::pair<std::string, std::string>("usdvaluetype", "bool"));
+    HOM_StdMapStringString colorTags;
+    colorTags.insert(std::pair<std::string, std::string>("usdvaluetype", "color3f"));
+
+
+    HOM_ParmTemplateGroup* group = node->parmTemplateGroup();
+    HOM_ToggleParmTemplate* enableTemplate = hou.newToggleParmTemplate("rprBackgroundOverrideGlobalEnable", "Global background override enable", false,
+        nullptr, true, true, false, nullptr, nullptr, HOM_scriptLanguage::Hscript, enableTags, HOM_StdMapEnumString(), "", HOM_scriptLanguage::Hscript);
+    HOM_StringParmTemplate* enableControlTemplate = hou.newStringParmTemplate("rprBackgroundOverrideGlobalEnable_control", "Global background override enable", 1, std::vector<std::string>(1, "set"), 
+        HOM_parmNamingScheme::Base1, HOM_stringParmType::Regular, HOM_fileType::Any, std::vector<std::string>(), std::vector<std::string>(), std::vector<std::string>(), "",
+        nullptr, HOM_menuType::Normal, nullptr, true, true, true, nullptr, nullptr, HOM_scriptLanguage::Hscript, HOM_StdMapStringString(), HOM_StdMapEnumString(), std::vector<std::string>(), std::vector<HOM_EnumValue*>());
+    HOM_FloatParmTemplate* colorTemplate = hou.newFloatParmTemplate("rprBackgroundOverrideGlobalColor", "Global background override color", 3, std::vector<double>(3, 0.0),
+        0, 1, true, true, HOM_parmLook::Regular, HOM_parmNamingScheme::RGBA, nullptr, true, true, false, nullptr, nullptr, HOM_scriptLanguage::Hscript, colorTags, HOM_StdMapEnumString(), std::vector<std::string>(), std::vector<HOM_EnumValue*>());
+    HOM_StringParmTemplate* colorControlTemplate = hou.newStringParmTemplate("rprBackgroundOverrideGlobalColor_control", "Global background override color", 1, std::vector<std::string>(1, "set"),
+        HOM_parmNamingScheme::Base1, HOM_stringParmType::Regular, HOM_fileType::Any, std::vector<std::string>(), std::vector<std::string>(), std::vector<std::string>(), "",
+        nullptr, HOM_menuType::Normal, nullptr, true, true, true, nullptr, nullptr, HOM_scriptLanguage::Hscript, HOM_StdMapStringString(), HOM_StdMapEnumString(), std::vector<std::string>(), std::vector<HOM_EnumValue*>());
+
+    group->append(*enableControlTemplate);
+    group->append(*enableTemplate);
+    group->append(*colorControlTemplate);
+    group->append(*colorTemplate);
+    node->setParmTemplateGroup(*group);
+}
+
+void SetSceneBackgroundOverride(HOM_Module& hou, HOM_Node* node, HdRprApi::BackgroundOverride & override) {
+    if (!node) {
+        return;
+    }
+    HOM_Parm* enableParm = node->parm("rprBackgroundOverrideGlobalEnable");
+    HOM_Parm* colorParmR = node->parm("rprBackgroundOverrideGlobalColorr");
+    HOM_Parm* colorParmG = node->parm("rprBackgroundOverrideGlobalColorg");
+    HOM_Parm* colorParmB = node->parm("rprBackgroundOverrideGlobalColorb");
+    if (!enableParm || !colorParmR || !colorParmG || !colorParmB) {
+        if (enableParm || colorParmR || colorParmG || colorParmB) {
+            // some parms exists, some not - inconsistent situation, exiting
+            return;
+        }
+        CreateSceneBackgroundOverrideParms(hou, node);
+        enableParm = node->parm("rprBackgroundOverrideGlobalEnable");
+        colorParmR = node->parm("rprBackgroundOverrideGlobalColorr");
+        colorParmG = node->parm("rprBackgroundOverrideGlobalColorg");
+        colorParmB = node->parm("rprBackgroundOverrideGlobalColorb");
+        if (!enableParm || !colorParmR || !colorParmG || !colorParmB) {
+            return;
+        }
+    }
+
+    enableParm->_set(override.enable ? 1 : 0);
+    colorParmR->_set(override.color[0]);
+    colorParmG->_set(override.color[1]);
+    colorParmB->_set(override.color[2]);
+}
+
+HdRprApi::BackgroundOverride backgroundOverrideSettings(HdSceneDelegate* sceneDelegate, const SdfPath& nodeId) {
     HdRprApi::BackgroundOverride result;
     result.enable = false;
     result.color = GfVec3f(1.0f);
 #ifdef BUILD_AS_HOUDINI_PLUGIN
-    HOM_Module& hou = HOM();
-    HOM_ui& ui = hou.ui();
-    HOM_SceneViewer* sceneViewer = dynamic_cast<HOM_SceneViewer*>(ui.paneTabOfType(HOM_paneTabType::SceneViewer));
-    if (sceneViewer) {
-        HOM_GeometryViewport* viewport = sceneViewer->selectedViewport();
-        HOM_GeometryViewportSettings* settings = viewport->settings();
-        result.enable = !settings->displayEnvironmentBackgroundImage();
-        std::string schemeName = settings->colorScheme().name();
-        if (schemeName == "Grey") {
-            result.color = GfVec3f(0.5f);
+    try {
+        //HOM_AutoUnlock lock();
+        HOM_Module& hou = HOM();
+        std::string an = hou.applicationName();
+        
+        if (an.rfind("houdini", 0) != 0) {
+            result.enable = HdRpr_GetParam(sceneDelegate, nodeId, RprUsdTokens->rprBackgroundOverrideGlobalEnable, false);
+            result.color = HdRpr_GetParam(sceneDelegate, nodeId, RprUsdTokens->rprBackgroundOverrideGlobalColor, GfVec3f(1.0f));
+            return result;
         }
-        else if (schemeName == "Dark") {
-            result.color = GfVec3f(0.0f);
+
+        HOM_ui& ui = hou.ui();
+        HOM_SceneViewer* sceneViewer = dynamic_cast<HOM_SceneViewer*>(ui.paneTabOfType(HOM_paneTabType::SceneViewer));
+        if (sceneViewer) {
+            HOM_GeometryViewport* viewport = sceneViewer->selectedViewport();
+            HOM_GeometryViewportSettings* settings = viewport->settings();
+            result.enable = !settings->displayEnvironmentBackgroundImage();
+            std::string schemeName = settings->colorScheme().name();
+            if (schemeName == "Grey") {
+                result.color = GfVec3f(0.5f);
+            }
+            else if (schemeName == "Dark") {
+                result.color = GfVec3f(0.0f);
+            }
+            else {          // Light
+                result.color = GfVec3f(1.0f);
+            }
         }
-        else {          // Light
-            result.color = GfVec3f(1.0f);
+        HOM_Node* node = FindNodeById(hou, nodeId.GetAsString());
+        if (node) {
+            SetSceneBackgroundOverride(hou, node, result);
         }
+        return result;
     }
-    return result;
+    catch (...) {}
 #else
     return result;
 #endif
@@ -170,7 +269,7 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         HdRprApi::BackgroundOverride backgroundOverride;
-        HdRprApi::BackgroundOverride overrideSettings = backgroundOverrideSettings();
+        HdRprApi::BackgroundOverride overrideSettings = backgroundOverrideSettings(sceneDelegate, id);
         backgroundOverride.enable = overrideSettings.enable || HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideEnable, false);
         backgroundOverride.color = overrideSettings.color;
 
