@@ -816,7 +816,7 @@ class "RprDomeLightSettingsAPI" (
         doc = "Color that overrides background"
     )
 
-    uniform bool rprBackgroundOverrideGlobalEnable = false (
+    uniform bool rpr:backgroundOverrideGlobal:enable = false (
         customData = {
             string apiName = "domeLightBackgroundOverrideGlobal"
         }
@@ -825,7 +825,7 @@ class "RprDomeLightSettingsAPI" (
         doc = "Whether to override background."
     )
 
-    uniform color3f rprBackgroundOverrideGlobalColor = (1, 1, 1) (
+    uniform color3f rpr:backgroundOverrideGlobal:color = (1, 1, 1) (
         customData = {
             string apiName = "backgroundOverrideColorGlobal"
         }

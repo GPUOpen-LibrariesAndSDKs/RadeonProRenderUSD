@@ -31,6 +31,7 @@ limitations under the License.
 #ifdef BUILD_AS_HOUDINI_PLUGIN
 #include <HOM/HOM_Module.h>
 #include <HOM/HOM_ui.h>
+#include <HOM/HOM_text.h>
 #include <HOM/HOM_SceneViewer.h>
 #include <HOM/HOM_GeometryViewport.h>
 #include <HOM/HOM_GeometryViewportSettings.h>
@@ -41,7 +42,7 @@ limitations under the License.
 #include <HOM/HOM_StringParmTemplate.h>
 #include <HOM/HOM_ParmTemplateGroup.h>
 #include <HOM/HOM_Parm.h>
-#endif
+#endif // BUILD_AS_HOUDINI_PLUGIN
 
 #include <ghc/filesystem.hpp>
 namespace fs = ghc::filesystem;
@@ -60,6 +61,8 @@ static void removeFirstSlash(std::string& string) {
 static float computeLightIntensity(float intensity, float exposure) {
     return intensity * exp2(exposure);
 }
+
+#ifdef BUILD_AS_HOUDINI_PLUGIN
 
 HOM_Node* FindNodeById(HOM_Node* node, const std::string& id) {
     auto schildren = node->children();
@@ -90,14 +93,14 @@ void CreateSceneBackgroundOverrideParms(HOM_Module& hou, HOM_Node* node) {
 
 
     HOM_ParmTemplateGroup* group = node->parmTemplateGroup();
-    HOM_ToggleParmTemplate* enableTemplate = hou.newToggleParmTemplate("rprBackgroundOverrideGlobalEnable", "Global background override enable", false,
+    HOM_ToggleParmTemplate* enableTemplate = hou.newToggleParmTemplate("rpr:backgroundOverrideGlobal:enable", "Global background override enable", false,
         nullptr, true, true, false, nullptr, nullptr, HOM_scriptLanguage::Hscript, enableTags, HOM_StdMapEnumString(), "", HOM_scriptLanguage::Hscript);
-    HOM_StringParmTemplate* enableControlTemplate = hou.newStringParmTemplate("rprBackgroundOverrideGlobalEnable_control", "Global background override enable", 1, std::vector<std::string>(1, "set"), 
+    HOM_StringParmTemplate* enableControlTemplate = hou.newStringParmTemplate("rpr:backgroundOverrideGlobal:enable_control", "Global background override enable", 1, std::vector<std::string>(1, "set"), 
         HOM_parmNamingScheme::Base1, HOM_stringParmType::Regular, HOM_fileType::Any, std::vector<std::string>(), std::vector<std::string>(), std::vector<std::string>(), "",
         nullptr, HOM_menuType::Normal, nullptr, true, true, true, nullptr, nullptr, HOM_scriptLanguage::Hscript, HOM_StdMapStringString(), HOM_StdMapEnumString(), std::vector<std::string>(), std::vector<HOM_EnumValue*>());
-    HOM_FloatParmTemplate* colorTemplate = hou.newFloatParmTemplate("rprBackgroundOverrideGlobalColor", "Global background override color", 3, std::vector<double>(3, 0.0),
+    HOM_FloatParmTemplate* colorTemplate = hou.newFloatParmTemplate("rpr:backgroundOverrideGlobal:color", "Global background override color", 3, std::vector<double>(3, 0.0),
         0, 1, true, true, HOM_parmLook::Regular, HOM_parmNamingScheme::RGBA, nullptr, true, true, false, nullptr, nullptr, HOM_scriptLanguage::Hscript, colorTags, HOM_StdMapEnumString(), std::vector<std::string>(), std::vector<HOM_EnumValue*>());
-    HOM_StringParmTemplate* colorControlTemplate = hou.newStringParmTemplate("rprBackgroundOverrideGlobalColor_control", "Global background override color", 1, std::vector<std::string>(1, "set"),
+    HOM_StringParmTemplate* colorControlTemplate = hou.newStringParmTemplate("rpr:backgroundOverrideGlobal:color_control", "Global background override color", 1, std::vector<std::string>(1, "set"),
         HOM_parmNamingScheme::Base1, HOM_stringParmType::Regular, HOM_fileType::Any, std::vector<std::string>(), std::vector<std::string>(), std::vector<std::string>(), "",
         nullptr, HOM_menuType::Normal, nullptr, true, true, true, nullptr, nullptr, HOM_scriptLanguage::Hscript, HOM_StdMapStringString(), HOM_StdMapEnumString(), std::vector<std::string>(), std::vector<HOM_EnumValue*>());
 
@@ -112,20 +115,21 @@ void SetSceneBackgroundOverride(HOM_Module& hou, HOM_Node* node, HdRprApi::Backg
     if (!node) {
         return;
     }
-    HOM_Parm* enableParm = node->parm("rprBackgroundOverrideGlobalEnable");
-    HOM_Parm* colorParmR = node->parm("rprBackgroundOverrideGlobalColorr");
-    HOM_Parm* colorParmG = node->parm("rprBackgroundOverrideGlobalColorg");
-    HOM_Parm* colorParmB = node->parm("rprBackgroundOverrideGlobalColorb");
+    HOM_text& text = hou.text();
+    HOM_Parm* enableParm = node->parm(text.encode("rpr:backgroundOverrideGlobal:enable").c_str());
+    HOM_Parm* colorParmR = node->parm((text.encode("rpr:backgroundOverrideGlobal:color") + "r").c_str());
+    HOM_Parm* colorParmG = node->parm((text.encode("rpr:backgroundOverrideGlobal:color") + "g").c_str());
+    HOM_Parm* colorParmB = node->parm((text.encode("rpr:backgroundOverrideGlobal:color") + "b").c_str());
     if (!enableParm || !colorParmR || !colorParmG || !colorParmB) {
         if (enableParm || colorParmR || colorParmG || colorParmB) {
             // some parms exists, some not - inconsistent situation, exiting
             return;
         }
         CreateSceneBackgroundOverrideParms(hou, node);
-        enableParm = node->parm("rprBackgroundOverrideGlobalEnable");
-        colorParmR = node->parm("rprBackgroundOverrideGlobalColorr");
-        colorParmG = node->parm("rprBackgroundOverrideGlobalColorg");
-        colorParmB = node->parm("rprBackgroundOverrideGlobalColorb");
+        enableParm = node->parm(text.encode("rpr:backgroundOverrideGlobal:enable").c_str());
+        colorParmR = node->parm((text.encode("rpr:backgroundOverrideGlobal:color") + "r").c_str());
+        colorParmG = node->parm((text.encode("rpr:backgroundOverrideGlobal:color") + "g").c_str());
+        colorParmB = node->parm((text.encode("rpr:backgroundOverrideGlobal:color") + "b").c_str());
         if (!enableParm || !colorParmR || !colorParmG || !colorParmB) {
             return;
         }
@@ -137,16 +141,15 @@ void SetSceneBackgroundOverride(HOM_Module& hou, HOM_Node* node, HdRprApi::Backg
     colorParmB->_set(override.color[2]);
 }
 
-HdRprApi::BackgroundOverride backgroundOverrideSettings(HdSceneDelegate* sceneDelegate, const SdfPath& nodeId) {
+HdRprApi::BackgroundOverride BackgroundOverrideSettings(HdSceneDelegate* sceneDelegate, const SdfPath& nodeId) {
     HdRprApi::BackgroundOverride result;
     result.enable = false;
     result.color = GfVec3f(1.0f);
-#ifdef BUILD_AS_HOUDINI_PLUGIN
     try {
         //HOM_AutoUnlock lock();
         HOM_Module& hou = HOM();
         std::string an = hou.applicationName();
-        
+
         if (an.rfind("houdini", 0) != 0) {
             result.enable = HdRpr_GetParam(sceneDelegate, nodeId, RprUsdTokens->rprBackgroundOverrideGlobalEnable, false);
             result.color = HdRpr_GetParam(sceneDelegate, nodeId, RprUsdTokens->rprBackgroundOverrideGlobalColor, GfVec3f(1.0f));
@@ -177,10 +180,57 @@ HdRprApi::BackgroundOverride backgroundOverrideSettings(HdSceneDelegate* sceneDe
         return result;
     }
     catch (...) {}
-#else
     return result;
-#endif
 }
+
+void CreateOverrideEnableParmIfNeeded(const SdfPath& nodeId) {
+    HOM_Module& hou = HOM();
+    std::string an = hou.applicationName();
+
+    if (an.rfind("houdini", 0) != 0) {
+        return;
+    }
+
+    HOM_Node* node = FindNodeById(hou, nodeId.GetAsString());
+    if (node) {
+        HOM_text& text = hou.text();
+        HOM_Parm* enableParm = node->parm(text.encode("rpr:backgroundOverride:enable").c_str());
+        if (!enableParm) {
+            auto lang = HOM_scriptLanguage::Python;
+            HOM_ParmTemplateGroup* group = node->parmTemplateGroup();
+            std::string enableControlName = text.encode("rpr:backgroundOverride:enable_control");
+            HOM_StringParmTemplate* enableControlTemplate = hou.newStringParmTemplate(enableControlName.c_str(), "Background override", 1, std::vector<std::string>(1, "none"),
+                HOM_parmNamingScheme::Base1, HOM_stringParmType::Regular, HOM_fileType::Any, std::vector<std::string>(), std::vector<std::string>(), std::vector<std::string>(), "import loputils\nreturn loputils.createEditPropertiesControlMenu(kwargs, 'bool[]')",
+                &lang, HOM_menuType::ControlNextParameter, nullptr, false, false, false, nullptr, nullptr, HOM_scriptLanguage::Hscript, HOM_StdMapStringString(), HOM_StdMapEnumString(), std::vector<std::string>(), std::vector<HOM_EnumValue*>());
+            group->appendToFolder("RPR", *enableControlTemplate);
+
+            HOM_StdMapStringString enableTags;
+            std::string enableName = text.encode("rpr:backgroundOverride:enable");
+            std::string disableWhen = "{ " + enableControlName + " == block } { " + enableControlName + " == none }";
+            enableTags.insert(std::pair<std::string, std::string>("usdvaluetype", "bool"));
+            HOM_ToggleParmTemplate* enableTemplate = hou.newToggleParmTemplate(enableName.c_str(), "Background override", false,
+                disableWhen.c_str(), false, false, false, nullptr, nullptr, HOM_scriptLanguage::Hscript, enableTags, HOM_StdMapEnumString(), "", HOM_scriptLanguage::Hscript);
+            group->appendToFolder("RPR", *enableTemplate);
+            node->setParmTemplateGroup(*group);
+        }
+    }
+}
+
+#else
+
+HdRprApi::BackgroundOverride BackgroundOverrideSettings(HdSceneDelegate* sceneDelegate, const SdfPath& nodeId) {
+    HdRprApi::BackgroundOverride result;
+    result.enable = false;
+    result.color = GfVec3f(1.0f);
+    return result;
+}
+
+void CreateOverrideEnableParmIfNeeded(const SdfPath& nodeId) {
+}
+
+#endif // BUILD_AS_HOUDINI_PLUGIN
+
+
 
 // RPR does not support .rat files, so we have to convert them to .exr and replace the path
 // this function runs conversion and changes the 'path' argument if needed; returns true on success
@@ -237,6 +287,11 @@ bool ResolveRat(std::string& path) {
     }
 }
 
+HdRprDomeLight::HdRprDomeLight(SdfPath const& id)
+    : HdSprim(id) {
+    CreateOverrideEnableParmIfNeeded(id);
+}
+
 void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
                           HdRenderParam* renderParam,
                           HdDirtyBits* dirtyBits) {
@@ -269,7 +324,7 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
         }
 
         HdRprApi::BackgroundOverride backgroundOverride;
-        HdRprApi::BackgroundOverride overrideSettings = backgroundOverrideSettings(sceneDelegate, id);
+        HdRprApi::BackgroundOverride overrideSettings = BackgroundOverrideSettings(sceneDelegate, id);
         backgroundOverride.enable = overrideSettings.enable || HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprBackgroundOverrideEnable, false);
         backgroundOverride.color = overrideSettings.color;
 
