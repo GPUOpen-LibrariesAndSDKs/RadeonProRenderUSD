@@ -1464,6 +1464,8 @@ public:
     }
 
     HdRprApiVolume* CreateNorthstarVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
+                                          VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
+                                          VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
                                           const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
         if (!m_rprContext) {
             return nullptr;
@@ -4660,12 +4662,9 @@ HdRprApiVolume* HdRprApi::CreateVolume(
     m_impl->InitIfNeeded();
     return m_impl->CreateNorthstarVolume(
         densityCoords, densityValues, densityLUT, densityScale,
+        albedoCoords, albedoValues, albedoLUT, albedoScale,
+        emissionCoords, emissionValues, emissionLUT, emissionScale,
         gridSize, voxelSize, gridBBLow);
-    //return m_impl->CreateVolume(
-        //densityCoords, densityValues, densityLUT, densityScale,
-        //albedoCoords, albedoValues, albedoLUT, albedoScale,
-        //emissionCoords, emissionValues, emissionLUT, emissionScale,
-        //gridSize, voxelSize, gridBBLow);
 }
 
 RprUsdMaterial* HdRprApi::CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {

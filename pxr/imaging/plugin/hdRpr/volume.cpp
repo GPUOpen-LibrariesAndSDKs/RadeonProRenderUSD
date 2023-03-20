@@ -406,53 +406,64 @@ void HdRprVolume::Sync(
             return nullptr;
         };
 
-        GridInfo densityGridInfo;
-        GridInfo emissionGridInfo;
-        GridInfo albedoGridInfo;
-
         decltype(m_fieldSubscriptions) activeFieldSubscriptions;
 
-        auto volumeFieldDescriptorVector = sceneDelegate->GetVolumeFieldDescriptors(GetId());
-        for (auto const& desc : volumeFieldDescriptorVector) {
-            GridInfo* targetInfo;
-            if (desc.fieldName == HdRprVolumeTokens->density) {
-                targetInfo = &densityGridInfo;
-            } else if (desc.fieldName == HdRprVolumeTokens->temperature) {
-                targetInfo = &emissionGridInfo;
-            } else if (desc.fieldName == HdRprVolumeTokens->color) {
-                targetInfo = &albedoGridInfo;
-            } else {
-                targetInfo = &densityGridInfo;
-            }
-
+        auto processVdbGridInfo = [&](GridInfo& targetInfo, const HdVolumeFieldDescriptor& desc) {
             auto param = sceneDelegate->Get(desc.fieldId, UsdVolTokens->filePath);
             if (param.IsHolding<SdfAssetPath>()) {
-                targetInfo->desc = &desc;
+                targetInfo.desc = &desc;
 
                 auto& assetPath = param.UncheckedGet<SdfAssetPath>();
                 if (!assetPath.GetResolvedPath().empty()) {
-                    targetInfo->filepath = assetPath.GetResolvedPath();
-                } else {
-                    targetInfo->filepath = assetPath.GetAssetPath();
+                    targetInfo.filepath = assetPath.GetResolvedPath();
+                }
+                else {
+                    targetInfo.filepath = assetPath.GetAssetPath();
                 }
 
-                targetInfo->params = ParseGridParameters(sceneDelegate, desc.fieldId);
+                targetInfo.params = ParseGridParameters(sceneDelegate, desc.fieldId);
 
-                targetInfo->vdbGrid = getVdbGrid(desc.fieldId, targetInfo->filepath);
-                if (targetInfo->vdbGrid) {
-                    ParseOpenvdbMetadata(targetInfo);
+                targetInfo.vdbGrid = getVdbGrid(desc.fieldId, targetInfo.filepath);
+                if (targetInfo.vdbGrid) {
+                    ParseOpenvdbMetadata(&targetInfo);
 
                     // Subscribe for field updates, more info in renderParam.h
                     auto fieldSubscription = m_fieldSubscriptions.find(desc.fieldId);
                     if (fieldSubscription == m_fieldSubscriptions.end()) {
                         activeFieldSubscriptions.emplace(desc.fieldId, rprRenderParam->SubscribeVolumeForFieldUpdates(this, desc.fieldId));
-                    } else {
+                    }
+                    else {
                         // Reuse the old one
                         activeFieldSubscriptions.emplace(desc.fieldId, std::move(fieldSubscription->second));
                     }
                 }
             }
-            break;
+        };
+
+        GridInfo densityGridInfo;
+        GridInfo emissionGridInfo;
+        GridInfo albedoGridInfo;
+
+        bool densityGridFound = false;
+        bool emissionGridFound = false;
+
+        auto volumeFieldDescriptorVector = sceneDelegate->GetVolumeFieldDescriptors(GetId());
+
+        //try to find grids by it's names
+        for (auto const& desc : volumeFieldDescriptorVector) {
+            if (desc.fieldName == HdRprVolumeTokens->density) {
+                processVdbGridInfo(densityGridInfo, desc);
+                densityGridFound = true;
+            } else if (desc.fieldName == HdRprVolumeTokens->temperature) {
+                processVdbGridInfo(emissionGridInfo, desc);
+                bool emissionGridFound = true;
+            } else if (desc.fieldName == HdRprVolumeTokens->color) {
+                processVdbGridInfo(albedoGridInfo, desc);
+            }
+        }
+
+        if (!densityGridFound && volumeFieldDescriptorVector.size() > 0) {
+            processVdbGridInfo(densityGridInfo, volumeFieldDescriptorVector[0]);
         }
 
         m_fieldSubscriptions.clear();
