@@ -7,7 +7,7 @@ if(NOT RPR_LOCATION)
 endif()
 
 if(NOT RPR_NS_KERNELS_DIR)
-    set(RPR_NS_KERNELS_DIR ${PROJECT_SOURCE_DIR}/deps/hipbin)
+    set(RPR_NS_KERNELS_DIR ${PROJECT_SOURCE_DIR}/deps/RPR/hipbin)
 endif()
 
 macro(SET_RPR_VARIABLES dirName)
