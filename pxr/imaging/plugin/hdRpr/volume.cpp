@@ -462,7 +462,7 @@ void HdRprVolume::Sync(
             }
         }
 
-        if (!densityGridFound && volumeFieldDescriptorVector.size() > 0) {
+        if (!densityGridFound && !emissionGridFound && volumeFieldDescriptorVector.size() > 0) {
             processVdbGridInfo(densityGridInfo, volumeFieldDescriptorVector[0]);
         }
 
@@ -560,16 +560,6 @@ void HdRprVolume::Sync(
         if (densityGridData.coords.empty()) {
             densityGridData = CopyGridTopology(emissionGridData);
             densityGridInfo.params.ramp.push_back(GfVec3f(defaultDensity));
-        }
-
-        if (emissionGridData.coords.empty()) {
-            emissionGridData = CopyGridTopology(densityGridData);
-            emissionGridInfo.params.ramp.push_back(defaultEmission);
-        }
-
-        if (albedoGridData.coords.empty()) {
-            albedoGridData = CopyGridTopology(densityGrid ? densityGridData : emissionGridData);
-            albedoGridInfo.params.ramp.push_back(defaultColor);
         }
 
         for (auto& value : densityGridInfo.params.ramp) {
