@@ -462,6 +462,7 @@ void HdRprVolume::Sync(
             }
         }
 
+        // if density grid is not found we try to use the first grid as density
         if (!densityGridFound && !emissionGridFound && volumeFieldDescriptorVector.size() > 0) {
             processVdbGridInfo(densityGridInfo, volumeFieldDescriptorVector[0]);
         }

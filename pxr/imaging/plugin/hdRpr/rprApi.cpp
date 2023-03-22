@@ -1472,7 +1472,7 @@ public:
         }
     }
 
-    HdRprApiVolume* CreateNorthstarVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
+    HdRprApiVolume* CreateVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
                                           VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
                                           VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
                                           const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
@@ -1487,23 +1487,8 @@ public:
         rpr::Status status;
 
         rprApiVolume->base_mesh.reset(CreateVoidMesh());
-        if (!rprApiVolume->base_mesh) {
-            return nullptr;
-        }
-
         rprApiVolume->volumeShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_VOLUME, &status));
-        if (!rprApiVolume->volumeShader) {
-            return nullptr;
-        }
-
-        if (densityCoords.empty()) {
-            return nullptr;
-        }
-
         rprApiVolume->densityGridShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_GRID_SAMPLER, &status));
-        if (!rprApiVolume->densityGridShader) {
-            return nullptr;
-        }
 
         //Northstar does not support density lookup, so we need to compute values
         std::vector<float> computedDensityValues;
@@ -1530,13 +1515,20 @@ public:
             &densityCoords[0], densityCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
             &computedDensityValues[0], computedDensityValues.size() * sizeof(computedDensityValues[0]), 0, &status));
 
+        // these objects are required to correctly create volume
+        if (!rprApiVolume->densityGridShader ||
+            !rprApiVolume->volumeShader ||
+            !rprApiVolume->densityGridShader ||
+            !rprApiVolume->densityGrid) {
+            return nullptr;
+        }
+
         RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->densityGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->densityGrid.get())), "Failde to set density grid");
+        RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITYGRID, rprApiVolume->densityGridShader.get()), "Failed to set density grid");
+        RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITY, 100.f, 1.f, 1.f, 1.f), "Failed to set density default value");
 
-        rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITYGRID, rprApiVolume->densityGridShader.get());
-        rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITY, 100.f, 1.f, 1.f, 1.f);
 
-        auto createLookupTexture = [&](VtVec3fArray const& LUT, std::unique_ptr<rpr::Image>& outImage) {
-            rpr::Status imageStatus;
+        auto createLookupTexture = [&](VtVec3fArray const& LUT, std::unique_ptr<rpr::Image>& outImage, rpr::Status* imageStatus) {
             rpr_image_desc lookupImageDesc;
             lookupImageDesc.image_width = LUT.size();
             lookupImageDesc.image_height = 1;
@@ -1544,135 +1536,56 @@ public:
             lookupImageDesc.image_row_pitch = lookupImageDesc.image_width * sizeof(float) * 3;
             lookupImageDesc.image_slice_pitch = 0;
 
-            outImage.reset(m_rprContext->CreateImage({ 3, RPR_COMPONENT_TYPE_FLOAT32 }, lookupImageDesc, (float*)LUT.data(), &imageStatus));
+            outImage.reset(m_rprContext->CreateImage({ 3, RPR_COMPONENT_TYPE_FLOAT32 }, lookupImageDesc, (float*)LUT.data(), imageStatus));
         };
 
         if (!emissionCoords.empty()) {
             rprApiVolume->emissionGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
                 &emissionCoords[0], emissionCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
                 &emissionValues[0], emissionValues.size() * sizeof(emissionValues[0]), 0, &status));
-
             rprApiVolume->emissionGridShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_GRID_SAMPLER, &status));
-            if (!rprApiVolume->emissionGridShader) {
-                return nullptr;
-            }
             rprApiVolume->emissionLookupShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_IMAGE_TEXTURE, &status));
-            if (!rprApiVolume->emissionLookupShader) {
-                return nullptr;
-            }
-            RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->emissionGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->emissionGrid.get())), "Failed to set emission grid");
-            createLookupTexture(emissionLUT, rprApiVolume->emissionLookupRamp);
-            rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_DATA, rprApiVolume->emissionLookupRamp.get());
-            rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->emissionGridShader.get());
-            rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_U, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE);
-            rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_V, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE);
+            createLookupTexture(emissionLUT, rprApiVolume->emissionLookupRamp, &status);
 
-            rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_EMISSION, rprApiVolume->emissionLookupShader.get());
+            if (rprApiVolume->emissionGrid &&
+                rprApiVolume->emissionGridShader &&
+                rprApiVolume->emissionLookupShader &&
+                rprApiVolume->emissionLookupRamp) {
+
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->emissionGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->emissionGrid.get())), "Failed to set emission grid");
+                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_DATA, rprApiVolume->emissionLookupRamp.get()), "Failed to set emission ramp");
+                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->emissionGridShader.get()), "Failed to set emission grid sampler");
+                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_U, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set emission wrap type");
+                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_V, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set emission wrap type");
+
+                RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_EMISSION, rprApiVolume->emissionLookupShader.get()), "Failed to set emission sampler");
+            }
         }
         
         if (!albedoCoords.empty()) {
             rprApiVolume->albedoGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
                 &albedoCoords[0], albedoCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
                 &albedoValues[0], albedoValues.size() * sizeof(albedoValues[0]), 0, &status));
-
             rprApiVolume->albedoGridShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_GRID_SAMPLER, &status));
-            if (!rprApiVolume->albedoGridShader) {
-                return nullptr;
-            }
             rprApiVolume->albedoLookupShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_IMAGE_TEXTURE, &status));
-            if (!rprApiVolume->albedoLookupShader) {
-                return nullptr;
+            createLookupTexture(albedoLUT, rprApiVolume->albedoLookupRamp, &status);
+            
+            if (rprApiVolume->albedoGrid &&
+                rprApiVolume->albedoGridShader &&
+                rprApiVolume->albedoLookupShader &&
+                rprApiVolume->albedoLookupRamp) {
+
+                RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->albedoGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->albedoGrid.get())), "Failed to set albedo grid");
+                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_DATA, rprApiVolume->albedoLookupRamp.get()), "Failed to set albedo ramp");
+                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->albedoGridShader.get()), "Failed to set albedo grid sampler");
+                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_U, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set albedo wrap type");
+                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_V, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set albedo wrap type");
+
+                RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_COLOR, rprApiVolume->albedoLookupShader.get()), "Failed to set albedo sampler");
             }
-            RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->albedoGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->albedoGrid.get())), "Failed to set albedo grid");
-            createLookupTexture(albedoLUT, rprApiVolume->albedoLookupRamp);
-            rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_DATA, rprApiVolume->albedoLookupRamp.get());
-            rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->albedoGridShader.get());
-            rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_U, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE);
-            rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_V, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE);
-
-            rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_COLOR, rprApiVolume->albedoLookupShader.get());
         }
 
-        rprApiVolume->base_mesh.get()->SetVolumeMaterial(rprApiVolume->volumeShader.get());
-
-        rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
-        rprApiVolume->voxelsTransform.SetScale(GfCompMult(voxelSize, gridSize));
-        rprApiVolume->voxelsTransform.SetTranslateOnly(GfCompMult(voxelSize, GfVec3f(gridSize)) / 2.0f + gridBBLow);
-
-        return rprApiVolume;
-    }
-
-    HdRprApiVolume* CreateVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
-                                 VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
-                                 VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
-                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
-        if (!m_rprContext) {
-            return nullptr;
-        }
-
-        auto cubeMesh = CreateCubeMesh(1.0f, 1.0f, 1.0f);
-        if (!cubeMesh) {
-            return nullptr;
-        }
-
-        LockGuard rprLock(m_rprContext->GetMutex());
-
-        auto rprApiVolume = new HdRprApiVolume;
-
-        rprApiVolume->cubeMeshMaterial.reset(HdRprApiRawMaterial::Create(m_rprContext.get(), RPR_MATERIAL_NODE_TRANSPARENT, {
-            {RPR_MATERIAL_INPUT_COLOR, GfVec4f(1.0f)}
-        }));
-        rprApiVolume->cubeMesh.reset(cubeMesh);
-
-        rpr::Status densityGridStatus;
-        rprApiVolume->densityGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-            &densityCoords[0], densityCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-            &densityValues[0], densityValues.size() * sizeof(densityValues[0]), 0, &densityGridStatus));
-
-        rpr::Status albedoGridStatus;
-        rprApiVolume->albedoGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-            &albedoCoords[0], albedoCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-            &albedoValues[0], albedoValues.size() * sizeof(albedoValues[0]), 0, &albedoGridStatus));
-
-        rpr::Status emissionGridStatus;
-        rprApiVolume->emissionGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-            &emissionCoords[0], emissionCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-            &emissionValues[0], emissionValues.size() * sizeof(emissionValues[0]), 0, &emissionGridStatus));
-
-        rpr::Status status;
-        rprApiVolume->heteroVolume.reset(m_rprContext->CreateHeteroVolume(&status));
-
-        if (!rprApiVolume->densityGrid || !rprApiVolume->albedoGrid || !rprApiVolume->emissionGrid ||
-            !rprApiVolume->cubeMeshMaterial || !rprApiVolume->cubeMesh ||
-            !rprApiVolume->heteroVolume ||
-
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityGrid(rprApiVolume->densityGrid.get()), "Failed to set density hetero volume grid") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityLookup((float*)densityLUT.data(), densityLUT.size()), "Failed to set density volume lookup values") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityScale(densityScale), "Failed to set volume's density scale") ||
-
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoGrid(rprApiVolume->albedoGrid.get()), "Failed to set albedo hetero volume grid") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoLookup((float*)albedoLUT.data(), albedoLUT.size()), "Failed to set albedo volume lookup values") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoScale(albedoScale), "Failed to set volume's albedo scale") ||
-
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionGrid(rprApiVolume->emissionGrid.get()), "Failed to set emission hetero volume grid") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionLookup((float*)emissionLUT.data(), emissionLUT.size()), "Failed to set emission volume lookup values") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionScale(emissionScale), "Failed to set volume's emission scale") ||
-
-            RPR_ERROR_CHECK(rprApiVolume->cubeMesh->SetHeteroVolume(rprApiVolume->heteroVolume.get()), "Failed to set hetero volume to mesh") ||
-            RPR_ERROR_CHECK(m_scene->Attach(rprApiVolume->heteroVolume.get()), "Failed attach hetero volume")) {
-
-            RPR_ERROR_CHECK(densityGridStatus, "Failed to create density grid");
-            RPR_ERROR_CHECK(albedoGridStatus, "Failed to create albedo grid");
-            RPR_ERROR_CHECK(emissionGridStatus, "Failed to create emission grid");
-            RPR_ERROR_CHECK(status, "Failed to create hetero volume");
-
-            m_scene->Detach(rprApiVolume->heteroVolume.get());
-            delete rprApiVolume;
-
-            return nullptr;
-        }
-
-        rprApiVolume->cubeMeshMaterial->AttachTo(rprApiVolume->cubeMesh.get(), false);
+        RPR_ERROR_CHECK(rprApiVolume->base_mesh.get()->SetVolumeMaterial(rprApiVolume->volumeShader.get()), "Failed to set volume shader");
 
         rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
         rprApiVolume->voxelsTransform.SetScale(GfCompMult(voxelSize, gridSize));
@@ -4731,7 +4644,7 @@ HdRprApiVolume* HdRprApi::CreateVolume(
     VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
     const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
     m_impl->InitIfNeeded();
-    return m_impl->CreateNorthstarVolume(
+    return m_impl->CreateVolume(
         densityCoords, densityValues, densityLUT, densityScale,
         albedoCoords, albedoValues, albedoLUT, albedoScale,
         emissionCoords, emissionValues, emissionLUT, emissionScale,
