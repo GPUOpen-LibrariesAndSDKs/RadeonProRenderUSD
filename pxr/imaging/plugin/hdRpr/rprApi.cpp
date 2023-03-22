@@ -1595,7 +1595,7 @@ public:
         auto t = transform * volume->voxelsTransform * GfMatrix4f(m_unitSizeTransform);
 
         LockGuard rprLock(m_rprContext->GetMutex());
-        RPR_ERROR_CHECK(volume->base_mesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
+        RPR_ERROR_CHECK(volume->base_mesh->SetTransform(t.data(), false), "Failed to set volume transform");
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
