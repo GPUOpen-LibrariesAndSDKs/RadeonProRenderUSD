@@ -334,12 +334,9 @@ private:
 };
 
 struct HdRprApiVolume {
-    std::unique_ptr<rpr::HeteroVolume> heteroVolume;
     std::unique_ptr<rpr::Grid> albedoGrid;
     std::unique_ptr<rpr::Grid> densityGrid;
     std::unique_ptr<rpr::Grid> emissionGrid;
-    std::unique_ptr<rpr::Shape> cubeMesh;
-    std::unique_ptr<HdRprApiRawMaterial> cubeMeshMaterial;
 
     std::unique_ptr<rpr::Shape> base_mesh;
     std::unique_ptr <rpr::MaterialNode> volumeShader;
@@ -1473,9 +1470,9 @@ public:
     }
 
     HdRprApiVolume* CreateVolume(VtUIntArray const& densityCoords, VtFloatArray const& densityValues, VtVec3fArray const& densityLUT, float densityScale,
-                                          VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
-                                          VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
-                                          const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
+                                 VtUIntArray const& albedoCoords, VtFloatArray const& albedoValues, VtVec3fArray const& albedoLUT, float albedoScale,
+                                 VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
+                                 const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow) {
         if (!m_rprContext) {
             return nullptr;
         }
@@ -1599,7 +1596,6 @@ public:
 
         LockGuard rprLock(m_rprContext->GetMutex());
         RPR_ERROR_CHECK(volume->base_mesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
-        //RPR_ERROR_CHECK(volume->heteroVolume->SetTransform(t.data(), false), "Failed to set heteroVolume transform");
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
@@ -1607,7 +1603,6 @@ public:
         if (volume) {
             LockGuard rprLock(m_rprContext->GetMutex());
 
-            //m_scene->Detach(volume->heteroVolume.get());
             delete volume;
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
