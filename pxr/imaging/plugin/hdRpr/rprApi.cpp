@@ -1602,9 +1602,7 @@ public:
     void Release(HdRprApiVolume* volume) {
         if (volume) {
             LockGuard rprLock(m_rprContext->GetMutex());
-
             delete volume;
-
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
