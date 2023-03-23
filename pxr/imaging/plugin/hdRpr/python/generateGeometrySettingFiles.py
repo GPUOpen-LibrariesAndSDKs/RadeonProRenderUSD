@@ -11,7 +11,7 @@
 # 
 import argparse
 
-from commonSettings import visibility_flag_settings
+from commonSettings import visibility_flag_settings, SettingValue
 from houdiniDsGenerator import generate_houdini_ds
 
 geometry_settings = [
@@ -26,11 +26,25 @@ geometry_settings = [
                 'maxValue': 2 ** 16
             },
             {
+                'name': '$subdivisionScheme',
+                'ui_name': 'Subdivision Scheme',
+                'defaultValue': 'none',
+                'values': [
+                    SettingValue('none'),
+                    SettingValue('bilinear'),
+                    SettingValue('catmullClark'),
+                    SettingValue('loop')
+                ]
+            },
+            {
                 'name': 'primvars:rpr:mesh:subdivisionLevel',
                 'ui_name': 'Subidivision Level',
                 'defaultValue': 0,
                 'minValue': 0,
-                'maxValue': 7
+                'maxValue': 7,
+                'houdini': {
+                    'disablewhen': ['$subdivisionScheme_control == block', '$subdivisionScheme_control == none' ,'$subdivisionScheme != "catmullClark"'],
+                }
             },
             {
                 'name': 'primvars:rpr:mesh:ignoreContour',
