@@ -45,6 +45,7 @@ parm {{
 )
 
 def _get_valid_houdini_param_name(name):
+    name = name.replace('$', '')
     if all(c.isalnum() or c == '_' for c in name):
         return name
     else:
@@ -52,9 +53,9 @@ def _get_valid_houdini_param_name(name):
         return hou.encode(name)
 
 def _get_usd_render_setting_name(name):
-    if not name.startswith('rpr:') and not name.startswith('primvars:'):
+    if not name.startswith('rpr:') and not name.startswith('primvars:') and not name.startswith('$'):
         name = 'rpr:' + name
-    return name
+    return name.replace('$', '')
 
 def _get_houdini_hidewhen_string(condition, settings):
     houdini_hidewhen_conditions = []

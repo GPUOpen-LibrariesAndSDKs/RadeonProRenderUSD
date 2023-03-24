@@ -11,7 +11,7 @@
 # 
 import argparse
 
-from commonSettings import visibility_flag_settings
+from commonSettings import visibility_flag_settings, SettingValue
 from houdiniDsGenerator import generate_houdini_ds
 
 geometry_settings = [
@@ -52,6 +52,36 @@ geometry_settings = [
                 'minValue': 1,
                 'maxValue': 2 ** 16,
                 'help': 'The number of sub-frame samples to compute when rendering deformation motion blur over the shutter open time. The default is 1 (sample only at the start of the shutter time), giving no deformation blur by default. If you want rapidly deforming geometry to blur properly, you must increase this value to 2 or more. Note that this value is limited by the number of sub-samples available in the USD file being rendered.'
+            },
+            {
+                'name': 'primvars:rpr:mesh:displacement:minHeight',
+                'ui_name': 'Min Height',
+                'defaultValue': 0.0,
+                'minValue': -1.0,
+                'maxValue': 1.0
+            },
+            {
+                'name': 'primvars:rpr:mesh:displacement:maxHeight',
+                'ui_name': 'Max Height',
+                'defaultValue': 0.0,
+                'minValue': -1.0,
+                'maxValue': 1.0
+            },
+            {
+                'name': 'primvars:rpr:mesh:displacement:creaseWeight',
+                'ui_name': 'Crease Weight',
+                'defaultValue': 0.0,
+                'minValue': 0.0,
+                'maxValue': 1000.0
+            },
+            {
+                'name': '$interpolateBoundary',
+                'ui_name': 'Boundary',
+                'defaultValue': 'edgeAndCorner',
+                'values': [
+                    SettingValue('edgeAndCorner'),
+                    SettingValue('edgeOnly')
+                ]
             },
             {
                 'folder': 'Visibility Settings',

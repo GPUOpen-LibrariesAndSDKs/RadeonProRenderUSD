@@ -666,6 +666,33 @@ class "RprMeshSettingsAPI" (
         displayName = "Subdivision Level"
         doc = ""
     )
+    
+    uniform float primvars:rpr:mesh:displacement:minHeight = 0.0 (
+        customData = {
+            string apiName = "minHeight"
+        }
+        displayGroup = "Displacement"
+        displayName = "Min Height"
+        doc = ""
+    )
+    
+    uniform float primvars:rpr:mesh:displacement:maxHeight = 0.0 (
+        customData = {
+            string apiName = "maxHeight"
+        }
+        displayGroup = "Displacement"
+        displayName = "Max Height"
+        doc = ""
+    )
+    
+    uniform float primvars:rpr:mesh:displacement:creaseWeight = 0.0 (
+        customData = {
+            string apiName = "creaseWeight"
+        }
+        displayGroup = "Displacement"
+        displayName = "Crease Weight"
+        doc = ""
+    )
 
     uniform int primvars:rpr:mesh:ignoreContour = 0 (
         customData = {

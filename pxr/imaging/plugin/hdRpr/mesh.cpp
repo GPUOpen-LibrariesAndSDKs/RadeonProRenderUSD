@@ -20,6 +20,7 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/material.h"
 #include "pxr/imaging/rprUsd/debugCodes.h"
+#include "pxr/imaging/rprUsd/tokens.h"
 
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/imaging/pxOsd/subdivTags.h"
@@ -146,15 +147,24 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     bool forceVisibilityUpdate = false;
     bool isIgnoreContourDirty = false;
     bool isIdDirty = false;
+    bool isDisplacementDirty = false;
     if (*dirtyBits & HdChangeTracker::DirtyPrimvar) {
         HdRprGeometrySettings geomSettings = {};
         geomSettings.visibilityMask = kVisibleAll;
         HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
         HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation, &geomSettings);
 
-        if (m_refineLevel != geomSettings.subdivisionLevel) {
-            m_refineLevel = geomSettings.subdivisionLevel;
-            isRefineLevelDirty = true;
+        float displacementMinHeight = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->primvarsRprMeshDisplacementMinHeight, 0.0f);
+        float displacementMaxHeight = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->primvarsRprMeshDisplacementMaxHeight, 0.0f);
+        float displacementCreaseWeight = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->primvarsRprMeshDisplacementCreaseWeight, 0.0f);
+        
+        if (m_displacementMinHeight != displacementMinHeight 
+            || m_displacementMaxHeight != displacementMaxHeight
+            || m_displacementCreaseWeight != displacementCreaseWeight) {
+            m_displacementMinHeight = displacementMinHeight;
+            m_displacementMaxHeight = displacementMaxHeight;
+            m_displacementCreaseWeight = displacementCreaseWeight;
+            isDisplacementDirty = true;
         }
 
         if (m_visibilityMask != geomSettings.visibilityMask) {
@@ -658,6 +668,12 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (newMesh || isRefineLevelDirty) {
             for (auto& rprMesh : m_rprMeshes) {
                 rprApi->SetMeshRefineLevel(rprMesh, m_enableSubdiv ? m_refineLevel : 0);
+            }
+        }
+
+        if (newMesh || isDisplacementDirty) {
+            for (auto& rprMesh : m_rprMeshes) {
+                rprApi->SetMeshDisplacement(rprMesh, m_displacementMinHeight, m_displacementMaxHeight, m_displacementCreaseWeight);
             }
         }
 

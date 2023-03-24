@@ -119,6 +119,7 @@ public:
     rpr::Shape* CreateMesh(VtArray<VtVec3fArray> const& pointSamples, VtIntArray const& pointIndexes, VtArray<VtVec3fArray> const& normalSamples, VtIntArray const& normalIndexes, VtArray<VtVec2fArray> const& uvSamples, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding);
     rpr::Shape* CreateMeshInstance(rpr::Shape* prototypeMesh);
     void SetMeshRefineLevel(rpr::Shape* mesh, int level);
+    void SetMeshDisplacement(rpr::Shape* mesh, double minHeight, double maxHeight, double creaseWeight);
     void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation);
     void SetMeshMaterial(rpr::Shape* mesh, RprUsdMaterial const* material, bool displacementEnabled);
     void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask);

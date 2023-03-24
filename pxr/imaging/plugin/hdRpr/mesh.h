@@ -100,6 +100,10 @@ private:
     std::string m_cryptomatteName;
     size_t m_numGeometrySamples = 1;
 
+    double m_displacementMinHeight = 0.0;
+    double m_displacementMaxHeight = 0.0;
+    double m_displacementCreaseWeight = 0.0;
+
     HdRprInstancer* m_instancer = nullptr;
 };
 
