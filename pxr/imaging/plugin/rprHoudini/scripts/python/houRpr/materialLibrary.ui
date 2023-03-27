@@ -61,7 +61,7 @@
         <number>0</number>
        </property>
        <item>
-        <widget class="QTreeView" name="treeView">
+        <widget class="QListWidget" name="categoryView">
          <property name="minimumSize">
           <size>
            <width>255</width>
