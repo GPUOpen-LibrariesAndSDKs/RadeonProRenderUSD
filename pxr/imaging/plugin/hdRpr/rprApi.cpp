@@ -1522,7 +1522,6 @@ public:
 
         RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->densityGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->densityGrid.get())), "Failde to set density grid");
         RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITYGRID, rprApiVolume->densityGridShader.get()), "Failed to set density grid");
-        RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITY, 100.f, 1.f, 1.f, 1.f), "Failed to set density default value");
 
 
         auto createLookupTexture = [&](VtVec3fArray const& LUT, std::unique_ptr<rpr::Image>& outImage, rpr::Status* imageStatus) {
