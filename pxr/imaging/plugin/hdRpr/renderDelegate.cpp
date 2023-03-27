@@ -380,11 +380,13 @@ bool HdRprDelegate::IsPauseSupported() const {
 }
 
 bool HdRprDelegate::Pause() {
+    NotifyRenderFinished();
     m_renderThread.PauseRender();
     return true;
 }
 
 bool HdRprDelegate::Resume() {
+    NotifyRenderStarted();
     m_renderThread.ResumeRender();
     return true;
 }
