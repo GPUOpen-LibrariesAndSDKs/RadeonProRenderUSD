@@ -32,33 +32,11 @@ rpr::MaterialNode* RprUsd_CreateRprMtlxFromString(std::string const& mtlxString,
 
     rpr_material_node matxNodeHandle = rpr::GetRprObject(matxNode.get());
 
-    // TODO: use rprMaterialXSetFileAsBuffer when fixed in HybridPro
-    /*status = rprMaterialXSetFileAsBuffer(matxNodeHandle, mtlxString.c_str(), mtlxString.size());
+    status = rprMaterialXSetFileAsBuffer(matxNodeHandle, mtlxString.c_str(), mtlxString.size());
     
     if (status != RPR_SUCCESS) {
         RPR_ERROR_CHECK(status, "Failed to set matx node file from buffer");
         return nullptr;
-    }
-    */
-
-    // For now, as we have only rprMaterialXSetFile working, create a temporary file
-    {
-        std::string temporaryFilePath = ArchMakeTmpFileName("tmpMaterial", ".mtlx");
-
-        FILE* fout = fopen(temporaryFilePath.c_str(), "w");
-        if (!fout) {
-            return nullptr;
-        }
-
-        fwrite(mtlxString.c_str(), 1, mtlxString.size(), fout);
-        fclose(fout);
-
-        status = rprMaterialXSetFile(matxNodeHandle, temporaryFilePath.c_str());
-        if (status != RPR_SUCCESS) {
-            RPR_ERROR_CHECK(status, "Failed to set matx node file");
-            ArchUnlinkFile(temporaryFilePath.c_str());
-            return nullptr;
-        }
     }
 
     return matxNode.release();
