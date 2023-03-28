@@ -334,9 +334,7 @@ private:
 };
 
 struct HdRprApiVolume {
-    std::unique_ptr<rpr::Grid> albedoGrid;
     std::unique_ptr<rpr::Grid> densityGrid;
-    std::unique_ptr<rpr::Grid> emissionGrid;
 
     std::unique_ptr<rpr::Shape> base_mesh;
     std::unique_ptr <rpr::MaterialNode> volumeShader;
@@ -344,11 +342,9 @@ struct HdRprApiVolume {
     std::unique_ptr <rpr::MaterialNode> densityGridShader;
 
     std::unique_ptr <rpr::Image> albedoLookupRamp;
-    std::unique_ptr <rpr::MaterialNode> albedoGridShader;
     std::unique_ptr <rpr::MaterialNode> albedoLookupShader;
 
     std::unique_ptr <rpr::Image> emissionLookupRamp;
-    std::unique_ptr <rpr::MaterialNode> emissionGridShader;
     std::unique_ptr <rpr::MaterialNode> emissionLookupShader;
 
     GfMatrix4f voxelsTransform;
@@ -1523,7 +1519,6 @@ public:
         RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->densityGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->densityGrid.get())), "Failde to set density grid");
         RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITYGRID, rprApiVolume->densityGridShader.get()), "Failed to set density grid");
 
-
         auto createLookupTexture = [&](VtVec3fArray const& LUT, std::unique_ptr<rpr::Image>& outImage, rpr::Status* imageStatus) {
             rpr_image_desc lookupImageDesc;
             lookupImageDesc.image_width = LUT.size();
@@ -1536,21 +1531,14 @@ public:
         };
 
         if (!emissionCoords.empty()) {
-            rprApiVolume->emissionGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-                &emissionCoords[0], emissionCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-                &emissionValues[0], emissionValues.size() * sizeof(emissionValues[0]), 0, &status));
-            rprApiVolume->emissionGridShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_GRID_SAMPLER, &status));
             rprApiVolume->emissionLookupShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_IMAGE_TEXTURE, &status));
             createLookupTexture(emissionLUT, rprApiVolume->emissionLookupRamp, &status);
 
-            if (rprApiVolume->emissionGrid &&
-                rprApiVolume->emissionGridShader &&
-                rprApiVolume->emissionLookupShader &&
+            if (rprApiVolume->emissionLookupShader &&
                 rprApiVolume->emissionLookupRamp) {
 
-                RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->emissionGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->emissionGrid.get())), "Failed to set emission grid");
                 RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_DATA, rprApiVolume->emissionLookupRamp.get()), "Failed to set emission ramp");
-                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->emissionGridShader.get()), "Failed to set emission grid sampler");
+                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->densityGridShader.get()), "Failed to set emission grid sampler");
                 RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_U, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set emission wrap type");
                 RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_V, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set emission wrap type");
 
@@ -1559,21 +1547,14 @@ public:
         }
         
         if (!albedoCoords.empty()) {
-            rprApiVolume->albedoGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-                &albedoCoords[0], albedoCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-                &albedoValues[0], albedoValues.size() * sizeof(albedoValues[0]), 0, &status));
-            rprApiVolume->albedoGridShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_GRID_SAMPLER, &status));
             rprApiVolume->albedoLookupShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_IMAGE_TEXTURE, &status));
             createLookupTexture(albedoLUT, rprApiVolume->albedoLookupRamp, &status);
             
-            if (rprApiVolume->albedoGrid &&
-                rprApiVolume->albedoGridShader &&
-                rprApiVolume->albedoLookupShader &&
+            if (rprApiVolume->albedoLookupShader &&
                 rprApiVolume->albedoLookupRamp) {
 
-                RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->albedoGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->albedoGrid.get())), "Failed to set albedo grid");
                 RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_DATA, rprApiVolume->albedoLookupRamp.get()), "Failed to set albedo ramp");
-                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->albedoGridShader.get()), "Failed to set albedo grid sampler");
+                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->densityGridShader.get()), "Failed to set albedo grid sampler");
                 RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_U, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set albedo wrap type");
                 RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_V, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set albedo wrap type");
 
