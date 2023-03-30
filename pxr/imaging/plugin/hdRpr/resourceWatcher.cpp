@@ -134,10 +134,8 @@ void ActivateScene(NodesToRestoreSet& nodesToRestore) {
     }
 }
 
-using namespace hboost::interprocess;
-
 struct MessageData {
-    ipcdetail::OS_process_id_t pid;
+    hboost::interprocess::ipcdetail::OS_process_id_t pid;
     bool started;
 };
 
@@ -155,7 +153,7 @@ void Notify(InterprocessMessage* message, bool started);
 
 class ResourceWatcher {
 public:
-    ResourceWatcher(): m_shm(open_or_create, "RprResourceWatcher", read_write), m_message(nullptr) {}
+    ResourceWatcher(): m_shm(hboost::interprocess::open_or_create, "RprResourceWatcher", hboost::interprocess::read_write), m_message(nullptr) {}
     ~ResourceWatcher() {
         try {
             Notify(m_message, false);
@@ -169,11 +167,11 @@ public:
     bool Init() {
         try {
             m_shm.truncate(sizeof(InterprocessMessage));
-            m_region = std::make_unique<mapped_region>(m_shm, read_write);
+            m_region = std::make_unique<hboost::interprocess::mapped_region>(m_shm, hboost::interprocess::read_write);
             void* addr = m_region->get_address();
             m_message = new (addr) InterprocessMessage;
         }
-        catch (interprocess_exception& ex) {
+        catch (hboost::interprocess::interprocess_exception& ex) {
             std::cout << "Resource watcher failure: " << ex.what() << std::endl;
             return false;
         }
@@ -182,8 +180,8 @@ public:
 
     InterprocessMessage* GetInterprocMessage() { return m_message; }
 private:
-    shared_memory_object m_shm;
-    std::unique_ptr<mapped_region> m_region;
+    hboost::interprocess::shared_memory_object m_shm;
+    std::unique_ptr<hboost::interprocess::mapped_region> m_region;
     InterprocessMessage* m_message;
 };
 
@@ -195,7 +193,7 @@ void Listen(InterprocessMessage* message)
     static NodesToRestoreSet nodesToRestore;
     try {
         do {
-            scoped_lock<interprocess_mutex> lock(message->mutex);
+            hboost::interprocess::scoped_lock<hboost::interprocess::interprocess_mutex> lock(message->mutex);
             if (!message->message_in) {
                 message->cond_empty.wait(lock);
             }
@@ -215,7 +213,7 @@ void Listen(InterprocessMessage* message)
             }
         } while (true);
     }
-    catch (interprocess_exception& ex) {
+    catch (hboost::interprocess::interprocess_exception& ex) {
         std::cout << "Resource watcher failure: " << ex.what() << std::endl;
     }
 }
@@ -229,7 +227,7 @@ void InitWatcher() {
 
 void Notify(InterprocessMessage* message, bool started) {
     try {
-        scoped_lock<interprocess_mutex> lock(message->mutex);
+        hboost::interprocess::scoped_lock<hboost::interprocess::interprocess_mutex> lock(message->mutex);
         if (message->message_in) {
             message->cond_full.wait(lock);
         }
@@ -242,7 +240,7 @@ void Notify(InterprocessMessage* message, bool started) {
         //Mark message buffer as full
         message->message_in = true;
     }
-    catch (interprocess_exception& ex) {
+    catch (hboost::interprocess::interprocess_exception& ex) {
         std::cout << ex.what() << std::endl;
     }
 }
