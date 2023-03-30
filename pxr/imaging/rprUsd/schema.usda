@@ -183,7 +183,7 @@ class "RprRendererSettingsAPI" (
 	uniform int rpr:seedOverride = 0 (
         displayName = "Random Seed Override"
         displayGroup = "General"
-		rprMinValue = 0
+        rprMinValue = 0
     )
 
 
