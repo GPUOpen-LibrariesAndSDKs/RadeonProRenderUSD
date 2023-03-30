@@ -135,6 +135,13 @@ void ActivateScene(NodesToRestoreSet& nodesToRestore) {
 }
 
 struct MessageData {
+#if defined (HBOOST_INTERPROCESS_WINDOWS)
+#pragma message(">>> Windows build")
+#else
+#pragma message(">>> Linux build")
+#endif
+    pid_t _pid;
+    hboost::interprocess::ipcdetail::OS_thread_t tid;
     hboost::interprocess::ipcdetail::OS_process_id_t pid;
     bool started;
 };
