@@ -165,6 +165,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             m_displacementMaxHeight = displacementMaxHeight;
             m_displacementCreaseWeight = displacementCreaseWeight;
             isDisplacementDirty = true;
+            m_displacementSet = true;
         }
 
         if (m_visibilityMask != geomSettings.visibilityMask) {
@@ -671,7 +672,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
-        if (newMesh || isDisplacementDirty) {
+        if (m_displacementSet && (newMesh || isDisplacementDirty)) {
             for (auto& rprMesh : m_rprMeshes) {
                 rprApi->SetMeshDisplacement(rprMesh, m_displacementMinHeight, m_displacementMaxHeight, m_displacementCreaseWeight);
             }

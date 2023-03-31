@@ -103,6 +103,7 @@ private:
     double m_displacementMinHeight = 0.0;
     double m_displacementMaxHeight = 0.0;
     double m_displacementCreaseWeight = 0.0;
+    bool m_displacementSet = false;
 
     HdRprInstancer* m_instancer = nullptr;
 };
