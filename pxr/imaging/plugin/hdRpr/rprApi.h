@@ -185,6 +185,8 @@ private:
     HdRprApiImpl* m_impl = nullptr;
 };
 
+rpr::EnvironmentLight* GetLightObject(HdRprApiEnvironmentLight* envLight);
+
 PXR_NAMESPACE_CLOSE_SCOPE
 
 #endif // HDRPR_RPR_API_H
