@@ -705,9 +705,10 @@ public:
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
+        rpr_float delta = 0.001;
         rpr_float oldCreaseWeight;
         if (!RPR_ERROR_CHECK(mesh->GetInfo(RPR_SHAPE_SUBDIVISION_CREASEWEIGHT, -1, &oldCreaseWeight, nullptr), "Failed to query mesh crease weight")) {
-            if (oldCreaseWeight != creaseWeight) {
+            if (fabs(oldCreaseWeight - creaseWeight) > delta) {
                 if (RPR_ERROR_CHECK(mesh->SetSubdivisionCreaseWeight(creaseWeight), "Failed to set mesh crease weight")) return;
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
@@ -715,7 +716,7 @@ public:
 
         rpr_float oldScale[2];
         if (!RPR_ERROR_CHECK(mesh->GetInfo(RPR_SHAPE_DISPLACEMENT_SCALE, -1, oldScale, nullptr), "Failed to query mesh displacement scale")) {
-            if (oldScale[0] != minHeight || oldScale[1] != maxHeight) {
+            if (fabs(oldScale[0] - minHeight) > delta || fabs(oldScale[1] - maxHeight) < delta) {
                 if (RPR_ERROR_CHECK(mesh->SetDisplacementScale(minHeight, maxHeight), "Failed to set mesh displacement scale")) return;
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
