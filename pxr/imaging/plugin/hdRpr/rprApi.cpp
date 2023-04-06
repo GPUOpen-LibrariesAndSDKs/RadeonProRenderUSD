@@ -1965,6 +1965,9 @@ public:
         if (preferences.IsDirty(HdRprConfig::DirtySeed) || force) {
             m_isUniformSeed = preferences.GetUniformSeed();
             m_frameCount = 0;
+
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RANDOM_SEED, uint32_t(preferences.GetSeedOverride())), "Failed to set random seed");
+
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
