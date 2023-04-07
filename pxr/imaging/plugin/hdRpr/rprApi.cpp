@@ -83,6 +83,9 @@ using json = nlohmann::json;
 #include <vector>
 #include <mutex>
 
+#include <ghc/filesystem.hpp>
+namespace fs = ghc::filesystem;
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_ENV_SETTING(HDRPR_RENDER_QUALITY_OVERRIDE, "",
@@ -93,6 +96,11 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
 );
 
 namespace {
+
+bool CacheCreated() {
+    auto cachePath = ArchGetEnv("HDRPR_CACHE_PATH_OVERRIDE");
+    return fs::exists(fs::path(cachePath) / "kernel");
+}
 
 std::string const& GetPath(SdfAssetPath const& path) {
     if (!path.GetResolvedPath().empty()) {
@@ -450,6 +458,7 @@ public:
         }
 
         try {
+            m_cacheCreationRequired = !CacheCreated();
             InitRpr();
             InitRif();
             InitAovs();
@@ -473,6 +482,8 @@ public:
         static const TfToken metersPerUnitToken("stageMetersPerUnit", TfToken::Immortal);
         double unitSize = m_delegate->GetRenderSetting<double>(metersPerUnitToken, 1.0);
         m_unitSizeTransform[0][0] = m_unitSizeTransform[1][1] = m_unitSizeTransform[2][2] = unitSize;
+
+        m_syncStartTime = std::chrono::high_resolution_clock::now();
     }
 
     rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndices,
@@ -2949,7 +2960,9 @@ public:
 
             m_rucData.previousProgress = -1.0f;
             auto status = m_rprContext->Render();
-
+            if (m_cacheCreationRequired) {
+                m_cacheCreationTime = std::chrono::high_resolution_clock::now().time_since_epoch() - startTime.time_since_epoch();
+            }
             m_frameRenderTotalTime += std::chrono::high_resolution_clock::now().time_since_epoch() - startTime.time_since_epoch();
 
             if (status != RPR_SUCCESS && status != RPR_ERROR_ABORTED) {
@@ -3339,7 +3352,15 @@ Don't show this message again?
         }
     }
 
+    void updateSyncTime() {
+        if (m_syncStartTime != std::chrono::steady_clock::time_point() && m_syncTime == Duration()) {
+            m_syncTime = std::chrono::high_resolution_clock::now().time_since_epoch() - m_syncStartTime.time_since_epoch();
+        }
+    }
+
     void Render(HdRprRenderThread* renderThread) {
+        updateSyncTime();
+        m_startTime = std::chrono::high_resolution_clock::now();
         RenderFrame(renderThread);
 
         for (auto& aovBinding : m_aovBindings) {
@@ -3396,6 +3417,9 @@ Don't show this message again?
         stats.frameRenderTotalTime = (double)m_frameRenderTotalTime.count() / 1000000000.0;
         stats.frameResolveTotalTime = (double)m_frameResolveTotalTime.count() / 1000000000.0;
         stats.totalRenderTime = (double)(std::chrono::high_resolution_clock::now().time_since_epoch() - m_startTime.time_since_epoch()).count() / 1000000000.0;
+
+        stats.syncTime = (double)m_syncTime.count() / 1000000000.0;
+        stats.cacheCreationTime = (double)m_cacheCreationTime.count() / 1000000000.0;
 
         return stats;
     }
@@ -4405,7 +4429,11 @@ private:
     using Duration = std::chrono::high_resolution_clock::duration;
     Duration m_frameRenderTotalTime;
     Duration m_frameResolveTotalTime;
-    std::chrono::steady_clock::time_point m_startTime;
+    std::chrono::steady_clock::time_point m_startTime = {};
+    std::chrono::steady_clock::time_point m_syncStartTime = {};
+    Duration m_syncTime;
+    Duration m_cacheCreationTime;
+    bool m_cacheCreationRequired = false;
 
     struct RenderUpdateCallbackData {
         HdRprApiImpl* rprApi = nullptr;

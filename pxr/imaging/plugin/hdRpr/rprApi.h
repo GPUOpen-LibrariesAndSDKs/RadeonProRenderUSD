@@ -160,6 +160,8 @@ public:
         double totalRenderTime;
         double frameRenderTotalTime;
         double frameResolveTotalTime;
+        double cacheCreationTime;
+        double syncTime;
     };
     RenderStats GetRenderStats() const;
 
