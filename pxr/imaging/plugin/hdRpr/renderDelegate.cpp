@@ -364,6 +364,10 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
 
     stats["firstIterationRenderTime"] = m_rprApi->GetFirstIterationRenerTime();
 
+    stats["totalRenderTime"] = rprStats.totalRenderTime;
+    stats["frameRenderTotalTime"] = rprStats.frameRenderTotalTime;
+    stats["frameResolveTotalTime"] = rprStats.frameResolveTotalTime;
+    
     return stats;
 }
 

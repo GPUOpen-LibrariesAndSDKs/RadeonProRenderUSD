@@ -365,14 +365,40 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, m_materialId)
     );
 
+	auto getPerFaceMeshMaterial = [sceneDelegate, this](SdfPath const& materialId) {
+		SdfPath parentMesh = this->GetId().GetParentPath();
+		SdfPath relativeMaterialPath = materialId.MakeRelativePath(SdfPath::AbsoluteRootPath());
+		SdfPath fullMaterialPath = parentMesh.AppendPath(relativeMaterialPath);
+		const HdRprMaterial* material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, fullMaterialPath));
+
+		while ((material == nullptr) && !parentMesh.IsEmpty())
+		{
+			parentMesh = parentMesh.GetParentPath();
+			SdfPath fullMaterialPath = parentMesh.AppendPath(relativeMaterialPath);
+
+			material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, fullMaterialPath));
+		}
+
+		return material;
+	};
+
     // Check all materials, including those from geomSubsets
     if (!material || !material->GetRprMaterialObject()) {
         for (auto& subset : m_geomSubsets) {
             if (subset.type == HdGeomSubset::TypeFaceSet &&
                 !subset.materialId.IsEmpty()) {
-                material = static_cast<const HdRprMaterial*>(
-                    sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, subset.materialId)
-                );
+
+				bool hasMaterialByShortPath
+					= (sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, subset.materialId)) != nullptr;
+
+				if (hasMaterialByShortPath) {
+					material = static_cast<const HdRprMaterial*>(
+						sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, subset.materialId)
+						);
+				} else {
+					material = getPerFaceMeshMaterial(subset.materialId);
+				}
+
                 if (material && material->GetRprMaterialObject()) {
                     break;
                 }
@@ -384,6 +410,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         auto rprMaterial = material->GetRprMaterialObject();
 
         auto uvPrimvarName = &rprMaterial->GetUvPrimvarName();
+
         // This will currently be empty for MaterialX.
         if (uvPrimvarName->IsEmpty()) {
             static TfToken st("st", TfToken::Immortal);
@@ -461,9 +488,12 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_rprMeshes.clear();
 
         if (m_geomSubsets.empty()) {
-            if (auto rprMesh = rprApi->CreateMesh(m_pointSamples, m_faceVertexIndices, m_normalSamples, m_normalIndices, m_uvSamples, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
-                m_colorsSet = rprApi->SetMeshVertexColor(rprMesh, m_colorSamples, m_colorInterpolation);
-                m_rprMeshes.push_back(rprMesh);
+            // HybridPro will return non-nullptr mesh even in case if points are empty, it will lead to crash subsequently, so let's avoid mesh creation in case if there no vertices present.
+            if (m_pointSamples.size() > 0) {
+                if (auto rprMesh = rprApi->CreateMesh(m_pointSamples, m_faceVertexIndices, m_normalSamples, m_normalIndices, m_uvSamples, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
+                    m_colorsSet = rprApi->SetMeshVertexColor(rprMesh, m_colorSamples, m_colorInterpolation);
+                    m_rprMeshes.push_back(rprMesh);
+                }
             }
         } else {
             // GeomSubset may reference face subset in any given order so we need to be able to
@@ -576,7 +606,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
                         if (!m_colorSamples.empty()) {
                             if (newPoint) {
-                                for (int sampleIndex = 0; sampleIndex < m_colorSamples.size(); ++sampleIndex) {
+                                for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
                                     subsetColorSamples[sampleIndex].push_back(m_colorSamples[sampleIndex][pointIndex]);
                                 }
                             }
@@ -661,10 +691,14 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 							// materials however are stored by full material path
 							// so when relative material path is passed material is not found
 							// thus we have to get full material path to get pointer to material
-							SdfPath parentMesh = this->GetId().GetParentPath();
-							SdfPath relativeMaterialPath = m_geomSubsets[i].materialId.MakeRelativePath(SdfPath::AbsoluteRootPath());
-							SdfPath fullMaterialPath = parentMesh.AppendPath(relativeMaterialPath);
-							material = getMeshMaterial(fullMaterialPath);
+							auto pMaterial = getPerFaceMeshMaterial(m_geomSubsets[i].materialId);
+							if (pMaterial && pMaterial->GetRprMaterialObject()) {
+								material = pMaterial->GetRprMaterialObject();
+							}
+							else {
+								HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, GetId(), &primvarDescsPerInterpolation);
+								material = GetFallbackMaterial(sceneDelegate, rprApi, *dirtyBits, primvarDescsPerInterpolation);
+							}
 						}
 						else {
 							material = getMeshMaterial(m_geomSubsets[i].materialId);

@@ -26,10 +26,7 @@ struct HdRprApiEnvironmentLight;
 class HdRprDomeLight : public HdSprim {
 
 public:
-    HdRprDomeLight(SdfPath const& id)
-        : HdSprim(id) {
-
-    }
+    HdRprDomeLight(SdfPath const& id);
 
     void Sync(HdSceneDelegate* sceneDelegate,
               HdRenderParam* renderParam,
