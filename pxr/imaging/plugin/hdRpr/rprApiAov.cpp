@@ -144,6 +144,8 @@ bool HdRprApiAov::InitUpscaleFilter(rif::Context* rifContext) {
     if (!m_upscaleFilter) {
         return false;
     }
+    m_upscaleFilter->SetParam("mode", (int) RIF_AI_UPSCALE_MODE_FAST_2X);
+    m_upscaleFilter->SetParam("useHDR", 1);
     m_upscaleFilter->SetParam("modelPath", rifContext->GetModelPath().c_str());
     m_upscaleFilter->Resize(m_width, m_height);
     m_upscaleFilter->SetOutput(rif::Image::GetDesc(m_width * 2, m_height * 2, m_format));
@@ -571,7 +573,11 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
                     [this, rifContext]() {
                         auto denoiseFilterType = (m_enabledFilters & kFilterAIDenoise) ? rif::FilterType::AIDenoise : rif::FilterType::EawDenoise;
                         auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
-                        return rif::Filter::Create(denoiseFilterType, rifContext, fbDesc.fb_width, fbDesc.fb_height);
+                        auto filter = rif::Filter::Create(denoiseFilterType, rifContext, fbDesc.fb_width, fbDesc.fb_height);
+                        filter->SetParam("filter_type", "ml");
+                        filter->SetParam("ml_color_only", 0);
+                        filter->SetParam("ml_use_fp16_compute_type", 1);
+                        return filter;
                     }
                 );
             }
