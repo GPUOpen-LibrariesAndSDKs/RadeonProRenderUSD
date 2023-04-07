@@ -3353,7 +3353,7 @@ Don't show this message again?
     }
 
     void updateSyncTime() {
-        if (m_syncStartTime != std::chrono::steady_clock::time_point() && m_syncTime == Duration()) {
+        if (m_syncStartTime != std::chrono::high_resolution_clock::time_point() && m_syncTime == Duration()) {
             m_syncTime = std::chrono::high_resolution_clock::now().time_since_epoch() - m_syncStartTime.time_since_epoch();
         }
     }
@@ -4429,8 +4429,8 @@ private:
     using Duration = std::chrono::high_resolution_clock::duration;
     Duration m_frameRenderTotalTime;
     Duration m_frameResolveTotalTime;
-    std::chrono::steady_clock::time_point m_startTime = {};
-    std::chrono::steady_clock::time_point m_syncStartTime = {};
+    std::chrono::high_resolution_clock::time_point m_startTime = {};
+    std::chrono::high_resolution_clock::time_point m_syncStartTime = {};
     Duration m_syncTime;
     Duration m_cacheCreationTime;
     bool m_cacheCreationRequired = false;
