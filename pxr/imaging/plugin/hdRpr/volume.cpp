@@ -454,10 +454,15 @@ void HdRprVolume::Sync(
             if (desc.fieldName == HdRprVolumeTokens->density) {
                 processVdbGridInfo(densityGridInfo, desc);
                 densityGridFound = true;
-            } else if (desc.fieldName == HdRprVolumeTokens->temperature) {
+            }
+            // now processing of temperature grid is temporary disabled because it can produce incorrect result. It will be re-implemented in the future using volume material 
+             
+            /* else if (desc.fieldName == HdRprVolumeTokens->temperature) {
                 processVdbGridInfo(emissionGridInfo, desc);
                 bool emissionGridFound = true;
-            } else if (desc.fieldName == HdRprVolumeTokens->color) {
+            }*/
+
+            else if (desc.fieldName == HdRprVolumeTokens->color) {
                 processVdbGridInfo(albedoGridInfo, desc);
             }
         }
