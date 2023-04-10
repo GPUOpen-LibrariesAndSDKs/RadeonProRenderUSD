@@ -336,7 +336,7 @@ private:
 struct HdRprApiVolume {
     std::unique_ptr<rpr::Grid> densityGrid;
 
-    std::unique_ptr<rpr::Shape> base_mesh;
+    std::unique_ptr<rpr::Shape> baseMesh;
     std::unique_ptr <rpr::MaterialNode> volumeShader;
 
     std::unique_ptr <rpr::MaterialNode> densityGridShader;
@@ -1479,7 +1479,7 @@ public:
 
         rpr::Status status;
 
-        rprApiVolume->base_mesh.reset(CreateVoidMesh());
+        rprApiVolume->baseMesh.reset(CreateVoidMesh());
         rprApiVolume->volumeShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_VOLUME, &status));
         rprApiVolume->densityGridShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_GRID_SAMPLER, &status));
 
@@ -1562,7 +1562,7 @@ public:
             }
         }
 
-        RPR_ERROR_CHECK(rprApiVolume->base_mesh.get()->SetVolumeMaterial(rprApiVolume->volumeShader.get()), "Failed to set volume shader");
+        RPR_ERROR_CHECK(rprApiVolume->baseMesh.get()->SetVolumeMaterial(rprApiVolume->volumeShader.get()), "Failed to set volume shader");
 
         rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
         rprApiVolume->voxelsTransform.SetScale(GfCompMult(voxelSize, gridSize));
@@ -1575,7 +1575,7 @@ public:
         auto t = transform * volume->voxelsTransform * GfMatrix4f(m_unitSizeTransform);
 
         LockGuard rprLock(m_rprContext->GetMutex());
-        RPR_ERROR_CHECK(volume->base_mesh->SetTransform(t.data(), false), "Failed to set volume transform");
+        RPR_ERROR_CHECK(volume->baseMesh->SetTransform(t.data(), false), "Failed to set volume transform");
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
@@ -3941,14 +3941,14 @@ private:
 
     rpr::Shape* CreateVoidMesh() { // creates special mesh which can be used as a base for hetero volumes
 
-        rpr_mesh_info mesh_properties[16];
-        mesh_properties[0] = (rpr_mesh_info)RPR_MESH_VOLUME_FLAG;
-        mesh_properties[1] = (rpr_mesh_info)1; // enable the Volume flag for the Mesh
-        mesh_properties[2] = (rpr_mesh_info)0;
+        rpr_mesh_info meshProperties[16];
+        meshProperties[0] = (rpr_mesh_info)RPR_MESH_VOLUME_FLAG;
+        meshProperties[1] = (rpr_mesh_info)1; // enable the Volume flag for the Mesh
+        meshProperties[2] = (rpr_mesh_info)0;
 
         rpr::Status status;
         auto mesh = m_rprContext->CreateShape(nullptr, 0, 0, nullptr, 0, 0, nullptr, 0, 0, 0, nullptr, nullptr,
-            nullptr, nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr, 0, mesh_properties, &status);
+            nullptr, nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr, 0, meshProperties, &status);
         if (!mesh) {
             RPR_ERROR_CHECK(status, "Failed to create mesh");
             return nullptr;

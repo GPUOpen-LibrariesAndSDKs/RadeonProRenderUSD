@@ -445,7 +445,6 @@ void HdRprVolume::Sync(
         GridInfo albedoGridInfo;
 
         bool densityGridFound = false;
-        bool emissionGridFound = false;
 
         auto volumeFieldDescriptorVector = sceneDelegate->GetVolumeFieldDescriptors(GetId());
 
@@ -455,20 +454,14 @@ void HdRprVolume::Sync(
                 processVdbGridInfo(densityGridInfo, desc);
                 densityGridFound = true;
             }
-            // now processing of temperature grid is temporary disabled because it can produce incorrect result. It will be re-implemented in the future using volume material 
-             
-            /* else if (desc.fieldName == HdRprVolumeTokens->temperature) {
-                processVdbGridInfo(emissionGridInfo, desc);
-                bool emissionGridFound = true;
-            }*/
-
             else if (desc.fieldName == HdRprVolumeTokens->color) {
                 processVdbGridInfo(albedoGridInfo, desc);
             }
+            // now processing of temperature grid is temporary disabled because it can produce incorrect result. It will be re-implemented in the future using volume material 
         }
 
         // if density grid is not found we try to use the first grid as density
-        if (!densityGridFound && !emissionGridFound && volumeFieldDescriptorVector.size() > 0) {
+        if (!densityGridFound && volumeFieldDescriptorVector.size() > 0) {
             processVdbGridInfo(densityGridInfo, volumeFieldDescriptorVector[0]);
         }
 
