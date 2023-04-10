@@ -574,9 +574,6 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
                         auto denoiseFilterType = (m_enabledFilters & kFilterAIDenoise) ? rif::FilterType::AIDenoise : rif::FilterType::EawDenoise;
                         auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
                         auto filter = rif::Filter::Create(denoiseFilterType, rifContext, fbDesc.fb_width, fbDesc.fb_height);
-                        filter->SetParam("filter_type", "ml");
-                        filter->SetParam("ml_color_only", 0);
-                        filter->SetParam("ml_use_fp16_compute_type", 1);
                         return filter;
                     }
                 );
