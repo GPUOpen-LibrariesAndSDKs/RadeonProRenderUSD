@@ -342,12 +342,19 @@ private:
 };
 
 struct HdRprApiVolume {
-    std::unique_ptr<rpr::HeteroVolume> heteroVolume;
-    std::unique_ptr<rpr::Grid> albedoGrid;
     std::unique_ptr<rpr::Grid> densityGrid;
-    std::unique_ptr<rpr::Grid> emissionGrid;
-    std::unique_ptr<rpr::Shape> cubeMesh;
-    std::unique_ptr<HdRprApiRawMaterial> cubeMeshMaterial;
+
+    std::unique_ptr<rpr::Shape> baseMesh;
+    std::unique_ptr <rpr::MaterialNode> volumeShader;
+
+    std::unique_ptr <rpr::MaterialNode> densityGridShader;
+
+    std::unique_ptr <rpr::Image> albedoLookupRamp;
+    std::unique_ptr <rpr::MaterialNode> albedoLookupShader;
+
+    std::unique_ptr <rpr::Image> emissionLookupRamp;
+    std::unique_ptr <rpr::MaterialNode> emissionLookupShader;
+
     GfMatrix4f voxelsTransform;
 };
 
@@ -1477,69 +1484,96 @@ public:
             return nullptr;
         }
 
-        auto cubeMesh = CreateCubeMesh(1.0f, 1.0f, 1.0f);
-        if (!cubeMesh) {
-            return nullptr;
-        }
-
         LockGuard rprLock(m_rprContext->GetMutex());
 
         auto rprApiVolume = new HdRprApiVolume;
 
-        rprApiVolume->cubeMeshMaterial.reset(HdRprApiRawMaterial::Create(m_rprContext.get(), RPR_MATERIAL_NODE_TRANSPARENT, {
-            {RPR_MATERIAL_INPUT_COLOR, GfVec4f(1.0f)}
-        }));
-        rprApiVolume->cubeMesh.reset(cubeMesh);
+        rpr::Status status;
 
-        rpr::Status densityGridStatus;
+        rprApiVolume->baseMesh.reset(CreateVoidMesh());
+        rprApiVolume->volumeShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_VOLUME, &status));
+        rprApiVolume->densityGridShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_GRID_SAMPLER, &status));
+
+        //Northstar does not support density lookup, so we need to compute values
+        std::vector<float> computedDensityValues;
+        computedDensityValues.resize(densityValues.size());
+
+        for (int idx = 0; idx < densityValues.size(); idx++) {
+            if (densityValues[idx] < 0) {
+                computedDensityValues[idx] = densityLUT[0][0];
+                continue;
+            }
+            if (densityValues[idx] >= 1) {
+                computedDensityValues[idx] = densityLUT.back()[0];
+                continue;
+            }
+            size_t lookupIndex = floor(densityValues[idx] * (densityLUT.size() - 1));
+            
+            //linear interpolation
+            float firstValue = densityLUT[lookupIndex][0];
+            float secondValue = densityLUT[lookupIndex + 1][0];
+            computedDensityValues[idx] = firstValue + (secondValue - firstValue) * (densityValues[idx] * densityLUT.size() - lookupIndex);
+        }
+
         rprApiVolume->densityGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
             &densityCoords[0], densityCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-            &densityValues[0], densityValues.size() * sizeof(densityValues[0]), 0, &densityGridStatus));
+            &computedDensityValues[0], computedDensityValues.size() * sizeof(computedDensityValues[0]), 0, &status));
 
-        rpr::Status albedoGridStatus;
-        rprApiVolume->albedoGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-            &albedoCoords[0], albedoCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-            &albedoValues[0], albedoValues.size() * sizeof(albedoValues[0]), 0, &albedoGridStatus));
-
-        rpr::Status emissionGridStatus;
-        rprApiVolume->emissionGrid.reset(m_rprContext->CreateGrid(gridSize[0], gridSize[1], gridSize[2],
-            &emissionCoords[0], emissionCoords.size() / 3, RPR_GRID_INDICES_TOPOLOGY_XYZ_U32,
-            &emissionValues[0], emissionValues.size() * sizeof(emissionValues[0]), 0, &emissionGridStatus));
-
-        rpr::Status status;
-        rprApiVolume->heteroVolume.reset(m_rprContext->CreateHeteroVolume(&status));
-
-        if (!rprApiVolume->densityGrid || !rprApiVolume->albedoGrid || !rprApiVolume->emissionGrid ||
-            !rprApiVolume->cubeMeshMaterial || !rprApiVolume->cubeMesh ||
-            !rprApiVolume->heteroVolume ||
-
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityGrid(rprApiVolume->densityGrid.get()), "Failed to set density hetero volume grid") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityLookup((float*)densityLUT.data(), densityLUT.size()), "Failed to set density volume lookup values") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetDensityScale(densityScale), "Failed to set volume's density scale") ||
-
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoGrid(rprApiVolume->albedoGrid.get()), "Failed to set albedo hetero volume grid") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoLookup((float*)albedoLUT.data(), albedoLUT.size()), "Failed to set albedo volume lookup values") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetAlbedoScale(albedoScale), "Failed to set volume's albedo scale") ||
-
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionGrid(rprApiVolume->emissionGrid.get()), "Failed to set emission hetero volume grid") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionLookup((float*)emissionLUT.data(), emissionLUT.size()), "Failed to set emission volume lookup values") ||
-            RPR_ERROR_CHECK(rprApiVolume->heteroVolume->SetEmissionScale(emissionScale), "Failed to set volume's emission scale") ||
-
-            RPR_ERROR_CHECK(rprApiVolume->cubeMesh->SetHeteroVolume(rprApiVolume->heteroVolume.get()), "Failed to set hetero volume to mesh") ||
-            RPR_ERROR_CHECK(m_scene->Attach(rprApiVolume->heteroVolume.get()), "Failed attach hetero volume")) {
-
-            RPR_ERROR_CHECK(densityGridStatus, "Failed to create density grid");
-            RPR_ERROR_CHECK(albedoGridStatus, "Failed to create albedo grid");
-            RPR_ERROR_CHECK(emissionGridStatus, "Failed to create emission grid");
-            RPR_ERROR_CHECK(status, "Failed to create hetero volume");
-
-            m_scene->Detach(rprApiVolume->heteroVolume.get());
-            delete rprApiVolume;
-
+        // these objects are required to correctly create volume
+        if (!rprApiVolume->densityGridShader ||
+            !rprApiVolume->volumeShader ||
+            !rprApiVolume->densityGridShader ||
+            !rprApiVolume->densityGrid) {
             return nullptr;
         }
 
-        rprApiVolume->cubeMeshMaterial->AttachTo(rprApiVolume->cubeMesh.get(), false);
+        RPR_ERROR_CHECK(rprMaterialNodeSetInputGridDataByKey(rpr::GetRprObject(rprApiVolume->densityGridShader.get()), RPR_MATERIAL_INPUT_DATA, rpr::GetRprObject(rprApiVolume->densityGrid.get())), "Failde to set density grid");
+        RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_DENSITYGRID, rprApiVolume->densityGridShader.get()), "Failed to set density grid");
+
+        auto createLookupTexture = [&](VtVec3fArray const& LUT, std::unique_ptr<rpr::Image>& outImage, rpr::Status* imageStatus) {
+            rpr_image_desc lookupImageDesc;
+            lookupImageDesc.image_width = LUT.size();
+            lookupImageDesc.image_height = 1;
+            lookupImageDesc.image_depth = 0;
+            lookupImageDesc.image_row_pitch = lookupImageDesc.image_width * sizeof(float) * 3;
+            lookupImageDesc.image_slice_pitch = 0;
+
+            outImage.reset(m_rprContext->CreateImage({ 3, RPR_COMPONENT_TYPE_FLOAT32 }, lookupImageDesc, (float*)LUT.data(), imageStatus));
+        };
+
+        if (!emissionCoords.empty()) {
+            rprApiVolume->emissionLookupShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_IMAGE_TEXTURE, &status));
+            createLookupTexture(emissionLUT, rprApiVolume->emissionLookupRamp, &status);
+
+            if (rprApiVolume->emissionLookupShader &&
+                rprApiVolume->emissionLookupRamp) {
+
+                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_DATA, rprApiVolume->emissionLookupRamp.get()), "Failed to set emission ramp");
+                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->densityGridShader.get()), "Failed to set emission grid sampler");
+                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_U, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set emission wrap type");
+                RPR_ERROR_CHECK(rprApiVolume->emissionLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_V, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set emission wrap type");
+
+                RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_EMISSION, rprApiVolume->emissionLookupShader.get()), "Failed to set emission sampler");
+            }
+        }
+        
+        if (!albedoCoords.empty()) {
+            rprApiVolume->albedoLookupShader.reset(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_IMAGE_TEXTURE, &status));
+            createLookupTexture(albedoLUT, rprApiVolume->albedoLookupRamp, &status);
+            
+            if (rprApiVolume->albedoLookupShader &&
+                rprApiVolume->albedoLookupRamp) {
+
+                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_DATA, rprApiVolume->albedoLookupRamp.get()), "Failed to set albedo ramp");
+                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_UV, rprApiVolume->densityGridShader.get()), "Failed to set albedo grid sampler");
+                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_U, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set albedo wrap type");
+                RPR_ERROR_CHECK(rprApiVolume->albedoLookupShader->SetInput(RPR_MATERIAL_INPUT_WRAP_V, RPR_IMAGE_WRAP_TYPE_CLAMP_TO_EDGE), "Failed to set albedo wrap type");
+
+                RPR_ERROR_CHECK(rprApiVolume->volumeShader->SetInput(RPR_MATERIAL_INPUT_COLOR, rprApiVolume->albedoLookupShader.get()), "Failed to set albedo sampler");
+            }
+        }
+
+        RPR_ERROR_CHECK(rprApiVolume->baseMesh.get()->SetVolumeMaterial(rprApiVolume->volumeShader.get()), "Failed to set volume shader");
 
         rprApiVolume->voxelsTransform = GfMatrix4f(1.0f);
         rprApiVolume->voxelsTransform.SetScale(GfCompMult(voxelSize, gridSize));
@@ -1552,18 +1586,14 @@ public:
         auto t = transform * volume->voxelsTransform * GfMatrix4f(m_unitSizeTransform);
 
         LockGuard rprLock(m_rprContext->GetMutex());
-        RPR_ERROR_CHECK(volume->cubeMesh->SetTransform(t.data(), false), "Failed to set cubeMesh transform");
-        RPR_ERROR_CHECK(volume->heteroVolume->SetTransform(t.data(), false), "Failed to set heteroVolume transform");
+        RPR_ERROR_CHECK(volume->baseMesh->SetTransform(t.data(), false), "Failed to set volume transform");
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
     void Release(HdRprApiVolume* volume) {
         if (volume) {
             LockGuard rprLock(m_rprContext->GetMutex());
-
-            m_scene->Detach(volume->heteroVolume.get());
             delete volume;
-
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
@@ -3934,6 +3964,29 @@ private:
         VtIntArray vpf(cubeVpfCount, 3);
 
         return CreateMesh(position, indexes, normals, VtIntArray(), VtVec2fArray(), VtIntArray(), vpf);
+    }
+
+    rpr::Shape* CreateVoidMesh() { // creates special mesh which can be used as a base for hetero volumes
+
+        rpr_mesh_info meshProperties[16];
+        meshProperties[0] = (rpr_mesh_info)RPR_MESH_VOLUME_FLAG;
+        meshProperties[1] = (rpr_mesh_info)1; // enable the Volume flag for the Mesh
+        meshProperties[2] = (rpr_mesh_info)0;
+
+        rpr::Status status;
+        auto mesh = m_rprContext->CreateShape(nullptr, 0, 0, nullptr, 0, 0, nullptr, 0, 0, 0, nullptr, nullptr,
+            nullptr, nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr, 0, meshProperties, &status);
+        if (!mesh) {
+            RPR_ERROR_CHECK(status, "Failed to create mesh");
+            return nullptr;
+        }
+
+        if (RPR_ERROR_CHECK(m_scene->Attach(mesh), "Failed to attach mesh to scene")) {
+            delete mesh;
+            return nullptr;
+        }
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
+        return mesh;
     }
 
     void UpdateColorAlpha(HdRprApiColorAov* colorAov) {
