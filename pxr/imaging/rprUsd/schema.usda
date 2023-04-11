@@ -186,6 +186,13 @@ class "RprRendererSettingsAPI" (
         displayName = "Use Uniform Seed"
         displayGroup = "General"
     )
+	
+	uniform int rpr:seedOverride = 0 (
+        displayName = "Random Seed Override"
+        displayGroup = "General"
+        rprMinValue = 0
+    )
+
 
     # not for < High
     uniform bool rpr:denoising:enable = false (
@@ -820,6 +827,24 @@ class "RprDomeLightSettingsAPI" (
         }
         displayGroup = "RPR"
         displayName = "Background Override Color"
+        doc = "Color that overrides background"
+    )
+
+    uniform bool rpr:backgroundOverrideGlobal:enable = false (
+        customData = {
+            string apiName = "domeLightBackgroundOverrideGlobal"
+        }
+        displayGroup = "RPR"
+        displayName = "Background Override Global"
+        doc = "Whether to override background."
+    )
+
+    uniform color3f rpr:backgroundOverrideGlobal:color = (1, 1, 1) (
+        customData = {
+            string apiName = "backgroundOverrideColorGlobal"
+        }
+        displayGroup = "RPR"
+        displayName = "Background Override Global Color"
         doc = "Color that overrides background"
     )
 
