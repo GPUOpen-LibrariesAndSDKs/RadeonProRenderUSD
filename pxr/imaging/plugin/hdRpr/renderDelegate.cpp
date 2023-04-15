@@ -351,6 +351,13 @@ HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const
     return m_settingDescriptors;
 }
 
+std::string join(const std::vector<std::string>& vec, const std::string& delim)
+{
+    std::stringstream res;
+    copy(vec.begin(), vec.end(), std::ostream_iterator<std::string>(res, delim.c_str()));
+    return res.str();
+}
+
 VtDictionary HdRprDelegate::GetRenderStats() const {
     auto rprStats = m_rprApi->GetRenderStats();
 
@@ -359,7 +366,7 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     stats["averageRenderTimePerSample"] = rprStats.averageRenderTimePerSample;
     stats["averageResolveTimePerSample"] = rprStats.averageResolveTimePerSample;
 
-    stats["gpuUsedNames"] = m_rprApi->GetGpuUsedNames();
+    stats["gpuUsedNames"] = join(m_rprApi->GetGpuUsedNames(), ", ");
     stats["threadCountUsed"] = m_rprApi->GetCpuThreadCountUsed();
 
     stats["firstIterationRenderTime"] = m_rprApi->GetFirstIterationRenerTime();
@@ -368,6 +375,9 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     stats["frameRenderTotalTime"] = rprStats.frameRenderTotalTime;
     stats["frameResolveTotalTime"] = rprStats.frameResolveTotalTime;
     
+    stats["cacheCreationTime"] = rprStats.cacheCreationTime;
+    stats["syncTime"] = rprStats.syncTime;
+
     return stats;
 }
 

@@ -587,6 +587,13 @@ render_setting_categories = [
                 'houdini': {
                     'hidewhen': hidewhen_hybrid
                 }
+            },
+            {
+                'name': 'seedOverride',
+                'ui_name': 'Random Seed Override',
+                'defaultValue': 0,
+                'minValue': 0,
+                'maxValue': 2 ** 16
             }
         ]
     },
