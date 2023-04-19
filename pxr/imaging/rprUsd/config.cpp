@@ -153,6 +153,7 @@ bool GetJsonProperty(const char* propertyName, json const& json, T* property) {
 const char* kShowRestartRequiredMessage = "ShowRestartRequiredMessage";
 const char* kTextureCacheDir = "TextureCacheDir";
 const char* kKernelCacheDir = "KernelCacheDir";
+const char* kMemManagement = "MemManagement";
 
 } // namespace anonymous
 
@@ -235,12 +236,26 @@ void RprUsdConfig::SetKernelCacheDir(std::string const& newValue) {
         Save();
     }
 }
+
 std::string RprUsdConfig::GetKernelCacheDir() const {
     std::string ret;
     if (!GetJsonProperty(kKernelCacheDir, m_impl->cfg, &ret)) {
         ret = GetDefaultCacheDir("kernel");
     }
     return ret;
+}
+
+bool RprUsdConfig::GetMemManagement() const {
+    bool ret = false;
+    GetJsonProperty(kMemManagement, m_impl->cfg, &ret);
+    return ret;
+}
+
+void RprUsdConfig::SetMemManagement(bool newValue) {
+    if (m_impl->cfg[kMemManagement] != newValue) {
+        m_impl->cfg[kMemManagement] = newValue;
+        Save();
+    }
 }
 
 std::string RprUsdConfig::GetDeviceConfigurationFilepath() const {
