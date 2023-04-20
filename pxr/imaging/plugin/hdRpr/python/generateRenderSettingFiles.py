@@ -331,9 +331,6 @@ render_setting_categories = [
     },
     {
         'name': 'Quality',
-        'houdini': {
-            'hidewhen': hidewhen_hybrid
-        },
         'settings': [
             {
                 'name': 'quality:rayDepth',
@@ -405,7 +402,10 @@ render_setting_categories = [
                 'help': 'Determines Pixel filter width (anti-aliasing).',
                 'defaultValue': 1.5,
                 'minValue': 0.0,
-                'maxValue': 5.0
+                'maxValue': 5.0,
+                'houdini': {
+                    'hidewhen': hidewhen_hybrid
+                }
             }
         ]
     },
