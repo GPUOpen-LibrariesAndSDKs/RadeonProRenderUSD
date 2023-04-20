@@ -179,6 +179,13 @@ class "RprRendererSettingsAPI" (
         displayName = "Use Uniform Seed"
         displayGroup = "General"
     )
+	
+	uniform int rpr:seedOverride = 0 (
+        displayName = "Random Seed Override"
+        displayGroup = "General"
+        rprMinValue = 0
+    )
+
 
     # not for < High
     uniform bool rpr:denoising:enable = false (
