@@ -2043,6 +2043,29 @@ public:
                     m_dirtyFlags |= ChangeTracker::DirtyScene;
                 }
             }
+            
+            if (preferences.IsDirty(HdRprConfig::DirtyDenoise) || preferences.IsDirty(HdRprConfig::DirtyViewportSettings)) {
+                if (preferences.GetDenoisingEnable() && preferences.GetViewportUpscaling()) {
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_UPSCALER), RPR_UPSCALER_FSR2), "Failed to set upscaler");
+                    rpr_uint upscaleQuality = RPR_FSR2_QUALITY_MODE_ULTRA_PERFORMANCE;
+                    TfToken qualityToken = preferences.GetViewportUpscalingQuality();
+                    if (qualityToken == HdRprViewportUpscalingQualityTokens->UltraQuality) {
+                        upscaleQuality = RPR_FSR2_QUALITY_ULTRA_QUALITY;
+                    } else if (qualityToken == HdRprViewportUpscalingQualityTokens->Quality) {
+                        upscaleQuality = RPR_FSR2_QUALITY_MODE_QUALITY;
+                    } else if (qualityToken == HdRprViewportUpscalingQualityTokens->Balance) {
+                        upscaleQuality = RPR_FSR2_QUALITY_MODE_BALANCE;
+                    } else if (qualityToken == HdRprViewportUpscalingQualityTokens->Performance) {
+                        upscaleQuality = RPR_FSR2_QUALITY_MODE_PERFORMANCE;
+                    } else if (qualityToken == HdRprViewportUpscalingQualityTokens->UltraPerformance) {
+                        upscaleQuality = RPR_FSR2_QUALITY_MODE_ULTRA_PERFORMANCE;
+                    }
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_FSR2_QUALITY), upscaleQuality), "Failed to set upscaler quality");
+                }
+                else {
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_UPSCALER), RPR_UPSCALER_NONE), "Failed to set upscaler");
+                }
+            }
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
@@ -2120,7 +2143,7 @@ public:
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyViewportSettings) || force) {
-            m_upscale = preferences.GetViewportUpscaling();
+            m_upscale = preferences.GetViewportUpscaling() && !RprUsdIsHybrid(m_rprContextMetadata.pluginType);
             m_dirtyFlags |= (ChangeTracker::DirtyScene | ChangeTracker::DirtyViewport);
             UpdateColorAlpha(m_colorAov.get());
         }
