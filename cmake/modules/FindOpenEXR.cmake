@@ -22,7 +22,7 @@
 # language governing permissions and limitations under the Apache License.
 #
 
-if (NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "Windows" AND HoudiniUSD_FOUND)
     set(PATH_PARAMS NO_DEFAULT_PATH NO_SYSTEM_ENVIRONMENT_PATH)
 endif()
 
