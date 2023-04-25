@@ -1648,6 +1648,10 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyViewport;
     }
 
+    int aovSize(int size) const {
+        return m_upscale ? size / 2 : size;
+    }
+
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings) {
         m_aovBindings = aovBindings;
         m_dirtyFlags |= ChangeTracker::DirtyAOVBindings;
@@ -1692,7 +1696,7 @@ public:
                 // Reuse previously created RPR AOV
                 std::swap(outRb.rprAov, outputRenderBufferIt->rprAov);
                 // Update underlying format if needed
-                outRb.rprAov->Resize(rprRenderBuffer->GetWidth(), rprRenderBuffer->GetHeight(), aovFormat);
+                outRb.rprAov->Resize(aovSize(rprRenderBuffer->GetWidth()), aovSize(rprRenderBuffer->GetHeight()), aovFormat, (rprRenderBuffer->GetWidth() % 2 != 0));
             }
 
             if (!outRb.rprAov) return nullptr;
@@ -1700,6 +1704,9 @@ public:
             if (!outRb.lpe.empty() &&
                 RPR_ERROR_CHECK(outRb.rprAov->GetAovFb()->GetRprObject()->SetLPE(outRb.lpe.c_str()), "Failed to set LPE")) {
                 return nullptr;
+            }
+            if (m_upscale) {
+                outRb.rprAov->InitUpscaleFilter(m_rifContext.get());
             }
 
             m_outputRenderBuffers.push_back(std::move(outRb));
@@ -1739,7 +1746,12 @@ public:
 
         for (auto& outRb : m_outputRenderBuffers) {
             if (outRb.mappedData && (m_isFirstSample || outRb.isMultiSampled)) {
-                outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
+                if (m_upscale) {
+                    outRb.rprAov->GetUpscaledData(outRb.mappedData, outRb.mappedDataSize, m_rifContext.get());
+                }
+                else {
+                    outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
+                }
             }
         }
 
@@ -2151,6 +2163,12 @@ public:
                 m_cryptomatteAovs = nullptr;
             }
         }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyViewportSettings) || force) {
+            m_upscale = preferences.GetViewportUpscaling();
+            m_dirtyFlags |= (ChangeTracker::DirtyScene | ChangeTracker::DirtyViewport);
+            UpdateColorAlpha(m_colorAov.get());
+        }
     }
 
     bool GetRprCameraMode(TfToken const& mode, rpr_camera_mode* out) {
@@ -2430,7 +2448,7 @@ public:
 
         if (m_dirtyFlags & ChangeTracker::DirtyViewport) {
             m_resolveData.ForAllAovs([this](ResolveData::AovEntry const& e) {
-                e.aov->Resize(m_viewportSize[0], m_viewportSize[1], e.aov->GetFormat());
+                e.aov->Resize(aovSize(m_viewportSize[0]), aovSize(m_viewportSize[1]), e.aov->GetFormat(), (m_viewportSize[0] % 2 != 0));
             });
 
             // If AOV bindings are dirty then we already committed HdRprRenderBuffers, see SetAovBindings
@@ -3646,6 +3664,7 @@ private:
 
             m_currentRenderQuality = GetRenderQuality(*config);
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
+            m_rprContextMetadata.isGlInteropEnabled = config->GetOpenglInteroperability();
             m_rprContextMetadata.useOpenCL = config->GetCoreUseOpenCL();
         }
 
@@ -3737,6 +3756,9 @@ private:
 
     void InitAovs() {
         m_colorAov = std::static_pointer_cast<HdRprApiColorAov>(CreateAov(HdAovTokens->color));
+        if (m_upscale) {
+            m_colorAov->InitUpscaleFilter(m_rifContext.get());
+        }
 
         m_lpeAovPool.clear();
         m_lpeAovPool.insert(m_lpeAovPool.begin(), {
@@ -4012,7 +4034,7 @@ private:
             }
         }
 
-        if (m_isAlphaEnabled) {
+        if (m_isAlphaEnabled || m_upscale) {
             auto opacityAov = GetAov(HdRprAovTokens->opacity, m_viewportSize[0], m_viewportSize[1], HdFormatFloat32Vec4);
             if (opacityAov) {
                 colorAov->SetOpacityAov(opacityAov);
@@ -4073,7 +4095,7 @@ private:
 
                     newAov = colorAov;
                 } else if (aovName == HdAovTokens->normal) {
-                    newAov = new HdRprApiNormalAov(width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiNormalAov(aovSize(width), aovSize(height), format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else if (aovName == HdAovTokens->depth) {
                     auto worldCoordinateAov = GetAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4);
                     if (!worldCoordinateAov) {
@@ -4086,7 +4108,7 @@ private:
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), std::move(opacityAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiDepthAov(aovSize(width), aovSize(height), format, std::move(worldCoordinateAov), std::move(opacityAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 }
                 else if (aovName == HdRprAovTokens->colorWithTransparency) {
                     auto rawColorAov = GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4);
@@ -4105,10 +4127,10 @@ private:
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiScCompositeAOV(width, height, format, std::move(rawColorAov), std::move(opacityAov), std::move(shadowCatcherAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiScCompositeAOV(aovSize(width), aovSize(height), format, std::move(rawColorAov), std::move(opacityAov), std::move(shadowCatcherAov), m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
 
                 } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
-                    newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), aovSize(width), aovSize(height), format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                     aovCustomDestructor = [this](HdRprApiAov* aov) {
                         // Each LPE AOV reserves RPR's LPE AOV id (RPR_AOV_LPE_0, ...)
                         // As soon as LPE AOV is released we want to return reserved id to the pool
@@ -4134,10 +4156,10 @@ private:
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiIdMaskAov(aovDesc, baseAov, width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiIdMaskAov(aovDesc, baseAov, aovSize(width), aovSize(height), format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                 } else {
                     if (!aovDesc.computed) {
-                        newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                        newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), aovSize(width), aovSize(height), format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
                     } else {
                         TF_CODING_ERROR("Failed to create %s AOV: unprocessed computed AOV", aovName.GetText());
                     }
@@ -4158,7 +4180,7 @@ private:
                 m_aovRegistry[aovName] = aov;
                 m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
             } else {
-                aov->Resize(width, height, format);
+                aov->Resize(aovSize(width), aovSize(height), format, (width % 2 != 0));
             }
         } catch (std::runtime_error const& e) {
             TF_RUNTIME_ERROR("Failed to create %s AOV: %s", aovName.GetText(), e.what());
@@ -4483,6 +4505,7 @@ private:
     int m_minSamples = 0;
     float m_varianceThreshold = 0.0f;
     TfToken m_currentRenderQuality;
+    bool m_upscale;
 
     using Duration = std::chrono::high_resolution_clock::duration;
     Duration m_frameRenderTotalTime;

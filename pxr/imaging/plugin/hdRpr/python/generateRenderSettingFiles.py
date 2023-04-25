@@ -712,6 +712,24 @@ render_setting_categories = [
                 'defaultValue': False
             }
         ]
+    },
+    {
+        'name': 'ViewportSettings',
+        'houdini': {},
+        'settings': [
+            {
+                'name': 'openglInteroperability',
+                'ui_name': 'OpenGL interoperability (Needs render restart)',
+                'help': '',
+                'defaultValue': False,
+            },
+            {
+                'name': 'viewportUpscaling',
+                'ui_name': 'Viewport Upscaling (Needs render restart)',
+                'help': '',
+                'defaultValue': False,
+            },
+        ]
     }
 ]
 
@@ -1025,7 +1043,13 @@ void HdRprConfig::Set{name_title}({c_type} {c_name}) {{
         rs_validate_values=''.join(rs_validate_values)))
 
     if generate_ds_files:
-        generate_houdini_ds(install_path, 'Global', render_setting_categories)
+        production_render_setting_categories = [category for category in render_setting_categories if category['name'] != 'ViewportSettings']
+        generate_houdini_ds(install_path, 'Global', production_render_setting_categories)        
+        viewport_render_setting_categories = [category for category in render_setting_categories \
+            if category['name'] == 'Sampling' or category['name'] == 'AdaptiveSampling' or category['name'] == 'Denoise' or category['name'] == 'ViewportSettings']
+        for category in viewport_render_setting_categories:
+            del category['houdini']
+        generate_houdini_ds(install_path, 'Viewport', viewport_render_setting_categories)
 
 
 def generate(install, generate_ds_files):
