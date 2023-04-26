@@ -47,6 +47,8 @@ public:
     std::string GetKernelCacheDir() const;
     RPRUSD_API
     void SetKernelCacheDir(std::string const&);
+    RPRUSD_API
+    std::string GetPrecompiledKernelDir() const;
 
     RPRUSD_API
     std::string GetDeviceConfigurationFilepath() const;

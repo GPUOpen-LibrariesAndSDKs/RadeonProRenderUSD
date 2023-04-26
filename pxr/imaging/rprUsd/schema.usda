@@ -57,6 +57,13 @@ class "RprRendererSettingsAPI" (
         displayName = "Flip Vertical"
         displayGroup = "General"
     )
+	
+	# northstar only
+	uniform bool rpr:core:useOpenCL = false (
+        displayName = "Use OpenCL Backend (legacy)"
+        displayGroup = "General"
+        doc = "Use OpenCL Northstar backed instead of HIP/CUDA"
+    )
 
     # tahoe only
     uniform float rpr:ambientOcclusion:radius = 1.0 (

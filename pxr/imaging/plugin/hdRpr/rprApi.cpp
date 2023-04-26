@@ -1829,7 +1829,8 @@ public:
                 m_currentRenderQuality = GetRenderQuality(*config);
                 auto newPlugin = GetPluginType(m_currentRenderQuality);
                 auto activePlugin = m_rprContextMetadata.pluginType;
-                m_state = (newPlugin != activePlugin) ? kStateRestartRequired : kStateRender;
+                bool backendChanged = activePlugin == kPluginNorthstar && m_rprContextMetadata.useOpenCL != config->GetCoreUseOpenCL();
+                m_state = (newPlugin != activePlugin || backendChanged) ? kStateRestartRequired : kStateRender;
             }
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
@@ -3664,6 +3665,7 @@ private:
             m_currentRenderQuality = GetRenderQuality(*config);
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
             m_rprContextMetadata.isGlInteropEnabled = config->GetOpenglInteroperability();
+            m_rprContextMetadata.useOpenCL = config->GetCoreUseOpenCL();
         }
 
         m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);

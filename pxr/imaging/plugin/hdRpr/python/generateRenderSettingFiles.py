@@ -73,6 +73,15 @@ render_setting_categories = [
                     SettingValue('HybridPro', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
                     SettingValue('Northstar', 'Full')
                 ]
+            },
+            {
+                'name': 'core:useOpenCL',
+                'ui_name': 'Use OpenCL Backend (legacy)',
+                'help': 'Render restart might be required',
+                'defaultValue': False,
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
             }
         ]
     },
