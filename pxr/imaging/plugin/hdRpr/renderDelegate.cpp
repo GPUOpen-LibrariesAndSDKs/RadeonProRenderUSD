@@ -434,23 +434,7 @@ void HdRprDelegate::SetDrivers(HdDriverVector const& drivers) {
             vkInteropInfo.instances->physical_device = dictionary["interop_info_physicalDevice"].Get<void*>();
             vkInteropInfo.instances->device = dictionary["interop_info_device"].Get<void*>();
 
-            // Condition variable is used to prevent this issue:
-            // [Plugin] Render_Frame_1 & Flush_Frame_1
-            // [Plugin] Render_Frame_2 & Flush_Frame_2
-            // [Client] Present frame
-            // Hybrid correct usage prohibit flushing next frame before previous was presented
-            // Render thread would wait on next flush till previous frame would be presented, example:
-            // [Plugin] Render_Frame_1 & Flush_Frame_1
-            // [Plugin] Render_Frame_2 & [Wait for present] <- Here frame wasn't presented yet
-            // [Client] Present Frame_1
-            // [Plugin] [Wake up] Flush Frame_2, continue work
-            std::condition_variable* presentedConditionVariable = dictionary["presented_condition_variable"].Get<std::condition_variable*>();
-            bool* presentedCondition = dictionary["presented_condition"].Get<bool*>();
-
-            // Set condition to true to render first frame
-            //*presentedCondition = true;
-
-            m_rprApi->SetInteropInfo(&vkInteropInfo, presentedConditionVariable, presentedCondition);
+            m_rprApi->SetInteropInfo(&vkInteropInfo);
             break;
         }
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT

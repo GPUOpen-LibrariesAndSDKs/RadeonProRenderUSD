@@ -3704,11 +3704,9 @@ Don't show this message again?
         return m_firstIterationRenderTime;
     }
 
-    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
+    void SetInteropInfo(void* interopInfo) {
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
         m_rprContextMetadata.interopInfo = interopInfo;
-        m_presentedConditionVariable = presentedConditionVariable;
-        m_presentedCondition = presentedCondition;
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     }
 
@@ -4758,8 +4756,6 @@ private:
     };
     std::unique_ptr<CryptomatteAovs> m_cryptomatteAovs;
 
-    std::condition_variable* m_presentedConditionVariable = nullptr;
-    bool* m_presentedCondition = nullptr;
     rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     bool m_vulkanInteropBufferReady = false;
@@ -5079,8 +5075,8 @@ rpr::FrameBuffer* HdRprApi::GetPrimIdFramebuffer() {
     return m_impl->GetPrimIdFramebuffer();
 }
 
-void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
-    m_impl->SetInteropInfo(interopInfo, presentedConditionVariable, presentedCondition);
+void HdRprApi::SetInteropInfo(void* interopInfo) {
+    m_impl->SetInteropInfo(interopInfo);
 
     // Temporary should be force inited here, because otherwise has issues with GPU synchronization
     m_impl->InitIfNeeded();
