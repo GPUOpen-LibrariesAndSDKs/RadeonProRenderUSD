@@ -407,12 +407,12 @@ class "RprRendererSettingsAPI" (
         rprHidden = 1
     )
     
-    uniform bool rpr:upscaling:enable = false (
+    uniform bool rpr:viewportUpscaling = false (
         displayGroup = "Postprocessing|Upscale"
         displayName = "Viewport Upscaling"
     )
     # Hybrid only
-    uniform token rpr:upscaling:quality = "Ultra Performance" (
+    uniform token rpr:viewportUpscalingQuality = "Ultra Performance" (
         allowedTokens = ["Ultra Quality", "Quality", "Balance", "Performance", "Ultra Performance"]
         displayName = "Viewport Upscaling Quality"
         displayGroup = "Postprocessing|Upscale"
