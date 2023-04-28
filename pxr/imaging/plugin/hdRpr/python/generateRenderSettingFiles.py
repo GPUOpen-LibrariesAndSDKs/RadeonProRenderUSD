@@ -725,10 +725,29 @@ render_setting_categories = [
             },
             {
                 'name': 'viewportUpscaling',
-                'ui_name': 'Viewport Upscaling (Needs render restart)',
+                'ui_name': 'Viewport Upscaling',
                 'help': '',
                 'defaultValue': False,
+                'houdini': {
+                    'hidewhen': ['denoising:enable == 0', lambda settings: hidewhen_render_quality('<', 'High', settings)]
+                }
             },
+            {
+                'name': 'viewportUpscalingQuality',
+                'ui_name': 'Viewport Upscaling Quality',
+                'help': '',
+                'defaultValue': 'Ultra Performance',
+                'values': [
+                    SettingValue('Ultra Quality'),
+                    SettingValue('Quality'),
+                    SettingValue('Balance'),
+                    SettingValue('Performance'),
+                    SettingValue('Ultra Performance'),
+                ],
+                'houdini': {
+                    'hidewhen': ['rpr:viewportUpscaling == 0', 'denoising:enable == 0', lambda settings: hidewhen_render_quality('<', 'High', settings), lambda settings: hidewhen_render_quality('==', 'Northstar', settings)]
+                }
+            }
         ]
     }
 ]
@@ -1044,11 +1063,11 @@ void HdRprConfig::Set{name_title}({c_type} {c_name}) {{
 
     if generate_ds_files:
         production_render_setting_categories = [category for category in render_setting_categories if category['name'] != 'ViewportSettings']
-        generate_houdini_ds(install_path, 'Global', production_render_setting_categories)        
-        viewport_render_setting_categories = [category for category in render_setting_categories \
-            if category['name'] == 'Sampling' or category['name'] == 'AdaptiveSampling' or category['name'] == 'Denoise' or category['name'] == 'ViewportSettings']
-        for category in viewport_render_setting_categories:
-            del category['houdini']
+        generate_houdini_ds(install_path, 'Global', production_render_setting_categories)
+        viewport_render_setting_categories = [category for category in render_setting_categories if category['name'] in ('RenderQuality', 'Sampling', 'AdaptiveSampling', 'Denoise', 'ViewportSettings')]
+        for category in (cat for cat in viewport_render_setting_categories if cat['name'] == 'RenderQuality'):
+            for setting in (s for s in category['settings'] if s['name'] == 'core:renderQuality'):
+                setting['values'] = [SettingValue(value.get_key(), value.get_key() if value.get_key() != 'Northstar' else 'Full') for value in setting['values']]
         generate_houdini_ds(install_path, 'Viewport', viewport_render_setting_categories)
 
 
