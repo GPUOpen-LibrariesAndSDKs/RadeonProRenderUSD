@@ -457,6 +457,9 @@ render_setting_categories = [
                 'ui_name': 'Downscale Resolution When Interactive',
                 'help': 'Controls whether in interactive mode resolution should be downscaled or no.',
                 'defaultValue': True,
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
             }
         ]
     },

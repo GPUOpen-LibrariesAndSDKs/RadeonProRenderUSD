@@ -299,7 +299,7 @@ class "RprRendererSettingsAPI" (
         rprMaxValue = 5.0
     )
 	
-	# HybridPro only
+    # HybridPro only
     uniform bool rpr:quality:enableReStir = true (
         displayName = "Enable ReStir (HybridPro only)"
         displayGroup = "General"
@@ -321,7 +321,7 @@ class "RprRendererSettingsAPI" (
         rprMinValue = 0
         rprMaxValue = 10
     )
-    # tahoe only
+    # northstar only
     uniform bool rpr:quality:interactive:enableDownscale = true (
         displayName = "Enable Downscale"
         displayGroup = "Quality|Interactive"
