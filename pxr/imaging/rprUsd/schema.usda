@@ -233,7 +233,6 @@ class "RprRendererSettingsAPI" (
         rprMaxValue = 1.0
     )
 
-    # not for hybrid
     uniform int rpr:quality:rayDepth = 3 (
         displayName = "Max Ray Depth"
         displayGroup = "Quality"
@@ -298,6 +297,12 @@ class "RprRendererSettingsAPI" (
         doc = "Determines Pixel filter width (anti-aliasing)."
         rprMinValue = 0.0
         rprMaxValue = 5.0
+    )
+	
+	# HybridPro only
+    uniform bool rpr:quality:enableReStir = true (
+        displayName = "Enable ReStir (HybridPro only)"
+        displayGroup = "General"
     )
 
     # not for hybrid

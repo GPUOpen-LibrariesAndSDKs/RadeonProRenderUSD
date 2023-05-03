@@ -415,6 +415,15 @@ render_setting_categories = [
                 'houdini': {
                     'hidewhen': hidewhen_hybrid
                 }
+            },
+            {
+                'name': 'quality:enableReStir',
+                'ui_name': 'Enable ReStir',
+                'help': 'Enable ReStir (HybridPro only)',
+                'defaultValue': True,
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
+                }
             }
         ]
     },
