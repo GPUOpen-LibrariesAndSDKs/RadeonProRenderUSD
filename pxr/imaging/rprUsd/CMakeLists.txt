@@ -203,3 +203,6 @@ install(
 install(
     FILES ${CMAKE_CURRENT_SOURCE_DIR}/metadataPlugin/plugInfo.json
     DESTINATION plugin/usd/rprUsdMetadata/resources)
+	
+file(GLOB_RECURSE RPR_NS_KERNEL_FILES "${RPR_NS_KERNELS_DIR}/*")
+install(FILES ${RPR_NS_KERNEL_FILES} DESTINATION ${CMAKE_INSTALL_PREFIX}/plugin/usd/rprUsd/resources/ns_kernels)

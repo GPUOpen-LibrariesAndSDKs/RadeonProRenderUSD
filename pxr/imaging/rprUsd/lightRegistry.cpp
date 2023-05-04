@@ -58,7 +58,7 @@ rpr::Light* RprUsdLightRegistry::Get(const std::string& id, std::function<void(r
     auto cit = self.m_Clients.find(id);
     if (cit != self.m_Clients.end())
     {
-        auto clientsAndCallbacks = (*cit).second;
+        auto& clientsAndCallbacks = (*cit).second;
         auto cbit = clientsAndCallbacks.find(client);
         if (cbit != clientsAndCallbacks.end()) {
             (*cbit).second = callback;
@@ -80,7 +80,7 @@ rpr::Light* RprUsdLightRegistry::Get(const std::string& id, std::function<void(r
 void RprUsdLightRegistry::ReleaseClient(void* client) {
     RprUsdLightRegistry& self = RprUsdLightRegistry::GetInstance();
     for (auto cit = self.m_Clients.begin(); cit != self.m_Clients.end(); ) {
-        auto clientsAndCallbacks = (*cit).second;
+        auto& clientsAndCallbacks = (*cit).second;
         auto it = clientsAndCallbacks.find(client);
         if (it != clientsAndCallbacks.end()) {
             clientsAndCallbacks.erase(it);

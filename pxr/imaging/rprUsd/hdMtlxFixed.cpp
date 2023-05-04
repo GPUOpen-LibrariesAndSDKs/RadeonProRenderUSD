@@ -301,6 +301,10 @@ _GatherUpstreamNodes(
                                  addedNodeNames, mxUpstreamNode, hdTextureNodes, 
                                  connName.GetString(), mxHdTextureMap);
 
+            if (!(*mxUpstreamNode)) {
+                continue;
+            }
+
             // Connect mxCurrNode to the mxUpstreamNode
             mx::NodePtr mxNextNode = *mxUpstreamNode;
 

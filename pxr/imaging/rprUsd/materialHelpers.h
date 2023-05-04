@@ -26,12 +26,21 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 using RprMaterialNodePtr = std::shared_ptr<rpr::MaterialNode>;
 
+// Some enums may start not from zero, here we tune them manually
+inline rpr_uint TranslateEmumValue(rpr::MaterialNodeInput input, int value) {
+    switch (input) {
+    case RPR_MATERIAL_INPUT_UBER_EMISSION_MODE:
+        return value + 1;
+    default: return value;
+    }
+}
+
 inline rpr::Status SetRprInput(rpr::MaterialNode* node, rpr::MaterialNodeInput input, VtValue const& value) {
     rpr::Status status;
     if (value.IsHolding<uint32_t>()) {
         status = node->SetInput(input, value.UncheckedGet<uint32_t>());
     } else if (value.IsHolding<int>()) {
-        status = node->SetInput(input, rpr_uint(value.UncheckedGet<int>()));
+        status = node->SetInput(input, TranslateEmumValue(input, value.UncheckedGet<int>()));
     } else if (value.IsHolding<bool>()) {
         rpr_uint v = value.UncheckedGet<bool>() ? 1 : 0;
         status = node->SetInput(input, v);

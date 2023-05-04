@@ -244,6 +244,14 @@ std::string RprUsdConfig::GetKernelCacheDir() const {
     }
     return ret;
 }
+std::string RprUsdConfig::GetPrecompiledKernelDir() const {
+    PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
+    auto kernelsDir = PlugFindPluginResource(plugin, "ns_kernels", true);
+    if (kernelsDir.empty()) {
+        TF_RUNTIME_ERROR("Failed to find precompiled kernels for Northstar");
+    }
+    return kernelsDir;
+}
 
 bool RprUsdConfig::GetMemManagement() const {
     bool ret = false;
