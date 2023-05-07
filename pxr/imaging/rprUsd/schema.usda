@@ -817,6 +817,15 @@ class "RprLightSettingsAPI" (
         displayName = "Visibility Transparent"
         doc = ""
     )
+	
+	uniform float rpr:light:intensityMultiplier = 1.0 (
+        customData = {
+            string apiName = "lightIntensityMultiplier"
+        }
+        displayGroup = "Intensity"
+        displayName = "Intensity Multiplier"
+        doc = ""
+    )
 }
 
 class "RprDomeLightSettingsAPI" (

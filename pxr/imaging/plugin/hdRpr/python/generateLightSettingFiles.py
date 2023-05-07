@@ -77,6 +77,11 @@ light_settings = [
                 'name': 'rpr:object:visibility:light',
                 'ui_name': 'Light Visibility',
                 'defaultValue': True
+            },
+            {
+                'name': 'rpr:light:intensityMultiplier',
+                'ui_name': 'Intensity Multiplier',
+                'defaultValue': 1.0
             }
         ]
     }

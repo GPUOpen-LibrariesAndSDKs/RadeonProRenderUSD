@@ -494,7 +494,8 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
 
         float intensity = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f);
         float exposure = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->exposure, 1.0f);
-        intensity = ComputeLightIntensity(intensity, exposure);
+        float multiplier = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprLightIntensityMultiplier, 1.0f);
+        intensity = ComputeLightIntensity(intensity * multiplier, exposure);
 
         GfVec3f color = HdRpr_GetParam(sceneDelegate, id, HdPrimvarRoleTokens->color, GfVec3f(1.0f));
         if (HdRpr_GetParam(sceneDelegate, id, HdLightTokens->enableColorTemperature, false)) {
