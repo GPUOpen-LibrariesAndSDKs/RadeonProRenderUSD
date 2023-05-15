@@ -1,11 +1,12 @@
 set(PXR_PREFIX pxr/imaging)
 set(PXR_PACKAGE rprUsd)
 
-function(SetPxrVersion configFileName)
+function(SetPxrVersion)
+    find_file(configFileName pxrConfig.cmake ${pxr_DIR})
     if(NOT EXISTS ${configFileName})
         return()
     endif()
-    file(READ "${configFileName}" fileContents)
+    file(READ ${configFileName} fileContents)
     string(REPLACE "\\\n" "" fileContents ${fileContents})
     string(REPLACE "\n" ";" fileLines ${fileContents})
     list(REMOVE_ITEM fileLines "")
@@ -18,7 +19,7 @@ function(SetPxrVersion configFileName)
     endforeach()
 endfunction()
 
-SetPxrVersion(${pxr_DIR}/pxrConfig.cmake)
+SetPxrVersion()
 
 set(RPRUSD_SCHEMA_PYMODULE_CPPFILES
     wrapTokens.cpp
