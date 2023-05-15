@@ -818,12 +818,12 @@ class "RprLightSettingsAPI" (
         doc = ""
     )
 	
-	uniform float rpr:light:intensityMultiplier = 1.0 (
+	uniform bool rpr:light:intensity:sameWithKarma = false (
         customData = {
-            string apiName = "lightIntensityMultiplier"
+            string apiName = "lightIntensitySameWithKarma"
         }
         displayGroup = "Intensity"
-        displayName = "Intensity Multiplier"
+        displayName = "Make Intensity Same With Karma"
         doc = ""
     )
 }

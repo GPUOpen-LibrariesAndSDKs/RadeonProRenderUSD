@@ -79,9 +79,9 @@ light_settings = [
                 'defaultValue': True
             },
             {
-                'name': 'rpr:light:intensityMultiplier',
-                'ui_name': 'Intensity Multiplier',
-                'defaultValue': 1.0
+                'name': 'rpr:light:intensity:sameWithKarma',
+                'ui_name': 'Make Intensity Same With Karma',
+                'defaultValue': False
             }
         ]
     }
