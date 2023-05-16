@@ -151,6 +151,7 @@ const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
 #elif defined __linux__
     {kPluginNorthstar, "libNorthstar64.so"},
     {kPluginHybrid, "Hybrid.so"},
+    {kPluginHybridPro, "HybridPro.so"},
 #elif defined __APPLE__
     {kPluginNorthstar, "libNorthstar64.dylib"},
 #endif
