@@ -817,6 +817,15 @@ class "RprLightSettingsAPI" (
         displayName = "Visibility Transparent"
         doc = ""
     )
+	
+	uniform bool rpr:light:intensity:sameWithKarma = false (
+        customData = {
+            string apiName = "lightIntensitySameWithKarma"
+        }
+        displayGroup = "Intensity"
+        displayName = "Make Intensity Same With Karma"
+        doc = ""
+    )
 }
 
 class "RprDomeLightSettingsAPI" (

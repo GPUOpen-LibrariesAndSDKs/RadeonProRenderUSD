@@ -77,6 +77,11 @@ light_settings = [
                 'name': 'rpr:object:visibility:light',
                 'ui_name': 'Light Visibility',
                 'defaultValue': True
+            },
+            {
+                'name': 'rpr:light:intensity:sameWithKarma',
+                'ui_name': 'Make Intensity Same With Karma',
+                'defaultValue': False
             }
         ]
     }
