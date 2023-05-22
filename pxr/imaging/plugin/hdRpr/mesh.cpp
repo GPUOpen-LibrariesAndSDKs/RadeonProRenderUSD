@@ -260,7 +260,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_adjacencyValid = false;
         m_normalsValid = false;
 
-        m_enableSubdiv = m_topology.GetScheme() == PxOsdOpenSubdivTokens->catmullClark;
         m_geomSubsets = m_topology.GetGeomSubsets();
 
         // GeomSubset data is directly transfered from USD into Hydra topology.
@@ -449,7 +448,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
     m_smoothNormals = !m_displayStyle.flatShadingEnabled;
     // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
-    if (m_enableSubdiv && m_refineLevel != 0) {
+    if (m_refineLevel != 0) {
         m_smoothNormals = false;
     }
 
@@ -657,7 +656,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (newMesh || isRefineLevelDirty) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh, m_enableSubdiv ? m_refineLevel : 0);
+                rprApi->SetMeshRefineLevel(rprMesh, m_refineLevel);
             }
         }
 

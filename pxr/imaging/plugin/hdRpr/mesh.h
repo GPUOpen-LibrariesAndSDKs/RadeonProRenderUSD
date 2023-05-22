@@ -73,7 +73,6 @@ private:
     VtArray<VtVec3fArray> m_pointSamples;
     VtIntArray m_faceVertexCounts;
     VtIntArray m_faceVertexIndices;
-    bool m_enableSubdiv = false;
 
     Hd_VertexAdjacency m_adjacency;
     bool m_adjacencyValid = false;
