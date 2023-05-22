@@ -2376,21 +2376,10 @@ public:
         auto rprApi = rprRenderParam->GetRprApi();
         m_resolveData.ForAllAovs([=](ResolveData::AovEntry const& e) {
             e.aov->Update(rprApi, m_rifContext.get());
-            if (clearAovs) {
-                e.aov->Clear();
-            }
         });
 
         if (clearAovs) {
-            m_numSamples = 0;
-            m_activePixels = -1;
-            m_isFirstSample = true;
-            m_frameRenderTotalTime = {};
-            m_frameResolveTotalTime = {};
-
-            // Always start from RPR_CONTEXT_ITERATIONS=1 to be able to resolve singlesampled AOVs correctly
-            m_numSamplesPerIter = 1;
-            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
+            Restart();
         }
     }
 
@@ -3495,7 +3484,19 @@ Don't show this message again?
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     void Restart() {
+        m_resolveData.ForAllAovs([=](ResolveData::AovEntry const& e) {
+            e.aov->Clear();
+        });
+
         m_numSamples = 0;
+        m_activePixels = -1;
+        m_isFirstSample = true;
+        m_frameRenderTotalTime = {};
+        m_frameResolveTotalTime = {};
+
+        // Always start from RPR_CONTEXT_ITERATIONS=1 to be able to resolve singlesampled AOVs correctly
+        m_numSamplesPerIter = 1;
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_ITERATIONS, m_numSamplesPerIter), "Failed to set context iterations");
     }
 
 private:
