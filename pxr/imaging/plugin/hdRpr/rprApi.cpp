@@ -4116,7 +4116,10 @@ private:
             if (!aov) {
                 HdRprApiAov* newAov = nullptr;
                 std::function<void(HdRprApiAov*)> aovCustomDestructor;
-
+                if (aovName == HdAovTokens->primId && RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
+                    TF_RUNTIME_ERROR("Failed to create primId AOV: HybridPro does not support this AOV type");
+                    return nullptr;
+                }
                 if (aovName == HdAovTokens->color) {
                     auto rawColorAov = GetAov(HdRprAovTokens->rawColor, width, height, HdFormatFloat32Vec4);
                     if (!rawColorAov) {

@@ -396,6 +396,12 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
     contextProperties.push_back(nullptr);
 
+#if LINUX
+    if (metadata->pluginType == kPluginHybridPro){
+        std::setlocale(LC_NUMERIC, "en_US.UTF-8"); // is needed for HybridPro to correctly compile shaders
+    }
+#endif
+
     rpr::Status status;
     rpr::Context* context = rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlags, contextProperties.data(), cachePath.c_str(), &status);
 
@@ -439,6 +445,9 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
         ret.cpu.numThreads = 0;
 
         if (!RprUsdIsCpuOnly()) {
+#if LINUX
+            std::setlocale(LC_NUMERIC, "en_US.UTF-8"); // is needed for HybridPro to correctly compile shaders
+#endif
             std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
             if (!name.empty()) {
                 ret.gpus.push_back({ 0, name });
