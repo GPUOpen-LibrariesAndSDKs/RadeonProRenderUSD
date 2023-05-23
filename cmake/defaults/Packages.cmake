@@ -162,7 +162,7 @@ endmacro()
 if (NOT MAYAUSD_OPENEXR_STATIC)
     find_exr(Half IlmImf Iex)
 else()
-    find_exr(Half IlmImf Iex IlmThread zlib)
+    find_exr(Half IlmImf Iex IlmThread zlib IMath)
 endif()
 
 set(RPR_EXR_EXPORT_ENABLED TRUE)

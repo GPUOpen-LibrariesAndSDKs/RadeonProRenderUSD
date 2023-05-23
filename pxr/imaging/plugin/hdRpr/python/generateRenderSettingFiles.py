@@ -73,6 +73,15 @@ render_setting_categories = [
                     SettingValue('HybridPro', enable_py_condition=HYBRID_IS_AVAILABLE_PY_CONDITION),
                     SettingValue('Northstar', 'Full')
                 ]
+            },
+            {
+                'name': 'core:useOpenCL',
+                'ui_name': 'Use OpenCL Backend (legacy)',
+                'help': 'Render restart might be required',
+                'defaultValue': False,
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
             }
         ]
     },
@@ -331,9 +340,6 @@ render_setting_categories = [
     },
     {
         'name': 'Quality',
-        'houdini': {
-            'hidewhen': hidewhen_hybrid
-        },
         'settings': [
             {
                 'name': 'quality:rayDepth',
@@ -405,7 +411,10 @@ render_setting_categories = [
                 'help': 'Determines Pixel filter width (anti-aliasing).',
                 'defaultValue': 1.5,
                 'minValue': 0.0,
-                'maxValue': 5.0
+                'maxValue': 5.0,
+                'houdini': {
+                    'hidewhen': hidewhen_hybrid
+                }
             }
         ]
     },
@@ -578,6 +587,13 @@ render_setting_categories = [
                 'houdini': {
                     'hidewhen': hidewhen_hybrid
                 }
+            },
+            {
+                'name': 'seedOverride',
+                'ui_name': 'Random Seed Override',
+                'defaultValue': 0,
+                'minValue': 0,
+                'maxValue': 2 ** 16
             }
         ]
     },
@@ -694,6 +710,43 @@ render_setting_categories = [
             {
                 'name': 'core:flipVertical',
                 'defaultValue': False
+            }
+        ]
+    },
+    {
+        'name': 'ViewportSettings',
+        'houdini': {},
+        'settings': [
+            {
+                'name': 'openglInteroperability',
+                'ui_name': 'OpenGL interoperability (Needs render restart)',
+                'help': '',
+                'defaultValue': False,
+            },
+            {
+                'name': 'viewportUpscaling',
+                'ui_name': 'Viewport Upscaling',
+                'help': '',
+                'defaultValue': False,
+                'houdini': {
+                    'hidewhen': ['denoising:enable == 0', lambda settings: hidewhen_render_quality('<', 'High', settings)]
+                }
+            },
+            {
+                'name': 'viewportUpscalingQuality',
+                'ui_name': 'Viewport Upscaling Quality',
+                'help': '',
+                'defaultValue': 'Ultra Performance',
+                'values': [
+                    SettingValue('Ultra Quality'),
+                    SettingValue('Quality'),
+                    SettingValue('Balance'),
+                    SettingValue('Performance'),
+                    SettingValue('Ultra Performance'),
+                ],
+                'houdini': {
+                    'hidewhen': ['rpr:viewportUpscaling == 0', 'denoising:enable == 0', lambda settings: hidewhen_render_quality('<', 'High', settings), lambda settings: hidewhen_render_quality('==', 'Northstar', settings)]
+                }
             }
         ]
     }
@@ -1009,7 +1062,13 @@ void HdRprConfig::Set{name_title}({c_type} {c_name}) {{
         rs_validate_values=''.join(rs_validate_values)))
 
     if generate_ds_files:
-        generate_houdini_ds(install_path, 'Global', render_setting_categories)
+        production_render_setting_categories = [category for category in render_setting_categories if category['name'] != 'ViewportSettings']
+        generate_houdini_ds(install_path, 'Global', production_render_setting_categories)
+        viewport_render_setting_categories = [category for category in render_setting_categories if category['name'] in ('RenderQuality', 'Sampling', 'AdaptiveSampling', 'Denoise', 'ViewportSettings')]
+        for category in (cat for cat in viewport_render_setting_categories if cat['name'] == 'RenderQuality'):
+            for setting in (s for s in category['settings'] if s['name'] == 'core:renderQuality'):
+                setting['values'] = [SettingValue(value.get_key(), value.get_key() if value.get_key() != 'Northstar' else 'Full') for value in setting['values']]
+        generate_houdini_ds(install_path, 'Viewport', viewport_render_setting_categories)
 
 
 def generate(install, generate_ds_files):

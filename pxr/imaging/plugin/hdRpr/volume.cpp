@@ -406,52 +406,63 @@ void HdRprVolume::Sync(
             return nullptr;
         };
 
-        GridInfo densityGridInfo;
-        GridInfo emissionGridInfo;
-        GridInfo albedoGridInfo;
-
         decltype(m_fieldSubscriptions) activeFieldSubscriptions;
 
-        auto volumeFieldDescriptorVector = sceneDelegate->GetVolumeFieldDescriptors(GetId());
-        for (auto const& desc : volumeFieldDescriptorVector) {
-            GridInfo* targetInfo;
-            if (desc.fieldName == HdRprVolumeTokens->density) {
-                targetInfo = &densityGridInfo;
-            } else if (desc.fieldName == HdRprVolumeTokens->temperature) {
-                targetInfo = &emissionGridInfo;
-            } else if (desc.fieldName == HdRprVolumeTokens->color) {
-                targetInfo = &albedoGridInfo;
-            } else {
-                continue;
-            }
-
+        auto processVdbGridInfo = [&](GridInfo& targetInfo, const HdVolumeFieldDescriptor& desc) {
             auto param = sceneDelegate->Get(desc.fieldId, UsdVolTokens->filePath);
             if (param.IsHolding<SdfAssetPath>()) {
-                targetInfo->desc = &desc;
+                targetInfo.desc = &desc;
 
                 auto& assetPath = param.UncheckedGet<SdfAssetPath>();
                 if (!assetPath.GetResolvedPath().empty()) {
-                    targetInfo->filepath = assetPath.GetResolvedPath();
-                } else {
-                    targetInfo->filepath = assetPath.GetAssetPath();
+                    targetInfo.filepath = assetPath.GetResolvedPath();
+                }
+                else {
+                    targetInfo.filepath = assetPath.GetAssetPath();
                 }
 
-                targetInfo->params = ParseGridParameters(sceneDelegate, desc.fieldId);
+                targetInfo.params = ParseGridParameters(sceneDelegate, desc.fieldId);
 
-                targetInfo->vdbGrid = getVdbGrid(desc.fieldId, targetInfo->filepath);
-                if (targetInfo->vdbGrid) {
-                    ParseOpenvdbMetadata(targetInfo);
+                targetInfo.vdbGrid = getVdbGrid(desc.fieldId, targetInfo.filepath);
+                if (targetInfo.vdbGrid) {
+                    ParseOpenvdbMetadata(&targetInfo);
 
                     // Subscribe for field updates, more info in renderParam.h
                     auto fieldSubscription = m_fieldSubscriptions.find(desc.fieldId);
                     if (fieldSubscription == m_fieldSubscriptions.end()) {
                         activeFieldSubscriptions.emplace(desc.fieldId, rprRenderParam->SubscribeVolumeForFieldUpdates(this, desc.fieldId));
-                    } else {
+                    }
+                    else {
                         // Reuse the old one
                         activeFieldSubscriptions.emplace(desc.fieldId, std::move(fieldSubscription->second));
                     }
                 }
             }
+        };
+
+        GridInfo densityGridInfo;
+        GridInfo emissionGridInfo;
+        GridInfo albedoGridInfo;
+
+        bool densityGridFound = false;
+
+        auto volumeFieldDescriptorVector = sceneDelegate->GetVolumeFieldDescriptors(GetId());
+
+        //try to find grids by it's names
+        for (auto const& desc : volumeFieldDescriptorVector) {
+            if (desc.fieldName == HdRprVolumeTokens->density) {
+                processVdbGridInfo(densityGridInfo, desc);
+                densityGridFound = true;
+            }
+            else if (desc.fieldName == HdRprVolumeTokens->color) {
+                processVdbGridInfo(albedoGridInfo, desc);
+            }
+            // now processing of temperature grid is temporary disabled because it can produce incorrect result. It will be re-implemented in the future using volume material 
+        }
+
+        // if density grid is not found we try to use the first grid as density
+        if (!densityGridFound && volumeFieldDescriptorVector.size() > 0) {
+            processVdbGridInfo(densityGridInfo, volumeFieldDescriptorVector[0]);
         }
 
         m_fieldSubscriptions.clear();
@@ -548,16 +559,6 @@ void HdRprVolume::Sync(
         if (densityGridData.coords.empty()) {
             densityGridData = CopyGridTopology(emissionGridData);
             densityGridInfo.params.ramp.push_back(GfVec3f(defaultDensity));
-        }
-
-        if (emissionGridData.coords.empty()) {
-            emissionGridData = CopyGridTopology(densityGridData);
-            emissionGridInfo.params.ramp.push_back(defaultEmission);
-        }
-
-        if (albedoGridData.coords.empty()) {
-            albedoGridData = CopyGridTopology(densityGrid ? densityGridData : emissionGridData);
-            albedoGridInfo.params.ramp.push_back(defaultColor);
         }
 
         for (auto& value : densityGridInfo.params.ramp) {

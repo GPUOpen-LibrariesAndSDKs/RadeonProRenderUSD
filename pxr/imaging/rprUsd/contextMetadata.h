@@ -57,6 +57,7 @@ struct RprUsdDevicesInfo {
 struct RprUsdContextMetadata {
     RprUsdPluginType pluginType = kPluginInvalid;
     bool isGlInteropEnabled = false;
+    bool useOpenCL = false;
     void* interopInfo = nullptr;
     rpr::CreationFlags creationFlags = 0;
 
