@@ -154,6 +154,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
         HdRprParseGeometrySettings(sceneDelegate, id, primvarDescsPerInterpolation, &geomSettings);
 
+        if (m_refineLevel != geomSettings.subdivisionLevel) {
+            m_refineLevel = geomSettings.subdivisionLevel;
+            isRefineLevelDirty = true;
+        }
+
         float displacementMinHeight = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->primvarsRprMeshDisplacementMinHeight, 0.0f);
         float displacementMaxHeight = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->primvarsRprMeshDisplacementMaxHeight, 0.0f);
         float displacementCreaseWeight = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->primvarsRprMeshDisplacementCreaseWeight, 0.0f);
