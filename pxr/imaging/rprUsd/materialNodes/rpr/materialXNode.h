@@ -21,6 +21,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 #define RPRUSD_RPR_MATERIALX_NODE_TOKENS \
     (rpr_materialx_node) \
+    (rpr_foo) \
     (file) \
     (string) \
     (basePath) \

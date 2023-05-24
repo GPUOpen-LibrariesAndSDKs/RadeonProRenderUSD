@@ -419,6 +419,50 @@ private:
     std::shared_ptr<rpr::MaterialNode> m_displacementNode;
 };
 
+class RprUsd_FooNode : public RprUsd_MaterialNode {
+public:
+    RprUsd_FooNode(RprUsd_MaterialBuilderContext* ctx)
+        : m_ctx(ctx) {
+
+    }
+
+    ~RprUsd_FooNode() override = default;
+
+    VtValue GetOutput(TfToken const& outputId) override {
+        return VtValue();
+    }
+
+    bool SetInput(
+        TfToken const& inputId,
+        VtValue const& value) override {
+
+        return true;
+    }
+
+    static RprUsd_RprNodeInfo* GetInfo() {
+        auto ret = new RprUsd_RprNodeInfo;
+        auto& nodeInfo = *ret;
+
+        nodeInfo.name = RprUsdRprMaterialXNodeTokens->rpr_foo.GetText();
+        nodeInfo.uiName = "RPR Foo";
+        nodeInfo.uiFolder = "Shaders";
+
+        return ret;
+    }
+
+    void ResetNodeOutput() {
+    }
+
+    bool UpdateNodeOutput() {
+        return true;
+    }
+
+private:
+    RprUsd_MaterialBuilderContext* m_ctx;
+};
+
+//auto node = new RprUsd_FooNode(nullptr);
+
 ARCH_CONSTRUCTOR(RprUsd_InitMaterialXNode, 255, void) {
     auto nodeInfo = RprUsd_RprMaterialXNode::GetInfo();
     RprUsdMaterialRegistry::GetInstance().Register(
@@ -430,6 +474,19 @@ ARCH_CONSTRUCTOR(RprUsd_InitMaterialXNode, 255, void) {
             return node;
         },
         nodeInfo);
+}
+
+ARCH_CONSTRUCTOR(RprUsd_InitFooNode, 255, void) {
+    auto nodeInfo = RprUsd_FooNode::GetInfo();
+    RprUsdMaterialRegistry::GetInstance().Register(
+        RprUsdRprMaterialXNodeTokens->rpr_foo,
+        [](RprUsd_MaterialBuilderContext* context,
+            std::map<TfToken, VtValue> const& parameters) {
+        auto node = new RprUsd_FooNode(context);
+        for (auto& entry : parameters) node->SetInput(entry.first, entry.second);
+        return node;
+    },
+    nodeInfo);
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

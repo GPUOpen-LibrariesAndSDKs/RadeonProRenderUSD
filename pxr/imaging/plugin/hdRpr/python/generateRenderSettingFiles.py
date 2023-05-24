@@ -415,6 +415,15 @@ render_setting_categories = [
                 'houdini': {
                     'hidewhen': hidewhen_hybrid
                 }
+            },
+            {
+                'name': 'quality:enableReStir',
+                'ui_name': 'Enable ReStir',
+                'help': 'Enable ReStir (HybridPro only)',
+                'defaultValue': True,
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
+                }
             }
         ]
     },
@@ -448,6 +457,9 @@ render_setting_categories = [
                 'ui_name': 'Downscale Resolution When Interactive',
                 'help': 'Controls whether in interactive mode resolution should be downscaled or no.',
                 'defaultValue': True,
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
             }
         ]
     },

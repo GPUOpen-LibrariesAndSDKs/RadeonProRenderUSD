@@ -233,7 +233,6 @@ class "RprRendererSettingsAPI" (
         rprMaxValue = 1.0
     )
 
-    # not for hybrid
     uniform int rpr:quality:rayDepth = 3 (
         displayName = "Max Ray Depth"
         displayGroup = "Quality"
@@ -299,6 +298,12 @@ class "RprRendererSettingsAPI" (
         rprMinValue = 0.0
         rprMaxValue = 5.0
     )
+	
+    # HybridPro only
+    uniform bool rpr:quality:enableReStir = true (
+        displayName = "Enable ReStir (HybridPro only)"
+        displayGroup = "General"
+    )
 
     # not for hybrid
     uniform int rpr:quality:interactive:rayDepth = 2 (
@@ -316,7 +321,7 @@ class "RprRendererSettingsAPI" (
         rprMinValue = 0
         rprMaxValue = 10
     )
-    # tahoe only
+    # northstar only
     uniform bool rpr:quality:interactive:enableDownscale = true (
         displayName = "Enable Downscale"
         displayGroup = "Quality|Interactive"
@@ -837,6 +842,15 @@ class "RprLightSettingsAPI" (
         }
         displayGroup = "Visibility"
         displayName = "Visibility Transparent"
+        doc = ""
+    )
+	
+	uniform bool rpr:light:intensity:sameWithKarma = false (
+        customData = {
+            string apiName = "lightIntensitySameWithKarma"
+        }
+        displayGroup = "Intensity"
+        displayName = "Make Intensity Same With Karma"
         doc = ""
     )
 }

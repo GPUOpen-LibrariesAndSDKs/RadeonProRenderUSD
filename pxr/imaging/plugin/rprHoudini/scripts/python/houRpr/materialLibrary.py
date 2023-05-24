@@ -55,6 +55,7 @@ def create_houdini_material_graph(material_name, mtlx_file):
 
     if matlib_parent.type().name() == "materiallibrary":  # call inside material library
         mtlx_node = matlib_parent.createNode('RPR::rpr_materialx_node')
+        foo_node = matlib_parent.createNode('RPR::rpr_foo')
         mtlx_node.setName(material_name, unique_name=True)
         mtlx_node.parm('file').set(mtlx_file)
         return
@@ -64,6 +65,7 @@ def create_houdini_material_graph(material_name, mtlx_file):
     matlib_node.setComment(MATERIAL_LIBRARY_TAG)
 
     mtlx_node = matlib_node.createNode('RPR::rpr_materialx_node')
+    foo_node = matlib_node.createNode('RPR::rpr_foo')
     mtlx_node.setName(material_name, unique_name=True)
     mtlx_node.parm('file').set(mtlx_file)
 
