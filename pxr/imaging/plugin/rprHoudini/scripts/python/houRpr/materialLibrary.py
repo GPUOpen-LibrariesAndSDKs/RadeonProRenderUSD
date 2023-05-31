@@ -19,6 +19,7 @@ import zipfile
 from hutil.Qt import QtCore, QtGui, QtWidgets, QtUiTools
 from time import sleep
 from . materialLibraryClient import MatlibClient
+import MaterialX as mx
 
 maxElementCount = 10000
 
@@ -29,6 +30,104 @@ The importer always auto-assigns an imported material to the last modified prims
 
 Use the text input widget at the bottom of the window to filter displayed materials.
 '''
+
+def build_mtlx_graph(library_node, mtlx_file):
+    positionOffset = 3
+    positionStep = hou.Vector2(0.1, -1.5)
+    
+    parsed_nodes = {}
+    
+    def setPosition(hou_node, parent_position=None):
+        if parent_position:
+            position = hou_node.position()
+            if position[0] >= parent_position[0]:
+                position = hou.Vector2(parent_position[0] - positionOffset, parent_position[1])
+                hou_node.setPosition(position)
+                
+    def setParm(hou_node, input_name, input_type, value):
+        if value is None:
+            return
+        t = type(value)
+        if t == str and input_type == 'filename':
+            parm = hou_node.parm(input_name)
+            parm.set(os.path.dirname(mtlx_file).replace(os.path.dirname(hou.hipFile.path()), '$HIP') + '/' + value)
+        elif t == int or t == float or t == str or t == bool:
+            parm = hou_node.parm(input_name)
+            parm.set(value)
+        elif t == mx.PyMaterialXCore.Color3 or t == mx.PyMaterialXCore.Color4:
+            parmr = hou_node.parm(input_name + 'r')
+            parmg = hou_node.parm(input_name + 'g')
+            parmb = hou_node.parm(input_name + 'b')
+            if parmr and parmg and parmb:
+                parmr.set(value[0])
+                parmg.set(value[1])
+                parmb.set(value[2])
+            if t == mx.PyMaterialXCore.Color4:
+                parma = hou_node.parm(input_name + 'a')
+                if parma:
+                    parma.set(value[3])
+        elif t == mx.PyMaterialXCore.Vector2 or t == mx.PyMaterialXCore.Vector3 or t == mx.PyMaterialXCore.Vector4:
+            parmx = hou_node.parm(input_name + 'x')
+            parmy = hou_node.parm(input_name + 'y')
+            if parmx and parmy:
+                parmx.set(value[0])
+                parmy.set(value[1])
+            if t == mx.PyMaterialXCore.Vector3:
+                parmz = hou_node.parm(input_name + 'z')
+                if parmz:
+                    parmz.set(value[2])
+            if t == mx.PyMaterialXCore.Vector4:
+                parmw = hou_node.parm(input_name + 'w')
+                if parmw:
+                    parmw.set(value[3])
+        
+    def setSignature(hou_node, signature_string):
+        parm = hou_node.parm('signature')
+        if parm:
+            parm.set(signature_string)
+    
+    def processNode(node, parent_position=None):
+    
+        path = node.getNamePath()
+        if path in parsed_nodes:
+            hou_node = parsed_nodes[path]
+            setPosition(hou_node, parent_position)
+            return hou_node
+        
+        hou_node = library_node.createNode('mtlx' + node.getCategory())
+        if not hou_node:
+            return None
+        hou_node.setName(node.getName().replace('_', '-'))
+        setSignature(hou_node, node.getType())
+        parsed_nodes[path] = hou_node
+        setPosition(hou_node, parent_position)
+        
+        nodes_in_layer = 0
+        for input in node.getInputs():
+            src_node = input.getConnectedNode()
+            if src_node:
+                hou_src_node = processNode(src_node, hou_node.position() + positionStep * nodes_in_layer)
+                if not hou_src_node:
+                    continue
+                hou_src_node.setMaterialFlag(False)
+                nodes_in_layer += 1
+                hou_node.setInput(hou_node.inputIndex(input.getName()), hou_src_node, 0)
+            else:
+                setParm(hou_node, input.getName(), input.getType(), input.getValue())
+                   
+        return hou_node
+    
+    doc = mx.createDocument()
+    try:
+        mx.readFromXmlFile(doc, mtlx_file)
+    except:
+        return None
+    
+    for nd in doc.getNodes():
+        if nd.getType() == 'material':
+            return processNode(nd)
+    
+    return None
 
 def recursive_mkdir(path):
     try:
@@ -54,19 +153,15 @@ def create_houdini_material_graph(material_name, mtlx_file):
         matlib_parent = hou.node('/stage')
 
     if matlib_parent.type().name() == "materiallibrary":  # call inside material library
-        mtlx_node = matlib_parent.createNode('RPR::rpr_materialx_node')
-        mtlx_node.setName(material_name, unique_name=True)
-        mtlx_node.parm('file').set(mtlx_file)
+        build_mtlx_graph(matlib_parent, mtlx_file)
         return
 
     matlib_node = matlib_parent.createNode('materiallibrary')
     matlib_node.setName(material_name, unique_name=True)
     matlib_node.setComment(MATERIAL_LIBRARY_TAG)
 
-    mtlx_node = matlib_node.createNode('RPR::rpr_materialx_node')
-    mtlx_node.setName(material_name, unique_name=True)
-    mtlx_node.parm('file').set(mtlx_file)
-
+    build_mtlx_graph(matlib_node, mtlx_file)
+    
     if len(selected_nodes) == 0:
         matlib_node.setSelected(True, clear_all_selected=True)
 
