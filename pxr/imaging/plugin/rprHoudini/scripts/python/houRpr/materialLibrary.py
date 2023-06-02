@@ -37,13 +37,6 @@ def build_mtlx_graph(library_node, mtlx_file):
     
     parsed_nodes = {}
     
-    def setPosition(hou_node, parent_position=None):
-        if parent_position:
-            position = hou_node.position()
-            if position[0] >= parent_position[0]:
-                position = hou.Vector2(parent_position[0] - positionOffset, parent_position[1])
-                hou_node.setPosition(position)
-                
     def setParm(hou_node, input_name, input_type, value):
         if value is None:
             return
@@ -86,27 +79,28 @@ def build_mtlx_graph(library_node, mtlx_file):
         if parm:
             parm.set(signature_string)
     
-    def processNode(node, parent_position=None):
+    def processNode(node, position):
     
         path = node.getNamePath()
         if path in parsed_nodes:
             hou_node = parsed_nodes[path]
-            setPosition(hou_node, parent_position)
+            if hou_node.position()[0] >= position[0]:
+                hou_node.setPosition(position)
             return hou_node
         
         hou_node = library_node.createNode('mtlx' + node.getCategory())
         if not hou_node:
             return None
-        hou_node.setName(node.getName().replace('_', '-'))
+        hou_node.setName(node.getName().replace('_', '-'), unique_name=True)
         setSignature(hou_node, node.getType())
+        hou_node.setPosition(position)
         parsed_nodes[path] = hou_node
-        setPosition(hou_node, parent_position)
         
         nodes_in_layer = 0
         for input in node.getInputs():
             src_node = input.getConnectedNode()
             if src_node:
-                hou_src_node = processNode(src_node, hou_node.position() + positionStep * nodes_in_layer)
+                hou_src_node = processNode(src_node, hou_node.position() - hou.Vector2(positionOffset, 0) + positionStep * nodes_in_layer)
                 if not hou_src_node:
                     continue
                 hou_src_node.setMaterialFlag(False)
@@ -123,9 +117,13 @@ def build_mtlx_graph(library_node, mtlx_file):
     except:
         return None
     
-    for nd in doc.getNodes():
-        if nd.getType() == 'material':
-            return processNode(nd)
+    for node in doc.getNodes():
+        if node.getType() == 'material':
+            position = hou.Vector2(0, 0)
+            for existing_node in library_node.allNodes():
+                if existing_node != library_node and (existing_node.position() - position).length() < 0.00001:
+                    position += hou.Vector2(0, -10)
+            return processNode(node, position)
     
     return None
 
