@@ -760,11 +760,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (newMesh || isIdDirty) {
             uint32_t id = m_id >= 0 ? uint32_t(m_id) : GetPrimId();
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshId(rprMesh, id);
+                rprApi->SetMeshId(rprMesh, id + 1);
             }
             for (auto& instances : m_rprMeshInstances) {
                 for (auto& rprMesh : instances) {
-                    rprApi->SetMeshId(rprMesh, id);
+                    rprApi->SetMeshId(rprMesh, id + 1);
                 }
             }
         }

@@ -18,14 +18,13 @@ limitations under the License.
 
 #include <RadeonProRender.hpp>
 #include <RadeonProRender_CL.h>
+#include "aovDescriptor.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApiFramebuffer {
 public:
-    static constexpr uint32_t kNumChannels = 4;
-
-    HdRprApiFramebuffer(rpr::Context* context, uint32_t width, uint32_t height);
+    HdRprApiFramebuffer(rpr::Context* context, uint32_t width, uint32_t height, rpr::ComponentType type = RPR_COMPONENT_TYPE_FLOAT32, std::uint32_t channels = 4);
     HdRprApiFramebuffer(HdRprApiFramebuffer&& fb) noexcept;
     ~HdRprApiFramebuffer();
 
@@ -55,6 +54,8 @@ protected:
     uint32_t m_width;
     uint32_t m_height;
     rpr::Aov m_aov;
+    rpr::ComponentType m_componentType;
+    std::uint32_t m_numChannels;
 
 private:
     void Create(uint32_t width, uint32_t height);

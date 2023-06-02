@@ -62,7 +62,13 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
         RIF_THROW_ERROR_MSG("Unsupported format: " + TfEnum::GetName(format));
     }
 
-    m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height);
+    if (RprUsdIsHybrid(rprContextMetadata.pluginType) && (rprAovType == RPR_AOV_OBJECT_ID))
+    {
+        m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height, RPR_COMPONENT_TYPE_UINT32, 1);
+    } else {
+        m_aov = pxr::make_unique<HdRprApiFramebuffer>(rprContext, width, height);
+    }
+
     m_aov->AttachAs(rprAovType);
 
     // XXX (Hybrid): Hybrid plugin does not support framebuffer resolving (rprContextResolveFrameBuffer)

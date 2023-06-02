@@ -12,18 +12,19 @@ limitations under the License.
 ************************************************************************/
 
 #include "rprApiFramebuffer.h"
-#include "aovDescriptor.h"
 
 #include "pxr/imaging/rprUsd/helpers.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-HdRprApiFramebuffer::HdRprApiFramebuffer(rpr::Context* context, uint32_t width, uint32_t height)
+HdRprApiFramebuffer::HdRprApiFramebuffer(rpr::Context* context, uint32_t width, uint32_t height, rpr::ComponentType type, std::uint32_t channels)
     : m_context(context)
     , m_rprFb(nullptr)
     , m_width(0)
     , m_height(0)
-    , m_aov(kAovNone) {
+    , m_aov(kAovNone)
+    , m_componentType(type)
+    , m_numChannels(channels) {
     if (!m_context) {
         RPR_THROW_ERROR_MSG("Failed to create framebuffer: missing rpr context");
     }
@@ -118,7 +119,7 @@ bool HdRprApiFramebuffer::GetData(void* dstBuffer, size_t dstBufferSize) {
 }
 
 size_t HdRprApiFramebuffer::GetSize() const {
-    return m_width * m_height * kNumChannels * sizeof(float);
+    return m_width * m_height * m_numChannels * sizeof(float);
 }
 
 rpr::FramebufferDesc HdRprApiFramebuffer::GetDesc() const {
@@ -142,8 +143,8 @@ void HdRprApiFramebuffer::Create(uint32_t width, uint32_t height) {
     }
 
     rpr::FramebufferFormat format = {};
-    format.num_components = kNumChannels;
-    format.type = RPR_COMPONENT_TYPE_FLOAT32;
+    format.type = m_componentType;
+    format.num_components = m_numChannels;
 
     rpr::FramebufferDesc desc = {};
     desc.fb_width = width;

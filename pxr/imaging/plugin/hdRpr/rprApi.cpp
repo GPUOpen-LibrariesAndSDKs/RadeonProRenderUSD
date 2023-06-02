@@ -3641,28 +3641,7 @@ private:
         RPR_ERROR_CHECK_THROW(m_rprContext->SetParameter(RPR_CONTEXT_Y_FLIP, requiredYFlip), "Failed to set context Y FLIP parameter");
 
         m_isRenderUpdateCallbackEnabled = false;
-
-        // TODO: Discuss again why during trace recording we've disabled aov index lookup setup
-
-        // We need it for correct rendering of ID AOVs (e.g. RPR_AOV_OBJECT_ID)
-        // XXX: it takes approximately 32ms due to RPR API indirection,
-        //      replace with rprContextSetAOVindexLookupRange when ready
-        // XXX: only up to 2^16 indices, internal LUT limit
-        for (uint32_t i = 0; i < (1 << 16); ++i) {
-            // Split uint32_t into 4 float values - every 8 bits correspond to one float.
-            // Such an encoding scheme simplifies the conversion of RPR ID texture (float4) to the int32 texture (as required by Hydra).
-            // Conversion is currently implemented like this:
-            //   * convert float4 texture to uchar4 using RIF
-            //   * reinterpret uchar4 data as int32_t (works on little-endian CPU only)
-
-            // 
-            // TODO: Do NOT MERGE INTO DEVELOP IT WOULD BREAK ANYTHING
-            //
-            m_rprContext->SetAOVindexLookup(rpr_int(i), float(i+1), 0.0f, 0.0f, 0.0f);
-        }
-
         m_imageCache.reset(new RprUsdImageCache(m_rprContext.get()));
-
         m_isAbortingEnabled.store(false);
     }
 
