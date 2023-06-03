@@ -42,37 +42,63 @@ def build_mtlx_graph(library_node, mtlx_file):
             return
         t = type(value)
         if t == str and input_type == 'filename':
-            parm = hou_node.parm(input_name)
-            parm.set(os.path.dirname(mtlx_file).replace(os.path.dirname(hou.hipFile.path()), '$HIP') + '/' + value)
+            for suffix in ('', '_string', '_filename'):
+                parm = hou_node.parm(input_name)
+                if parm:
+                    parm.set(os.path.dirname(mtlx_file).replace(os.path.dirname(hou.hipFile.path()), '$HIP') + '/' + value)
+                    break
         elif t == int or t == float or t == str or t == bool:
-            parm = hou_node.parm(input_name)
-            parm.set(value)
+            for suffix in ('', '_integer', '_string', '_filename'):
+                parm = hou_node.parm(input_name + suffix)
+                if parm:
+                    parm.set(value)
+                    break
         elif t == mx.PyMaterialXCore.Color3 or t == mx.PyMaterialXCore.Color4:
-            parmr = hou_node.parm(input_name + 'r')
-            parmg = hou_node.parm(input_name + 'g')
-            parmb = hou_node.parm(input_name + 'b')
-            if parmr and parmg and parmb:
-                parmr.set(value[0])
-                parmg.set(value[1])
-                parmb.set(value[2])
-            if t == mx.PyMaterialXCore.Color4:
-                parma = hou_node.parm(input_name + 'a')
-                if parma:
-                    parma.set(value[3])
+            for suffix in ('', '_color3' if mx.PyMaterialXCore.Color3 else '_color4'):
+                found = False
+                parmr = hou_node.parm(input_name + suffix + 'r')
+                parmg = hou_node.parm(input_name + suffix + 'g')
+                parmb = hou_node.parm(input_name + suffix + 'b')
+                if parmr and parmg and parmb:
+                    parmr.set(value[0])
+                    parmg.set(value[1])
+                    parmb.set(value[2])
+                    found = True
+                if t == mx.PyMaterialXCore.Color4:
+                    parma = hou_node.parm(input_name + suffix + 'a')
+                    if parma:
+                        parma.set(value[3])
+                if found:
+                    break
         elif t == mx.PyMaterialXCore.Vector2 or t == mx.PyMaterialXCore.Vector3 or t == mx.PyMaterialXCore.Vector4:
-            parmx = hou_node.parm(input_name + 'x')
-            parmy = hou_node.parm(input_name + 'y')
-            if parmx and parmy:
-                parmx.set(value[0])
-                parmy.set(value[1])
-            if t == mx.PyMaterialXCore.Vector3:
-                parmz = hou_node.parm(input_name + 'z')
-                if parmz:
-                    parmz.set(value[2])
-            if t == mx.PyMaterialXCore.Vector4:
-                parmw = hou_node.parm(input_name + 'w')
-                if parmw:
-                    parmw.set(value[3])
+            for suffix in ('', '_vector2', '_vector3', '_vector4'):
+                found = False
+                parmx = hou_node.parm(input_name + 'x')
+                parmy = hou_node.parm(input_name + 'y')
+                if parmx and parmy:
+                    parmx.set(value[0])
+                    parmy.set(value[1])
+                    found = True
+                if t == mx.PyMaterialXCore.Vector3:
+                    parmz = hou_node.parm(input_name + 'z')
+                    if parmz:
+                        parmz.set(value[2])
+                if t == mx.PyMaterialXCore.Vector4:
+                    parmw = hou_node.parm(input_name + 'w')
+                    if parmw:
+                        parmw.set(value[3])
+                if found:
+                    break
+        elif t == mx.PyMaterialXCore.Matrix33:
+            for i in range(9):
+                parm = hou_node.parm(input_name + '_matrix33' + str(i + 1))
+                if parm:
+                    parm.set(value[int(i/3), i%3])
+        elif t == mx.PyMaterialXCore.Matrix44:
+            for i in range(16):
+                parm = hou_node.parm(input_name + '_matrix44' + str(i + 1))
+                if parm:
+                    parm.set(value[int(i/4), i%4])
         
     def setSignature(hou_node, signature_string):
         parm = hou_node.parm('signature')
