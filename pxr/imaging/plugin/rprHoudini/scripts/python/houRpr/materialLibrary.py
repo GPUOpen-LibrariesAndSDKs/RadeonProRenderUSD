@@ -35,6 +35,7 @@ class Cache:
     def __init__(self):
         self._categories = []
         self._materials = []
+        self._material_thumbnails = {}  # material id: (material, icon)
         
     def categories(self, matlib_client):
         if not self._categories:
@@ -51,6 +52,17 @@ class Cache:
                 if c['title'] == category:
                     category_id = c['id']
         return [m for m in self._materials if m['category'] == category_id] if category_id else self._materials
+        
+    def thumbnail_material(self, material_id):
+        entry = self._material_thumbnails.get(material_id, None)
+        return entry[0] if entry else None
+    
+    def thumbnail_icon(self, material_id):
+        entry = self._material_thumbnails.get(material_id, None)
+        return entry[1] if entry else None
+        
+    def set_thumbnail_icon(self, material, icon):
+        self._material_thumbnails[material['id']] = (material, icon)
         
 cache = Cache()
     
@@ -515,15 +527,23 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._materialsView.clear()
 
         for material in materials:
-            loader = ThumbnailLoader(self._matlib_client, material)
-            loader.signals.finished.connect(self._onThumbnailLoaded)
-            QtCore.QThreadPool.globalInstance().start(loader)
+            cached_material = cache.thumbnail_material(material['id'])
+            if cached_material:
+                self._addThumbnail(cached_material, cache.thumbnail_icon(material['id']))
+            else:
+                loader = ThumbnailLoader(self._matlib_client, material)
+                loader.signals.finished.connect(self._onThumbnailLoaded)
+                QtCore.QThreadPool.globalInstance().start(loader)
 
     def _onThumbnailLoaded(self, result):
         icon = QtGui.QIcon(QtGui.QPixmap(result["thumbnail"]))
-        material_item = QtWidgets.QListWidgetItem(result["material"]["title"], self._materialsView)
+        cache.set_thumbnail_icon(result["material"], icon)
+        self._addThumbnail(result["material"], icon)
+        
+    def _addThumbnail(self, material, icon):
+        material_item = QtWidgets.QListWidgetItem(material["title"], self._materialsView)
         material_item.setIcon(icon)
-        material_item.value = result["material"] # store material id in list item
+        material_item.value = material # store material id in list item
         self._materialsView.addItem(material_item)
         self._thumbnail_progress += 1
         self._thumbnail_progress_dialog.setValue(self._thumbnail_progress)
