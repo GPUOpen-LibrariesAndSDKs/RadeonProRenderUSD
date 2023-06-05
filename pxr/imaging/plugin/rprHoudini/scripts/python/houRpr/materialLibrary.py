@@ -31,6 +31,29 @@ The importer always auto-assigns an imported material to the last modified prims
 Use the text input widget at the bottom of the window to filter displayed materials.
 '''
 
+class Cache:
+    def __init__(self):
+        self._categories = []
+        self._materials = []
+        
+    def categories(self, matlib_client):
+        if not self._categories:
+            self._categories = matlib_client.categories.get_list(limit=maxElementCount)
+        return self._categories
+        
+    def materials(self, matlib_client, category):
+        if not self._materials:
+            self.categories(matlib_client)   # ensure categories are loaded
+            self._materials = matlib_client.materials.get_list(limit=maxElementCount)
+        category_id = None
+        if category:
+            for c in self._categories:
+                if c['title'] == category:
+                    category_id = c['id']
+        return [m for m in self._materials if m['category'] == category_id] if category_id else self._materials
+        
+cache = Cache()
+    
 def build_mtlx_graph(library_node, mtlx_file):
     positionOffset = 3
     positionStep = hou.Vector2(0.1, -1.5)
@@ -105,13 +128,12 @@ def build_mtlx_graph(library_node, mtlx_file):
         if parm:
             parm.set(signature_string)
     
-    def processNode(node, position):
-    
+    def processNode(node, position, d=0):
         path = node.getNamePath()
         if path in parsed_nodes:
             hou_node = parsed_nodes[path]
             if hou_node.position()[0] >= position[0]:
-                hou_node.setPosition(position)
+                hou_node.setPosition(position + positionStep * d * 0.3)
             return hou_node
         
         hou_node = library_node.createNode('mtlx' + node.getCategory())
@@ -119,14 +141,14 @@ def build_mtlx_graph(library_node, mtlx_file):
             return None
         hou_node.setName(node.getName().replace('_', '-'), unique_name=True)
         setSignature(hou_node, node.getType())
-        hou_node.setPosition(position)
+        hou_node.setPosition(position + positionStep * d * 0.3)
         parsed_nodes[path] = hou_node
         
         nodes_in_layer = 0
         for input in node.getInputs():
             src_node = input.getConnectedNode()
             if src_node:
-                hou_src_node = processNode(src_node, hou_node.position() - hou.Vector2(positionOffset, 0) + positionStep * nodes_in_layer)
+                hou_src_node = processNode(src_node, hou_node.position() - hou.Vector2(positionOffset, 0) + positionStep * nodes_in_layer, d + 1 if nodes_in_layer else d)
                 if not hou_src_node:
                     continue
                 hou_src_node.setMaterialFlag(False)
@@ -176,8 +198,21 @@ def create_houdini_material_graph(material_name, mtlx_file):
     else:
         matlib_parent = hou.node('/stage')
 
-    if matlib_parent.type().name() == "materiallibrary":  # call inside material library
-        build_mtlx_graph(matlib_parent, mtlx_file)
+    if matlib_parent.type().name() == "materiallibrary" or matlib_parent.type().name() == "subnet":  # call inside material library or subnet
+        subnet_node = matlib_parent.createNode('subnet')
+        subnet_node.deleteItems([subnet_node.node('subinput1')])
+        subnet_output_node = subnet_node.node('suboutput1')
+        material_node = build_mtlx_graph(subnet_node, mtlx_file)
+        subnet_output_node.setInput(0, material_node, 0)
+        subnet_node.setMaterialFlag(True)
+        subnet_node.setName(material_node.name(), unique_name=True)
+        while True:
+            for node in matlib_parent.allNodes():
+                if node != subnet_node and (node.position() - subnet_node.position()).length() < 0.00001:
+                    subnet_node.setPosition(subnet_node.position() + hou.Vector2(0, -1.5))
+                    break
+            else:
+                break
         return
 
     matlib_node = matlib_parent.createNode('materiallibrary')
@@ -448,6 +483,7 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._materialsView.clicked.connect(self._materialItemClicked)
         self._materialsView.viewportEntered.connect(self._materialViewportEntered)
         self._materialsView.setMouseTracking(True)
+        self._materialsView.setSortingEnabled(True)
 
         self._initCategoryList()
 
@@ -457,10 +493,11 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._layout.addWidget(self._ui)
 
     def _initCategoryList(self):
-        categories = self._matlib_client.categories.get_list(limit=maxElementCount)
+        categories = cache.categories(self._matlib_client)
         item = QtWidgets.QListWidgetItem("All (" + str(sum([category["materials"] for category in categories])) + ")")
         item.value = None
         self._ui.categoryView.addItem(item)
+        categories.sort(key=lambda c: c["title"])
         for category in categories:
             item = QtWidgets.QListWidgetItem("    " + category["title"] + " (" + str(category["materials"]) + ")")
             item.value = category["title"]
@@ -470,11 +507,7 @@ class MaterialLibraryWidget(QtWidgets.QWidget):
         self._updateMaterialList()
 
     def _updateMaterialList(self):
-        category = self._ui.categoryView.currentItem().value
-        params = {}
-        if category is not None:
-            params["category"] = category
-        materials = self._matlib_client.materials.get_list(limit=maxElementCount, params=params)
+        materials = cache.materials(self._matlib_client, self._ui.categoryView.currentItem().value)
 
         self._thumbnail_progress_dialog = QtWidgets.QProgressDialog('Loading thumbnails', None, 0, len(materials), self)
         self._thumbnail_progress = 0
