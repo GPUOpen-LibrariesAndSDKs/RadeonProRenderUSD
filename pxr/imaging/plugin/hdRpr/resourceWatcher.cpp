@@ -90,6 +90,8 @@ void SetBypassed(HOM_Node* node, bool bypass) {
 
 typedef std::map<std::string, bool> NodesToRestoreSet;
 
+bool updateLock = false;
+
 bool ResourceManagementActive(HOM_Module& hom) {
     auto result = hom.hscript("if( $RPR_MEM_MANAGEMENT ) then\necho 1;\nelse\necho 0;\nendif");
     return result.size() > 0 && result[0].size() > 0 && result[0][0] == '1';
@@ -123,7 +125,7 @@ bool IsHoudiniInstance() {
 void DeActivateScene(NodesToRestoreSet& nodesToRestore) {
     HOM_Module& hom = HOM();
     if (nodesToRestore.size() != 0 // already deactivated
-        || !IsHoudiniInstance() || ResourceManagementActive(hom))
+        || !IsHoudiniInstance() || !ResourceManagementActive(hom))
     {
         return;
     }
@@ -238,15 +240,18 @@ void Listen(InterprocessMessage* message)
             else {
                 if (message->content.pid != hboost::interprocess::ipcdetail::get_current_process_id()) {      // Ignore messages from the same process
                     if (message->content.messageType == MessageType::Started) {
-                        fprintf(stdout, "RCV\n");
                         std::lock_guard<std::mutex> lock(timePointsLock);
                         timePoints[message->content.pid] = std::chrono::steady_clock::now();
+                        updateLock = true;
                         DeActivateScene(nodesToRestore);
+                        updateLock = false;
                     }
                     else if (message->content.messageType == MessageType::Finished) {
                         std::lock_guard<std::mutex> lock(timePointsLock);
                         timePoints.erase(message->content.pid);
+                        updateLock = true;
                         ActivateScene(nodesToRestore);
+                        updateLock = false;
                     }
                     else if (message->content.messageType == MessageType::Live) {
                         std::lock_guard<std::mutex> lock(timePointsLock);
@@ -312,6 +317,9 @@ void CheckLive(InterprocessMessage* message) {
 }
 
 void Notify(InterprocessMessage* message, bool started) {
+    if (updateLock) {
+        return;
+    }
     try {
         hboost::interprocess::scoped_lock<hboost::interprocess::interprocess_mutex> lock(message->mutex);
         if (message->messageIn) {
