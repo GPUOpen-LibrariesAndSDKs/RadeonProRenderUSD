@@ -1590,6 +1590,10 @@ public:
         m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
+    void SetVolumeVisibility(HdRprApiVolume* volume, uint32_t visibilityMask) {
+        SetMeshVisibility(volume->baseMesh.get(), visibilityMask);
+    }
+
     void Release(HdRprApiVolume* volume) {
         if (volume) {
             LockGuard rprLock(m_rprContext->GetMutex());
@@ -4712,6 +4716,11 @@ HdRprApiVolume* HdRprApi::CreateVolume(
         albedoCoords, albedoValues, albedoLUT, albedoScale,
         emissionCoords, emissionValues, emissionLUT, emissionScale,
         gridSize, voxelSize, gridBBLow);
+}
+
+void HdRprApi::SetVolumeVisibility(HdRprApiVolume *volume, uint32_t visibilityMask) {
+    m_impl->InitIfNeeded();
+    m_impl->SetVolumeVisibility(volume, visibilityMask);
 }
 
 RprUsdMaterial* HdRprApi::CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork) {
