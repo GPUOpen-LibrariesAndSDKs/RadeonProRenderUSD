@@ -1591,7 +1591,13 @@ public:
     }
 
     void SetVolumeVisibility(HdRprApiVolume* volume, uint32_t visibilityMask) {
-        SetMeshVisibility(volume->baseMesh.get(), visibilityMask);
+        // SetMeshVisibility(volume->baseMesh.get(), visibilityMask);
+        if (visibilityMask) {
+            m_scene->Attach(volume->baseMesh.get());
+        } else {
+            m_scene->Detach(volume->baseMesh.get());
+        }
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 
     void Release(HdRprApiVolume* volume) {
