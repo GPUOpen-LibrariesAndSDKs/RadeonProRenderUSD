@@ -1591,7 +1591,6 @@ public:
     }
 
     void SetVolumeVisibility(HdRprApiVolume* volume, uint32_t visibilityMask) {
-        // SetMeshVisibility(volume->baseMesh.get(), visibilityMask);
         if (visibilityMask) {
             m_scene->Attach(volume->baseMesh.get());
         } else {
