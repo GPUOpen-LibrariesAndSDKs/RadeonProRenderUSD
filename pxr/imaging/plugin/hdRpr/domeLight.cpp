@@ -220,8 +220,8 @@ void CreateOverrideEnableParmIfNeeded(const SdfPath& nodeId) {
 
 HdRprApi::BackgroundOverride BackgroundOverrideSettings(HdSceneDelegate* sceneDelegate, const SdfPath& nodeId) {
     HdRprApi::BackgroundOverride result;
-    result.enable = false;
-    result.color = GfVec3f(1.0f);
+    result.enable = HdRpr_GetParam(sceneDelegate, nodeId, RprUsdTokens->rprBackgroundOverrideEnable, false);
+    result.color = HdRpr_GetParam(sceneDelegate, nodeId, RprUsdTokens->rprBackgroundOverrideColor, GfVec3f(1.0f));
     return result;
 }
 
