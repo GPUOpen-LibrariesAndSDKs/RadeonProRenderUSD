@@ -51,7 +51,7 @@
             </scriptItem>
 
             <scriptToggleItem id="myvar_toggle_script">
-                <label>RPR_MEM_MANAGEMENT Status With Script</label>
+                <label>Release viewport when another rendering active</label>
                 <variableName>RPR_MEM_MANAGEMENT</variableName>
                 <scriptCode><![CDATA[
 hou.hscript("""
