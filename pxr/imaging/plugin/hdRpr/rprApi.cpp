@@ -3627,6 +3627,9 @@ private:
             RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_ENABLE_RELAXED_MATERIAL_CHECKS), 1u), "Failed to enable relaxed material checks");
         }
 
+        // TODO: Re-check
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_USE_GMON), 1u), "Failed to enable GMON (By Roman Vasilyev)");
+
         uint32_t requiredYFlip = 0;
         bool flipRequestedByInteropHybrid = RprUsdIsHybrid(m_rprContextMetadata.pluginType) && m_rprContextMetadata.interopInfo;
         if (flipRequestedByInteropHybrid || flipRequestedByRenderSetting) {
