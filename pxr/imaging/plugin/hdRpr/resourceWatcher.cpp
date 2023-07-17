@@ -1,6 +1,5 @@
 #include "resourceWatcher.h"
 
-#ifdef BUILD_AS_HOUDINI_PLUGIN
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -353,15 +352,5 @@ void NotifyRenderFinished() {
     WriteMemManagementFlag();   // calls on render delegate destructor, just as needed
     Notify(resourceWatcher.GetInterprocMessage(), false);
 }
-
-#else
-
-PXR_NAMESPACE_OPEN_SCOPE
-
-void InitWatcher() {}
-void NotifyRenderStarted() {}
-void NotifyRenderFinished() {}
-
-#endif // BUILD_AS_HOUDINI_PLUGIN
 
 PXR_NAMESPACE_CLOSE_SCOPE

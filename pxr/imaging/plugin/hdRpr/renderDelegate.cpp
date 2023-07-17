@@ -44,7 +44,9 @@ limitations under the License.
 #include <sstream>
 #include <cstdio>
 
+#ifdef BUILD_AS_HOUDINI_PLUGIN
 #include "resourceWatcher.h"
+#endif
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -188,11 +190,15 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
     }
 
     m_lastCreatedInstance = this;
+#ifdef BUILD_AS_HOUDINI_PLUGIN
     InitWatcher();
+#endif
 }
 
 HdRprDelegate::~HdRprDelegate() {
+#ifdef BUILD_AS_HOUDINI_PLUGIN
     NotifyRenderFinished();
+#endif
     g_rprApi = nullptr;
     m_lastCreatedInstance = nullptr;
 }
@@ -390,13 +396,17 @@ bool HdRprDelegate::IsPauseSupported() const {
 }
 
 bool HdRprDelegate::Pause() {
+#ifdef BUILD_AS_HOUDINI_PLUGIN
     NotifyRenderFinished();
+#endif
     m_renderThread.PauseRender();
     return true;
 }
 
 bool HdRprDelegate::Resume() {
+#ifdef BUILD_AS_HOUDINI_PLUGIN
     NotifyRenderStarted();
+#endif
     m_renderThread.ResumeRender();
     return true;
 }

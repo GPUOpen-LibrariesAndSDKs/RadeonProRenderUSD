@@ -3436,7 +3436,9 @@ Don't show this message again?
     }
 
     void Render(HdRprRenderThread* renderThread) {
+#ifdef BUILD_AS_HOUDINI_PLUGIN
         NotifyRenderStarted();
+#endif
         updateSyncTime();
         m_startTime = std::chrono::high_resolution_clock::now();
         RenderFrame(renderThread);

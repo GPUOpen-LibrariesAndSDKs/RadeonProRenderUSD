@@ -88,6 +88,11 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
 list(APPEND RIF_MODEL_RESOURCE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
 
+if(HoudiniUSD_FOUND)
+    set(RESOURCE_WATCHER_H resourceWatcher.h)
+    set(RESOURCE_WATCHER_CPP resourceWatcher.cpp)
+endif()
+
 pxr_plugin(hdRpr
     DISABLE_PRECOMPILED_HEADERS
 
@@ -152,7 +157,7 @@ pxr_plugin(hdRpr
     PRIVATE_HEADERS
         baseRprim.h
         api.h
-        resourceWatcher.h
+        ${RESOURCE_WATCHER_H}
 
     RESOURCE_FILES
         plugInfo.json
@@ -164,7 +169,7 @@ pxr_plugin(hdRpr
         ${CMAKE_CURRENT_BINARY_DIR}/config.cpp
         ndrDiscoveryPlugin.cpp
         ndrParserPlugin.cpp
-        resourceWatcher.cpp
+        ${RESOURCE_WATCHER_CPP}
 )
 
 if(RPR_EXR_EXPORT_ENABLED)
