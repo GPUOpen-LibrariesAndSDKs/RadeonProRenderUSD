@@ -57,7 +57,7 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
 #else
         m_transform = GfMatrix4f(HdRpr_GetParam(sceneDelegate, id, HdTokens->transform).Get<GfMatrix4d>());
 #endif
-        m_transform *= GfMatrix4f(1.0).SetScale(GfVec3f(1.0f, 1.0f, -1.0f));
+        m_transform = GfMatrix4f(1.0).SetScale(GfVec3f(1.0f, 1.0f, -1.0f)) * m_transform;
     }
 
     bool newLight = false;
