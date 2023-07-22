@@ -100,7 +100,8 @@ public:
         HdSceneDelegate* sceneDelegate,
         HdMaterialNetworkMap const& networkMap,
         rpr::Context* rprContext,
-        RprUsdImageCache* imageCache);
+        RprUsdImageCache* imageCache,
+        bool isHybrid);
 
     RPRUSD_API
     TfToken const& GetMaterialNetworkSelector();

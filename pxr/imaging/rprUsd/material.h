@@ -49,6 +49,9 @@ protected:
     rpr::MaterialNode* m_surfaceNode = nullptr;
     rpr::MaterialNode* m_displacementNode = nullptr;
     rpr::MaterialNode* m_volumeNode = nullptr;
+    bool m_isHybrid = false;
+    std::unique_ptr <rpr::MaterialNode> m_hybridDisplacementMul = nullptr;
+    std::unique_ptr <rpr::MaterialNode> m_hybridDisplacementAdd = nullptr;
     bool m_isShadowCatcher = false;
     bool m_isReflectionCatcher = false;
     TfToken m_uvPrimvarName;

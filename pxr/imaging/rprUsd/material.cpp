@@ -26,32 +26,49 @@ bool RprUsdMaterial::AttachTo(rpr::Shape* mesh, bool displacementEnabled) const 
     fail |= RPR_ERROR_CHECK(mesh->SetVolumeMaterial(m_volumeNode), "Failed to set shape volume material");
 
     if (displacementEnabled && m_displacementNode) {
-        size_t dummy;
-        int subdFactor;
-        if (RPR_ERROR_CHECK(mesh->GetInfo(RPR_SHAPE_SUBDIVISION_FACTOR, sizeof(subdFactor), &subdFactor, &dummy), "Failed to query mesh subdivision factor")) {
-            subdFactor = 0;
-        }
+        if (!m_isHybrid) {
+            size_t dummy;
+            int subdFactor;
+            if (RPR_ERROR_CHECK(mesh->GetInfo(RPR_SHAPE_SUBDIVISION_FACTOR, sizeof(subdFactor), &subdFactor, &dummy), "Failed to query mesh subdivision factor")) {
+                subdFactor = 0;
+            }
 
-        if (subdFactor == 0) {
-            TF_WARN("Displacement material requires subdivision to be enabled. The subdivision will be enabled with refine level of 1");
-            uint64_t normalCount;
-            if (!RPR_ERROR_CHECK(rprMeshGetInfo(GetRprObject(mesh), RPR_MESH_NORMAL_COUNT, sizeof(normalCount), &normalCount, nullptr), "Failed to get normal count")) {
-                if (normalCount != 0) {
-                    if (!RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(1), "Failed to set mesh subdividion")) {
-                        subdFactor = 1;
+            if (subdFactor == 0) {
+                TF_WARN("Displacement material requires subdivision to be enabled. The subdivision will be enabled with refine level of 1");
+                uint64_t normalCount;
+                if (!RPR_ERROR_CHECK(rprMeshGetInfo(GetRprObject(mesh), RPR_MESH_NORMAL_COUNT, sizeof(normalCount), &normalCount, nullptr), "Failed to get normal count")) {
+                    if (normalCount != 0) {
+                        if (!RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(1), "Failed to set mesh subdividion")) {
+                            subdFactor = 1;
+                        }
                     }
                 }
             }
-        }
-        if (subdFactor > 0) {
-            fail |= RPR_ERROR_CHECK(mesh->SetDisplacementMaterial(m_displacementNode), "Failed to set shape displacement material");
+            if (subdFactor > 0) {
+                {
+                    fail |= RPR_ERROR_CHECK(mesh->SetDisplacementMaterial(m_displacementNode), "Failed to set shape displacement material");
 
-            GfVec2f displacementScale(0.0f, 1.0f);
-            if (m_displacementScale.IsHolding<GfVec2f>()) {
-                displacementScale = m_displacementScale.UncheckedGet<GfVec2f>();
+                    GfVec2f displacementScale(0.0f, 1.0f);
+                    if (m_displacementScale.IsHolding<GfVec2f>()) {
+                        displacementScale = m_displacementScale.UncheckedGet<GfVec2f>();
+                    }
+
+                    fail |= RPR_ERROR_CHECK(mesh->SetDisplacementScale(displacementScale[0], displacementScale[1]), "Failed to set shape displacement scale");
+                }
             }
+        }
+        else {
+            if (m_hybridDisplacementMul && m_hybridDisplacementAdd) {
+                fail |= RPR_ERROR_CHECK(mesh->SetDisplacementMaterial(m_hybridDisplacementAdd.get()), "Failed to set shape displacement material");
 
-            fail |= RPR_ERROR_CHECK(mesh->SetDisplacementScale(displacementScale[0], displacementScale[1]), "Failed to set shape displacement scale");
+                GfVec2f displacementScale(0.0f, 1.0f);
+                if (m_displacementScale.IsHolding<GfVec2f>()) {
+                    displacementScale = m_displacementScale.UncheckedGet<GfVec2f>();
+                }
+
+                fail |= RPR_ERROR_CHECK(m_hybridDisplacementMul->SetInput(RPR_MATERIAL_INPUT_COLOR1, displacementScale[1] - displacementScale[0], 0, 0, 0), "Failed to set displacement scale");
+                fail |= RPR_ERROR_CHECK(m_hybridDisplacementAdd->SetInput(RPR_MATERIAL_INPUT_COLOR1, displacementScale[0], 0, 0, 0), "Failed to set displacement scale");
+            }
         }
     } else {
         fail |= RPR_ERROR_CHECK(mesh->SetDisplacementMaterial(nullptr), "Failed to unset shape displacement material");

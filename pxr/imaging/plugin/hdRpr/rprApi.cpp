@@ -1342,7 +1342,7 @@ public:
         }
 
         LockGuard rprLock(m_rprContext->GetMutex());
-        return RprUsdMaterialRegistry::GetInstance().CreateMaterial(materialId, sceneDelegate, materialNetwork, m_rprContext.get(), m_imageCache.get());
+        return RprUsdMaterialRegistry::GetInstance().CreateMaterial(materialId, sceneDelegate, materialNetwork, m_rprContext.get(), m_imageCache.get(), RprUsdIsHybrid(m_rprContextMetadata.pluginType));
     }
 
     RprUsdMaterial* CreatePointsMaterial(VtVec3fArray const& colors) {

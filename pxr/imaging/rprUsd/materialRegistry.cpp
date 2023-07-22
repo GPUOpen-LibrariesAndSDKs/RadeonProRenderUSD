@@ -490,7 +490,8 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     HdSceneDelegate* sceneDelegate,
     HdMaterialNetworkMap const& legacyNetworkMap,
     rpr::Context* rprContext,
-    RprUsdImageCache* imageCache) {
+    RprUsdImageCache* imageCache,
+    bool isHybrid) {
 
     if (TfDebug::IsEnabled(RPR_USD_DEBUG_DUMP_MATERIALS)) {
         DumpMaterialNetwork(legacyNetworkMap);
@@ -529,7 +530,9 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             VtValue const& displacementOutput,
             VtValue const& volumeOutput,
             const char* cryptomatteName,
-            int materialId) {
+            int materialId,
+            bool isHybrid,
+            rpr::Context* rprContext) {
 
             auto getTerminalRprNode = [](VtValue const& terminalOutput) -> rpr::MaterialNode* {
                 if (!terminalOutput.IsEmpty()) {
@@ -546,6 +549,29 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             m_volumeNode = getTerminalRprNode(volumeOutput);
             m_surfaceNode = getTerminalRprNode(surfaceOutput);
             m_displacementNode = getTerminalRprNode(displacementOutput);
+
+            m_isHybrid = isHybrid;
+            if (isHybrid) {
+                rpr::Status status;
+                m_hybridDisplacementMul.reset(rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_ARITHMETIC, &status));
+                if (!m_hybridDisplacementMul) {
+                    RPR_ERROR_CHECK(status, "Failed to create arithmetic node");
+                    return false;
+                }
+                m_hybridDisplacementMul->SetInput(RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
+                m_hybridDisplacementMul->SetInput(RPR_MATERIAL_INPUT_COLOR0, m_displacementNode);
+                m_hybridDisplacementMul->SetInput(RPR_MATERIAL_INPUT_COLOR1, 1.0f, 0.0f, 0.0f, 0.0f);
+
+                m_hybridDisplacementAdd.reset(rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_ARITHMETIC, &status));
+                if (!m_hybridDisplacementAdd) {
+                    RPR_ERROR_CHECK(status, "Failed to create arithmetic node");
+                    m_hybridDisplacementMul.release();
+                    return false;
+                }
+                m_hybridDisplacementAdd->SetInput(RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
+                m_hybridDisplacementAdd->SetInput(RPR_MATERIAL_INPUT_COLOR0, m_hybridDisplacementMul.get());
+                m_hybridDisplacementAdd->SetInput(RPR_MATERIAL_INPUT_COLOR1, 0.0f, 0.0f, 0.0f, 0.0f);
+            }
 
             m_isShadowCatcher = context.isShadowCatcher;
             m_isReflectionCatcher = context.isReflectionCatcher;
@@ -691,7 +717,7 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
         cryptomatteName = materialId.GetString();
     }
 
-    if (out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId)) {
+    if (out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId, isHybrid, rprContext)) {
         return out.release();
     }
 
