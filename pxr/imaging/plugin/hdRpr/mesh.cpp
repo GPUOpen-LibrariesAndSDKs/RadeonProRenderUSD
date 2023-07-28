@@ -447,11 +447,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     // 2. Resolve drawstyles
 
     m_smoothNormals = !m_displayStyle.flatShadingEnabled;
-    // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
-    if (m_refineLevel != 0) {
-        m_smoothNormals = false;
-    }
-
     if (!m_authoredNormals && m_smoothNormals) {
         if (!m_adjacencyValid) {
             m_adjacency.BuildAdjacencyTable(&m_topology);
