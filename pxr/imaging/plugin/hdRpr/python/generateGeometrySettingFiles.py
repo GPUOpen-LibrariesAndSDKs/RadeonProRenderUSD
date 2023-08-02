@@ -37,7 +37,7 @@ geometry_settings = [
                 'ui_name': 'Crease Weight',
                 'defaultValue': 0.0,
                 'minValue': 0.0,
-                'maxValue': 1000.0
+                'maxValue': 3.0
             },
             {
                 'name': '$interpolateBoundary',
