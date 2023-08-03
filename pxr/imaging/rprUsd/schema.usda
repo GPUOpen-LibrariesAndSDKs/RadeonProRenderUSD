@@ -696,6 +696,14 @@ class "RprMeshSettingsAPI" (
         displayName = "Subdivision Level"
         doc = ""
     )
+    
+    uniform float primvars:rpr:mesh:subdivisionCreaseWeight = 0.0 (
+        customData = {
+            string apiName = "creaseWeight"
+        }
+        displayGroup = "Subdivision"
+        displayName = "Subdivision Crease Weight"
+    )
 
     uniform int primvars:rpr:mesh:ignoreContour = 0 (
         customData = {
