@@ -26,7 +26,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 HdRprPoints::HdRprPoints(SdfPath const& id HDRPR_INSTANCER_ID_ARG_DECL)
     : HdRprBaseRprim(id HDRPR_INSTANCER_ID_ARG)
     , m_visibilityMask(kVisibleAll)
-    , m_subdivisionLevel(0) {
+    , m_subdivisionLevel(0)
+    , m_subdivisionCreaseWeight(0.0) {
 
 }
 
@@ -120,6 +121,11 @@ void HdRprPoints::Sync(
             dirtySubdivisionLevel = true;
         }
 
+        if (m_subdivisionCreaseWeight != geomSettings.subdivisionCreaseWeight) {
+            m_subdivisionCreaseWeight = geomSettings.subdivisionCreaseWeight;
+            dirtySubdivisionLevel = true;
+        }
+
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
             dirtyVisibilityMask = true;
@@ -155,7 +161,7 @@ void HdRprPoints::Sync(
 
             m_prototypeMesh = rprApi->CreateMesh(points, topology.GetFaceVertexIndices(), points, topology.GetFaceVertexIndices(), VtVec2fArray(), VtIntArray(), topology.GetFaceVertexCounts(), topology.GetOrientation());
             rprApi->SetMeshVisibility(m_prototypeMesh, kInvisible);
-            rprApi->SetMeshRefineLevel(m_prototypeMesh, m_subdivisionLevel);
+            rprApi->SetMeshRefineLevel(m_prototypeMesh, m_subdivisionLevel, m_subdivisionCreaseWeight);
 
             dirtyPrototypeMesh = true;
 
@@ -189,7 +195,7 @@ void HdRprPoints::Sync(
 
     if (!m_instances.empty()) {
         if (dirtySubdivisionLevel && !dirtyPrototypeMesh) {
-            rprApi->SetMeshRefineLevel(m_prototypeMesh, m_subdivisionLevel);
+            rprApi->SetMeshRefineLevel(m_prototypeMesh, m_subdivisionLevel, m_subdivisionCreaseWeight);
         }
 
         if ((*dirtyBits & HdChangeTracker::DirtyTransform) ||

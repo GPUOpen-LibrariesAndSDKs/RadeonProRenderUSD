@@ -162,8 +162,8 @@ public:
             TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `int`", id.GetText(), value.GetTypeName().c_str());
             return false;
         } else if (id == _tokens->transparency) {
-            if (value.IsHolding<float>()) {
-                UpdateTransparency(value.UncheckedGet<float>());
+            if (value.IsHolding<RprMaterialNodePtr>() || value.IsHolding<float>()) {
+                UpdateTransparency(value);
                 return true;
             }
             TF_RUNTIME_ERROR("Input `%s` has invalid type: %s, expected - `float`", id.GetText(), value.GetTypeName().c_str());
@@ -287,8 +287,10 @@ private:
 
     rpr::Context* m_rprContext = nullptr;
 
-    void UpdateTransparency(float transparency) {
-        if (transparency > 0.0f) {
+    void UpdateTransparency(VtValue const& value) {
+        bool isHoldingNode = value.IsHolding<RprMaterialNodePtr>();
+        float transparency = value.UncheckedGet<float>();
+        if (isHoldingNode || transparency > 0.0f) {
             rpr::Status status;
             if (!m_blendNode) {
                 std::unique_ptr<rpr::MaterialNode> blendNode(m_rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_BLEND, &status));
@@ -311,7 +313,8 @@ private:
                     throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set color0 input of blend node", m_rprContext));
                 }
 
-                status = blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, transparency, transparency, transparency, transparency);
+                status = isHoldingNode ? blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, value.UncheckedGet<RprMaterialNodePtr>().get()) 
+                    : blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, transparency, transparency, transparency, transparency);
                 if (status != RPR_SUCCESS) {
                     throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set weight input of blend node", m_rprContext));
                 }
@@ -319,7 +322,8 @@ private:
                 m_blendNode = std::move(blendNode);
                 m_transparentNode = std::move(transparentNode);
             } else {
-                status = m_blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, transparency, transparency, transparency, transparency);
+                status = isHoldingNode ? m_blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, value.UncheckedGet<RprMaterialNodePtr>().get()) 
+                    : m_blendNode->SetInput(RPR_MATERIAL_INPUT_WEIGHT, transparency, transparency, transparency, transparency);
                 if (status != RPR_SUCCESS) {
                     throw RprUsd_NodeError(RPR_GET_ERROR_MESSAGE(status, "Failed to set weight input of blend node", m_rprContext));
                 }
