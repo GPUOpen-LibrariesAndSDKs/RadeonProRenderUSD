@@ -1996,6 +1996,19 @@ public:
             auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
 
+            static std::map<TfToken, rpr_aa_filter> s_filter_types = {
+                {HdRprQualityFilterTypeTokens->None, RPR_FILTER_NONE},
+                {HdRprQualityFilterTypeTokens->Box, RPR_FILTER_BOX},
+                {HdRprQualityFilterTypeTokens->Triangle, RPR_FILTER_TRIANGLE},
+                {HdRprQualityFilterTypeTokens->Gaussian, RPR_FILTER_GAUSSIAN},
+                {HdRprQualityFilterTypeTokens->Mitchell, RPR_FILTER_MITCHELL},
+                {HdRprQualityFilterTypeTokens->Lanczos, RPR_FILTER_LANCZOS},
+                {HdRprQualityFilterTypeTokens->BlackmanHarris, RPR_FILTER_BLACKMANHARRIS},
+            };
+            auto it = s_filter_types.find(preferences.GetQualityFilterType());
+            rpr_aa_filter filterType = (it == s_filter_types.end()) ? RPR_FILTER_NONE : it->second;
+
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_IMAGE_FILTER_TYPE, uint32_t(filterType)), "Failed to set Pixel filter type");
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_IMAGE_FILTER_RADIUS, preferences.GetQualityImageFilterRadius()), "Failed to set Pixel filter width");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
