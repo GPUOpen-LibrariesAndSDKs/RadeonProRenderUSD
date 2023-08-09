@@ -46,6 +46,7 @@
 
       <input name="uber_emission_color" type="color3" value="1,1,1" uimin="0,0,0" uimax="1,1,1" uiname="Color" uifolder="Emission" doc=""/>
       <input name="uber_emission_weight" type="float" value="0.0" uimin="0.0" uisoftmax="1.0" uiname="Weight" uifolder="Emission" doc=""/>
+      <input name="uber_emission_intensity" type="float" value="1.0" uimin="0.0" uisoftmax="1.0" uiname="Intensity" uifolder="Emission" doc=""/>
       <input name="uber_emission_mode" type="string" value="Singlesided" enum="Singlesided,Doublesided" uiname="Mode" uifolder="Emission"/>
 
       <input name="uber_transparency" type="float" value="0.0" uimin="0.0" uimax="1.0" uiname="Transparency" uifolder="Transparency" doc=""/>
