@@ -211,7 +211,7 @@ class "RprRendererSettingsAPI" (
     )
 
     # not for low
-    uniform int rpr:maxSamples = 256 (
+    uniform int rpr:maxSamples = 128 (
         displayGroup = "Sampling"
         displayName = "Max Samples"
         doc = "Maximum number of samples to render for each pixel."
@@ -225,7 +225,7 @@ class "RprRendererSettingsAPI" (
         doc = "Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than 'Variance Threshold'."
         rprMinValue = 1
     )
-    uniform float rpr:adaptiveSampling:noiseTreshold = 0.0 (
+    uniform float rpr:adaptiveSampling:noiseTreshold = 0.05 (
         displayGroup = "Sampling"
         displayName = "Noise Threshold"
         doc = "Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff."

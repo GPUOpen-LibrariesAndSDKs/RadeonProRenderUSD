@@ -308,7 +308,7 @@ render_setting_categories = [
                 'name': 'maxSamples',
                 'ui_name': 'Max Samples',
                 'help': 'Maximum number of samples to render for each pixel.',
-                'defaultValue': 256,
+                'defaultValue': 128,
                 'minValue': 1,
                 'maxValue': 2 ** 16
             }
@@ -332,7 +332,7 @@ render_setting_categories = [
                 'name': 'adaptiveSampling:noiseTreshold',
                 'ui_name': 'Noise Threshold',
                 'help': 'Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff.',
-                'defaultValue': 0.0,
+                'defaultValue': 0.05,
                 'minValue': 0.0,
                 'maxValue': 1.0
             }
