@@ -324,7 +324,7 @@ render_setting_categories = [
                 'name': 'adaptiveSampling:minSamples',
                 'ui_name': 'Min Samples',
                 'help': 'Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than \'Variance Threshold\'.',
-                'defaultValue': 64,
+                'defaultValue': 32,
                 'minValue': 1,
                 'maxValue': 2 ** 16
             },
