@@ -46,6 +46,8 @@ void HdRprParseGeometrySettings(
             if (HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &subdivisionLevel)) {
                 geomSettings->subdivisionLevel = std::max(0, std::min(subdivisionLevel, 7));
             }
+        } else if (primvarName == RprUsdTokens->primvarsRprMeshSubdivisionCreaseWeight) {
+            HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &geomSettings->subdivisionCreaseWeight);
         } else if (primvarName == RprUsdTokens->primvarsRprMeshIgnoreContour) {
             HdRprGetConstantPrimvar(desc.name, sceneDelegate, id, &geomSettings->ignoreContour);
         } else if (primvarName == RprUsdTokens->primvarsRprObjectAssetName) {

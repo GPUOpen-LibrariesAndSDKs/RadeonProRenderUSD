@@ -686,7 +686,7 @@ public:
         return mesh;
     }
 
-    void SetMeshRefineLevel(rpr::Shape* mesh, const int level) {
+    void SetMeshRefineLevel(rpr::Shape* mesh, const int level, const float creaseWeight) {
         if (!m_rprContext) {
             return;
         }
@@ -712,6 +712,15 @@ public:
             if (normalCount != 0) {
                 if (RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(level), "Failed to set mesh subdividion level")) return;
             }
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+
+        float oldCreaseWeight;
+        if (!RPR_ERROR_CHECK(mesh->GetInfo(RPR_SHAPE_SUBDIVISION_CREASEWEIGHT, sizeof(oldCreaseWeight), &oldCreaseWeight, &dummy), "Failed to query mesh subdivision crease weight")) {
+            dirty = creaseWeight != oldCreaseWeight;
+        }
+        if (dirty) {
+            if (RPR_ERROR_CHECK(mesh->SetSubdivisionCreaseWeight(creaseWeight), "Failed to set mesh subdividion crease weight")) return;
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
@@ -4751,8 +4760,8 @@ RprUsdMaterial* HdRprApi::CreatePrimvarColorLookupMaterial(){
     return m_impl->CreatePrimvarColorLookupMaterial();
 }
 
-void HdRprApi::SetMeshRefineLevel(rpr::Shape* mesh, int level) {
-    m_impl->SetMeshRefineLevel(mesh, level);
+void HdRprApi::SetMeshRefineLevel(rpr::Shape* mesh, int level, const float creaseWeight) {
+    m_impl->SetMeshRefineLevel(mesh, level, creaseWeight);
 }
 
 void HdRprApi::SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation) {
