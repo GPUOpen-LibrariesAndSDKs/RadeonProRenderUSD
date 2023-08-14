@@ -406,6 +406,23 @@ render_setting_categories = [
                 'maxValue': 1e6
             },
             {
+                'name': 'quality:filterType',
+                'ui_name': 'Filter Type',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('Box'),
+                    SettingValue('Triangle'),
+                    SettingValue('Gaussian'),
+                    SettingValue('Mitchell'),
+                    SettingValue('Lanczos'),
+                    SettingValue('BlackmanHarris')
+                ],
+                'houdini': {
+                    'hidewhen': hidewhen_hybrid
+                }
+            },
+            {
                 'name': 'quality:imageFilterRadius',
                 'ui_name': 'Pixel filter width',
                 'help': 'Determines Pixel filter width (anti-aliasing).',

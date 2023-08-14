@@ -291,6 +291,12 @@ class "RprRendererSettingsAPI" (
     )
 
     # northstar only
+    uniform token rpr:quality:filterType = "None" (
+        allowedTokens = ["None", "Box", "Triangle", "Gaussian", "Mitchell", "Lanczos", "BlackmanHarris"]
+        displayGroup = "Quality"
+        displayName = "Filter Type"
+    )
+    # northstar only
     uniform float rpr:quality:imageFilterRadius = 1.5 (
         displayGroup = "Quality"
         displayName = "Pixel filter width"
