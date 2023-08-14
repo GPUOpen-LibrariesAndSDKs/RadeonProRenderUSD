@@ -19,7 +19,7 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-const HdRprAovDescriptor kInvalidDesc(0, true, HdFormatInvalid);
+const HdRprAovDescriptor kInvalidDesc;
 
 TF_INSTANTIATE_SINGLETON(HdRprAovRegistry);
 TF_DEFINE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_AOV_TOKENS);
