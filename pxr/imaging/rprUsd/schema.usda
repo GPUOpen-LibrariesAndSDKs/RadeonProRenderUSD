@@ -211,7 +211,7 @@ class "RprRendererSettingsAPI" (
     )
 
     # not for low
-    uniform int rpr:maxSamples = 256 (
+    uniform int rpr:maxSamples = 128 (
         displayGroup = "Sampling"
         displayName = "Max Samples"
         doc = "Maximum number of samples to render for each pixel."
@@ -219,13 +219,13 @@ class "RprRendererSettingsAPI" (
     )
 
     # tahoe and northstar only
-    uniform int rpr:adaptiveSampling:minSamples = 64 (
+    uniform int rpr:adaptiveSampling:minSamples = 32 (
         displayGroup = "Sampling"
         displayName = "Min Samples"
         doc = "Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than 'Variance Threshold'."
         rprMinValue = 1
     )
-    uniform float rpr:adaptiveSampling:noiseTreshold = 0.0 (
+    uniform float rpr:adaptiveSampling:noiseTreshold = 0.05 (
         displayGroup = "Sampling"
         displayName = "Noise Threshold"
         doc = "Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff."
@@ -290,6 +290,12 @@ class "RprRendererSettingsAPI" (
         rprMaxValue = 1000000
     )
 
+    # northstar only
+    uniform token rpr:quality:filterType = "None" (
+        allowedTokens = ["None", "Box", "Triangle", "Gaussian", "Mitchell", "Lanczos", "BlackmanHarris"]
+        displayGroup = "Quality"
+        displayName = "Filter Type"
+    )
     # northstar only
     uniform float rpr:quality:imageFilterRadius = 1.5 (
         displayGroup = "Quality"
@@ -695,6 +701,14 @@ class "RprMeshSettingsAPI" (
         displayGroup = "Subdivision"
         displayName = "Subdivision Level"
         doc = ""
+    )
+    
+    uniform float primvars:rpr:mesh:subdivisionCreaseWeight = 0.0 (
+        customData = {
+            string apiName = "creaseWeight"
+        }
+        displayGroup = "Subdivision"
+        displayName = "Subdivision Crease Weight"
     )
 
     uniform int primvars:rpr:mesh:ignoreContour = 0 (

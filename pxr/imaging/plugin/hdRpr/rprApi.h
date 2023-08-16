@@ -107,6 +107,7 @@ public:
                                  VtUIntArray const& emissionCoords, VtFloatArray const& emissionValues, VtVec3fArray const& emissionLUT, float emissionScale,
                                  const GfVec3i& gridSize, const GfVec3f& voxelSize, const GfVec3f& gridBBLow);
     void SetTransform(HdRprApiVolume* volume, GfMatrix4f const& transform);
+    void SetVolumeVisibility(HdRprApiVolume* volume, uint32_t visibilityMask);
     void Release(HdRprApiVolume* volume);
 
     RprUsdMaterial* CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork);
@@ -118,7 +119,7 @@ public:
     rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndexes, VtVec3fArray const& normals, VtIntArray const& normalIndexes, VtVec2fArray const& uvs, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding);
     rpr::Shape* CreateMesh(VtArray<VtVec3fArray> const& pointSamples, VtIntArray const& pointIndexes, VtArray<VtVec3fArray> const& normalSamples, VtIntArray const& normalIndexes, VtArray<VtVec2fArray> const& uvSamples, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding);
     rpr::Shape* CreateMeshInstance(rpr::Shape* prototypeMesh);
-    void SetMeshRefineLevel(rpr::Shape* mesh, int level);
+    void SetMeshRefineLevel(rpr::Shape* mesh, int level, const float creaseWeight);
     void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation);
     void SetMeshMaterial(rpr::Shape* mesh, RprUsdMaterial const* material, bool displacementEnabled);
     void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask);

@@ -359,6 +359,9 @@ void HdRprVolume::Sync(
     if (*dirtyBits & HdChangeTracker::DirtyTransform) {
         m_transform = GfMatrix4f(sceneDelegate->GetTransform(id));
     }
+    if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
+        m_visibility = sceneDelegate->GetVisible(id);
+    }
 
     bool newVolume = false;
 
@@ -586,6 +589,9 @@ void HdRprVolume::Sync(
     if (m_rprVolume) {
         if (newVolume || (*dirtyBits & HdChangeTracker::DirtyTransform)) {
             rprApi->SetTransform(m_rprVolume, m_transform);
+        }
+        if (newVolume || (*dirtyBits & HdChangeTracker::DirtyVisibility)){
+            rprApi->SetVolumeVisibility(m_rprVolume, m_visibility & kVisiblePrimary);
         }
     }
 

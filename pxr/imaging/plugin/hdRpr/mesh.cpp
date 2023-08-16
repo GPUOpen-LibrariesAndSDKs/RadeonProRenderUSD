@@ -157,6 +157,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             isRefineLevelDirty = true;
         }
 
+        if (m_subdivisionCreaseWeight != geomSettings.subdivisionCreaseWeight) {
+            m_subdivisionCreaseWeight = geomSettings.subdivisionCreaseWeight;
+            isRefineLevelDirty = true;
+        }
+
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
             forceVisibilityUpdate = true;
@@ -447,11 +452,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     // 2. Resolve drawstyles
 
     m_smoothNormals = !m_displayStyle.flatShadingEnabled;
-    // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
-    if (m_refineLevel != 0) {
-        m_smoothNormals = false;
-    }
-
     if (!m_authoredNormals && m_smoothNormals) {
         if (!m_adjacencyValid) {
             m_adjacency.BuildAdjacencyTable(&m_topology);
@@ -656,7 +656,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (newMesh || isRefineLevelDirty) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh, m_refineLevel);
+                rprApi->SetMeshRefineLevel(rprMesh, m_refineLevel, m_subdivisionCreaseWeight);
             }
         }
 

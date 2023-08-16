@@ -46,6 +46,7 @@ protected:
 private:
     HdRprApiVolume* m_rprVolume = nullptr;
     GfMatrix4f m_transform;
+    bool m_visibility = true;
 
     std::map<SdfPath, std::shared_ptr<HdRprVolume>> m_fieldSubscriptions;
 };

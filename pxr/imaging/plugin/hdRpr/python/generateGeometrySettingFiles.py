@@ -11,7 +11,7 @@
 # 
 import argparse
 
-from commonSettings import visibility_flag_settings
+from commonSettings import visibility_flag_settings, SettingValue
 from houdiniDsGenerator import generate_houdini_ds
 
 geometry_settings = [
@@ -31,6 +31,22 @@ geometry_settings = [
                 'defaultValue': 0,
                 'minValue': 0,
                 'maxValue': 7
+            },
+            {
+                'name': 'primvars:rpr:mesh:subdivisionCreaseWeight',
+                'ui_name': 'Crease Weight',
+                'defaultValue': 0.0,
+                'minValue': 0.0,
+                'maxValue': 3.0
+            },
+            {
+                'name': '$interpolateBoundary',
+                'ui_name': 'Boundary',
+                'defaultValue': 'edgeAndCorner',
+                'values': [
+                    SettingValue('edgeAndCorner'),
+                    SettingValue('edgeOnly')
+                ]
             },
             {
                 'name': 'primvars:rpr:mesh:ignoreContour',
