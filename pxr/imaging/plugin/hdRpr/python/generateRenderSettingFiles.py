@@ -522,6 +522,19 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'DisplayGamma',
+        'settings': [
+            {
+                'name': 'core:displayGamma',
+                'ui_name': 'Display Gamma',
+                'help': 'Adjusts the brightness of each pixel in the image based on the gamma correction value to make the overall image brightness appear more natural on the screen.',
+                'defaultValue': 1.0,
+                'minValue': 0.0,
+                'maxValue': 5.0
+            }
+        ]
+    },
+    {
         'name': 'Tonemapping',
         'settings': [
             {

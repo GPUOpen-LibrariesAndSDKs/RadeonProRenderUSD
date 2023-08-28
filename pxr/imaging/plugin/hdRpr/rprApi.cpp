@@ -2140,6 +2140,8 @@ public:
                 if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
                     m_dirtyFlags |= ChangeTracker::DirtyScene;
                 }
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_DISPLAY_GAMMA, preferences.GetCoreDisplayGamma()), "Failed to set display gamma");
             }
             
             if (preferences.IsDirty(HdRprConfig::DirtyDenoise) || preferences.IsDirty(HdRprConfig::DirtyViewportSettings)) {
