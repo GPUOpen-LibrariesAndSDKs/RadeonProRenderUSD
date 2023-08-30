@@ -41,6 +41,11 @@ class "RprRendererSettingsAPI" (
     doc = "Defines render settings for AMD Radeon Pro Renderer"
 )
 {
+    uniform bool rpr:core:useGmon = false (
+        displayName = "Use GMON (HybridPro only)"
+        displayGroup = "General"
+    )
+
     uniform token rpr:core:renderQuality = "Northstar" (
         allowedTokens = ["Low", "Medium", "High", "HybridPro", "Full", "Northstar"]
         displayName = "Render Quality"
