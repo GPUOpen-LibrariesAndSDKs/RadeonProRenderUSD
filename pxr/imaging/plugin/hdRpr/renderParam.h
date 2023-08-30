@@ -26,6 +26,34 @@ class HdRprVolume;
 using HdRprVolumeFieldSubscription = std::shared_ptr<HdRprVolume>;
 using HdRprVolumeFieldSubscriptionHandle = std::weak_ptr<HdRprVolume>;
 
+class HdRprRenderParam;
+
+class RprApiSafeWrapper final
+{
+private:
+    friend class HdRprRenderParam;
+    explicit RprApiSafeWrapper(HdRprRenderParam* renderParam, HdRprApi* rprApi);
+
+    RprApiSafeWrapper(const RprApiSafeWrapper& other) = delete;
+
+public:
+    RprApiSafeWrapper(RprApiSafeWrapper&& other);
+
+public:
+    virtual ~RprApiSafeWrapper();
+
+    RprApiSafeWrapper& operator = (const RprApiSafeWrapper& other) = delete;
+    RprApiSafeWrapper& operator = (RprApiSafeWrapper&& other) = delete;
+    operator HdRprApi* () { return m_rprApi; }
+    HdRprApi* operator->() { return m_rprApi; }
+
+private:
+    HdRprRenderParam* m_renderParam;
+    HdRprApi* m_rprApi;
+    static size_t m_ptrCounter;
+    static std::mutex m_threadControlMutex;
+};
+
 class HdRprRenderParam final : public HdRenderParam {
 public:
     HdRprRenderParam(HdRprApi* rprApi, HdRprRenderThread* renderThread)
@@ -34,9 +62,8 @@ public:
     ~HdRprRenderParam() override = default;
 
     HdRprApi const* GetRprApi() const { return m_rprApi; }
-    HdRprApi* AcquireRprApiForEdit() {
-        m_renderThread->StopRender();
-        return m_rprApi;
+    RprApiSafeWrapper AcquireRprApiForEdit() {
+        return RprApiSafeWrapper(this, m_rprApi);
     }
 
     HdRprRenderThread* GetRenderThread() { return m_renderThread; }

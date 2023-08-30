@@ -606,6 +606,10 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         if (!m_colorSamples.empty()) {
                             if (newPoint) {
                                 for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
+                                    if (sampleIndex >= m_colorSamples.size() || pointIndex >= m_colorSamples[sampleIndex].size()) {
+                                        TF_WARN("Failed verification sampleIndex >= m_colorSamples.size() || pointIndex >= m_colorSamples[sampleIndex].size()");
+                                        continue;
+                                    }
                                     subsetColorSamples[sampleIndex].push_back(m_colorSamples[sampleIndex][pointIndex]);
                                 }
                             }
@@ -663,7 +667,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
             (*dirtyBits & HdChangeTracker::DirtyDoubleSided) || // update twosided material node
             (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) || isRefineLevelDirty) { // update displacement material
-            auto getMeshMaterial = [sceneDelegate, rprApi, dirtyBits, &primvarDescsPerInterpolation, this](SdfPath const& materialId) {
+            auto getMeshMaterial = [sceneDelegate, &rprApi, dirtyBits, &primvarDescsPerInterpolation, this](SdfPath const& materialId) {
                 auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
                 if (material && material->GetRprMaterialObject()) {
                     return material->GetRprMaterialObject();
