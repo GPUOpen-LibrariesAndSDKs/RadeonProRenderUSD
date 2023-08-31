@@ -2107,15 +2107,26 @@ public:
                 auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
 
-                if (preferences.GetQualityEnableReStir()) {
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESERVOIR_SAMPLING), 2), "Failed to set ReStir reservoir sampling");
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESTIR_SPATIAL_RESAMPLE_ITERATIONS), 3), "Failed to set ReStir resample iterations");
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESTIR_MAX_RESERVOIRS_PER_CELL), 128), "Failed to set ReStir max reservoirs");
+                rpr_uint reservoirSampling = -1;
+                TfToken qualityToken = preferences.GetQualityReservoirSampling();
+                if (qualityToken == HdRprQualityReservoirSamplingTokens->Off) {
+                    reservoirSampling = 0;
                 }
-                else {
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESERVOIR_SAMPLING), 0), "Failed to set ReStir reservoir sampling");
+                else if (qualityToken == HdRprQualityReservoirSamplingTokens->ScreenSpace) {
+                    reservoirSampling = 1;
                 }
-                
+                else if (qualityToken == HdRprQualityReservoirSamplingTokens->PathSpace) {
+                    reservoirSampling = 2;
+                }
+
+                if (reservoirSampling != -1) {
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESERVOIR_SAMPLING), reservoirSampling), "Failed to set reservoir sampling");
+
+                    if (reservoirSampling != 0) {
+                        RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESTIR_SPATIAL_RESAMPLE_ITERATIONS), 3), "Failed to set ReStir resample iterations");
+                        RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESTIR_MAX_RESERVOIRS_PER_CELL), 128), "Failed to set ReStir max reservoirs");
+                    }
+                }
 
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }

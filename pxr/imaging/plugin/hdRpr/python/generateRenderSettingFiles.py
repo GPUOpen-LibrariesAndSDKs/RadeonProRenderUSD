@@ -434,10 +434,15 @@ render_setting_categories = [
                 }
             },
             {
-                'name': 'quality:enableReStir',
-                'ui_name': 'Enable ReStir',
-                'help': 'Enable ReStir (HybridPro only)',
-                'defaultValue': True,
+                'name': 'quality:reservoirSampling',
+                'ui_name': 'ReSTIR (HybridPro only)',
+                'help': 'ReSTIR is a low computational cost technique for rendering realistic lighting with millions of lights in real-time.',
+                'defaultValue': 'PathSpace',
+                'values': [
+                    SettingValue('Off'),
+                    SettingValue('ScreenSpace'),
+                    SettingValue('PathSpace'),
+                ],
                 'houdini': {
                     'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
                 }
