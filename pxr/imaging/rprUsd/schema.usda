@@ -41,6 +41,13 @@ class "RprRendererSettingsAPI" (
     doc = "Defines render settings for AMD Radeon Pro Renderer"
 )
 {
+    uniform float rpr:core:displayGamma = 1.0 (
+        displayName = "Display Gamma"
+        displayGroup = "General"
+        rprMinValue = 0.0
+        rprMaxValue = 5.0
+    )
+
     uniform bool rpr:core:useGmon = false (
         displayName = "Use GMON (HybridPro only)"
         displayGroup = "General"
