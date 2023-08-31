@@ -65,6 +65,7 @@ private:
 
     uint32_t m_visibilityMask;
     int m_subdivisionLevel;
+    float m_subdivisionCreaseWeight;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

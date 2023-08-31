@@ -93,6 +93,7 @@ private:
 
     HdDisplayStyle m_displayStyle;
     int m_refineLevel = 0;
+    float m_subdivisionCreaseWeight = 0.0;
 
     int m_id = -1;
     bool m_ignoreContour;

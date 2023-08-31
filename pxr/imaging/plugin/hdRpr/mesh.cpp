@@ -157,6 +157,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             isRefineLevelDirty = true;
         }
 
+        if (m_subdivisionCreaseWeight != geomSettings.subdivisionCreaseWeight) {
+            m_subdivisionCreaseWeight = geomSettings.subdivisionCreaseWeight;
+            isRefineLevelDirty = true;
+        }
+
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
             forceVisibilityUpdate = true;
@@ -651,7 +656,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (newMesh || isRefineLevelDirty) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh, m_refineLevel);
+                rprApi->SetMeshRefineLevel(rprMesh, m_refineLevel, m_subdivisionCreaseWeight);
             }
         }
 
