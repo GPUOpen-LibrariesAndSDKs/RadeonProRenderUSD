@@ -3720,6 +3720,7 @@ private:
 
     void InitRpr() {
         bool flipRequestedByRenderSetting = false;
+        bool useGmon = false;
 
         {
             HdRprConfig* config;
@@ -3729,6 +3730,7 @@ private:
 
             m_currentRenderQuality = GetRenderQuality(*config);
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
+            useGmon = config->GetCoreUseGmon();
             m_rprContextMetadata.isGlInteropEnabled = config->GetOpenglInteroperability();
             m_rprContextMetadata.useOpenCL = config->GetCoreUseOpenCL();
         }
@@ -3750,6 +3752,8 @@ private:
         if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_ENABLE_RELAXED_MATERIAL_CHECKS), 1u), "Failed to enable relaxed material checks");
         }
+
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_USE_GMON), useGmon), "Failed to set GMON parameter");
 
         uint32_t requiredYFlip = 0;
         bool flipRequestedByInteropHybrid = RprUsdIsHybrid(m_rprContextMetadata.pluginType) && m_rprContextMetadata.interopInfo;

@@ -503,6 +503,20 @@ render_setting_categories = [
         ]
     },
     {
+        'name': 'GMON',
+        'settings': [
+            {
+                'name': 'core:useGmon',
+                'ui_name': 'Use GMON (HybridPro only)',
+                'help': 'Enable fireflies suppression by using adaptive median of mean estimator',
+                'defaultValue': False,
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
+                }
+            }
+        ]
+    },
+    {
         'name': 'Tonemapping',
         'settings': [
             {
