@@ -389,7 +389,7 @@ HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
         }
         // We have a trouble here: VtValue does not support 'bool' type.
         // There is only one input in all supported mtlx nodes that must be boolean - thin_walled in standard_surface node, 
-        // but it’s critical for HybridPro to be boolean, so here is the hack for it.
+        // but it's critical for HybridPro to be boolean, so here is the hack for it.
         else if (hdMaterialXNode.nodeTypeId.GetString() == "ND_standard_surface_surfaceshader" && mxInputName == "thin_walled") {
             int value = hdParamValue.UncheckedGet<int>();
             mxInput->setValue(value == 1 ? true : false);
