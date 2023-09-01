@@ -242,6 +242,7 @@ void Listen(InterprocessMessage* message)
                         std::lock_guard<std::mutex> lock(timePointsLock);
                         timePoints[message->content.pid] = std::chrono::steady_clock::now();
                         updateLock = true;
+                        fprintf(stdout, "Deactivate %d\n", message->content.pid);
                         DeActivateScene(nodesToRestore);
                         updateLock = false;
                     }
@@ -253,6 +254,7 @@ void Listen(InterprocessMessage* message)
                         updateLock = false;
                     }
                     else if (message->content.messageType == MessageType::Live) {
+                        fprintf(stdout, "Live %d\n", message->content.pid);
                         std::lock_guard<std::mutex> lock(timePointsLock);
                         timePoints[message->content.pid] = std::chrono::steady_clock::now();
                     }
@@ -282,7 +284,7 @@ void NotifyLive(InterprocessMessage* message) {
                 message->condEmpty.notify_all();
                 message->messageIn = true; 
             }
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
     }
     catch (hboost::interprocess::interprocess_exception& ex) {
@@ -298,7 +300,7 @@ void CheckLive(InterprocessMessage* message) {
             for (auto it = timePoints.begin(); it != timePoints.end(); ++it) {
                 auto interval = std::chrono::steady_clock::now().time_since_epoch() - (*it).second.time_since_epoch();
                 double seconds = (double)interval.count() / 1000000000.0;
-                int maxTimeoutSeconds = 3;
+                int maxTimeoutSeconds = 5;
                 if (seconds < maxTimeoutSeconds) {
                     anyAlive = true;
                     break;
