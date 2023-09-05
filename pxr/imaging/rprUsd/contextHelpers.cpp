@@ -398,21 +398,13 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     if (RprUsdIsHybrid(metadata->pluginType) && metadata->interopInfo) {
-        // Create interop context for hybrid
-        // TODO: should not it be configurable?
-        constexpr std::uint32_t MB = 1024u * 1024u;
-        static std::uint32_t acc_size = 1024 * MB;
-        static std::uint32_t vbuf_size = 1024 * MB;
-        static std::uint32_t ibuf_size = 512 * MB;
-        static std::uint32_t sbuf_size = 512 * MB;
-
         appendContextProperty(RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO, metadata->interopInfo);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE, &acc_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, &vbuf_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, &ibuf_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, &sbuf_size);
     }
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+    for (const auto& entry: metadata->additionalIntProperties) {
+        appendContextProperty(entry.first, const_cast<void*>(reinterpret_cast<const void*>(&entry.second)));
+    }
 
     contextProperties.push_back(nullptr);
 

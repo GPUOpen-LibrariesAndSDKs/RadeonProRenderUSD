@@ -347,6 +347,45 @@ class "RprRendererSettingsAPI" (
         doc = "Controls whether in interactive mode resolution should be downscaled or no."
     )
 
+    uniform token rpr:hybrid:tonemapping = "None" (
+        allowedTokens = ["None", "Filmic", "Aces", "Reinhard", "Photolinear"]
+        displayName = "Hybrid Tonemapping"
+        displayGroup = "Hybrid|Postprocessing"
+    )
+
+    uniform token rpr:hybrid:denoising = "None" (
+        allowedTokens = ["None", "SVGF", "ASVGF"]
+        displayName = "Hybrid Denoising"
+        displayGroup = "Hybrid|Postprocessing"
+    )
+
+    uniform uint rpr:hybrid:acceleration_memory_size_mb = 2048 (
+        displayName = "Hybrid Acceleration Structure Memory Size"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 1
+        rprMaxValue = 4096
+    )
+
+    uniform uint rpr:hybrid:mesh_memory_size_mb = 1024 (
+        displayName = "Hybrid Mesh Memory Size"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 1
+        rprMaxValue = 4096
+    )
+
+    uniform uint rpr:hybrid:staging_memory_size_mb = 512 (
+        displayName = "Hybrid Staging Memory Size"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 1
+        rprMaxValue = 4096
+    )
+
+    uniform uint rpr:hybrid:scratch_memory_size_mb = 256 (
+        displayName = "Hybrid Scratch Memory Size"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 1
+        rprMaxValue = 4096
+    )
     uniform bool rpr:tonemapping:enable = false (
         displayName = "Enable Tonemapping"
         displayGroup = "Postprocessing|Tonemapping"

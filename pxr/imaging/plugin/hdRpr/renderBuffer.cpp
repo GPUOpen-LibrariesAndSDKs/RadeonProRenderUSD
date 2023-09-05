@@ -17,6 +17,12 @@ limitations under the License.
 
 #include "pxr/imaging/hd/sceneDelegate.h"
 
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+#include <vulkan/vulkan.h>
+#include <RadeonProRender.hpp>
+#include <RadeonProRender_VK.h>
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 HdRprRenderBuffer::HdRprRenderBuffer(SdfPath const& id, HdRprApi* api)
@@ -161,11 +167,36 @@ VtValue HdRprRenderBuffer::GetResource(bool multiSampled) const {
         }
 
         VtDictionary dictionary;
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+        // We are using multiSampled parameter as workaround since USD also calls this method, but with 'false' value
+        if (multiSampled) {
+            dictionary["isVulkanInteropEnabled"] = m_rprApi->IsVulkanInteropEnabled();
+
+            VkImage vkImage = VK_NULL_HANDLE;
+            if (RPR_SUCCESS == color->GetInfo(static_cast<rpr::FramebufferInfo>(RPR_VK_IMAGE_OBJECT), sizeof(vkImage), &vkImage, nullptr)) {
+                VkSemaphore interopSemaphore;
+                uint32_t interopSemaphoreIndex;
+                if (m_rprApi->GetInteropSemaphore(interopSemaphore, interopSemaphoreIndex)) {
+                    dictionary["semaphore"] = static_cast<void*>(interopSemaphore);
+                    dictionary["semaphoreIndex"] = static_cast<unsigned int>(interopSemaphoreIndex);
+
+                    dictionary["frameBuffer"] = static_cast<void*>(vkImage);
+
+                    rpr::FrameBuffer* primId = m_rprApi->GetPrimIdFramebuffer();
+                    if (primId && (RPR_SUCCESS == primId->GetInfo(static_cast<rpr::FramebufferInfo>(RPR_VK_IMAGE_OBJECT), sizeof(vkImage), &vkImage, nullptr))) {
+                        dictionary["primIdFrameBuffer"] = static_cast<void*>(vkImage);
+                    }
+                }
+            }
+        }
+#else
         dictionary["isVulkanInteropEnabled"] = m_rprApi->IsVulkanInteropEnabled();
         dictionary["framebuffer"] = color;
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
         return VtValue(dictionary);
     }
+
     return VtValue();
 }
 
