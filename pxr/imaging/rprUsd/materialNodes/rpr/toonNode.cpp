@@ -125,21 +125,21 @@ public:
         } else if (id == _tokens->highlightTint2) {
             return ProcessInput<GfVec3f>(id, value, m_rampNode, RPR_MATERIAL_INPUT_HIGHLIGHT2);
         } /* level */ else if (id == _tokens->shadowLevel) {
-            return ProcessInput<float>(id, VtValue(value.Get<float>() * factor), m_rampNode, RPR_MATERIAL_INPUT_POSITION_SHADOW);
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION_SHADOW);
         } else if (id == _tokens->midLevel) {
             return ProcessInput<float>(id, VtValue(value.Get<float>() * factor), m_rampNode, RPR_MATERIAL_INPUT_POSITION1);
         } else if (id == _tokens->highlightLevel) {
             return ProcessInput<float>(id, VtValue(value.Get<float>() * factor), m_rampNode, RPR_MATERIAL_INPUT_POSITION2);
         } else if (id == _tokens->highlightLevel2) {
-            return ProcessInput<float>(id, VtValue(value.Get<float>() * factor), m_rampNode, RPR_MATERIAL_INPUT_POSITION_HIGHLIGHT);
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_POSITION_HIGHLIGHT);
         } /* mix */ else if (id == _tokens->shadowLevelMix) {
-            return ProcessInput<float>(id, VtValue(value.Get<float>() * factor), m_rampNode, RPR_MATERIAL_INPUT_RANGE_SHADOW);
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE_SHADOW);
         } else if (id == _tokens->midLevelMix) {
-            return ProcessInput<float>(id, VtValue(value.Get<float>() * factor), m_rampNode, RPR_MATERIAL_INPUT_RANGE1);
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE1);
         }  else if (id == _tokens->highlightLevelMix) {
-            return ProcessInput<float>(id, VtValue(value.Get<float>() * factor), m_rampNode, RPR_MATERIAL_INPUT_RANGE2);
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE2);
         } else if (id == _tokens->highlightLevelMix2) {
-            return ProcessInput<float>(id, VtValue(value.Get<float>() * factor), m_rampNode, RPR_MATERIAL_INPUT_RANGE_HIGHLIGHT);
+            return ProcessInput<float>(id, value, m_rampNode, RPR_MATERIAL_INPUT_RANGE_HIGHLIGHT);
         } else if (id == _tokens->interpolationMode) {
             if (value.IsHolding<int>()) {
                 int interpolationModeInt = value.UncheckedGet<int>();
