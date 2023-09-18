@@ -113,13 +113,12 @@ std::string GetRprSdkPath() {
 
 void SetupRprTracing() {
     if (RprUsdIsTracingEnabled()) {
-        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(nullptr, RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
-
         auto tracingDir = TfGetEnvSetting(RPRUSD_TRACING_DIR);
         if (!tracingDir.empty()) {
             printf("RPR tracing directory: %s\n", tracingDir.c_str());
         }
         RPR_ERROR_CHECK(rprContextSetParameterByKeyString(nullptr, RPR_CONTEXT_TRACING_PATH, tracingDir.c_str()), "Failed to set tracing directory parameter");
+        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(nullptr, RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
     }
 }
 
