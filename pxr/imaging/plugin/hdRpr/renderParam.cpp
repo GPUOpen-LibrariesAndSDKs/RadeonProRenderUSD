@@ -82,5 +82,45 @@ void HdRprRenderParam::MaterialDidChange(HdSceneDelegate* sceneDelegate, SdfPath
     }
 }
 
+size_t RprApiSafeWrapper::m_ptrCounter = 0;
+std::mutex RprApiSafeWrapper::m_threadControlMutex;
+
+RprApiSafeWrapper::RprApiSafeWrapper(HdRprRenderParam* renderParam, HdRprApi* rprApi)
+    : m_renderParam(renderParam)
+    , m_rprApi(rprApi)
+{
+    std::lock_guard<std::mutex> lock(m_threadControlMutex);
+    if (m_ptrCounter == 0)
+    {
+        m_renderParam->GetRenderThread()->StopRender();
+    }
+
+    ++m_ptrCounter;
+}
+
+RprApiSafeWrapper::RprApiSafeWrapper(RprApiSafeWrapper&& other)
+{
+    std::lock_guard<std::mutex> lock(m_threadControlMutex);
+    if (this == &other)
+        return;
+
+    m_renderParam = other.m_renderParam;
+    other.m_renderParam = nullptr;
+
+    m_rprApi = other.m_rprApi;
+    other.m_rprApi = nullptr;
+
+    ++m_ptrCounter;
+}
+
+RprApiSafeWrapper::~RprApiSafeWrapper()
+{
+    std::lock_guard<std::mutex> lock(m_threadControlMutex);
+    if (--m_ptrCounter != 0)
+        return;
+
+    if (m_renderParam)
+        m_renderParam->RestartRender();
+}
 
 PXR_NAMESPACE_CLOSE_SCOPE

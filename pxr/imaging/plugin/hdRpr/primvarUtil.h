@@ -42,6 +42,7 @@ bool HdRprIsValidPrimvarSize(
 struct HdRprGeometrySettings {
     int id = -1;
     int subdivisionLevel = 0;
+    float subdivisionCreaseWeight = 0.0;
     uint32_t visibilityMask = 0;
     bool ignoreContour = false;
     std::string cryptomatteName;

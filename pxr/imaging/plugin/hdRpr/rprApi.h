@@ -33,7 +33,12 @@ limitations under the License.
 #include <memory>
 #include <vector>
 #include <string>
-#include <condition_variable>
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+#include <RadeonProRender_VK.h>
+#include <RadeonProRender_Baikal.h>
+#include <vulkan/vulkan.h>
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -119,7 +124,7 @@ public:
     rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndexes, VtVec3fArray const& normals, VtIntArray const& normalIndexes, VtVec2fArray const& uvs, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding);
     rpr::Shape* CreateMesh(VtArray<VtVec3fArray> const& pointSamples, VtIntArray const& pointIndexes, VtArray<VtVec3fArray> const& normalSamples, VtIntArray const& normalIndexes, VtArray<VtVec2fArray> const& uvSamples, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding);
     rpr::Shape* CreateMeshInstance(rpr::Shape* prototypeMesh);
-    void SetMeshRefineLevel(rpr::Shape* mesh, int level);
+    void SetMeshRefineLevel(rpr::Shape* mesh, int level, const float creaseWeight);
     void SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation);
     void SetMeshMaterial(rpr::Shape* mesh, RprUsdMaterial const* material, bool displacementEnabled);
     void SetMeshVisibility(rpr::Shape* mesh, uint32_t visibilityMask);
@@ -152,7 +157,13 @@ public:
     void SetAovBindings(HdRenderPassAovBindingVector const& aovBindings);
     HdRenderPassAovBindingVector GetAovBindings() const;
 
-    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition);
+    void SetInteropInfo(void* interopInfo);
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+    bool GetInteropSemaphore(VkSemaphore& rInteropSemaphore, uint32_t& rInteropSemaphoreIndex);
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+    void Restart();
 
     struct RenderStats {
         double percentDone;
@@ -182,6 +193,7 @@ public:
     bool IsSphereAndDiskLightSupported() const;
     TfToken const& GetCurrentRenderQuality() const;
     rpr::FrameBuffer* GetRawColorFramebuffer();
+    rpr::FrameBuffer* GetPrimIdFramebuffer();
 
 private:
     HdRprApiImpl* m_impl = nullptr;

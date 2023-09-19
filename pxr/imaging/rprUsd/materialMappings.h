@@ -108,6 +108,7 @@ bool ToRpr(TfToken const& id, uint32_t* out, bool pedantic = true);
     (uber_sheen_weight) \
     (uber_emission_color) \
     (uber_emission_weight) \
+    (uber_emission_intensity) \
     (uber_emission_mode) \
     (uber_transparency) \
     (uber_sss_scatter_color) \

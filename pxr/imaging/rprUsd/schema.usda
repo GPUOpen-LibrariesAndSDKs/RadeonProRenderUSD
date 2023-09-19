@@ -41,6 +41,18 @@ class "RprRendererSettingsAPI" (
     doc = "Defines render settings for AMD Radeon Pro Renderer"
 )
 {
+    uniform float rpr:core:displayGamma = 1.0 (
+        displayName = "Display Gamma"
+        displayGroup = "General"
+        rprMinValue = 0.0
+        rprMaxValue = 5.0
+    )
+
+    uniform bool rpr:core:useGmon = false (
+        displayName = "Use GMON (HybridPro only)"
+        displayGroup = "General"
+    )
+
     uniform token rpr:core:renderQuality = "Northstar" (
         allowedTokens = ["Low", "Medium", "High", "HybridPro", "Full", "Northstar"]
         displayName = "Render Quality"
@@ -211,7 +223,7 @@ class "RprRendererSettingsAPI" (
     )
 
     # not for low
-    uniform int rpr:maxSamples = 256 (
+    uniform int rpr:maxSamples = 128 (
         displayGroup = "Sampling"
         displayName = "Max Samples"
         doc = "Maximum number of samples to render for each pixel."
@@ -219,13 +231,13 @@ class "RprRendererSettingsAPI" (
     )
 
     # tahoe and northstar only
-    uniform int rpr:adaptiveSampling:minSamples = 64 (
+    uniform int rpr:adaptiveSampling:minSamples = 32 (
         displayGroup = "Sampling"
         displayName = "Min Samples"
         doc = "Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than 'Variance Threshold'."
         rprMinValue = 1
     )
-    uniform float rpr:adaptiveSampling:noiseTreshold = 0.0 (
+    uniform float rpr:adaptiveSampling:noiseTreshold = 0.05 (
         displayGroup = "Sampling"
         displayName = "Noise Threshold"
         doc = "Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff."
@@ -291,6 +303,12 @@ class "RprRendererSettingsAPI" (
     )
 
     # northstar only
+    uniform token rpr:quality:filterType = "None" (
+        allowedTokens = ["None", "Box", "Triangle", "Gaussian", "Mitchell", "Lanczos", "BlackmanHarris"]
+        displayGroup = "Quality"
+        displayName = "Filter Type"
+    )
+    # northstar only
     uniform float rpr:quality:imageFilterRadius = 1.5 (
         displayGroup = "Quality"
         displayName = "Pixel filter width"
@@ -298,10 +316,11 @@ class "RprRendererSettingsAPI" (
         rprMinValue = 0.0
         rprMaxValue = 5.0
     )
-	
+
     # HybridPro only
-    uniform bool rpr:quality:enableReStir = true (
-        displayName = "Enable ReStir (HybridPro only)"
+    uniform token rpr:quality:reservoirSampling = "PathSpace" (
+        allowedTokens = ["Off", "ScreenSpace", "PathSpace"]
+        displayName = "ReSTIR (HybridPro only)"
         displayGroup = "General"
     )
 
@@ -328,6 +347,45 @@ class "RprRendererSettingsAPI" (
         doc = "Controls whether in interactive mode resolution should be downscaled or no."
     )
 
+    uniform token rpr:hybrid:tonemapping = "None" (
+        allowedTokens = ["None", "Filmic", "Aces", "Reinhard", "Photolinear"]
+        displayName = "Hybrid Tonemapping"
+        displayGroup = "Hybrid|Postprocessing"
+    )
+
+    uniform token rpr:hybrid:denoising = "None" (
+        allowedTokens = ["None", "SVGF", "ASVGF"]
+        displayName = "Hybrid Denoising"
+        displayGroup = "Hybrid|Postprocessing"
+    )
+
+    uniform uint rpr:hybrid:acceleration_memory_size_mb = 2048 (
+        displayName = "Hybrid Acceleration Structure Memory Size"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 1
+        rprMaxValue = 4096
+    )
+
+    uniform uint rpr:hybrid:mesh_memory_size_mb = 1024 (
+        displayName = "Hybrid Mesh Memory Size"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 1
+        rprMaxValue = 4096
+    )
+
+    uniform uint rpr:hybrid:staging_memory_size_mb = 512 (
+        displayName = "Hybrid Staging Memory Size"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 1
+        rprMaxValue = 4096
+    )
+
+    uniform uint rpr:hybrid:scratch_memory_size_mb = 256 (
+        displayName = "Hybrid Scratch Memory Size"
+        displayGroup = "Hybrid|Memory"
+        rprMinValue = 1
+        rprMaxValue = 4096
+    )
     uniform bool rpr:tonemapping:enable = false (
         displayName = "Enable Tonemapping"
         displayGroup = "Postprocessing|Tonemapping"
@@ -695,6 +753,14 @@ class "RprMeshSettingsAPI" (
         displayGroup = "Subdivision"
         displayName = "Subdivision Level"
         doc = ""
+    )
+    
+    uniform float primvars:rpr:mesh:subdivisionCreaseWeight = 0.0 (
+        customData = {
+            string apiName = "creaseWeight"
+        }
+        displayGroup = "Subdivision"
+        displayName = "Subdivision Crease Weight"
     )
 
     uniform int primvars:rpr:mesh:ignoreContour = 0 (

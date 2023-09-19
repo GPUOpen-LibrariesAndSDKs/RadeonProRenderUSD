@@ -308,7 +308,7 @@ render_setting_categories = [
                 'name': 'maxSamples',
                 'ui_name': 'Max Samples',
                 'help': 'Maximum number of samples to render for each pixel.',
-                'defaultValue': 256,
+                'defaultValue': 128,
                 'minValue': 1,
                 'maxValue': 2 ** 16
             }
@@ -324,7 +324,7 @@ render_setting_categories = [
                 'name': 'adaptiveSampling:minSamples',
                 'ui_name': 'Min Samples',
                 'help': 'Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than \'Variance Threshold\'.',
-                'defaultValue': 64,
+                'defaultValue': 32,
                 'minValue': 1,
                 'maxValue': 2 ** 16
             },
@@ -332,7 +332,7 @@ render_setting_categories = [
                 'name': 'adaptiveSampling:noiseTreshold',
                 'ui_name': 'Noise Threshold',
                 'help': 'Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff.',
-                'defaultValue': 0.0,
+                'defaultValue': 0.05,
                 'minValue': 0.0,
                 'maxValue': 1.0
             }
@@ -406,21 +406,43 @@ render_setting_categories = [
                 'maxValue': 1e6
             },
             {
-                'name': 'quality:imageFilterRadius',
-                'ui_name': 'Pixel filter width',
-                'help': 'Determines Pixel filter width (anti-aliasing).',
-                'defaultValue': 1.5,
-                'minValue': 0.0,
-                'maxValue': 5.0,
+                'name': 'quality:filterType',
+                'ui_name': 'Filter Type',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('Box'),
+                    SettingValue('Triangle'),
+                    SettingValue('Gaussian'),
+                    SettingValue('Mitchell'),
+                    SettingValue('Lanczos'),
+                    SettingValue('BlackmanHarris')
+                ],
                 'houdini': {
                     'hidewhen': hidewhen_hybrid
                 }
             },
             {
-                'name': 'quality:enableReStir',
-                'ui_name': 'Enable ReStir',
-                'help': 'Enable ReStir (HybridPro only)',
-                'defaultValue': True,
+                'name': 'quality:imageFilterRadius',
+                'ui_name': 'Pixel filter width',
+                'help': 'Determines Pixel filter width (anti-aliasing).',
+                'defaultValue': 1.5,
+                'minValue': 0.0,
+                'maxValue': 1.5,
+                'houdini': {
+                    'hidewhen': hidewhen_hybrid
+                }
+            },
+            {
+                'name': 'quality:reservoirSampling',
+                'ui_name': 'ReSTIR (HybridPro only)',
+                'help': 'ReSTIR is a low computational cost technique for rendering realistic lighting with millions of lights in real-time.',
+                'defaultValue': 'PathSpace',
+                'values': [
+                    SettingValue('Off'),
+                    SettingValue('ScreenSpace'),
+                    SettingValue('PathSpace'),
+                ],
                 'houdini': {
                     'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
                 }
@@ -482,6 +504,88 @@ render_setting_categories = [
                 'houdini': {
                     'hidewhen': 'gamma:enable == 0'
                 }
+            }
+        ]
+    },
+    {
+        'name': 'GMON',
+        'settings': [
+            {
+                'name': 'core:useGmon',
+                'ui_name': 'Use GMON (HybridPro only)',
+                'help': 'Enable fireflies suppression by using adaptive median of mean estimator',
+                'defaultValue': False,
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
+                }
+            }
+        ]
+    },
+    {
+        'name': 'DisplayGamma',
+        'settings': [
+            {
+                'name': 'core:displayGamma',
+                'ui_name': 'Display Gamma',
+                'help': 'Adjusts the brightness of each pixel in the image based on the gamma correction value to make the overall image brightness appear more natural on the screen.',
+                'defaultValue': 1.0,
+                'minValue': 0.0,
+                'maxValue': 5.0
+            }
+        ]
+    },
+    {
+        'name': 'Hybrid',
+        'settings': [
+            {
+                'name': 'hybrid:tonemapping',
+                'ui_name': 'Hybrid Tonemapping',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('Filmic'),
+                    SettingValue('Aces'),
+                    SettingValue('Reinhard'),
+                    SettingValue('Photolinear')
+                ]
+            },
+            {
+                'name': 'hybrid:denoising',
+                'ui_name': 'Hybrid Denoising',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('SVGF'),
+                    SettingValue('ASVGF')
+                ]
+            },
+            {
+                'name': 'hybrid:accelerationMemorySizeMb',
+                'ui_name': 'Hybrid Acceleration Structure Memory Size (MB)',
+                'defaultValue': 2048,
+                'minValue': 1,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:meshMemorySizeMb',
+                'ui_name': 'Hybrid Mesh Memory Size (MB)',
+                'defaultValue': 1024,
+                'minValue': 1,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:stagingMemorySizeMb',
+                'ui_name': 'Hybrid Staging Memory Size (MB)',
+                'defaultValue': 512,
+                'minValue': 1,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:scratchMemorySizeMb',
+                'ui_name': 'Hybrid Scratch Memory Size (MB)',
+                'defaultValue': 256,
+                'minValue': 1,
+                'maxValue': 4096
             }
         ]
     },

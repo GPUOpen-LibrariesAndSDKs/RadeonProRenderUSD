@@ -686,7 +686,7 @@ public:
         return mesh;
     }
 
-    void SetMeshRefineLevel(rpr::Shape* mesh, const int level) {
+    void SetMeshRefineLevel(rpr::Shape* mesh, const int level, const float creaseWeight) {
         if (!m_rprContext) {
             return;
         }
@@ -712,6 +712,15 @@ public:
             if (normalCount != 0) {
                 if (RPR_ERROR_CHECK(mesh->SetSubdivisionFactor(level), "Failed to set mesh subdividion level")) return;
             }
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+
+        float oldCreaseWeight;
+        if (!RPR_ERROR_CHECK(mesh->GetInfo(RPR_SHAPE_SUBDIVISION_CREASEWEIGHT, sizeof(oldCreaseWeight), &oldCreaseWeight, &dummy), "Failed to query mesh subdivision crease weight")) {
+            dirty = creaseWeight != oldCreaseWeight;
+        }
+        if (dirty) {
+            if (RPR_ERROR_CHECK(mesh->SetSubdivisionCreaseWeight(creaseWeight), "Failed to set mesh subdividion crease weight")) return;
             m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
@@ -1996,6 +2005,19 @@ public:
             auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
 
+            static std::map<TfToken, rpr_aa_filter> s_filter_types = {
+                {HdRprQualityFilterTypeTokens->None, RPR_FILTER_NONE},
+                {HdRprQualityFilterTypeTokens->Box, RPR_FILTER_BOX},
+                {HdRprQualityFilterTypeTokens->Triangle, RPR_FILTER_TRIANGLE},
+                {HdRprQualityFilterTypeTokens->Gaussian, RPR_FILTER_GAUSSIAN},
+                {HdRprQualityFilterTypeTokens->Mitchell, RPR_FILTER_MITCHELL},
+                {HdRprQualityFilterTypeTokens->Lanczos, RPR_FILTER_LANCZOS},
+                {HdRprQualityFilterTypeTokens->BlackmanHarris, RPR_FILTER_BLACKMANHARRIS},
+            };
+            auto it = s_filter_types.find(preferences.GetQualityFilterType());
+            rpr_aa_filter filterType = (it == s_filter_types.end()) ? RPR_FILTER_NONE : it->second;
+
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_IMAGE_FILTER_TYPE, uint32_t(filterType)), "Failed to set Pixel filter type");
             RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_IMAGE_FILTER_RADIUS, preferences.GetQualityImageFilterRadius()), "Failed to set Pixel filter width");
 
             m_dirtyFlags |= ChangeTracker::DirtyScene;
@@ -2085,15 +2107,26 @@ public:
                 auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
 
-                if (preferences.GetQualityEnableReStir()) {
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESERVOIR_SAMPLING), 2), "Failed to set ReStir reservoir sampling");
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESTIR_SPATIAL_RESAMPLE_ITERATIONS), 3), "Failed to set ReStir resample iterations");
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESTIR_MAX_RESERVOIRS_PER_CELL), 128), "Failed to set ReStir max reservoirs");
+                rpr_uint reservoirSampling = -1;
+                TfToken qualityToken = preferences.GetQualityReservoirSampling();
+                if (qualityToken == HdRprQualityReservoirSamplingTokens->Off) {
+                    reservoirSampling = 0;
                 }
-                else {
-                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESERVOIR_SAMPLING), 0), "Failed to set ReStir reservoir sampling");
+                else if (qualityToken == HdRprQualityReservoirSamplingTokens->ScreenSpace) {
+                    reservoirSampling = 1;
                 }
-                
+                else if (qualityToken == HdRprQualityReservoirSamplingTokens->PathSpace) {
+                    reservoirSampling = 2;
+                }
+
+                if (reservoirSampling != -1) {
+                    RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESERVOIR_SAMPLING), reservoirSampling), "Failed to set reservoir sampling");
+
+                    if (reservoirSampling != 0) {
+                        RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESTIR_SPATIAL_RESAMPLE_ITERATIONS), 3), "Failed to set ReStir resample iterations");
+                        RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RESTIR_MAX_RESERVOIRS_PER_CELL), 128), "Failed to set ReStir max reservoirs");
+                    }
+                }
 
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
@@ -2107,6 +2140,8 @@ public:
                 if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
                     m_dirtyFlags |= ChangeTracker::DirtyScene;
                 }
+
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_DISPLAY_GAMMA, preferences.GetCoreDisplayGamma()), "Failed to set display gamma");
             }
             
             if (preferences.IsDirty(HdRprConfig::DirtyDenoise) || preferences.IsDirty(HdRprConfig::DirtyViewportSettings)) {
@@ -2145,6 +2180,67 @@ public:
 
             if (hybridRenderQuality != -1) {
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_RENDER_QUALITY), hybridRenderQuality), "Fail to set context hybrid render quality");
+            }
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyHybrid) || force) {
+            auto hybridTonemapping = preferences.GetHybridTonemapping();
+            if (hybridTonemapping == HdRprHybridTonemappingTokens->None) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_NONE), "Failed to set tonemapping");
+            } else if (hybridTonemapping == HdRprHybridTonemappingTokens->Filmic) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_FILMIC), "Failed to set tonemapping");
+            } else if (hybridTonemapping == HdRprHybridTonemappingTokens->Aces) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_ACES), "Failed to set tonemapping");
+            } else if (hybridTonemapping == HdRprHybridTonemappingTokens->Reinhard) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_REINHARD), "Failed to set tonemapping");
+            } else if (hybridTonemapping == HdRprHybridTonemappingTokens->Photolinear) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_TONE_MAPPING), RPR_TONE_MAPPING_PHOTO_LINEAR), "Failed to set tonemapping");
+            }
+
+            auto hybridDenoising = preferences.GetHybridDenoising();
+            if (hybridDenoising == HdRprHybridDenoisingTokens->None) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_NONE), "Failed to set denoiser");
+            } else if (hybridDenoising == HdRprHybridDenoisingTokens->SVGF) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_SVGF), "Failed to set denoiser");
+            } else if (hybridDenoising == HdRprHybridDenoisingTokens->ASVGF) {
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_ASVGF), "Failed to set denoiser");
+            }
+        }
+
+        if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, preferences.GetQualityRayDepth()), "Failed to set max recursion");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_DIFFUSE, preferences.GetQualityRayDepthDiffuse()), "Failed to set max depth diffuse");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY, preferences.GetQualityRayDepthGlossy()), "Failed to set max depth glossy");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_REFRACTION, preferences.GetQualityRayDepthRefraction()), "Failed to set max depth refraction");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_GLOSSY_REFRACTION, preferences.GetQualityRayDepthGlossyRefraction()), "Failed to set max depth glossy refraction");
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_DEPTH_SHADOW, preferences.GetQualityRayDepthShadow()), "Failed to set max depth shadow");
+
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RAY_CAST_EPSILON, preferences.GetQualityRaycastEpsilon()), "Failed to set ray cast epsilon");
+            auto radianceClamp = preferences.GetQualityRadianceClamping() == 0 ? std::numeric_limits<float>::max() : preferences.GetQualityRadianceClamping();
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_RADIANCE_CLAMP, radianceClamp), "Failed to set radiance clamp");
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
+
+        if ((preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) ||
+            preferences.IsDirty(HdRprConfig::DirtyInteractiveQuality)) || force) {
+            m_isInteractive = preferences.GetInteractiveMode();
+            auto maxRayDepth = m_isInteractive ? preferences.GetQualityInteractiveRayDepth() : preferences.GetQualityRayDepth();
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_MAX_RECURSION, maxRayDepth), "Failed to set max recursion");
+
+            if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+                int downscale = 0;
+                if (m_isInteractive) {
+                    downscale = preferences.GetQualityInteractiveDownscaleResolution();
+                }
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
+            } else {
+                bool enableDownscale = m_isInteractive && preferences.GetQualityInteractiveDownscaleEnable();
+                RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(enableDownscale)), "Failed to set preview mode");
+            }
+
+            if (preferences.IsDirty(HdRprConfig::DirtyInteractiveMode) || m_isInteractive) {
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         }
     }
@@ -3110,31 +3206,48 @@ public:
         }
     }
 
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     void InteropRenderImpl(HdRprRenderThread* renderThread) {
         if (!RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             TF_CODING_ERROR("InteropRenderImpl should be called for Hybrid plugin only");
             return;
         }
+        bool isRendered = false;
+        while (true) {
+            // In interactive mode, always render at least one frame, otherwise
+            // disturbing full-screen-flickering will be visible or
+            // viewport will not update because of fast exit due to abort
+            const bool forceRender = m_isInteractive && m_numSamples == 0;
 
-        // For now render 5 frames before each present
-        for (int i = 0; i < 5; i++) {
-            rpr::Status status = m_rprContext->Render();
-            if (status != rpr::Status::RPR_SUCCESS) {
-                TF_WARN("rprContextRender returns: %d", status);
+            renderThread->WaitUntilPaused();
+            if (renderThread->IsStopRequested() && !forceRender) {
+                break;
+            }
+
+            if (!m_vulkanInteropBufferReady)
+            {
+                m_rucData.previousProgress = -1.0f;
+                rpr::Status status = m_rprContext->Render();
+                if (rpr::Status::RPR_SUCCESS == status) {
+                    m_numSamples += m_numSamplesPerIter;
+                    rpr_int status = m_rprContextFlushFrameBuffers(rpr::GetRprObject(m_rprContext.get()));
+                    if (RPR_SUCCESS == status) {
+                        m_vulkanInteropBufferReady = true;
+                    }
+                    else {
+                        TF_WARN("rprContextFlushFrameBuffers returns: %d", status);
+                    }
+                }
+                else {
+                    TF_WARN("rprContextRender returns: %d", status);
+                }
+            }
+            else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
-
-        // Next frame couldn't be flushed before previous was presented. We should wait for presenter
-        std::unique_lock<std::mutex> lock(m_rprContext->GetMutex());
-        m_presentedConditionVariable->wait(lock, [this] { return *m_presentedCondition == true; });
-
-        rpr_int status = m_rprContextFlushFrameBuffers(rpr::GetRprObject(m_rprContext.get()));
-        if (status != RPR_SUCCESS) {
-            TF_WARN("rprContextFlushFrameBuffers returns: %d", status);
-        }
-
-        *m_presentedCondition = false;
     }
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     void RenderFrame(HdRprRenderThread* renderThread) {
         if (!m_rprContext) {
@@ -3167,7 +3280,9 @@ public:
                 } else {
                     if (RprUsdIsHybrid(m_rprContextMetadata.pluginType) &&
                         m_rprContextMetadata.interopInfo) {
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
                         InteropRenderImpl(renderThread);
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
                     } else {
                         RenderImpl(renderThread);
                     }
@@ -3544,7 +3659,7 @@ Don't show this message again?
             return m_numSamples == 1;
         }
 
-        return m_numSamples >= m_maxSamples || m_activePixels == 0;
+        return (m_numSamples >= m_maxSamples) || (m_activePixels == 0);
     }
 
     bool IsAdaptiveSamplingEnabled() const {
@@ -3589,11 +3704,9 @@ Don't show this message again?
         return m_firstIterationRenderTime;
     }
 
-    void SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
+    void SetInteropInfo(void* interopInfo) {
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
         m_rprContextMetadata.interopInfo = interopInfo;
-        m_presentedConditionVariable = presentedConditionVariable;
-        m_presentedCondition = presentedCondition;
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     }
 
@@ -3610,6 +3723,45 @@ Don't show this message again?
         return nullptr;
     }
 
+    rpr::FrameBuffer* GetPrimIdFramebuffer() {
+        auto it = m_aovRegistry.find(HdAovTokens->primId);
+        if (it != m_aovRegistry.end()) {
+            if (auto aov = it->second.lock()) {
+                if (auto fb = aov->GetAovFb()) {
+                    return fb->GetRprObject();
+                }
+            }
+        }
+
+        return nullptr;
+    }
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+    bool GetInteropSemaphore(VkSemaphore& rInteropSemaphore, uint32_t& rInteropSemaphoreIndex) {
+        rInteropSemaphore = VK_NULL_HANDLE;
+
+        while (!m_vulkanInteropBufferReady) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        m_rprContext->GetInfo(static_cast<rpr::ContextInfo>(RPR_CONTEXT_INTEROP_SEMAPHORE_INDEX), sizeof(rInteropSemaphoreIndex), &rInteropSemaphoreIndex, nullptr);
+
+        const unsigned int interopSemaphoreCount = 3; // Awful, has to be "global" constant
+        if (rInteropSemaphoreIndex < interopSemaphoreCount) {
+            VkSemaphore interopSemaphoreArray[interopSemaphoreCount];
+            m_rprContext->GetInfo(static_cast<rpr::ContextInfo>(RPR_CONTEXT_FRAMEBUFFERS_READY_SEMAPHORES), sizeof(interopSemaphoreArray), (void*)&interopSemaphoreArray, nullptr);
+            rInteropSemaphore = interopSemaphoreArray[rInteropSemaphoreIndex];
+        }
+
+        m_vulkanInteropBufferReady = false;
+
+        return (VK_NULL_HANDLE != rInteropSemaphore);
+    }
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+    void Restart() {
+        m_numSamples = 0;
+    }
 private:
     static RprUsdPluginType GetPluginType(TfToken const& renderQuality) {
         if (renderQuality == HdRprCoreRenderQualityTokens->Northstar) {
@@ -3698,6 +3850,7 @@ private:
 
     void InitRpr() {
         bool flipRequestedByRenderSetting = false;
+        bool useGmon = false;
 
         {
             HdRprConfig* config;
@@ -3707,11 +3860,20 @@ private:
 
             m_currentRenderQuality = GetRenderQuality(*config);
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
+            useGmon = config->GetCoreUseGmon();
             m_rprContextMetadata.isGlInteropEnabled = config->GetOpenglInteroperability();
             m_rprContextMetadata.useOpenCL = config->GetCoreUseOpenCL();
+
+            m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
+
+            if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
+                m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE] = config->GetHybridAccelerationMemorySizeMb() * 1024u * 1024u;
+                m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_MESH_MEMORY_SIZE] = config->GetHybridMeshMemorySizeMb() * 1024u * 1024u;
+                m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE] = config->GetHybridStagingMemorySizeMb() * 1024u * 1024u;
+                m_rprContextMetadata.additionalIntProperties[RPR_CONTEXT_CREATEPROP_HYBRID_SCRATCH_MEMORY_SIZE] = config->GetHybridScratchMemorySizeMb() * 1024u * 1024u;
+            }
         }
 
-        m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
         m_rprContext = RprContextPtr(RprUsdCreateContext(&m_rprContextMetadata), RprContextDeleter);
         if (!m_rprContext) {
             RPR_THROW_ERROR_MSG("Failed to create RPR context");
@@ -3728,6 +3890,8 @@ private:
         if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_ENABLE_RELAXED_MATERIAL_CHECKS), 1u), "Failed to enable relaxed material checks");
         }
+
+        RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_USE_GMON), useGmon), "Failed to set GMON parameter");
 
         uint32_t requiredYFlip = 0;
         bool flipRequestedByInteropHybrid = RprUsdIsHybrid(m_rprContextMetadata.pluginType) && m_rprContextMetadata.interopInfo;
@@ -4592,9 +4756,10 @@ private:
     };
     std::unique_ptr<CryptomatteAovs> m_cryptomatteAovs;
 
-    std::condition_variable* m_presentedConditionVariable = nullptr;
-    bool* m_presentedCondition = nullptr;
     rprContextFlushFrameBuffers_func m_rprContextFlushFrameBuffers = nullptr;
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+    bool m_vulkanInteropBufferReady = false;
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     GfMatrix4d m_unitSizeTransform = GfMatrix4d(1.0);
 };
@@ -4751,8 +4916,8 @@ RprUsdMaterial* HdRprApi::CreatePrimvarColorLookupMaterial(){
     return m_impl->CreatePrimvarColorLookupMaterial();
 }
 
-void HdRprApi::SetMeshRefineLevel(rpr::Shape* mesh, int level) {
-    m_impl->SetMeshRefineLevel(mesh, level);
+void HdRprApi::SetMeshRefineLevel(rpr::Shape* mesh, int level, const float creaseWeight) {
+    m_impl->SetMeshRefineLevel(mesh, level, creaseWeight);
 }
 
 void HdRprApi::SetMeshVertexInterpolationRule(rpr::Shape* mesh, TfToken boundaryInterpolation) {
@@ -4906,8 +5071,12 @@ rpr::FrameBuffer* HdRprApi::GetRawColorFramebuffer() {
     return m_impl->GetRawColorFramebuffer();
 }
 
-void HdRprApi::SetInteropInfo(void* interopInfo, std::condition_variable* presentedConditionVariable, bool* presentedCondition) {
-    m_impl->SetInteropInfo(interopInfo, presentedConditionVariable, presentedCondition);
+rpr::FrameBuffer* HdRprApi::GetPrimIdFramebuffer() {
+    return m_impl->GetPrimIdFramebuffer();
+}
+
+void HdRprApi::SetInteropInfo(void* interopInfo) {
+    m_impl->SetInteropInfo(interopInfo);
 
     // Temporary should be force inited here, because otherwise has issues with GPU synchronization
     m_impl->InitIfNeeded();
@@ -4927,6 +5096,17 @@ float HdRprApi::GetFirstIterationRenerTime() const {
 
 rpr::EnvironmentLight* GetLightObject(HdRprApiEnvironmentLight* envLight) {
     return envLight->light.get();
+}
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+bool HdRprApi::GetInteropSemaphore(VkSemaphore& rInteropSemaphore, uint32_t& rInteropSemaphoreIndex) {
+    return m_impl->GetInteropSemaphore(rInteropSemaphore, rInteropSemaphoreIndex);
+}
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+void HdRprApi::Restart()
+{
+    m_impl->Restart();
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE
