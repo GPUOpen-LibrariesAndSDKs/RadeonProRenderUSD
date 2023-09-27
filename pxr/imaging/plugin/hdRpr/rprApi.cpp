@@ -2145,7 +2145,7 @@ public:
             }
             
             if (preferences.IsDirty(HdRprConfig::DirtyDenoise) || preferences.IsDirty(HdRprConfig::DirtyViewportSettings)) {
-                if (preferences.GetDenoisingEnable() && preferences.GetViewportUpscaling()) {
+                if ((preferences.GetHybridDenoising() != HdRprHybridDenoisingTokens->None) && preferences.GetViewportUpscaling()) {
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_UPSCALER), RPR_UPSCALER_FSR2), "Failed to set upscaler");
                     rpr_uint upscaleQuality = RPR_FSR2_QUALITY_MODE_ULTRA_PERFORMANCE;
                     TfToken qualityToken = preferences.GetViewportUpscalingQuality();
