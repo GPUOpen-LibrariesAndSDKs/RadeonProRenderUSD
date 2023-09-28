@@ -53,7 +53,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 mx::DocumentPtr
 HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
     HdMaterialNetwork2 const& hdNetwork,
-    HdMaterialNode2 const& hdMaterialXNode,
+    HdMaterialNode2 const* hdMaterialXSurfaceNodePtr,
+    HdMaterialNode2 const* hdMaterialXDisplacementNodePtr,
     SdfPath const& materialPath,
     mx::DocumentPtr const& libraries,
     std::set<SdfPath>* hdTextureNodes,
@@ -397,13 +398,9 @@ void DumpMaterialNetwork(HdMaterialNetworkMap const& networkMap) {
     }
 }
 
-RprUsdMaterial* CreateMaterialXFromUsdShade(
-    SdfPath const& materialPath,
-    RprUsd_MaterialBuilderContext const& context,
-    mx::DocumentPtr& stdLibraries) {
-
 #ifdef USE_USDSHADE_MTLX
-    auto terminalIt = context.materialNetwork->terminals.find(UsdShadeTokens->surface);
+HdMaterialNode2 const* GetTerminalNodeByToken(SdfPath const& materialPath, RprUsd_MaterialBuilderContext const& context, const TfToken& type){
+    auto terminalIt = context.materialNetwork->terminals.find(type);
     if (terminalIt == context.materialNetwork->terminals.end()) {
         return nullptr;
     }
@@ -421,6 +418,22 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     SdrShaderNodeConstPtr const mtlxSdrNode = sdrRegistry.GetShaderNodeByIdentifierAndType(terminalNode.nodeTypeId, _tokens->mtlx);
 
     if (!mtlxSdrNode) {
+        return nullptr;
+    }
+
+    return &nodeIt->second;
+}
+#endif // USE_USDSHADE_MTLX
+
+RprUsdMaterial* CreateMaterialXFromUsdShade(
+    SdfPath const& materialPath,
+    RprUsd_MaterialBuilderContext const& context,
+    mx::DocumentPtr& stdLibraries) {
+
+#ifdef USE_USDSHADE_MTLX
+    HdMaterialNode2 const* surfaceTerminalNode = GetTerminalNodeByToken(materialPath, context, UsdShadeTokens->surface);
+    HdMaterialNode2 const* displacementTerminalNode = GetTerminalNodeByToken(materialPath, context, UsdShadeTokens->displacement);
+    if(!surfaceTerminalNode){
         return nullptr;
     }
 
@@ -452,7 +465,8 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     try {
         mtlxDoc = HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
             *context.materialNetwork,
-            terminalNode,
+            surfaceTerminalNode,
+            displacementTerminalNode,
             materialPath,
             stdLibraries,
             &hdTextureNodes,
@@ -469,15 +483,16 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     }
 
     struct RprUsdMaterial_RprApiMtlx : public RprUsdMaterial {
-        RprUsdMaterial_RprApiMtlx(rpr::MaterialNode* retainedNode)
+        RprUsdMaterial_RprApiMtlx(rpr::MaterialNode* retainedNode, bool containsDisplacement)
             : m_retainedNode(retainedNode) {
             // TODO: fill m_uvPrimvarName
             m_surfaceNode = m_retainedNode.get();
+            m_displacementNode = containsDisplacement ? m_retainedNode.get() : nullptr;
         }
 
         std::unique_ptr<rpr::MaterialNode> m_retainedNode;
     };
-    return new RprUsdMaterial_RprApiMtlx(mtlxNode);
+    return new RprUsdMaterial_RprApiMtlx(mtlxNode, displacementTerminalNode);
 #else
     return nullptr;
 #endif // USE_USDSHADE_MTLX
