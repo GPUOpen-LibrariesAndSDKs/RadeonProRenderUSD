@@ -487,7 +487,7 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
             : m_retainedNode(retainedNode) {
             // TODO: fill m_uvPrimvarName
             m_surfaceNode = m_retainedNode.get();
-            m_displacementNode = containsDisplacement ? m_retainedNode.get() : nullptr;
+            m_isMaterialXDisplacement = containsDisplacement;
         }
 
         std::unique_ptr<rpr::MaterialNode> m_retainedNode;

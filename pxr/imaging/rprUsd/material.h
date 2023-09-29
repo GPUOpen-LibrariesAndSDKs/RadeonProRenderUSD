@@ -50,6 +50,7 @@ protected:
     rpr::MaterialNode* m_displacementNode = nullptr;
     rpr::MaterialNode* m_volumeNode = nullptr;
     bool m_isHybrid = false;
+    bool m_isMaterialXDisplacement = false;
     std::unique_ptr <rpr::MaterialNode> m_hybridDisplacementMul = nullptr;
     std::unique_ptr <rpr::MaterialNode> m_hybridDisplacementAdd = nullptr;
     bool m_isShadowCatcher = false;

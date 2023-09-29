@@ -70,7 +70,8 @@ bool RprUsdMaterial::AttachTo(rpr::Shape* mesh, bool displacementEnabled) const 
                 fail |= RPR_ERROR_CHECK(m_hybridDisplacementAdd->SetInput(RPR_MATERIAL_INPUT_COLOR1, displacementScale[0], 0, 0, 0), "Failed to set displacement scale");
             }
         }
-    } else {
+    // We shouldn't set nullptr to displacement if displacement is described by materialX file
+    } else if (!m_isMaterialXDisplacement){
         fail |= RPR_ERROR_CHECK(mesh->SetDisplacementMaterial(nullptr), "Failed to unset shape displacement material");
     }
 
