@@ -113,13 +113,12 @@ std::string GetRprSdkPath() {
 
 void SetupRprTracing() {
     if (RprUsdIsTracingEnabled()) {
-        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(nullptr, RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
-
         auto tracingDir = TfGetEnvSetting(RPRUSD_TRACING_DIR);
         if (!tracingDir.empty()) {
             printf("RPR tracing directory: %s\n", tracingDir.c_str());
         }
         RPR_ERROR_CHECK(rprContextSetParameterByKeyString(nullptr, RPR_CONTEXT_TRACING_PATH, tracingDir.c_str()), "Failed to set tracing directory parameter");
+        RPR_ERROR_CHECK(rprContextSetParameterByKey1u(nullptr, RPR_CONTEXT_TRACING_ENABLED, 1), "Failed to set context tracing parameter");
     }
 }
 
@@ -175,16 +174,37 @@ rpr_int GetPluginID(RprUsdPluginType pluginType) {
     return pluginID;
 }
 
-std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
+std::string GetGpuName(RprUsdPluginType pluginType, rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
     rpr::CreationFlags additionalFlags = 0x0;
 
 #if defined(__APPLE__)
     additionalFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
 #endif
 
+    std::vector<rpr_context_properties> properties;
+
+#ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+    // This fix is required since for 4GB VRAM default Hybrid allocation might be too big
+    std::size_t allocation = 1024 * 1024; // 1 MB for each buffer
+
+    if (RprUsdIsHybrid(pluginType)) {
+        for (const std::size_t property: {
+            RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE,
+            RPR_CONTEXT_CREATEPROP_HYBRID_MESH_MEMORY_SIZE,
+            RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE,
+            RPR_CONTEXT_CREATEPROP_HYBRID_SCRATCH_MEMORY_SIZE })
+        {
+            properties.push_back((rpr_context_properties)property);
+            properties.push_back((rpr_context_properties)const_cast<void*>(reinterpret_cast<const void*>(&allocation)));
+        }
+    }
+#endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+    properties.push_back(nullptr);
+
     try {
         rpr::Status status;
-        std::unique_ptr<rpr::Context> context(rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlag | additionalFlags, nullptr, cachePath, &status));
+        std::unique_ptr<rpr::Context> context(rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlag | additionalFlags, properties.data(), cachePath, &status));
         if (context) {
             return RprUsdGetStringInfo(context.get(), gpuNameId);
         }
@@ -196,11 +216,11 @@ std::string GetGpuName(rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::C
 }
 
 template <typename Func>
-void ForEachGpu(rpr_int pluginID, const char* cachePath, Func&& func) {
+void ForEachGpu(RprUsdPluginType pluginType, rpr_int pluginID, const char* cachePath, Func&& func) {
 #define GPU_ACTION(index) \
     do { \
         rpr::CreationFlags gpuFlag = RPR_CREATION_FLAGS_ENABLE_GPU ## index; \
-        std::string name = GetGpuName(pluginID, gpuFlag, RPR_CONTEXT_GPU ## index ## _NAME, cachePath); \
+        std::string name = GetGpuName(pluginType, pluginID, gpuFlag, RPR_CONTEXT_GPU ## index ## _NAME, cachePath); \
         func(index, gpuFlag, name); \
     } while (0);
 
@@ -377,21 +397,13 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     if (RprUsdIsHybrid(metadata->pluginType) && metadata->interopInfo) {
-        // Create interop context for hybrid
-        // TODO: should not it be configurable?
-        constexpr std::uint32_t MB = 1024u * 1024u;
-        static std::uint32_t acc_size = 1024 * MB;
-        static std::uint32_t vbuf_size = 1024 * MB;
-        static std::uint32_t ibuf_size = 512 * MB;
-        static std::uint32_t sbuf_size = 512 * MB;
-
         appendContextProperty(RPR_CONTEXT_CREATEPROP_VK_INTEROP_INFO, metadata->interopInfo);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_ACC_MEMORY_SIZE, &acc_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_VERTEX_MEMORY_SIZE, &vbuf_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_INDEX_MEMORY_SIZE, &ibuf_size);
-        appendContextProperty(RPR_CONTEXT_CREATEPROP_HYBRID_STAGING_MEMORY_SIZE, &sbuf_size);
     }
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
+
+    for (const auto& entry: metadata->additionalIntProperties) {
+        appendContextProperty(entry.first, const_cast<void*>(reinterpret_cast<const void*>(&entry.second)));
+    }
 
     contextProperties.push_back(nullptr);
 
@@ -434,11 +446,12 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
     }
 
     RprUsdDevicesInfo ret = {};
+
     if (RprUsdIsHybrid(pluginType)) {
         ret.cpu.numThreads = 0;
 
         if (!RprUsdIsCpuOnly()) {
-            std::string name = GetGpuName(pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
+            std::string name = GetGpuName(pluginType, pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
             if (!name.empty()) {
                 ret.gpus.push_back({ 0, name });
             }
@@ -447,7 +460,7 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
         ret.cpu.numThreads = std::thread::hardware_concurrency();
 
         if (!RprUsdIsCpuOnly()) {
-            ForEachGpu(pluginID, cachePath.c_str(),
+            ForEachGpu(pluginType, pluginID, cachePath.c_str(),
                 [&ret](int index, rpr::CreationFlags, std::string const& name) {
                 if (!name.empty()) {
                     ret.gpus.push_back({index, name});
