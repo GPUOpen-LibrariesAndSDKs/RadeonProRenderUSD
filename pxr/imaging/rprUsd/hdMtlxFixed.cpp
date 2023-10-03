@@ -230,9 +230,8 @@ _AddMaterialXNode(
     // to the mxNode
     for (auto const& currParam : hdNode.parameters) {
 
-        // DANGER: Dirty hack
-        // For some reason USD do not provide colorspace attribute on file (or I haven't found it)
-        // So we adding new input attribute just to handle texture file colorspace
+        // USD does not provide colorspace attribute on file
+        // Add new input attribute to handle texture file colorspace
         if ("rs:colorspace" == currParam.first) {
             mxNode->setColorSpace(currParam.second.UncheckedGet<std::string>());
             continue;
