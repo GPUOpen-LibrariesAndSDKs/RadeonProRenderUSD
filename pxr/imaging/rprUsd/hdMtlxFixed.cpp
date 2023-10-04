@@ -315,10 +315,16 @@ _GatherUpstreamNodes(
             // Connect mxCurrNode to the mxUpstreamNode
             mx::NodePtr mxNextNode = *mxUpstreamNode;
 
-            // Make sure to not add the same input twice 
+            mx::OutputPtr mxOutput = mxNextNode->getOutput(currConnection.upstreamOutputName);
+            if (!mxOutput) {
+              mxOutput = mxNextNode->addOutput(currConnection.upstreamOutputName);
+            }
+
+            // Make sure to not add the same input twice
             mx::InputPtr mxInput = mxCurrNode->getInput(connName);
             if (!mxInput){
-                mxInput = mxCurrNode->addInput(connName, mxNextNode->getType());
+              mxInput = mxCurrNode->addInput(connName, mxNextNode->getType() == "multioutput" ?
+                mxOutput->getType() : mxNextNode->getType());
             }
             mxInput->setConnectedNode(mxNextNode);
         }
