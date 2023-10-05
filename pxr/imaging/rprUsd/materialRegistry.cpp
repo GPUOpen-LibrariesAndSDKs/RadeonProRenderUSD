@@ -428,13 +428,19 @@ HdMaterialNode2 const* GetTerminalNodeByToken(SdfPath const& materialPath, RprUs
 RprUsdMaterial* CreateMaterialXFromUsdShade(
     SdfPath const& materialPath,
     RprUsd_MaterialBuilderContext const& context,
-    mx::DocumentPtr& stdLibraries) {
+    mx::DocumentPtr& stdLibraries,
+    bool enableDisplacement) {
 
 #ifdef USE_USDSHADE_MTLX
     HdMaterialNode2 const* surfaceTerminalNode = GetTerminalNodeByToken(materialPath, context, UsdShadeTokens->surface);
     HdMaterialNode2 const* displacementTerminalNode = GetTerminalNodeByToken(materialPath, context, UsdShadeTokens->displacement);
     if(!surfaceTerminalNode){
         return nullptr;
+    }
+
+    // Ignore displacement node if displacement is not allowed
+    if(!enableDisplacement){
+        displacementTerminalNode = nullptr;
     }
 
     // TODO: move lib initialization to class constructor
@@ -506,7 +512,8 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     HdMaterialNetworkMap const& legacyNetworkMap,
     rpr::Context* rprContext,
     RprUsdImageCache* imageCache,
-    bool isHybrid) {
+    bool isHybrid,
+    bool hybridEnableDisplacement) {
 
     if (TfDebug::IsEnabled(RPR_USD_DEBUG_DUMP_MATERIALS)) {
         DumpMaterialNetwork(legacyNetworkMap);
@@ -531,7 +538,8 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
 #endif // USE_CUSTOM_MATERIALX_LOADER
 
     if (!isVolume) {
-        if (auto usdShadeMtlxMaterial = CreateMaterialXFromUsdShade(materialId, context, m_stdLibraries)) {
+        bool enableDisplacement = !isHybrid | hybridEnableDisplacement;
+        if (auto usdShadeMtlxMaterial = CreateMaterialXFromUsdShade(materialId, context, m_stdLibraries, enableDisplacement)) {
             return usdShadeMtlxMaterial;
         }
     }
@@ -725,6 +733,11 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     auto volumeOutput = getTerminalOutput(UsdShadeTokens->volume);
     auto surfaceOutput = getTerminalOutput(UsdShadeTokens->surface);
     auto displacementOutput = getTerminalOutput(UsdShadeTokens->displacement);
+
+    // Ignore displacement node if displacement is not allowed
+    if(!hybridEnableDisplacement && isHybrid){
+        displacementOutput = VtValue();
+    }
 
     int materialRprId = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialId).GetWithDefault(-1);
     std::string cryptomatteName = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialAssetName).GetWithDefault(std::string{});

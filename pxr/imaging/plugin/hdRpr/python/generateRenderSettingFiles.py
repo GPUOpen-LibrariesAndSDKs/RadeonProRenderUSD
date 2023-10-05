@@ -536,6 +536,9 @@ render_setting_categories = [
     },
     {
         'name': 'Hybrid',
+        'houdini': {
+            'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
+        },
         'settings': [
             {
                 'name': 'hybrid:tonemapping',
@@ -558,6 +561,12 @@ render_setting_categories = [
                     SettingValue('SVGF'),
                     SettingValue('ASVGF')
                 ]
+            },
+            {
+                'name': 'hybrid:displacement',
+                'ui_name': 'Enable Hybrid Displacement',
+                'help': 'Enable displacement for Hybrid. Render restart might be required',
+                'defaultValue': True,
             },
             {
                 'name': 'hybrid:accelerationMemorySizeMb',

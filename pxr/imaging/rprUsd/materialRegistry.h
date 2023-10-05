@@ -101,7 +101,8 @@ public:
         HdMaterialNetworkMap const& networkMap,
         rpr::Context* rprContext,
         RprUsdImageCache* imageCache,
-        bool isHybrid);
+        bool isHybrid,
+        bool hybridEnableDisplacement);
 
     RPRUSD_API
     TfToken const& GetMaterialNetworkSelector();

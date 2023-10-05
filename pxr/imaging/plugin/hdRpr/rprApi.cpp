@@ -1351,7 +1351,7 @@ public:
         }
 
         LockGuard rprLock(m_rprContext->GetMutex());
-        return RprUsdMaterialRegistry::GetInstance().CreateMaterial(materialId, sceneDelegate, materialNetwork, m_rprContext.get(), m_imageCache.get(), RprUsdIsHybrid(m_rprContextMetadata.pluginType));
+        return RprUsdMaterialRegistry::GetInstance().CreateMaterial(materialId, sceneDelegate, materialNetwork, m_rprContext.get(), m_imageCache.get(), RprUsdIsHybrid(m_rprContextMetadata.pluginType), m_hybridDisplacement);
     }
 
     RprUsdMaterial* CreatePointsMaterial(VtVec3fArray const& colors) {
@@ -2204,6 +2204,11 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_SVGF), "Failed to set denoiser");
             } else if (hybridDenoising == HdRprHybridDenoisingTokens->ASVGF) {
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_ASVGF), "Failed to set denoiser");
+            }
+
+            if(m_hybridDisplacement != preferences.GetHybridDisplacement()){
+                m_hybridDisplacement = preferences.GetHybridDisplacement();
+                m_state = kStateRestartRequired;
             }
         }
 
@@ -4713,6 +4718,7 @@ private:
     float m_varianceThreshold = 0.0f;
     TfToken m_currentRenderQuality;
     bool m_upscale;
+    bool m_hybridDisplacement;
 
     using Duration = std::chrono::high_resolution_clock::duration;
     Duration m_frameRenderTotalTime;
