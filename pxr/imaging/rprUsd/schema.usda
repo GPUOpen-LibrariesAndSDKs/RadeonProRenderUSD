@@ -359,7 +359,7 @@ class "RprRendererSettingsAPI" (
         displayGroup = "Hybrid|Postprocessing"
     )
 
-    uniform bool rpr:hybrid:displacement = true (
+    uniform bool rpr:hybrid:displacement = false (
         displayName = "Enable Hybrid Displacement"
         displayGroup = "Hybrid"
         doc = "Enables displecement in Hybrid Pro. Render restart might be required."
