@@ -801,15 +801,6 @@ render_setting_categories = [
                 'defaultValue': False,
             },
             {
-                'name': 'viewportUpscaling',
-                'ui_name': 'Viewport Upscaling',
-                'help': '',
-                'defaultValue': False,
-                'houdini': {
-                    'hidewhen': ['hybrid:denoising == "None"', lambda settings: hidewhen_render_quality('<', 'High', settings), lambda settings: hidewhen_render_quality('==', 'Northstar', settings)]
-                }
-            },
-            {
                 'name': 'viewportUpscalingQuality',
                 'ui_name': 'Viewport Upscaling Quality',
                 'help': '',
@@ -822,7 +813,7 @@ render_setting_categories = [
                     SettingValue('Ultra Performance'),
                 ],
                 'houdini': {
-                    'hidewhen': ['hybrid:denoising == "None"', 'rpr:viewportUpscaling == 0', lambda settings: hidewhen_render_quality('<', 'High', settings), lambda settings: hidewhen_render_quality('==', 'Northstar', settings)]
+                    'hidewhen': ['hybrid:denoising == "None"', lambda settings: hidewhen_render_quality('<', 'High', settings), lambda settings: hidewhen_render_quality('==', 'Northstar', settings)]
                 }
             }
         ]
