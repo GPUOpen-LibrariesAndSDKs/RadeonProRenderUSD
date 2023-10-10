@@ -2123,20 +2123,20 @@ public:
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_DISPLAY_GAMMA, preferences.GetCoreDisplayGamma()), "Failed to set display gamma");
             }
             
-            if (preferences.IsDirty(HdRprConfig::DirtyHybrid) || preferences.IsDirty(HdRprConfig::DirtyViewportSettings) || force) {
+            if (preferences.IsDirty(HdRprConfig::DirtyHybrid) || force) {
                 if (preferences.GetHybridDenoising() != HdRprHybridDenoisingTokens->None) {
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_UPSCALER), RPR_UPSCALER_FSR2), "Failed to set upscaler");
                     rpr_uint upscaleQuality = RPR_FSR2_QUALITY_MODE_ULTRA_PERFORMANCE;
-                    TfToken qualityToken = preferences.GetViewportUpscalingQuality();
-                    if (qualityToken == HdRprViewportUpscalingQualityTokens->UltraQuality) {
+                    TfToken qualityToken = preferences.GetHybridUpscalingQuality();
+                    if (qualityToken == HdRprHybridUpscalingQualityTokens->UltraQuality) {
                         upscaleQuality = RPR_FSR2_QUALITY_ULTRA_QUALITY;
-                    } else if (qualityToken == HdRprViewportUpscalingQualityTokens->Quality) {
+                    } else if (qualityToken == HdRprHybridUpscalingQualityTokens->Quality) {
                         upscaleQuality = RPR_FSR2_QUALITY_MODE_QUALITY;
-                    } else if (qualityToken == HdRprViewportUpscalingQualityTokens->Balance) {
+                    } else if (qualityToken == HdRprHybridUpscalingQualityTokens->Balance) {
                         upscaleQuality = RPR_FSR2_QUALITY_MODE_BALANCE;
-                    } else if (qualityToken == HdRprViewportUpscalingQualityTokens->Performance) {
+                    } else if (qualityToken == HdRprHybridUpscalingQualityTokens->Performance) {
                         upscaleQuality = RPR_FSR2_QUALITY_MODE_PERFORMANCE;
-                    } else if (qualityToken == HdRprViewportUpscalingQualityTokens->UltraPerformance) {
+                    } else if (qualityToken == HdRprHybridUpscalingQualityTokens->UltraPerformance) {
                         upscaleQuality = RPR_FSR2_QUALITY_MODE_ULTRA_PERFORMANCE;
                     }
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_FSR2_QUALITY), upscaleQuality), "Failed to set upscaler quality");
@@ -2144,6 +2144,7 @@ public:
                 else {
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_UPSCALER), RPR_UPSCALER_NONE), "Failed to set upscaler");
                 }
+                m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         }
 
@@ -2184,6 +2185,8 @@ public:
             } else if (hybridDenoising == HdRprHybridDenoisingTokens->ASVGF) {
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_ASVGF), "Failed to set denoiser");
             }
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyQuality) || force) {

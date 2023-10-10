@@ -505,7 +505,10 @@ render_setting_categories = [
                     SettingValue('Aces'),
                     SettingValue('Reinhard'),
                     SettingValue('Photolinear')
-                ]
+                ],
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('==', 'HybridPro', settings)   # Disabled until tonemapping implementation is finished
+                }
             },
             {
                 'name': 'hybrid:denoising',
@@ -516,6 +519,22 @@ render_setting_categories = [
                     SettingValue('SVGF'),
                     SettingValue('ASVGF')
                 ]
+            },
+            {
+                'name': 'hybrid:upscalingQuality',
+                'ui_name': 'Upscaling Quality',
+                'help': '',
+                'defaultValue': 'Ultra Performance',
+                'values': [
+                    SettingValue('Ultra Quality'),
+                    SettingValue('Quality'),
+                    SettingValue('Balance'),
+                    SettingValue('Performance'),
+                    SettingValue('Ultra Performance'),
+                ],
+                'houdini': {
+                    'hidewhen': 'hybrid:denoising == "None"'
+                }
             },
             {
                 'name': 'hybrid:accelerationMemorySizeMb',
@@ -799,22 +818,6 @@ render_setting_categories = [
                 'ui_name': 'OpenGL interoperability (Needs render restart)',
                 'help': '',
                 'defaultValue': False,
-            },
-            {
-                'name': 'viewportUpscalingQuality',
-                'ui_name': 'Viewport Upscaling Quality',
-                'help': '',
-                'defaultValue': 'Ultra Performance',
-                'values': [
-                    SettingValue('Ultra Quality'),
-                    SettingValue('Quality'),
-                    SettingValue('Balance'),
-                    SettingValue('Performance'),
-                    SettingValue('Ultra Performance'),
-                ],
-                'houdini': {
-                    'hidewhen': ['hybrid:denoising == "None"', lambda settings: hidewhen_render_quality('<', 'High', settings), lambda settings: hidewhen_render_quality('==', 'Northstar', settings)]
-                }
             }
         ]
     }
