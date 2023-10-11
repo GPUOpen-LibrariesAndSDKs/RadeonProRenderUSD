@@ -361,7 +361,7 @@ render_setting_categories = [
                 'help': 'Limits the intensity, or the maximum brightness, of samples in the scene. Greater clamp radiance values produce more brightness.',
                 'defaultValue': 0.0,
                 'minValue': 0.0,
-                'maxValue': 1e6
+                'maxValue': 10
             },
             {
                 'name': 'quality:filterType',
