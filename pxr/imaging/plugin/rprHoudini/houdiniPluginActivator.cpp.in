@@ -240,7 +240,7 @@ fs::path GetHoudiniUserPrefDir(const char* hver) {
 
 #if defined(_WIN32) || defined(_WIN64)
     {
-        CStringA documentsDir = ExecCmd(LR"(powershell "(new-object -COM Shell.Application).Namespace(0x05).Self.Path")");
+        CStringA documentsDir = ExecCmd(LR"(powershell "[Console]::OutputEncoding = [Text.Encoding]::UTF8 ; (new-object -COM Shell.Application).Namespace(0x05).Self.Path")");
         documentsDir.TrimRight();
         auto prefDir = GetHoudiniUserPrefDirFromParentDir((LPCTSTR)documentsDir, hver);
         if (!prefDir.empty()) return prefDir;
@@ -260,6 +260,10 @@ fs::path GetHoudiniUserPrefDir(const char* hver) {
         auto prefDir = fs::path(home) / "Library" / "Preferences" / "houdini" / hver;
         if (fs::is_directory(prefDir)) {
             return prefDir.string();
+        }
+        auto prefDir2 = fs::path(home) / "Library alias" / "Preferences" / "houdini" / hver;
+        if (fs::is_directory(prefDir2)) {
+            return prefDir2.string();
         }
     }
 #endif
