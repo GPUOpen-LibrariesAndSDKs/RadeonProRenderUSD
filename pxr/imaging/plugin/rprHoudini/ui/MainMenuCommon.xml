@@ -50,6 +50,18 @@
                 <scriptCode><![CDATA[__import__('houRpr.materialLibrary').materialLibrary.import_material()]]></scriptCode>
             </scriptItem>
 
+            <separatorItem />
+
+            <scriptItem id="renderstudio_workspace_connect">
+                <label>Connect to Render Studio shared workspace</label>
+                <scriptCode><![CDATA[__import__('houRpr.resolver').resolver.SharedWorkspaceConnect()]]></scriptCode>
+            </scriptItem>
+
+            <scriptItem id="renderstudio_workspace_disconnect">
+                <label>Disconnect from Render Studio shared workspace</label>
+                <scriptCode><![CDATA[__import__('houRpr.resolver').resolver.SharedWorkspaceDisconnect()]]></scriptCode>
+            </scriptItem>
+
         </subMenu>
     </menuBar>
 </mainMenu>

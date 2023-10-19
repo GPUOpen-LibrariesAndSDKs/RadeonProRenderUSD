@@ -73,6 +73,7 @@ install(
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/mtlxInclude/standard_surface.mtlx
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/materialLibrary.ui
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/na.png
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/resolver.py
     DESTINATION
         houdini/scripts/python/houRpr)
 install(
