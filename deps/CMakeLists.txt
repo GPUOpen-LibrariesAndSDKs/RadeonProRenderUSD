@@ -90,4 +90,20 @@ add_library(murmurhash STATIC
 target_include_directories(murmurhash PUBLIC ${MURMURHASH_DIR})
 set_target_properties(murmurhash PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# RenderStudioKit
+# ----------------------------------------------
+
+if(HoudiniUSD_FOUND)
+    include(ExternalProject)
+    ExternalProject_Add(RenderStudioKit
+            GIT_REPOSITORY https://github.com/Radeon-Pro/RenderStudioKit.git
+            GIT_TAG vgorash/houdini_support
+            STEP_TARGETS   install
+            CMAKE_CACHE_ARGS -DHOUDINI_SUPPORT:STRING=ON
+            CMAKE_CACHE_ARGS -DBoost_ROOT:STRING=${Boost_ROOT}
+            CMAKE_CACHE_ARGS -DCMAKE_INSTALL_PREFIX:STRING=${CMAKE_INSTALL_PREFIX}
+            CMAKE_CACHE_ARGS -DPXR_ENABLE_PYTHON_SUPPORT:STRING=ON
+    )
+endif()
+
 # ----------------------------------------------
