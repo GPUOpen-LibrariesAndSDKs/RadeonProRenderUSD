@@ -73,7 +73,6 @@ install(
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/mtlxInclude/standard_surface.mtlx
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/materialLibrary.ui
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/na.png
-        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/resolver.py
     DESTINATION
         houdini/scripts/python/houRpr)
 install(
@@ -83,7 +82,27 @@ install(
         houdini/config/Icons)
 install(
     FILES
-        ui/MainMenuCommon.xml
         UsdRenderers.json
     DESTINATION
         houdini)
+
+if(BUILD_RESOLVER)
+    install(
+        FILES
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/resolver.py
+        DESTINATION
+            houdini/scripts/python/houRpr)
+    install(
+        FILES
+            ui/MainMenuCommon_resolver.xml
+        DESTINATION
+            houdini
+        RENAME
+            MainMenuCommon.xml)
+else ()
+    install(
+        FILES
+            ui/MainMenuCommon.xml
+        DESTINATION
+            houdini)
+endif ()
