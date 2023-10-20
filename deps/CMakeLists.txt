@@ -93,7 +93,7 @@ set_target_properties(murmurhash PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # RenderStudioKit
 # ----------------------------------------------
 
-if(HoudiniUSD_FOUND)
+if(HoudiniUSD_FOUND AND BUILD_RESOLVER)
     include(ExternalProject)
     ExternalProject_Add(RenderStudioKit
             GIT_REPOSITORY https://github.com/Radeon-Pro/RenderStudioKit.git
