@@ -50,6 +50,13 @@
                 <scriptCode><![CDATA[__import__('houRpr.materialLibrary').materialLibrary.import_material()]]></scriptCode>
             </scriptItem>
 
+            <separatorItem/>
+
+            <scriptMenuStripDynamic id="renderstudio_shared_workspace">
+                <contentsScriptCode><![CDATA[__import__('houRpr.resolver').resolver.get_shared_workspace_menu()]]></contentsScriptCode>
+                <scriptCode><![CDATA[__import__('houRpr.resolver').resolver.toggle_shared_workspace(kwargs["selectedtoken"])]]></scriptCode>
+            </scriptMenuStripDynamic>
+
         </subMenu>
     </menuBar>
 </mainMenu>
