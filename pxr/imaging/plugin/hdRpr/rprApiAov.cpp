@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/contextMetadata.h"
 #include "pxr/imaging/rprUsd/error.h"
+#include "pxr/base/work/loops.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -53,6 +54,86 @@ namespace {
 
 } // namespace anonymous
 
+void CpuRemapFilter(float* src, float* dest, size_t length, float srcLo, float srcHi, float dstLo, float dstHi) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (size_t i = begin; i < end; ++i) {
+            dest[i] = ((src[i] - srcLo) / (srcHi - srcLo)) * (dstHi - dstLo) + dstLo;
+        }});
+}
+
+void CpuVec4toVec3Filter(float* src, float* dest, size_t length) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (int i = 0; i < length; ++i) {
+            dest[i * 3] = src[i * 4];
+            dest[i * 3 + 1] = src[i * 4 + 1];
+            dest[i * 3 + 2] = src[i * 4 + 2];
+        }
+    });
+}
+
+void CpuNdcFilter(float* src, float* dest, size_t length, const GfMatrix4f& viewProjectionMatrix) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (int i = begin; i < end; ++i) {
+            float norm = std::max(src[i * 4 + 3], 1.0f);
+            GfVec4f pos(src[i * 4] / norm, src[i * 4 + 1] / norm, src[i * 4 + 2] / norm, 1.0f);
+            GfVec4f posResult = viewProjectionMatrix * pos;
+            dest[i] = posResult[2] / posResult[3];
+        }
+    });
+}
+
+void CpuOpacityFilter(float* opacity, float* srcdest, size_t length) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (int i = begin; i < end; ++i) {
+            float op = opacity[i * 4];
+            srcdest[i] *= op;
+        }
+    });
+}
+
+void CpuOpacityMaskFilter(float* opacity, float* srcdest, size_t length) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (int i = begin; i < end; ++i) {
+            float op = opacity[i * 4];
+            if (op == 0.0f) {
+                srcdest[i] = 1.0f;
+            }
+        }
+    });
+}
+
+void CpuFillMaskFilter(float* srcdest, size_t length) {
+    WorkParallelForN(length,
+        [&](size_t begin, size_t end) {
+        for (int i = begin; i < end; ++i) {
+            unsigned int idDecoded = (unsigned int)(srcdest[i * 4] * 256) + (unsigned int)(srcdest[i * 4 + 1] * 256 * 256) + (unsigned int)(srcdest[i * 4 + 2] * 256 * 256 * 256);
+            if (idDecoded) {
+                unsigned int v0 = 0x123;
+                unsigned int v1 = idDecoded;
+                unsigned int s0 = 0;
+                const unsigned int N = 4;
+                for (unsigned int n = 0; n < N; n++) {
+                    s0 += 0x9e3779b9;
+                    v0 += ((v1 << 4) + 0xa341316c) ^ (v1 + s0) ^ ((v1 >> 5) + 0xc8013ea4);
+                    v1 += ((v0 << 4) + 0xad90777d) ^ (v0 + s0) ^ ((v0 >> 5) + 0x7e95761e);
+                }
+                srcdest[i * 4]     = (v0 & 0xFFFF) / (float)(0xFFFF);
+                srcdest[i * 4 + 1] = (v0 >> 16) / (float)(0xFFFF);
+                srcdest[i * 4 + 2] = (v1 & 0xFFFF) / (float)(0xFFFF);
+                srcdest[i * 4 + 3] = 1.0f;
+            }
+            else {
+                srcdest[i * 4] = srcdest[i * 4 + 1] = srcdest[i * 4 + 2] = srcdest[i * 4 + 3] = 0;
+            }
+        }
+    });
+}
+
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
     rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter)
     : m_aovDescriptor(HdRprAovRegistry::GetInstance().GetAovDesc(rprAovType, false))
@@ -78,15 +159,8 @@ HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat for
         // RPR framebuffers by default with such format
         return nullptr;
     }
-    if (!rifContext)
-    {
-        if (format == HdFormatFloat32) {
+    if (!rifContext) {
             return nullptr;
-        }
-        if (format == HdFormatInt32) {
-            return nullptr;
-        }
-        RPR_THROW_ERROR_MSG("Only Float32Vec4, Float32, and Int32 data types are supported without rifContext.");
     }
 
     auto filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
@@ -534,25 +608,32 @@ void HdRprApiColorAov::OnSizeChange(rif::Context* rifContext) {
 HdRprApiNormalAov::HdRprApiNormalAov(
     int width, int height, HdFormat format,
     rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
-    : HdRprApiAov(RPR_AOV_SHADING_NORMAL, width, height, format, rprContext, rprContextMetadata, rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext)) {
-    if (!rifContext) {
-        RPR_THROW_ERROR_MSG("Can not create normal AOV: RIF context required");
-    }
-
-    m_filter->SetParam("srcRangeAuto", 0);
-    m_filter->SetParam("dstLo", -1.0f);
-    m_filter->SetParam("dstHi", 1.0f);
+    : HdRprApiAov(RPR_AOV_SHADING_NORMAL, width, height, format, rprContext, rprContextMetadata, nullptr) {
 }
 
 void HdRprApiNormalAov::OnFormatChange(rif::Context* rifContext) {
     m_dirtyBits |= ChangeTracker::DirtySize;
 }
 
-void HdRprApiNormalAov::OnSizeChange(rif::Context* rifContext) {
+bool HdRprApiNormalAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
     auto fbDesc = m_aov->GetDesc();
-    m_filter->Resize(fbDesc.fb_width, fbDesc.fb_height);
-    m_filter->SetInput(rif::Color, GetResolvedFb());
-    m_filter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width, fbDesc.fb_height, m_format));
+    if (fbDesc.fb_width * fbDesc.fb_height * 4 != m_cpuFilterBuffer.size()) {
+        m_cpuFilterBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4);
+    }
+    static size_t numPixels = dstBufferSize / (3 * sizeof(float));
+    if (m_cpuFilterBuffer.size() / 4 != numPixels)
+    {
+        return false;
+    }
+
+    auto resolvedFb = GetResolvedFb();
+    if (!resolvedFb || !resolvedFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
+        return false;
+    }
+
+    CpuVec4toVec3Filter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels);
+    CpuRemapFilter((float*)dstBuffer, (float*)dstBuffer, numPixels * 3, 0.0, 1.0, -1.0, 1.0);
+    return true;
 }
 
 void HdRprApiComputedAov::Resize(int width, int height, HdFormat format) {
@@ -568,87 +649,47 @@ void HdRprApiComputedAov::Resize(int width, int height, HdFormat format) {
     }
 }
 
-HdRprApiDepthAov::HdRprApiDepthAov(
-    int width, int height, HdFormat format,
+HdRprApiDepthAov::HdRprApiDepthAov(int width, int height, HdFormat format,
     std::shared_ptr<HdRprApiAov> worldCoordinateAov,
     std::shared_ptr<HdRprApiAov> opacityAov,
-    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
+    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata)
     : HdRprApiComputedAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kNdcDepth), true), width, height, format)
     , m_retainedWorldCoordinateAov(worldCoordinateAov)
-    , m_retainedOpacityAov(opacityAov) {
 
-    if (!rifContext) {
-        RPR_THROW_ERROR_MSG("Can not create depth AOV: RIF context required");
-    }
-
-    m_retainedNDCFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_NDC_DEPTH, rifContext);
-    m_ndcFilter = m_retainedNDCFilter.get();
-
-    m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, rifContext);
-
-    auto opacityComposingKernelCode = std::string(R"(
-                            int2 coord;
-                            GET_COORD_OR_RETURN(coord, GET_BUFFER_SIZE(inputImage));
-                            vec4 alpha = ReadPixelTyped(alphaImage, coord.x, coord.y);
-                            vec4 color = ReadPixelTyped(inputImage, coord.x, coord.y);
-                            if (alpha.x == 0) {
-                                color = make_vec4(1.f, 1.f, 1.f, 1.f);
-                            }
-                            WritePixelTyped(outputImage, coord.x, coord.y, color);
-                        )");
-    m_filter->SetParam("code", opacityComposingKernelCode);
-    m_opacityFilter = m_filter.get();
-    m_remapFilter = nullptr;
-
-#if PXR_VERSION >= 2002
-    m_retainedOpacityFilter = std::move(m_filter);
-
-    m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_REMAP_RANGE, rifContext);
-    m_filter->SetParam("srcRangeAuto", 0);
-    m_filter->SetParam("srcLo", -1.0f);
-    m_filter->SetParam("srcHi", 1.0f);
-    m_filter->SetParam("dstLo", 0.0f);
-    m_filter->SetParam("dstHi", 1.0f);
-    m_remapFilter = m_filter.get();
-#endif
+    , m_retainedOpacityAov(opacityAov)
+    , m_viewProjectionMatrix(GfMatrix4f()) {
+    m_cpuFilterBuffer.resize(cpuFilterBufferSize());
 }
 
 void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
-    if (m_dirtyBits & ChangeTracker::DirtyFormat ||
-        m_dirtyBits & ChangeTracker::DirtySize) {
-
-        m_ndcFilter->SetInput(rif::Color, m_retainedWorldCoordinateAov->GetResolvedFb());
-        m_ndcFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
-        m_opacityFilter->SetInput(rif::Color, m_ndcFilter->GetOutput());
-        m_opacityFilter->SetInput("alphaImage", m_retainedOpacityAov->GetResolvedFb());
-        m_opacityFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
-        if (m_remapFilter) {
-            m_remapFilter->SetInput(rif::Color, m_opacityFilter->GetOutput());
-            m_remapFilter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
-        }
-    }
-    m_dirtyBits = ChangeTracker::Clean;
-
-    auto viewProjectionMatrix = rprApi->GetCameraViewMatrix() * rprApi->GetCameraProjectionMatrix();
-    m_ndcFilter->SetParam("viewProjMatrix", GfMatrix4f(viewProjectionMatrix.GetTranspose()));
-
-    m_ndcFilter->Update();
-    m_opacityFilter->Update();
-    if (m_remapFilter) {
-        m_remapFilter->Update();
-    }
+    m_viewProjectionMatrix = GfMatrix4f(rprApi->GetCameraViewMatrix() * rprApi->GetCameraProjectionMatrix()).GetTranspose();
 }
 
-void HdRprApiDepthAov::Resolve() {
-    if (m_ndcFilter) {
-        m_ndcFilter->Resolve();
+bool HdRprApiDepthAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
+    if (cpuFilterBufferSize() != m_cpuFilterBuffer.size()) {
+        m_cpuFilterBuffer.resize(cpuFilterBufferSize());
     }
-    if (m_opacityFilter) {
-        m_opacityFilter->Resolve();
+    static size_t numPixels = dstBufferSize / sizeof(float);
+    if (m_cpuFilterBuffer.size() / 4 != numPixels)
+    {
+        return false;
     }
-    if (m_remapFilter) {
-        m_remapFilter->Resolve();
+
+    auto coordinateFb = m_retainedWorldCoordinateAov->GetResolvedFb();
+    if (!coordinateFb || !coordinateFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
+        return false;
     }
+    
+    CpuNdcFilter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels, m_viewProjectionMatrix);
+    
+    auto opacityFb = m_retainedOpacityAov->GetResolvedFb();
+    if (!opacityFb || !opacityFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
+        return false;
+    }
+    
+    CpuOpacityMaskFilter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels);
+    CpuRemapFilter((float*)dstBuffer, (float*)dstBuffer, numPixels, -1, 1, 0, 1.0);
+    return true;
 }
 
 HdRprApiIdMaskAov::HdRprApiIdMaskAov(
@@ -660,46 +701,18 @@ HdRprApiIdMaskAov::HdRprApiIdMaskAov(
     if (!rifContext) {
         RPR_THROW_ERROR_MSG("Can not create id mask AOV: RIF context required");
     }
-
-    m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, rifContext);
-    auto colorizeIdKernelCode = std::string(R"(
-        int2 coord;
-        GET_COORD_OR_RETURN(coord, GET_BUFFER_SIZE(inputImage));
-        vec3 idEncoded = ReadPixelTyped(inputImage, coord.x, coord.y).xyz;
-        unsigned int idDecoded = (unsigned int)(idEncoded.x*256) + (unsigned int)(idEncoded.y*256*256) + (unsigned int)(idEncoded.z*256*256*256);
-
-        vec4 color;
-        if (idDecoded) {
-            unsigned int v0 = 0x123;
-            unsigned int v1 = idDecoded;
-            unsigned int s0 = 0;
-            const unsigned int N = 4;
-            for( unsigned int n = 0; n < N; n++ ) {
-                s0 += 0x9e3779b9;
-                v0 += ((v1<<4)+0xa341316c)^(v1+s0)^((v1>>5)+0xc8013ea4);
-                v1 += ((v0<<4)+0xad90777d)^(v0+s0)^((v0>>5)+0x7e95761e);
-            }
-            color = make_vec4(v0&0xFFFF, v0>>16, v1&0xFFFF, 0xFFFF)/(float)(0xFFFF);
-        } else {
-            color = make_vec4(0.0f, 0.0f, 0.0f, 0.0f);
-        }
-
-        WritePixelTyped(outputImage, coord.x, coord.y, color);
-    )");
-    m_filter->SetParam("code", colorizeIdKernelCode);
 }
 
-void HdRprApiIdMaskAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
-    if (m_dirtyBits & ChangeTracker::DirtyFormat ||
-        m_dirtyBits & ChangeTracker::DirtySize) {
-        m_filter->SetInput(rif::Color, m_baseIdAov->GetResolvedFb());
-        m_filter->SetOutput(rif::Image::GetDesc(m_width, m_height, m_format));
+bool HdRprApiIdMaskAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
+    static size_t numPixels = dstBufferSize / (4 * sizeof(float));
+    
+    auto resolvedFb = m_baseIdAov->GetResolvedFb();
+    if (!resolvedFb || !resolvedFb->GetData(dstBuffer, dstBufferSize)) {
+        return false;
     }
-    m_dirtyBits = ChangeTracker::Clean;
 
-    if (m_filter) {
-        m_filter->Update();
-    }
+    CpuFillMaskFilter((float*)dstBuffer, numPixels);
+    return true;
 }
 
 HdRprApiScCompositeAOV::HdRprApiScCompositeAOV(int width, int height, HdFormat format,

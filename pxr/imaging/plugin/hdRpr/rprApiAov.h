@@ -157,11 +157,13 @@ private:
 class HdRprApiNormalAov : public HdRprApiAov {
 public:
     HdRprApiNormalAov(int width, int height, HdFormat format,
-                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+        rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     ~HdRprApiNormalAov() override = default;
 protected:
     void OnFormatChange(rif::Context* rifContext) override;
-    void OnSizeChange(rif::Context* rifContext) override;
+    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
+private:
+    std::vector<float> m_cpuFilterBuffer;
 };
 
 class HdRprApiComputedAov : public HdRprApiAov {
@@ -180,37 +182,34 @@ protected:
 class HdRprApiDepthAov : public HdRprApiComputedAov {
 public:
     HdRprApiDepthAov(int width, int height, HdFormat format,
-                     std::shared_ptr<HdRprApiAov> worldCoordinateAov,
-                     std::shared_ptr<HdRprApiAov> opacityAov,
-                     rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+        std::shared_ptr<HdRprApiAov> worldCoordinateAov,
+        std::shared_ptr<HdRprApiAov> opacityAov,
+        rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata);
     ~HdRprApiDepthAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
-    void Resolve() override;
-
+protected:
+    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
 private:
-    std::unique_ptr<rif::Filter> m_retainedNDCFilter;
-    std::unique_ptr<rif::Filter> m_retainedOpacityFilter;
-
-    rif::Filter* m_ndcFilter;
-    rif::Filter* m_opacityFilter;
-    rif::Filter* m_remapFilter;
+    inline size_t cpuFilterBufferSize() const { return m_width * m_height * 4; }    // Vec4f for each pixel
 
     std::shared_ptr<HdRprApiAov> m_retainedWorldCoordinateAov;
     std::shared_ptr<HdRprApiAov> m_retainedOpacityAov;
+    GfMatrix4f m_viewProjectionMatrix;
+    std::vector<float> m_cpuFilterBuffer;
 };
 
 class HdRprApiIdMaskAov : public HdRprApiComputedAov {
 public:
     HdRprApiIdMaskAov(HdRprAovDescriptor const& aovDescriptor, std::shared_ptr<HdRprApiAov> const& baseIdAov,
-                      int width, int height, HdFormat format,
-                      rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
+        int width, int height, HdFormat format,
+        rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     ~HdRprApiIdMaskAov() override = default;
-
-    void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
-
+protected:
+    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
 private:
     std::shared_ptr<HdRprApiAov> m_baseIdAov;
+    std::vector<float> m_cpuFilterBuffer;
 };
 
 class HdRprApiScCompositeAOV : public HdRprApiAov {
