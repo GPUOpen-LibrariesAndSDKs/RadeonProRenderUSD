@@ -434,6 +434,9 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
             std::string usdLibPath = usdPlugin->GetPath();
             std::string usdDir = TfNormPath(TfGetPathName(usdLibPath) + "..");
             materialXStdlibPath = usdDir;
+#ifdef __APPLE__
+            materialXStdlibPath += "/Resources";
+#endif
         }
 
         stdLibraries = mx::createDocument();
