@@ -118,7 +118,7 @@ if(HoudiniUSD_FOUND AND BUILD_RESOLVER)
 
     ExternalProject_Add(RenderStudioKit
             GIT_REPOSITORY https://github.com/Radeon-Pro/RenderStudioKit.git
-            GIT_TAG vgorash/houdini_support
+            GIT_TAG vgorash/path_getters
             CMAKE_CACHE_ARGS -DHOUDINI_SUPPORT:STRING=ON
             CMAKE_CACHE_ARGS -DBoost_ROOT:STRING=${CMAKE_BINARY_DIR}/boost_1_76_0/stage/lib/cmake
             CMAKE_CACHE_ARGS -DCMAKE_INSTALL_PREFIX:STRING=${CMAKE_INSTALL_PREFIX}

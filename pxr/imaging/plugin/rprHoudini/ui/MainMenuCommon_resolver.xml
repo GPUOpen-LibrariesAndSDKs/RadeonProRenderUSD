@@ -52,11 +52,27 @@
 
             <separatorItem/>
 
-            <scriptMenuStripDynamic id="renderstudio_shared_workspace">
-                <contentsScriptCode><![CDATA[__import__('houRpr.resolver').resolver.get_shared_workspace_menu()]]></contentsScriptCode>
-                <scriptCode><![CDATA[__import__('houRpr.resolver').resolver.toggle_shared_workspace(kwargs["selectedtoken"])]]></scriptCode>
-            </scriptMenuStripDynamic>
+            <subMenu id="renderstudio">
+                <label>Render Studio</label>
 
+                <scriptMenuStripDynamic id="renderstudio_shared_workspace_enable">
+                    <contentsScriptCode><![CDATA[__import__('houRpr.resolver').resolver.get_shared_workspace_menu()]]></contentsScriptCode>
+                    <scriptCode><![CDATA[__import__('houRpr.resolver').resolver.toggle_shared_workspace(kwargs["selectedtoken"])]]></scriptCode>
+                </scriptMenuStripDynamic>
+
+                <separatorItem/>
+
+                <scriptItem id="renderstudio_shared_workspace_directory">
+                    <label>Set Workspace Directory</label>
+                    <scriptCode><![CDATA[__import__('houRpr.resolver').resolver.set_workspace_directory()]]></scriptCode>
+                </scriptItem>
+
+                <scriptItem id="renderstudio_open_workspace_directory">
+                    <label>Open Workspace Directory</label>
+                    <scriptCode><![CDATA[__import__('houRpr.resolver').resolver.open_workspace_directory()]]></scriptCode>
+                </scriptItem>
+
+            </subMenu>
         </subMenu>
     </menuBar>
 </mainMenu>
