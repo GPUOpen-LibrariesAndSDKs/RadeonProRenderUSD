@@ -108,7 +108,7 @@ if(HoudiniUSD_FOUND AND BUILD_RESOLVER)
             URL https://boostorg.jfrog.io/artifactory/main/release/1.76.0/source/boost_1_76_0.zip
             URL_HASH SHA256=0fd43bb53580ca54afc7221683dfe8c6e3855b351cd6dce53b1a24a7d7fbeedd
             DOWNLOAD_EXTRACT_TIMESTAMP ON
-            CONFIGURE_COMMAND ./bootstrap.bat
+            CONFIGURE_COMMAND ${HYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/Resolver/modified_boost_bootstrap.py ${CMAKE_BINARY_DIR}/boost_1_76_0/bootstrap.bat vc142
             BUILD_COMMAND ./b2.exe --with-log --with-python --user-config=${CMAKE_BINARY_DIR}/boost-python-config.jam
             BUILD_IN_SOURCE ON
             SOURCE_DIR ${CMAKE_BINARY_DIR}/boost_1_76_0
