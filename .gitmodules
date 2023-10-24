@@ -3,7 +3,7 @@
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/RadeonImageFilter
 [submodule "deps/RPR"]
 	path = deps/RPR
-	url = https://github.com/V-Gorash/RadeonProRenderSDK
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/RadeonProRenderSDK
 [submodule "deps/MaterialX"]
 	path = deps/MaterialX
 	url = https://github.com/materialx/MaterialX
