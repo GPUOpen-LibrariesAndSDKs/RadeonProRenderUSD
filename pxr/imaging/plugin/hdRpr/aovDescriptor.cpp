@@ -104,7 +104,8 @@ HdRprAovRegistry::HdRprAovRegistry() {
 
     addAovNameLookup(HdAovTokens->color, m_computedAovDescriptors[kColorAlpha]);
     addAovNameLookup(HdAovTokens->normal, m_aovDescriptors[RPR_AOV_SHADING_NORMAL]);
-    addAovNameLookup(HdAovTokens->primId, m_aovDescriptors[RPR_AOV_OBJECT_ID]);
+    addAovNameLookup(HdAovTokens->primId, m_aovDescriptors[RPR_AOV_MESH_ID]);
+    addAovNameLookup(HdAovTokens->instanceId, m_aovDescriptors[RPR_AOV_OBJECT_ID]);
     addAovNameLookup(HdAovTokens->Neye, m_aovDescriptors[RPR_AOV_VIEW_SHADING_NORMAL]);
     addAovNameLookup(HdAovTokens->depth, m_computedAovDescriptors[kNdcDepth]);
     addAovNameLookup(HdRprGetCameraDepthAovName(), m_aovDescriptors[RPR_AOV_DEPTH]);
