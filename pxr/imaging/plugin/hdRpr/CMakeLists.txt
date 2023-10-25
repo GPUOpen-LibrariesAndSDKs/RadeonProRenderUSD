@@ -196,6 +196,10 @@ endif()
 
 GroupSources(hdRpr)
 
+if(BUILD_RESOLVER)
+    add_dependencies(hdRpr RenderStudioKit)
+endif()
+
 install(
     CODE
     "FILE(WRITE \"${CMAKE_INSTALL_PREFIX}/plugin/plugInfo.json\"

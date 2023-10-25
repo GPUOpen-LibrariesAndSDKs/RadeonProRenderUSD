@@ -93,7 +93,7 @@ set_target_properties(murmurhash PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # RenderStudioKit
 # ----------------------------------------------
 
-if(HoudiniUSD_FOUND AND BUILD_RESOLVER)
+if(BUILD_RESOLVER)
     add_subdirectory(RenderStudioKit)
 endif()
 
