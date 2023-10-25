@@ -10,7 +10,7 @@ file(WRITE ${CMAKE_BINARY_DIR}/boost-python-config.jam ${BOOST_CONFIG})
 
 if(RESOLVER_BOOST_TOOLSET_OVERRIDE)
     # Boost 1.76.0 always use default toolset. We should modify bootstrap.bat file to override toolset
-    set(BOOST_TOOLSET_SCRIPT "${HYTHON_EXECUTABLE} ..\\modified_boost_bootstrap.py .\\bootstrap.bat ${RESOLVER_BOOST_TOOLSET_OVERRIDE}\n call .\\bootstrap.bat")
+    set(BOOST_TOOLSET_SCRIPT "\"${HYTHON_EXECUTABLE}\" ..\\modified_boost_bootstrap.py .\\bootstrap.bat ${RESOLVER_BOOST_TOOLSET_OVERRIDE}\ncall .\\bootstrap.bat")
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/modified_boost_bootstrap.py DESTINATION ${CMAKE_BINARY_DIR})
     file(WRITE ${CMAKE_BINARY_DIR}/build_boost_override.bat ${BOOST_TOOLSET_SCRIPT})
     set(BOOST_CONFIGURE_COMMAND ../build_boost_override.bat)
