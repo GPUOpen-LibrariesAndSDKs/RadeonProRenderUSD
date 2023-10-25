@@ -461,7 +461,7 @@ class "RprRendererSettingsAPI" (
     )
 
     # Hybrid only
-    uniform token hybrid:upscalingQuality = "Ultra Performance" (
+    uniform token rpr:hybrid:upscalingQuality = "Ultra Performance" (
         allowedTokens = ["Ultra Quality", "Quality", "Balance", "Performance", "Ultra Performance"]
         displayName = "Viewport Upscaling Quality"
         displayGroup = "Postprocessing|Upscale"
