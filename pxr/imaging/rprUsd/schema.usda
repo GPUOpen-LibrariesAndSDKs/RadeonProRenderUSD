@@ -359,6 +359,12 @@ class "RprRendererSettingsAPI" (
         displayGroup = "Hybrid|Postprocessing"
     )
 
+    uniform bool rpr:hybrid:displacement = false (
+        displayName = "Enable Hybrid Displacement"
+        displayGroup = "Hybrid"
+        doc = "Enables displecement in Hybrid Pro. Render restart might be required."
+    )
+
     uniform uint rpr:hybrid:acceleration_memory_size_mb = 2048 (
         displayName = "Hybrid Acceleration Structure Memory Size"
         displayGroup = "Hybrid|Memory"

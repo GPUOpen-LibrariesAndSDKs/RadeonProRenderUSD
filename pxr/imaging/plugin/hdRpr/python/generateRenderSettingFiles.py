@@ -537,6 +537,12 @@ render_setting_categories = [
                 }
             },
             {
+                'name': 'hybrid:displacement',
+                'ui_name': 'Enable Hybrid Displacement',
+                'help': 'Enable displacement for Hybrid. Render restart might be required',
+                'defaultValue': False,
+            },
+            {
                 'name': 'hybrid:accelerationMemorySizeMb',
                 'ui_name': 'Hybrid Acceleration Structure Memory Size (MB)',
                 'defaultValue': 2048,
