@@ -86,7 +86,7 @@ install(
     DESTINATION
         houdini)
 
-if(BUILD_RESOLVER)
+if(RESOLVER_SUPPORT)
     install(
         FILES
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/resolver.py
