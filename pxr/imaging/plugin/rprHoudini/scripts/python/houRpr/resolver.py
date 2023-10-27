@@ -1,4 +1,4 @@
-from pxr import Plug
+from pxr import Plug, Tf
 from time import sleep
 
 import hou
@@ -12,6 +12,19 @@ from rs import RenderStudioKit
 
 shared_workspace_enabled = False
 
+
+def workspace_enabled_callback(notice, sender):
+    global shared_workspace_enabled
+    shared_workspace_enabled = notice.IsConnected()
+
+def workspace_state_callback(notice, sender):
+    hou.ui.displayMessage(str(notice.GetState()),
+                          severity=hou.severityType.Warning)
+
+
+listener_1 = Tf.Notice.RegisterGlobally("RenderStudioNotice::WorkspaceConnectionChanged", workspace_enabled_callback)
+# listener_3 = Tf.Notice.RegisterGlobally("RenderStudioNotice::WorkspaceState", workspace_state_callback)
+
 def get_shared_workspace_menu():
     global shared_workspace_enabled
     if shared_workspace_enabled:
@@ -19,24 +32,25 @@ def get_shared_workspace_menu():
     else:
         return ["enable", "Connect to Render Studio shared workspace"]
 
+
 def toggle_shared_workspace(command):
     global shared_workspace_enabled
 
     if command == "enable":
         code, server_url = hou.ui.readInput("Storage server URL", buttons=('OK',),
-                                      severity=hou.severityType.Message, help=None, title=None,
-                                      initial_contents=RenderStudioKit.GetWorkspaceUrl())
+                                            severity=hou.severityType.Message, help=None, title=None,
+                                            initial_contents=RenderStudioKit.GetWorkspaceUrl())
         if code == -1 or server_url == "":
             return
         if not server_url.startswith("http"):
-            hou.ui.displayMessage("The URL should start from 'http://' or 'https://'", severity=hou.severityType.Warning)
+            hou.ui.displayMessage("The URL should start from 'http://' or 'https://'",
+                                  severity=hou.severityType.Warning)
             toggle_shared_workspace("enable")
             return
         try:
             with hou.InterruptableOperation("Connecting to shared workspace", open_interrupt_dialog=True) as op:
                 RenderStudioKit.SetWorkspaceUrl(server_url)
                 RenderStudioKit.SharedWorkspaceConnect()
-                shared_workspace_enabled = True
         except hou.OperationInterrupted:
             toggle_shared_workspace("disable")
         except:
@@ -46,7 +60,6 @@ def toggle_shared_workspace(command):
         try:
             with hou.InterruptableOperation("Disconnecting from shared workspace", open_interrupt_dialog=True) as op:
                 RenderStudioKit.SharedWorkspaceDisconnect()
-                shared_workspace_enabled = False
         except hou.OperationInterrupted:
             pass
         except:
@@ -61,6 +74,7 @@ def set_workspace_directory():
         chooser_mode=hou.fileChooserMode.Write)
     if directory:
         RenderStudioKit.SetWorkspacePath(hou.expandString(directory))
+
 
 def open_workspace_directory():
     os.system("explorer " + RenderStudioKit.GetWorkspacePath())
