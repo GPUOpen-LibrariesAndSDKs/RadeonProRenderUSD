@@ -75,6 +75,8 @@ def set_workspace_directory():
     if directory:
         RenderStudioKit.SetWorkspacePath(hou.expandString(directory))
 
+def get_workspace_directory():
+    return RenderStudioKit.GetWorkspacePath().replace('\\', '/')
 
 def open_workspace_directory():
     os.system("explorer " + RenderStudioKit.GetWorkspacePath())
