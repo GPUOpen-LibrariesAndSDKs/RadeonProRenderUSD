@@ -3,7 +3,7 @@ import shlex
 import subprocess
 
 RESOLVER_REPO_URL = "https://github.com/Radeon-Pro/RenderStudioKit.git"
-RESOLVER_REPO_TAG = "e5960bf"
+RESOLVER_REPO_TAG = "agurov/standalone"
 
 
 def clone_repository(workdir):
