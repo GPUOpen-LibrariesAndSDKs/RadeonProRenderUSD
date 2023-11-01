@@ -20,6 +20,18 @@ if not os.path.isdir(RESOLVER_SETTINGS_PATH):
     os.makedirs(RESOLVER_SETTINGS_PATH, exist_ok=True)
 
 
+def _get_saved_config():
+    if os.path.exists(WORKSPACE_CONFIG_PATH):
+        with open(WORKSPACE_CONFIG_PATH) as f:
+            return json.load(f)
+    return {"url": RenderStudioKit.GetWorkspaceUrl(), "workdir": RenderStudioKit.GetWorkspacePath()}
+
+
+def _save_config(config):
+    with open(WORKSPACE_CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=1)
+
+
 def _workspace_enabled_callback(notice, sender):
     global shared_workspace_enabled
     global shared_workspace_enable_expected
@@ -32,17 +44,7 @@ def _workspace_enabled_callback(notice, sender):
 
 listener_1 = Tf.Notice.RegisterGlobally("RenderStudioNotice::WorkspaceConnectionChanged", _workspace_enabled_callback)
 
-
-def _get_saved_config():
-    if os.path.exists(WORKSPACE_CONFIG_PATH):
-        with open(WORKSPACE_CONFIG_PATH) as f:
-            return json.load(f)
-    return {"url": RenderStudioKit.GetWorkspaceUrl(), "workdir": RenderStudioKit.GetWorkspacePath().replace('\\', '/')}
-
-
-def _save_config(config):
-    with open(WORKSPACE_CONFIG_PATH, "w") as f:
-        json.dump(config, f, indent=1)
+RenderStudioKit.SetWorkspacePath(hou.expandString(_get_saved_config()["workdir"]))
 
 
 def get_shared_workspace_menu():
@@ -104,12 +106,12 @@ def set_workspace_directory():
     config = _get_saved_config()
     directory = hou.ui.selectFile(
         title='Render Studio Workspace Directory',
-        start_directory=config["workdir"],
+        start_directory=config["workdir"].replace('\\', '/'),
         file_type=hou.fileType.Directory,
         chooser_mode=hou.fileChooserMode.Write)
     if directory:
-        RenderStudioKit.SetWorkspacePath(hou.expandString(directory))
-        config["workdir"] = directory
+        RenderStudioKit.SetWorkspacePath(os.path.normpath(directory))
+        config["workdir"] = os.path.normpath(RenderStudioKit.GetWorkspacePath())
         _save_config(config)
 
 
