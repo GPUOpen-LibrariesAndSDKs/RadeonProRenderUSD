@@ -33,12 +33,11 @@ public:
                 rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     virtual ~HdRprApiAov() = default;
 
-    virtual void Resize(int width, int height, HdFormat format, bool oddWidth);
+    virtual void Resize(int width, int height, HdFormat format);
     virtual void Update(HdRprApi const* rprApi, rif::Context* rifContext);
     virtual void Resolve();
 
     virtual bool GetData(void* dstBuffer, size_t dstBufferSize);
-    bool GetUpscaledData(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext);
     void Clear();
 
     HdFormat GetFormat() const { return m_format; }
@@ -47,20 +46,13 @@ public:
     HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); };
     HdRprApiFramebuffer* GetResolvedFb();
 
-    virtual bool InitUpscaleFilter(rif::Context* rifContext);
+    virtual bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
 protected:
-    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format)
-        : m_aovDescriptor(aovDescriptor), m_width(width), m_height(height), m_format(format) {};
+    HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
+        : m_aovDescriptor(aovDescriptor), m_format(format) {};
 
     virtual void OnFormatChange(rif::Context* rifContext);
     virtual void OnSizeChange(rif::Context* rifContext);
-
-    void SetUpSizeAndBuffer(void*& dstBuffer, size_t& dstBufferSize);
-    void ApplyFormatToOutput(void* getBuffer, void* dstBuffer, size_t dstBufferSize);
-    virtual bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
-    virtual bool GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext);
-
-    friend class HdRprApiScCompositeAOV;
 protected:
     HdRprAovDescriptor const& m_aovDescriptor;
     HdFormat m_format;
@@ -69,11 +61,6 @@ protected:
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
     std::unique_ptr<rif::Filter> m_filter;
     std::vector<char> m_tmpBuffer;
-    std::unique_ptr<rif::Filter> m_upscaleFilter;
-
-    int m_width = 0;
-    int m_height = 0;
-    bool m_oddWidth = false;    // for upscaler
 
     enum ChangeTracker {
         Clean = 0,
@@ -89,23 +76,12 @@ public:
     HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata);
     ~HdRprApiColorAov() override = default;
 
-    void Resize(int width, int height, HdFormat format, bool oddWidth) override;
+    void Resize(int width, int height, HdFormat format) override;
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
     bool GetData(void* dstBuffer, size_t dstBufferSize) override;
     void Resolve() override;
 
     void SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity);
-
-    void InitAIDenoise(std::shared_ptr<HdRprApiAov> albedo,
-                         std::shared_ptr<HdRprApiAov> normal,
-                         std::shared_ptr<HdRprApiAov> linearDepth);
-    void InitEAWDenoise(std::shared_ptr<HdRprApiAov> albedo,
-                          std::shared_ptr<HdRprApiAov> normal,
-                          std::shared_ptr<HdRprApiAov> linearDepth,
-                          std::shared_ptr<HdRprApiAov> objectId,
-                          std::shared_ptr<HdRprApiAov> worldCoordinate);
-    void DeinitDenoise(rif::Context* rifContext);
-    void SetDenoise(bool enable, HdRprApi const* rprApi, rif::Context* rifContext);
 
     struct TonemapParams {
         bool enable;
@@ -146,8 +122,8 @@ private:
     enum Filter {
         kFilterNone = 0,
         kFilterResample = 1 << 0,
-        kFilterAIDenoise = 1 << 1,
-        kFilterEAWDenoise = 1 << 2,
+        //kFilterAIDenoise = 1 << 1,
+        //kFilterEAWDenoise = 1 << 2,
         kFilterComposeOpacity = 1 << 3,
         kFilterTonemap = 1 << 4,
         kFilterGamma = 1 << 5
@@ -164,8 +140,6 @@ private:
 private:
     std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
-    std::shared_ptr<HdRprApiAov> m_retainedDenoiseInputs[rif::MaxInput];
-    Filter m_denoiseFilterType = kFilterNone;
 
     Filter m_mainFilterType = kFilterNone;
     std::vector<std::pair<Filter, std::unique_ptr<rif::Filter>>> m_auxFilters;
@@ -175,6 +149,9 @@ private:
 
     TonemapParams m_tonemap;
     GammaParams m_gamma;
+
+    int m_width = 0;
+    int m_height = 0;
 };
 
 class HdRprApiNormalAov : public HdRprApiAov {
@@ -190,10 +167,14 @@ protected:
 class HdRprApiComputedAov : public HdRprApiAov {
 public:
     HdRprApiComputedAov(HdRprAovDescriptor const& aovDescriptor, int width, int height, HdFormat format)
-        : HdRprApiAov(aovDescriptor, width, height, format) {}
+        : HdRprApiAov(aovDescriptor, format), m_width(width), m_height(height) {}
     ~HdRprApiComputedAov() override = default;
 
-    void Resize(int width, int height, HdFormat format, bool oddWidth) override final;
+    void Resize(int width, int height, HdFormat format) override final;
+
+protected:
+    int m_width = -1;
+    int m_height = -1;
 };
 
 class HdRprApiDepthAov : public HdRprApiComputedAov {
@@ -239,10 +220,7 @@ public:
                          std::shared_ptr<HdRprApiAov> opacityAov,
                          std::shared_ptr<HdRprApiAov> scAov,
                          rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
-    bool InitUpscaleFilter(rif::Context* rifContext) override;
-protected:
     bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
-    bool GetUpscaledDataImpl(void* dstBuffer, size_t dstBufferSize, rif::Context* rifContext) override;
 private:
     std::shared_ptr<HdRprApiAov> m_retainedRawColorAov;
     std::shared_ptr<HdRprApiAov> m_retainedOpacityAov;

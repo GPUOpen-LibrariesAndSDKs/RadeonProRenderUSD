@@ -157,6 +157,11 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             isRefineLevelDirty = true;
         }
 
+        if (m_subdivisionCreaseWeight != geomSettings.subdivisionCreaseWeight) {
+            m_subdivisionCreaseWeight = geomSettings.subdivisionCreaseWeight;
+            isRefineLevelDirty = true;
+        }
+
         if (m_visibilityMask != geomSettings.visibilityMask) {
             m_visibilityMask = geomSettings.visibilityMask;
             forceVisibilityUpdate = true;
@@ -260,7 +265,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_adjacencyValid = false;
         m_normalsValid = false;
 
-        m_enableSubdiv = m_topology.GetScheme() == PxOsdOpenSubdivTokens->catmullClark;
         m_geomSubsets = m_topology.GetGeomSubsets();
 
         // GeomSubset data is directly transfered from USD into Hydra topology.
@@ -448,11 +452,6 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
     // 2. Resolve drawstyles
 
     m_smoothNormals = !m_displayStyle.flatShadingEnabled;
-    // Don't compute smooth normals on a refined mesh. They are implicitly smooth.
-    if (m_enableSubdiv && m_refineLevel != 0) {
-        m_smoothNormals = false;
-    }
-
     if (!m_authoredNormals && m_smoothNormals) {
         if (!m_adjacencyValid) {
             m_adjacency.BuildAdjacencyTable(&m_topology);
@@ -607,6 +606,10 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                         if (!m_colorSamples.empty()) {
                             if (newPoint) {
                                 for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
+                                    if (sampleIndex >= m_colorSamples.size() || pointIndex >= m_colorSamples[sampleIndex].size()) {
+                                        TF_WARN("Failed verification sampleIndex >= m_colorSamples.size() || pointIndex >= m_colorSamples[sampleIndex].size()");
+                                        continue;
+                                    }
                                     subsetColorSamples[sampleIndex].push_back(m_colorSamples[sampleIndex][pointIndex]);
                                 }
                             }
@@ -657,14 +660,14 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
 
         if (newMesh || isRefineLevelDirty) {
             for (auto& rprMesh : m_rprMeshes) {
-                rprApi->SetMeshRefineLevel(rprMesh, m_enableSubdiv ? m_refineLevel : 0);
+                rprApi->SetMeshRefineLevel(rprMesh, m_refineLevel, m_subdivisionCreaseWeight);
             }
         }
 
         if (newMesh || (*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
             (*dirtyBits & HdChangeTracker::DirtyDoubleSided) || // update twosided material node
             (*dirtyBits & HdChangeTracker::DirtyDisplayStyle) || isRefineLevelDirty) { // update displacement material
-            auto getMeshMaterial = [sceneDelegate, rprApi, dirtyBits, &primvarDescsPerInterpolation, this](SdfPath const& materialId) {
+            auto getMeshMaterial = [sceneDelegate, &rprApi, dirtyBits, &primvarDescsPerInterpolation, this](SdfPath const& materialId) {
                 auto material = static_cast<const HdRprMaterial*>(sceneDelegate->GetRenderIndex().GetSprim(HdPrimTypeTokens->material, materialId));
                 if (material && material->GetRprMaterialObject()) {
                     return material->GetRprMaterialObject();

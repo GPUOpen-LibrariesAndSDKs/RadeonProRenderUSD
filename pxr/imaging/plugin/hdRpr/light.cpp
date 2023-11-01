@@ -126,8 +126,18 @@ float GetCylinderLightNormalization(GfMatrix4f const& transform, float length, f
     return scaleFactor;
 }
 
-float ComputeLightIntensity(float intensity, float exposure) {
-    return intensity * exp2(exposure);
+float ComputeLightIntensity(float intensity, float exposure, bool sameWithKarma, bool normalizeIntensity, TfToken lightType) {
+    intensity *= exp2(exposure);
+    int multiplier = 1;
+    if (sameWithKarma) {
+        if (!normalizeIntensity) {
+            multiplier = 3; // 3 is a manually fitted coefficient to get same visual results with Karma
+        }
+        else if (lightType != HdPrimTypeTokens->diskLight && lightType != HdPrimTypeTokens->sphereLight && lightType != HdPrimTypeTokens->cylinderLight) {
+            multiplier = 3; // 3 is a manually fitted coefficient to get same visual results with Karma
+        }
+    }
+    return intensity * multiplier;
 }
 
 } // namespace anonymous
@@ -494,7 +504,9 @@ void HdRprLight::Sync(HdSceneDelegate* sceneDelegate,
 
         float intensity = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f);
         float exposure = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->exposure, 1.0f);
-        intensity = ComputeLightIntensity(intensity, exposure);
+        bool sameWithKarma = HdRpr_GetParam(sceneDelegate, id, RprUsdTokens->rprLightIntensitySameWithKarma, false);
+        bool normalizeIntensity = HdRpr_GetParam(sceneDelegate, id, HdLightTokens->normalize, false);
+        intensity = ComputeLightIntensity(intensity, exposure, sameWithKarma, normalizeIntensity, m_lightType);
 
         GfVec3f color = HdRpr_GetParam(sceneDelegate, id, HdPrimvarRoleTokens->color, GfVec3f(1.0f));
         if (HdRpr_GetParam(sceneDelegate, id, HdLightTokens->enableColorTemperature, false)) {

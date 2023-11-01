@@ -73,7 +73,6 @@ private:
     VtArray<VtVec3fArray> m_pointSamples;
     VtIntArray m_faceVertexCounts;
     VtIntArray m_faceVertexIndices;
-    bool m_enableSubdiv = false;
 
     Hd_VertexAdjacency m_adjacency;
     bool m_adjacencyValid = false;
@@ -94,6 +93,7 @@ private:
 
     HdDisplayStyle m_displayStyle;
     int m_refineLevel = 0;
+    float m_subdivisionCreaseWeight = 0.0;
 
     int m_id = -1;
     bool m_ignoreContour;

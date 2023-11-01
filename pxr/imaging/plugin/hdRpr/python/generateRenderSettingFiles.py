@@ -257,48 +257,6 @@ render_setting_categories = [
         }
     },
     {
-        'name': 'Denoise',
-        'houdini': {
-            'hidewhen': lambda settings: hidewhen_render_quality('<', 'High', settings)
-        },
-        'settings': [
-            {
-                'name': 'denoising:enable',
-                'ui_name': 'Enable AI Denoising',
-                'defaultValue': False,
-                'houdini': {
-                    'custom_tags': [
-                        '"uiicon" VIEW_display_denoise'
-                    ]
-                }
-            },
-            {
-                'folder': 'Denoise Settings',
-                'houdini': {
-                    'hidewhen': 'denoising:enable == 0'
-                },
-                'settings': [
-                    {
-                        'name': 'denoising:minIter',
-                        'ui_name': 'Denoise Min Iteration',
-                        'defaultValue': 4,
-                        'minValue': 1,
-                        'maxValue': 2 ** 16,
-                        'help': 'The first iteration on which denoising should be applied.'
-                    },
-                    {
-                        'name': 'denoising:iterStep',
-                        'ui_name': 'Denoise Iteration Step',
-                        'defaultValue': 32,
-                        'minValue': 1,
-                        'maxValue': 2 ** 16,
-                        'help': 'Denoise use frequency. To denoise on each iteration, set to 1.'
-                    }
-                ]
-            }
-        ]
-    },
-    {
         'name': 'Sampling',
         'houdini': {
             'hidewhen': lambda settings: hidewhen_render_quality('==', 'Low', settings)
@@ -308,7 +266,7 @@ render_setting_categories = [
                 'name': 'maxSamples',
                 'ui_name': 'Max Samples',
                 'help': 'Maximum number of samples to render for each pixel.',
-                'defaultValue': 256,
+                'defaultValue': 128,
                 'minValue': 1,
                 'maxValue': 2 ** 16
             }
@@ -324,7 +282,7 @@ render_setting_categories = [
                 'name': 'adaptiveSampling:minSamples',
                 'ui_name': 'Min Samples',
                 'help': 'Minimum number of samples to render for each pixel. After this, adaptive sampling will stop sampling pixels where noise is less than \'Variance Threshold\'.',
-                'defaultValue': 64,
+                'defaultValue': 32,
                 'minValue': 1,
                 'maxValue': 2 ** 16
             },
@@ -332,7 +290,7 @@ render_setting_categories = [
                 'name': 'adaptiveSampling:noiseTreshold',
                 'ui_name': 'Noise Threshold',
                 'help': 'Cutoff for adaptive sampling. Once pixels are below this amount of noise, no more samples are added. Set to 0 for no cutoff.',
-                'defaultValue': 0.0,
+                'defaultValue': 0.05,
                 'minValue': 0.0,
                 'maxValue': 1.0
             }
@@ -403,7 +361,24 @@ render_setting_categories = [
                 'help': 'Limits the intensity, or the maximum brightness, of samples in the scene. Greater clamp radiance values produce more brightness.',
                 'defaultValue': 0.0,
                 'minValue': 0.0,
-                'maxValue': 1e6
+                'maxValue': 10
+            },
+            {
+                'name': 'quality:filterType',
+                'ui_name': 'Filter Type',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('Box'),
+                    SettingValue('Triangle'),
+                    SettingValue('Gaussian'),
+                    SettingValue('Mitchell'),
+                    SettingValue('Lanczos'),
+                    SettingValue('BlackmanHarris')
+                ],
+                'houdini': {
+                    'hidewhen': hidewhen_hybrid
+                }
             },
             {
                 'name': 'quality:imageFilterRadius',
@@ -411,9 +386,23 @@ render_setting_categories = [
                 'help': 'Determines Pixel filter width (anti-aliasing).',
                 'defaultValue': 1.5,
                 'minValue': 0.0,
-                'maxValue': 5.0,
+                'maxValue': 1.5,
                 'houdini': {
                     'hidewhen': hidewhen_hybrid
+                }
+            },
+            {
+                'name': 'quality:reservoirSampling',
+                'ui_name': 'ReSTIR (HybridPro only)',
+                'help': 'ReSTIR is a low computational cost technique for rendering realistic lighting with millions of lights in real-time.',
+                'defaultValue': 'PathSpace',
+                'values': [
+                    SettingValue('Off'),
+                    SettingValue('ScreenSpace'),
+                    SettingValue('PathSpace'),
+                ],
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
                 }
             }
         ]
@@ -448,6 +437,9 @@ render_setting_categories = [
                 'ui_name': 'Downscale Resolution When Interactive',
                 'help': 'Controls whether in interactive mode resolution should be downscaled or no.',
                 'defaultValue': True,
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
             }
         ]
     },
@@ -472,6 +464,116 @@ render_setting_categories = [
                 }
             }
         ]
+    },
+    {
+        'name': 'GMON',
+        'settings': [
+            {
+                'name': 'core:useGmon',
+                'ui_name': 'Use GMON (HybridPro only)',
+                'help': 'Enable fireflies suppression by using adaptive median of mean estimator',
+                'defaultValue': False,
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
+                }
+            }
+        ]
+    },
+    {
+        'name': 'DisplayGamma',
+        'settings': [
+            {
+                'name': 'core:displayGamma',
+                'ui_name': 'Display Gamma',
+                'help': 'Adjusts the brightness of each pixel in the image based on the gamma correction value to make the overall image brightness appear more natural on the screen.',
+                'defaultValue': 1.0,
+                'minValue': 0.0,
+                'maxValue': 5.0
+            }
+        ]
+    },
+    {
+        'name': 'Hybrid',
+        'settings': [
+            {
+                'name': 'hybrid:tonemapping',
+                'ui_name': 'Hybrid Tonemapping',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('Filmic'),
+                    SettingValue('Aces'),
+                    SettingValue('Reinhard'),
+                    SettingValue('Photolinear')
+                ],
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('==', 'HybridPro', settings)   # Disabled until tonemapping implementation is finished
+                }
+            },
+            {
+                'name': 'hybrid:denoising',
+                'ui_name': 'Hybrid Denoising',
+                'defaultValue': 'None',
+                'values': [
+                    SettingValue('None'),
+                    SettingValue('SVGF'),
+                    SettingValue('ASVGF')
+                ]
+            },
+            {
+                'name': 'hybrid:upscalingQuality',
+                'ui_name': 'Upscaling Quality',
+                'help': '',
+                'defaultValue': 'Ultra Performance',
+                'values': [
+                    SettingValue('Ultra Quality'),
+                    SettingValue('Quality'),
+                    SettingValue('Balance'),
+                    SettingValue('Performance'),
+                    SettingValue('Ultra Performance'),
+                ],
+                'houdini': {
+                    'hidewhen': 'hybrid:denoising == "None"'
+                }
+            },
+            {
+                'name': 'hybrid:displacement',
+                'ui_name': 'Enable Hybrid Displacement',
+                'help': 'Enable displacement for Hybrid. Render restart might be required',
+                'defaultValue': False,
+            },
+            {
+                'name': 'hybrid:accelerationMemorySizeMb',
+                'ui_name': 'Hybrid Acceleration Structure Memory Size (MB)',
+                'defaultValue': 2048,
+                'minValue': 1,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:meshMemorySizeMb',
+                'ui_name': 'Hybrid Mesh Memory Size (MB)',
+                'defaultValue': 1024,
+                'minValue': 1,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:stagingMemorySizeMb',
+                'ui_name': 'Hybrid Staging Memory Size (MB)',
+                'defaultValue': 512,
+                'minValue': 1,
+                'maxValue': 4096
+            },
+            {
+                'name': 'hybrid:scratchMemorySizeMb',
+                'ui_name': 'Hybrid Scratch Memory Size (MB)',
+                'defaultValue': 256,
+                'minValue': 1,
+                'maxValue': 4096
+            }
+        ],
+        'houdini': {
+            'hidewhen': lambda settings: hidewhen_render_quality('!=', 'HybridPro', settings)
+        }
     },
     {
         'name': 'Tonemapping',
@@ -722,31 +824,6 @@ render_setting_categories = [
                 'ui_name': 'OpenGL interoperability (Needs render restart)',
                 'help': '',
                 'defaultValue': False,
-            },
-            {
-                'name': 'viewportUpscaling',
-                'ui_name': 'Viewport Upscaling',
-                'help': '',
-                'defaultValue': False,
-                'houdini': {
-                    'hidewhen': ['denoising:enable == 0', lambda settings: hidewhen_render_quality('<', 'High', settings)]
-                }
-            },
-            {
-                'name': 'viewportUpscalingQuality',
-                'ui_name': 'Viewport Upscaling Quality',
-                'help': '',
-                'defaultValue': 'Ultra Performance',
-                'values': [
-                    SettingValue('Ultra Quality'),
-                    SettingValue('Quality'),
-                    SettingValue('Balance'),
-                    SettingValue('Performance'),
-                    SettingValue('Ultra Performance'),
-                ],
-                'houdini': {
-                    'hidewhen': ['rpr:viewportUpscaling == 0', 'denoising:enable == 0', lambda settings: hidewhen_render_quality('<', 'High', settings), lambda settings: hidewhen_render_quality('==', 'Northstar', settings)]
-                }
             }
         ]
     }
@@ -1064,7 +1141,7 @@ void HdRprConfig::Set{name_title}({c_type} {c_name}) {{
     if generate_ds_files:
         production_render_setting_categories = [category for category in render_setting_categories if category['name'] != 'ViewportSettings']
         generate_houdini_ds(install_path, 'Global', production_render_setting_categories)
-        viewport_render_setting_categories = [category for category in render_setting_categories if category['name'] in ('RenderQuality', 'Sampling', 'AdaptiveSampling', 'Denoise', 'ViewportSettings')]
+        viewport_render_setting_categories = [category for category in render_setting_categories if category['name'] in ('RenderQuality', 'Sampling', 'AdaptiveSampling', 'Hybrid', 'ViewportSettings')]
         for category in (cat for cat in viewport_render_setting_categories if cat['name'] == 'RenderQuality'):
             for setting in (s for s in category['settings'] if s['name'] == 'core:renderQuality'):
                 setting['values'] = [SettingValue(value.get_key(), value.get_key() if value.get_key() != 'Northstar' else 'Full') for value in setting['values']]

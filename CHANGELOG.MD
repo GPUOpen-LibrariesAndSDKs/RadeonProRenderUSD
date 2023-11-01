@@ -1,5 +1,34 @@
 # Change Log
 
+## Version 2.4
+### New Features:
+- The RPR Final mode now uses AMD’s HIP for running on the GPU. This increases download package size for now, but allows faster first renders as the kernels are pre-compiled.
+- The RPR Interactive mode has been improved with the following developments:
+ - Displacement support;
+ - Better MaterialX support;
+ - Lookup UV nodes support;
+ - Support for GPUs with less than 8 GB VRAM;
+ - Support for GPUs without hardware-accelerated ray tracing.
+- The Interactive mode settings to use RESTIR-based direct lighting and FSR2 upscaling have been added. These by default should give excellent interactivity when rendering in the viewport.
+- Support for Houdini .rat textures has been added.
+- Support for USD version 23.02 has been added.
+
+### Bugs Fixed:
+- A bug on Nvidia caused by a driver update has been fixed. (We now use the HIP feature to compile kernels to CUDA, avoiding buggy OpenCL implementations).
+- The AOV “scTransparentBackground” has been renamed to “ColorWithTransparency” for clarity.
+- Artifacts with the Interactive mode (Hybrid Pro) using MaterialX have been fixed.
+- Tiled rendering with orthographic cameras has been fixed.
+- Dome light rotations were incorrect — fixed.
+- Incorrect renders with per-face materials have been fixed.
+- More UI and settings have been added for Toon Materials.
+- The UV AOV was showing incorrectly in the Houdini MPlay viewer — fixed.
+- IES lights now correctly use the Z direction. They were using the Y direction.
+- Default material can now be applied to points for rendering. Sphere points now look more rounded with smooth normals.
+- Support for light linking of Toon shaders has been added.
+- OpenVDB volumes have been fixed to work again.
+- A random seed setting has been added to jitter the noise in a render.
+
+
 ## Version 2.3
 ### New Features:
 - Support for Houdini 19.5 has been added.

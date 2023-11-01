@@ -75,6 +75,7 @@ foreach(python_major_minor "3;9" "3;7" "2;7")
         Houdini_Boostpython_LIB
         "libhboost_python-mt${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
         "libhboost_python${py_major}${py_minor}-mt-x64${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
+        "libhboost_python${py_major}${py_minor}-mt-a64${CMAKE_SHARED_LIBRARY_SUFFIX}" # MacOS ARM
         "hboost_python-mt.lib" # Windows (import lib)
         "hboost_python${py_major}${py_minor}-mt-x64.lib" # Windows Houdini 18.5
         PATHS ${HOUDINI_ROOT}

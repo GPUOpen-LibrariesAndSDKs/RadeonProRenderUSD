@@ -24,6 +24,8 @@ limitations under the License.
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+class UberNodeExtension;
+
 /// \class RprUsd_BaseRuntimeNode
 ///
 /// The node output of which is always rpr::MaterialNode*.
@@ -33,7 +35,7 @@ public:
         rpr::MaterialNodeType type,
         RprUsd_MaterialBuilderContext* ctx);
 
-    ~RprUsd_BaseRuntimeNode() override = default;
+    ~RprUsd_BaseRuntimeNode() override;
 
     bool SetInput(
         TfToken const& inputId,
@@ -48,6 +50,7 @@ protected:
     rpr::MaterialNodeType m_type;
     RprUsd_MaterialBuilderContext* m_ctx;
     std::shared_ptr<rpr::MaterialNode> m_rprNode;
+    std::unique_ptr<UberNodeExtension> m_extNode;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
