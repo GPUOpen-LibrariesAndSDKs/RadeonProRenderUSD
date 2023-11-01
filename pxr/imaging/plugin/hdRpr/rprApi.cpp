@@ -3707,7 +3707,13 @@ private:
     void AddDefaultLight() {
         if (!m_defaultLightObject) {
             const GfVec3f k_defaultLightColor(0.5f, 0.5f, 0.5f);
-            m_defaultLightObject = CreateEnvironmentLight(k_defaultLightColor, 1.f, HdRprApi::BackgroundOverride{});
+            PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
+            auto imagesPath = PlugFindPluginResource(plugin, "images", false);
+            auto path = imagesPath + "/Default.hdr";
+            m_defaultLightObject = CreateEnvironmentLight(path, 1.f, HdRprApi::BackgroundOverride{true, {0.003f, 0.003f, 0.003f}});
+            SetTransform(
+                m_defaultLightObject->light.get(), 
+                GfMatrix4f(1.0).SetRotate(GfRotation({1.0f, 0.0f, 0.0f}, 90.0)) * GfMatrix4f(1.0).SetRotate(GfRotation({0.0f, 0.0f, 1.0f}, 180.0)));
 
             if (RprUsdIsLeakCheckEnabled()) {
                 m_defaultLightObject->light->SetName("defaultLight");

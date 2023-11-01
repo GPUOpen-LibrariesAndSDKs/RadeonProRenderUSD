@@ -144,6 +144,7 @@ pxr_plugin(hdRpr
     RESOURCE_FILES
         plugInfo.json
         ${RESTART_REQUIRED_RESOURCE_FILE}
+        images/Default.hdr
         ${RIF_MODEL_RESOURCE_FILES}
 
     CPPFILES
