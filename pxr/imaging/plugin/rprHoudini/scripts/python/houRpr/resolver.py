@@ -3,6 +3,7 @@ from time import sleep
 
 import hou
 import os
+import json
 
 usd_plugin = Plug.Registry().GetPluginWithName('RenderStudioResolver')
 if not usd_plugin.isLoaded:
@@ -13,8 +14,13 @@ from rs import RenderStudioKit
 shared_workspace_enabled = False
 shared_workspace_enable_expected = False
 
+RESOLVER_SETTINGS_PATH = usd_plugin.MakeResourcePath("settings")
+WORKSPACE_CONFIG_PATH = os.path.join(RESOLVER_SETTINGS_PATH, "workspace_config.json")
+if not os.path.isdir(RESOLVER_SETTINGS_PATH):
+    os.makedirs(RESOLVER_SETTINGS_PATH, exist_ok=True)
 
-def workspace_enabled_callback(notice, sender):
+
+def _workspace_enabled_callback(notice, sender):
     global shared_workspace_enabled
     global shared_workspace_enable_expected
     shared_workspace_enabled = notice.IsConnected()
@@ -24,15 +30,20 @@ def workspace_enabled_callback(notice, sender):
     shared_workspace_enable_expected = shared_workspace_enabled
 
 
-def workspace_state_callback(notice, sender):
-    hou.ui.displayMessage(str(notice.GetState()),
-                          severity=hou.severityType.Warning)
+listener_1 = Tf.Notice.RegisterGlobally("RenderStudioNotice::WorkspaceConnectionChanged", _workspace_enabled_callback)
 
 
-listener_1 = Tf.Notice.RegisterGlobally("RenderStudioNotice::WorkspaceConnectionChanged", workspace_enabled_callback)
+def _get_saved_config():
+    if os.path.exists(WORKSPACE_CONFIG_PATH):
+        with open(WORKSPACE_CONFIG_PATH) as f:
+            return json.load(f)
+    return {"url": RenderStudioKit.GetWorkspaceUrl(), "workdir": RenderStudioKit.GetWorkspacePath().replace('\\', '/')}
 
 
-# listener_3 = Tf.Notice.RegisterGlobally("RenderStudioNotice::WorkspaceState", workspace_state_callback)
+def _save_config(config):
+    with open(WORKSPACE_CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=1)
+
 
 def get_shared_workspace_menu():
     global shared_workspace_enabled
@@ -47,9 +58,13 @@ def toggle_shared_workspace(command):
     global shared_workspace_enable_expected
 
     if command == "enable":
+        current_workspace_url = RenderStudioKit.GetWorkspaceUrl()
+        config = _get_saved_config()
+        if current_workspace_url == "":
+            current_workspace_url = config["url"]
         code, server_url = hou.ui.readInput("Storage server URL", buttons=('OK',),
                                             severity=hou.severityType.Message, help=None, title=None,
-                                            initial_contents=RenderStudioKit.GetWorkspaceUrl())
+                                            initial_contents=current_workspace_url)
         if code == -1 or server_url == "":
             return
         if not server_url.startswith("http"):
@@ -70,6 +85,9 @@ def toggle_shared_workspace(command):
                         break
                 if not shared_workspace_enabled:
                     toggle_shared_workspace("disable")
+                else:
+                    config["url"] = server_url
+                    _save_config(config)
         except:
             toggle_shared_workspace("disable")
             raise Exception('Shared workspace server is unavailable')
@@ -83,13 +101,16 @@ def toggle_shared_workspace(command):
 
 
 def set_workspace_directory():
+    config = _get_saved_config()
     directory = hou.ui.selectFile(
         title='Render Studio Workspace Directory',
-        start_directory=RenderStudioKit.GetWorkspacePath().replace('\\', '/'),
+        start_directory=config["workdir"],
         file_type=hou.fileType.Directory,
         chooser_mode=hou.fileChooserMode.Write)
     if directory:
         RenderStudioKit.SetWorkspacePath(hou.expandString(directory))
+        config["workdir"] = directory
+        _save_config(config)
 
 
 def get_workspace_directory():
