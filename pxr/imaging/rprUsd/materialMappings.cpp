@@ -43,6 +43,7 @@ bool ToRpr(TfToken const& id, rpr::MaterialNodeType* out, bool pedantic) {
         {RprUsdMaterialNodeTypeTokens->checker_texture, RPR_MATERIAL_NODE_CHECKER_TEXTURE},
         {RprUsdMaterialNodeTypeTokens->constant_texture, RPR_MATERIAL_NODE_CONSTANT_TEXTURE},
         {RprUsdMaterialNodeTypeTokens->input_lookup, RPR_MATERIAL_NODE_INPUT_LOOKUP},
+        {RprUsdMaterialNodeTypeTokens->primvar_lookup, RPR_MATERIAL_NODE_PRIMVAR_LOOKUP},
         {RprUsdMaterialNodeTypeTokens->blend_value, RPR_MATERIAL_NODE_BLEND_VALUE},
         {RprUsdMaterialNodeTypeTokens->passthrough, RPR_MATERIAL_NODE_PASSTHROUGH},
         {RprUsdMaterialNodeTypeTokens->orennayar, RPR_MATERIAL_NODE_ORENNAYAR},
@@ -207,6 +208,8 @@ bool ToRpr(TfToken const& id, uint32_t* out, bool pedantic) {
         {RprUsdMaterialInputModeTokens->cylindical, RPR_MATERIAL_NODE_UVTYPE_CYLINDICAL},
         {RprUsdMaterialInputModeTokens->spherical, RPR_MATERIAL_NODE_UVTYPE_SPHERICAL},
         {RprUsdMaterialInputModeTokens->project, RPR_MATERIAL_NODE_UVTYPE_PROJECT},
+        {RprUsdMaterialInputModeTokens->displayColor, 0},
+        {RprUsdMaterialInputModeTokens->displayOpacity, 1},
     };
 
     auto it = s_mapping.find(id);

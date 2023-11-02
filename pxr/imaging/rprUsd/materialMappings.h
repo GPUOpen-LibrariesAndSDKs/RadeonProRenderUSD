@@ -141,6 +141,7 @@ bool ToRpr(TfToken const& id, uint32_t* out, bool pedantic = true);
     (checker_texture) \
     (constant_texture) \
     (input_lookup) \
+    (primvar_lookup) \
     (blend_value) \
     (passthrough) \
     (orennayar) \

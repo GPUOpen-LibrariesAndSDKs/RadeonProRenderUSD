@@ -88,6 +88,11 @@ private:
     bool m_authoredColors = false;
     bool m_colorsSet = false;
 
+    VtArray<VtFloatArray> m_opacitySamples;
+    HdInterpolation m_opacityInterpolation;
+    bool m_authoredOpacity = false;
+    bool m_opacitySet = false;
+
     VtArray<VtVec2fArray> m_uvSamples;
     VtIntArray m_uvIndices;
 

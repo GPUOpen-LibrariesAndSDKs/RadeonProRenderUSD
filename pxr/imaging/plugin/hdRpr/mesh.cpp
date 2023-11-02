@@ -86,9 +86,9 @@ RprUsdMaterial const* HdRprMesh::GetFallbackMaterial(
     if (!m_fallbackMaterial) {
 
         // Means that vertex color primvar correctly set on mesh. Only Northstar supports this feature
-        if (m_colorsSet)
+        if (m_colorsSet || m_opacitySet)
         {
-            m_fallbackMaterial = rprApi->CreatePrimvarColorLookupMaterial();
+            m_fallbackMaterial = rprApi->CreatePrimvarLookupMaterial(m_colorsSet, m_opacitySet);
             rprApi->SetName(m_fallbackMaterial, GetId().GetText());
             return m_fallbackMaterial;
         }
@@ -360,6 +360,17 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
         m_colorsSet = false;
     }
 
+    if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->displayOpacity)) {
+        HdRprFillPrimvarDescsPerInterpolation(sceneDelegate, id, &primvarDescsPerInterpolation);
+        m_authoredOpacity = HdRprSamplePrimvar(id, HdTokens->displayOpacity, sceneDelegate, primvarDescsPerInterpolation, m_numGeometrySamples, &m_opacitySamples, &m_opacityInterpolation);
+        if (!m_authoredOpacity) {
+            m_opacitySamples.clear();
+        }
+
+        newMesh = true;
+        m_opacitySet = false;
+    }
+
     if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
         UpdateMaterialId(sceneDelegate, rprRenderParam);
     }
@@ -491,6 +502,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             if (m_pointSamples.size() > 0) {
                 if (auto rprMesh = rprApi->CreateMesh(m_pointSamples, m_faceVertexIndices, m_normalSamples, m_normalIndices, m_uvSamples, m_uvIndices, m_faceVertexCounts, m_topology.GetOrientation())) {
                     m_colorsSet = rprApi->SetMeshVertexColor(rprMesh, m_colorSamples, m_colorInterpolation);
+                    m_opacitySet = rprApi->SetMeshVertexOpacity(rprMesh, m_opacitySamples, m_opacityInterpolation);
                     m_rprMeshes.push_back(rprMesh);
                 }
             }
@@ -520,6 +532,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                 VtArray<VtVec3fArray> subsetPointSamples(m_pointSamples.size());
                 VtArray<VtVec3fArray> subsetNormalSamples(m_normalSamples.size());
                 VtArray<VtVec3fArray> subsetColorSamples(m_colorSamples.size());
+                VtArray<VtFloatArray> subsetOpacitySamples(m_opacitySamples.size());
                 VtArray<VtVec2fArray> subsetUvSamples(m_uvSamples.size());
                 VtIntArray subsetNormalIndices;
                 VtIntArray subsetUvIndices;
@@ -614,11 +627,24 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                                 }
                             }
                         }
+
+                        if (!m_opacitySamples.empty()) {
+                            if (newPoint) {
+                                for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
+                                    if (sampleIndex >= m_opacitySamples.size() || pointIndex >= m_opacitySamples[sampleIndex].size()) {
+                                        TF_WARN("Failed verification sampleIndex >= m_opacitySamples.size() || pointIndex >= m_opacitySamples[sampleIndex].size()");
+                                        continue;
+                                    }
+                                    subsetOpacitySamples[sampleIndex].push_back(m_opacitySamples[sampleIndex][pointIndex]);
+                                }
+                            }
+                        }
                     }
                 }
 
                 if (auto rprMesh = rprApi->CreateMesh(subsetPointSamples, subsetIndexes, subsetNormalSamples, subsetNormalIndices, subsetUvSamples, subsetUvIndices, subsetVertexPerFace, m_topology.GetOrientation())) {
                     m_colorsSet = rprApi->SetMeshVertexColor(rprMesh, subsetColorSamples, m_colorInterpolation);
+                    m_opacitySet = rprApi->SetMeshVertexOpacity(rprMesh, subsetOpacitySamples, m_opacityInterpolation);
                     m_rprMeshes.push_back(rprMesh);
                     ++it;
                 } else {
