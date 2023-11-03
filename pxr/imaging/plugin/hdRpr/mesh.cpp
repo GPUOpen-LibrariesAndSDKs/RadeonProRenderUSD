@@ -851,6 +851,17 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
             }
         }
 
+        if (!newMesh && (*dirtyBits & HdChangeTracker::DirtyMaterialId)) {
+            for (auto& rprMesh : m_rprMeshes) {
+                if (!m_colorSamples.empty()) {
+                    m_colorsSet = rprApi->SetMeshVertexColor(rprMesh, m_colorSamples, m_colorInterpolation);
+                }
+                if (!m_opacitySamples.empty()) {
+                    m_opacitySet = rprApi->SetMeshVertexOpacity(rprMesh, m_opacitySamples, m_opacityInterpolation);
+                }
+            }
+        }
+
         if (updateTransform) {
             for (auto& rprMesh : m_rprMeshes) {
                 rprApi->SetTransform(rprMesh, m_transformSamples.count, m_transformSamples.times.data(), m_transformSamples.values.data());
