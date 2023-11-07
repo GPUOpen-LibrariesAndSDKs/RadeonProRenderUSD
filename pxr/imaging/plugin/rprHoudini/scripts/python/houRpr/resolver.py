@@ -120,4 +120,4 @@ def get_workspace_directory():
 
 
 def open_workspace_directory():
-    os.system("explorer " + RenderStudioKit.GetWorkspacePath())
+    os.system("explorer " + os.path.normpath(RenderStudioKit.GetWorkspacePath()))
