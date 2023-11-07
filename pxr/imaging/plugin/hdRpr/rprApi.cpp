@@ -2070,6 +2070,11 @@ public:
 #endif // RPR_EXR_EXPORT_ENABLED
             }
         }
+        if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
+            int enableNormalization = preferences.GetCoreLegacyToon() ? 0 : 1;
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_NORMALIZE_LIGHT_INTENSITY_ENABLED, enableNormalization), "Failed to set toon mode");
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+        }
     }
 
     void UpdateHybridSettings(HdRprConfig const& preferences, bool force) {
