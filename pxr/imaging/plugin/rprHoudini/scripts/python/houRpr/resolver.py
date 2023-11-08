@@ -78,7 +78,7 @@ def toggle_shared_workspace(command):
             shared_workspace_enable_expected = True
             with hou.InterruptableOperation("Connecting to shared workspace", open_interrupt_dialog=True) as op:
                 RenderStudioKit.SetWorkspaceUrl(server_url)
-                RenderStudioKit.SharedWorkspaceConnect()
+                RenderStudioKit.SharedWorkspaceConnect(RenderStudioKit.Role.Client)
                 # wait 30 seconds
                 for i in range(300):
                     sleep(0.1)
