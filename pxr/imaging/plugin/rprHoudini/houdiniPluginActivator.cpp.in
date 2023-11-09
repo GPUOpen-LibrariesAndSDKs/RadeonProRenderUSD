@@ -286,16 +286,14 @@ std::vector<fs::path> GetLopScriptsDir(const char* hver) {
     std::string searchPattern = "Houdini " + std::string(hver);
 #endif
 #if defined(__APPLE__) || defined(_WIN32) || defined(_WIN64)
-    std::vector<fs::path> subdirs;
     std::error_code ec;
     for (auto& p : fs::directory_iterator(searchPath, fs::directory_options::skip_permission_denied, ec)) {
         if (p.path().stem().string() == searchPattern) {
-            subdirs.push_back(p.path());
+            auto scriptsPath = p.path() / "houdini" / "scripts" / "lop";
+            if(fs::exists(scriptsPath)){
+                foundPaths.push_back(scriptsPath);
+            }
         }
-    }
-    foundPaths.reserve(subdirs.size());
-    for(const auto& subdir : subdirs){
-        foundPaths.push_back(subdir / "houdini" / "scripts" / "lop");
     }
 #endif
     if (!foundPaths.empty()) {
