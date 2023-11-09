@@ -377,6 +377,32 @@ int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<c
             std::cout << "Cannot copy render settings update script: " << ec.message() << std::endl;
             std::cout << "You might need root/administrator rights to install it" << std::endl;
         }
+
+#if defined RESOLVER_SUPPORT
+        auto houdiniBinDir = scriptsDir / ".." / ".." / ".." / "bin";
+        auto serverDir = fs::path(package) / "RenderStudioServer";
+        auto usdPluginDir = fs::path(package) / "plugin";
+#if defined(_WIN32) || defined(_WIN64)
+        auto serverScriptPath = serverDir / "Run.bat";
+        std::ofstream serverScript(serverScriptPath);
+        if (!serverScript.is_open()) {
+            std::cout << "Failed to open output file: " << serverScriptPath << std::endl;
+            return EXIT_FAILURE;
+        }
+        serverScript << "@echo off" << "\n";
+        serverScript << "setlocal" << "\n";
+        serverScript << R"(set SCRIPT_DIR="%~dp0")" << "\n";
+        serverScript << "set USD_DIR=%~dp0.." << "\n";
+        serverScript << R"(set USD_PATH=%USD_DIR%\lib;;%USD_DIR%\plugin\usd)" << "\n";
+        serverScript << "set PATH=%PATH%;%USD_PATH%;" << houdiniBinDir.string() << "\n";
+        serverScript << "set PXR_PLUGINPATH_NAME=" << usdPluginDir.string() << "\n";
+        serverScript << R"("%~dp0\RenderStudioServer.exe" %*)" << "\n";
+        if (serverScript.fail()) {
+            std::cout << "Failed to write output file: " << serverScriptPath <<", Render Studio server launch is unavailable" << '\n' << std::endl;
+        }
+#endif
+#endif
+
     } else {
         std::cout << "Can not determine scripts directory. Please check your environment. Render settings update script not installed" << std::endl;
     }

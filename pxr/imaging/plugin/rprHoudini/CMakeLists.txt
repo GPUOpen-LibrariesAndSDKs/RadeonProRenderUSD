@@ -104,6 +104,7 @@ if(RESOLVER_SUPPORT)
             ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_exportToRenderStudio.hda
         DESTINATION
             houdini/otls)
+    target_compile_definitions(activateHoudiniPlugin PRIVATE RESOLVER_SUPPORT)
 else ()
     install(
         FILES
