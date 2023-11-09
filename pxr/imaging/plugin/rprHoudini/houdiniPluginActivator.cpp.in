@@ -271,9 +271,13 @@ fs::path GetHoudiniUserPrefDir(const char* hver) {
     return {};
 }
 
-fs::path GetLopScriptsDir(const char* hver) {
+std::vector<fs::path> GetLopScriptsDir(const char* hver) {
+    std::vector<fs::path> foundPaths;
 #if defined(__linux__)
-    auto scriptsPath = fs::path("/opt/hfs" + std::string(hver) + "/houdini/scripts/lop");
+    auto linuxScriptsPath = fs::path("/opt/hfs" + std::string(hver) + "/houdini/scripts/lop");
+    if (exists(linuxScriptsPath)) {
+        foundPaths.push_back(linuxScriptsPath);
+    }
 #elif defined(__APPLE__)
     auto searchPath = fs::path("/Applications/Houdini");
     std::string searchPattern = "Houdini" + std::string(hver);
@@ -289,24 +293,50 @@ fs::path GetLopScriptsDir(const char* hver) {
             subdirs.push_back(p.path());
         }
     }
-    if (subdirs.size() != 1) {
-        return {};
+    foundPaths.reserve(subdirs.size());
+    for(const auto& subdir : subdirs){
+        foundPaths.push_back(subdir / "houdini" / "scripts" / "lop");
     }
-    auto scriptsPath = subdirs[0] / "houdini" / "scripts" / "lop";
 #endif
-    if (exists(scriptsPath)) {
-        return scriptsPath;
+    if (!foundPaths.empty()) {
+        return foundPaths;
     }
 
     std::cout << "Can not determine houdini installation. To copy render settings update script enter the path to houdini directory" << std::endl << ">";
     std::string userInput;
     std::getline(std::cin, userInput);
-    scriptsPath = fs::path(userInput) / "houdini" / "scripts" / "lop";
+    auto scriptsPath = fs::path(userInput) / "houdini" / "scripts" / "lop";
     if (!exists(scriptsPath)) {
         std::cout << "Path not found: " << scriptsPath << std::endl;
         return {};
     }
-    return scriptsPath;
+    foundPaths.push_back(scriptsPath);
+    return foundPaths;
+}
+
+void updateRenderStudioServerScript(const fs::path& houdiniScriptsDir, const fs::path& packageDir){
+    auto houdiniBinDir = houdiniScriptsDir / ".." / ".." / ".." / "bin";
+    auto serverDir = packageDir / "RenderStudioServer";
+    auto usdPluginDir = packageDir / "plugin";
+#if defined(_WIN32) || defined(_WIN64)
+    auto serverScriptPath = serverDir / "Run.bat";
+    std::ofstream serverScript(serverScriptPath);
+    if (!serverScript.is_open()) {
+        std::cout << "Failed to open output file: " << serverScriptPath << ", Render Studio server launch is unavailable" << "\n" << std::endl;
+        return;
+    }
+    serverScript << "@echo off" << "\n";
+    serverScript << "setlocal" << "\n";
+    serverScript << R"(set SCRIPT_DIR="%~dp0")" << "\n";
+    serverScript << "set USD_DIR=%~dp0.." << "\n";
+    serverScript << R"(set USD_PATH=%USD_DIR%\lib;;%USD_DIR%\plugin\usd)" << "\n";
+    serverScript << "set PATH=%PATH%;%USD_PATH%;" << houdiniBinDir.string() << "\n";
+    serverScript << "set PXR_PLUGINPATH_NAME=" << usdPluginDir.string() << "\n";
+    serverScript << R"("%~dp0\RenderStudioServer.exe" %*)" << "\n";
+    if (serverScript.fail()) {
+        std::cout << "Failed to write output file: " << serverScriptPath <<", Render Studio server launch is unavailable" << "\n" << std::endl;
+    }
+#endif
 }
 
 int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<const char*, const char*>> const& env, const char* version=nullptr) {
@@ -367,40 +397,21 @@ int ActivateHoudiniPlugin(std::string const& pluginName, std::vector<std::pair<c
         return EXIT_FAILURE;
     }
 
-    auto scriptsDir = GetLopScriptsDir("@HOUDINI_MAJOR_MINOR_VERSION@");
-    if (!scriptsDir.empty()) {
-        std::error_code ec;
-        auto src = fs::path(package) / "plugin" / "usd" / "hdRpr" / "resources" / "scripts" / "rendersettings_OnLoaded.py";
-        auto dest = scriptsDir / "rendersettings_OnLoaded.py";
-        fs::copy(src, dest, fs::copy_options::overwrite_existing, ec);
-        if (ec) {
-            std::cout << "Cannot copy render settings update script: " << ec.message() << std::endl;
-            std::cout << "You might need root/administrator rights to install it" << std::endl;
+    auto scriptsDirs = GetLopScriptsDir("@HOUDINI_MAJOR_MINOR_VERSION@");
+    if (!scriptsDirs.empty()) {
+        for(const auto& scriptsDir : scriptsDirs){
+            std::error_code ec;
+            auto src = fs::path(package) / "plugin" / "usd" / "hdRpr" / "resources" / "scripts" / "rendersettings_OnLoaded.py";
+            auto dest = scriptsDir / "rendersettings_OnLoaded.py";
+            fs::copy(src, dest, fs::copy_options::overwrite_existing, ec);
+            if (ec) {
+                std::cout << "Cannot copy render settings update script to " << dest.string() << ": " << ec.message() << std::endl;
+                std::cout << "You might need root/administrator rights to install it" << std::endl;
+            }
         }
 
 #if defined RESOLVER_SUPPORT
-        auto houdiniBinDir = scriptsDir / ".." / ".." / ".." / "bin";
-        auto serverDir = fs::path(package) / "RenderStudioServer";
-        auto usdPluginDir = fs::path(package) / "plugin";
-#if defined(_WIN32) || defined(_WIN64)
-        auto serverScriptPath = serverDir / "Run.bat";
-        std::ofstream serverScript(serverScriptPath);
-        if (!serverScript.is_open()) {
-            std::cout << "Failed to open output file: " << serverScriptPath << std::endl;
-            return EXIT_FAILURE;
-        }
-        serverScript << "@echo off" << "\n";
-        serverScript << "setlocal" << "\n";
-        serverScript << R"(set SCRIPT_DIR="%~dp0")" << "\n";
-        serverScript << "set USD_DIR=%~dp0.." << "\n";
-        serverScript << R"(set USD_PATH=%USD_DIR%\lib;;%USD_DIR%\plugin\usd)" << "\n";
-        serverScript << "set PATH=%PATH%;%USD_PATH%;" << houdiniBinDir.string() << "\n";
-        serverScript << "set PXR_PLUGINPATH_NAME=" << usdPluginDir.string() << "\n";
-        serverScript << R"("%~dp0\RenderStudioServer.exe" %*)" << "\n";
-        if (serverScript.fail()) {
-            std::cout << "Failed to write output file: " << serverScriptPath <<", Render Studio server launch is unavailable" << '\n' << std::endl;
-        }
-#endif
+        updateRenderStudioServerScript(scriptsDirs[0], fs::path(package));
 #endif
 
     } else {
