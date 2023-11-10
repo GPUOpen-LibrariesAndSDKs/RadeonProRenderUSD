@@ -38,7 +38,7 @@ def _workspace_enabled_callback(notice, sender):
     shared_workspace_enabled = notice.IsConnected()
     if shared_workspace_enable_expected and not shared_workspace_enabled:
         shared_workspace_enable_expected = False
-        raise Exception('Shared workspace server is unavailable')
+        hou.ui.displayMessage("Connection to server is unexpectedly closed", severity=hou.severityType.Error)
     shared_workspace_enable_expected = shared_workspace_enabled
 
 
@@ -85,7 +85,8 @@ def toggle_shared_workspace(command):
                     # if connected or connection error - break
                     if shared_workspace_enabled or not shared_workspace_enable_expected:
                         break
-                if not shared_workspace_enabled:
+                if not shared_workspace_enabled and shared_workspace_enable_expected:
+                    hou.ui.displayMessage("Cannot connect to server, timeout reached. ", severity=hou.severityType.Error)
                     toggle_shared_workspace("disable")
                 else:
                     config["url"] = server_url
