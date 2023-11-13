@@ -620,7 +620,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                             if (newPoint) {
                                 for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
                                     if (sampleIndex >= m_colorSamples.size() || pointIndex >= m_colorSamples[sampleIndex].size()) {
-                                        TF_WARN("Failed verification sampleIndex >= m_colorSamples.size() || pointIndex >= m_colorSamples[sampleIndex].size()");
+                                        TF_WARN("Vertex index does not match displayColor primvar size");
                                         continue;
                                     }
                                     subsetColorSamples[sampleIndex].push_back(m_colorSamples[sampleIndex][pointIndex]);
@@ -632,7 +632,7 @@ void HdRprMesh::Sync(HdSceneDelegate* sceneDelegate,
                             if (newPoint) {
                                 for (int sampleIndex = 0; sampleIndex < m_uvSamples.size(); ++sampleIndex) {
                                     if (sampleIndex >= m_opacitySamples.size() || pointIndex >= m_opacitySamples[sampleIndex].size()) {
-                                        TF_WARN("Failed verification sampleIndex >= m_opacitySamples.size() || pointIndex >= m_opacitySamples[sampleIndex].size()");
+                                        TF_WARN("Vertex index does not match displayOpacity primvar size");
                                         continue;
                                     }
                                     subsetOpacitySamples[sampleIndex].push_back(m_opacitySamples[sampleIndex][pointIndex]);
