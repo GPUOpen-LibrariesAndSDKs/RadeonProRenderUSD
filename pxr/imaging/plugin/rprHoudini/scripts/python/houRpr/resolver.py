@@ -44,7 +44,7 @@ def _workspace_enabled_callback(notice, sender):
 
 listener_1 = Tf.Notice.RegisterGlobally("RenderStudioNotice::WorkspaceConnectionChanged", _workspace_enabled_callback)
 
-RenderStudioKit.SetWorkspacePath(hou.expandString(_get_saved_config()["workdir"]))
+# RenderStudioKit.SetWorkspacePath(hou.expandString(_get_saved_config()["workdir"]))
 
 
 def get_shared_workspace_menu():
@@ -103,6 +103,7 @@ def toggle_shared_workspace(command):
             raise Exception('Error on shared workspace disconnecting')
 
 
+# unused for now because Render Studio can work only with default workspace
 def set_workspace_directory():
     config = _get_saved_config()
     directory = hou.ui.selectFile(

@@ -61,11 +61,13 @@
                 </scriptMenuStripDynamic>
 
                 <separatorItem/>
-
+                <!--TODO enable after updates on RenderStudio Side-->
+                <!--
                 <scriptItem id="renderstudio_shared_workspace_directory">
                     <label>Set Workspace Directory</label>
                     <scriptCode><![CDATA[__import__('houRpr.resolver').resolver.set_workspace_directory()]]></scriptCode>
                 </scriptItem>
+                -->
 
                 <scriptItem id="renderstudio_open_workspace_directory">
                     <label>Open Workspace Directory</label>
