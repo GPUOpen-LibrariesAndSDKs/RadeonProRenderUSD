@@ -86,6 +86,7 @@ foreach(python_major_minor "3;9" "3;7" "2;7")
         NO_DEFAULT_PATH)
 
     set(Houdini_Python_FOUND TRUE)
+    set(Houdini_Python_VERSION ${py_major}.${py_minor})
     foreach(var ${Houdini_Python_VARS})
         if(NOT ${var})
             set(Houdini_Python_FOUND FALSE)
