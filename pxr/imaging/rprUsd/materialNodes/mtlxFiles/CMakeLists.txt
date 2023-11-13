@@ -14,6 +14,7 @@ set(MTLX_FILES
     Utilities/rpr_hsv_to_rgb.mtlx
 
     Utilities/rpr_input_lookup.mtlx
+    Utilities/rpr_primvar_lookup.mtlx
 
     Utilities/rpr_uv_triplanar.mtlx
     Utilities/rpr_uv_procedural.mtlx
