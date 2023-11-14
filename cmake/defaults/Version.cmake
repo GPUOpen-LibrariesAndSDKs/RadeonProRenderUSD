@@ -22,6 +22,6 @@
 # language governing permissions and limitations under the Apache License.
 #
 # Versioning information
-set(HD_RPR_MAJOR_VERSION "2")
-set(HD_RPR_MINOR_VERSION "5")
-set(HD_RPR_PATCH_VERSION "2")
+set(HD_RPR_MAJOR_VERSION "3")
+set(HD_RPR_MINOR_VERSION "0")
+set(HD_RPR_PATCH_VERSION "0")
