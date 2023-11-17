@@ -58,6 +58,7 @@ using json = nlohmann::json;
 #include "pxr/base/tf/envSetting.h"
 
 #include "notify/message.h"
+#include "resourceWatcher.h"
 
 #include <RadeonProRender_MaterialX.h>
 #include <RadeonProRender_Baikal.h>
@@ -3531,6 +3532,9 @@ Don't show this message again?
     }
 
     void Render(HdRprRenderThread* renderThread) {
+#ifdef BUILD_AS_HOUDINI_PLUGIN
+        NotifyRenderStarted();
+#endif
         updateSyncTime();
         m_startTime = std::chrono::high_resolution_clock::now();
         RenderFrame(renderThread);

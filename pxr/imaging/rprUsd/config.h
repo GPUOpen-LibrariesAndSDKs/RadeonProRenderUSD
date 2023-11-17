@@ -51,6 +51,11 @@ public:
     std::string GetPrecompiledKernelDir() const;
 
     RPRUSD_API
+    bool GetMemManagement() const;
+    RPRUSD_API
+    void SetMemManagement(bool);
+
+    RPRUSD_API
     std::string GetDeviceConfigurationFilepath() const;
 
 private:

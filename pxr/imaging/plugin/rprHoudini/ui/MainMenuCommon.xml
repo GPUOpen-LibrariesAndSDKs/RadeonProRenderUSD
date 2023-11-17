@@ -50,6 +50,21 @@
                 <scriptCode><![CDATA[__import__('houRpr.materialLibrary').materialLibrary.import_material()]]></scriptCode>
             </scriptItem>
 
+            <scriptToggleItem id="myvar_toggle_script">
+                <label>Release viewport when another rendering active</label>
+                <variableName>RPR_MEM_MANAGEMENT</variableName>
+                <scriptCode><![CDATA[
+hou.hscript("""
+if( $RPR_MEM_MANAGEMENT ) then
+set -g RPR_MEM_MANAGEMENT = 0;
+else
+set -g RPR_MEM_MANAGEMENT = 1;
+endif
+        """)
+hou.hscript('varchange RPR_MEM_MANAGEMENT')
+]]></scriptCode>
+        </scriptToggleItem>
+
         </subMenu>
     </menuBar>
 </mainMenu>
