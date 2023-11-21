@@ -43,7 +43,7 @@ public:
     HdFormat GetFormat() const { return m_format; }
     HdRprAovDescriptor const& GetDesc() const { return m_aovDescriptor; }
 
-    HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); };
+    HdRprApiFramebuffer* GetAovFb() { return m_aov.get(); }
     HdRprApiFramebuffer* GetResolvedFb();
 
     virtual bool GetDataImpl(void* dstBuffer, size_t dstBufferSize);
@@ -51,16 +51,17 @@ protected:
     HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
         : m_aovDescriptor(aovDescriptor), m_format(format) {};
 
-    virtual void OnFormatChange(rif::Context* rifContext);
-    virtual void OnSizeChange(rif::Context* rifContext);
+    //virtual void OnFormatChange(rif::Context* rifContext);
+    //virtual void OnSizeChange();
 protected:
     HdRprAovDescriptor const& m_aovDescriptor;
     HdFormat m_format;
 
     std::unique_ptr<HdRprApiFramebuffer> m_aov;
     std::unique_ptr<HdRprApiFramebuffer> m_resolved;
-    std::unique_ptr<rif::Filter> m_filter;
+    bool m_filterEnabled = false;
     std::vector<char> m_tmpBuffer;
+    std::vector<char> m_outputBuffer;
 
     enum ChangeTracker {
         Clean = 0,
@@ -116,8 +117,8 @@ public:
     void SetGamma(GammaParams const& params);
 
 protected:
-    void OnFormatChange(rif::Context* rifContext) override;
-    void OnSizeChange(rif::Context* rifContext) override;
+    void OnFormatChange(rif::Context* rifContext);// override;
+    void OnSizeChange();// override;
 private:
     enum Filter {
         kFilterNone = 0,
@@ -138,6 +139,8 @@ private:
     bool CanComposeAlpha();
 
 private:
+    std::unique_ptr<rif::Filter> m_filter;
+
     std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
 
@@ -159,9 +162,11 @@ public:
     HdRprApiNormalAov(int width, int height, HdFormat format,
         rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     ~HdRprApiNormalAov() override = default;
+
+    void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+    void Resolve() override;
 protected:
-    void OnFormatChange(rif::Context* rifContext) override;
-    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
+    void OnFormatChange(rif::Context* rifContext);// override;
 private:
     std::vector<float> m_cpuFilterBuffer;
 };
@@ -205,8 +210,9 @@ public:
         int width, int height, HdFormat format,
         rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
     ~HdRprApiIdMaskAov() override = default;
-protected:
-    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
+
+    void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
+    void Resolve() override;
 private:
     std::shared_ptr<HdRprApiAov> m_baseIdAov;
     std::vector<float> m_cpuFilterBuffer;

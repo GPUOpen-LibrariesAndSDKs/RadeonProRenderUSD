@@ -79,8 +79,20 @@ void CpuNdcFilter(float* src, float* dest, size_t length, const GfMatrix4f& view
         for (int i = begin; i < end; ++i) {
             float norm = std::max(src[i * 4 + 3], 1.0f);
             GfVec4f pos(src[i * 4] / norm, src[i * 4 + 1] / norm, src[i * 4 + 2] / norm, 1.0f);
+            GfVec4f posResult = viewProjectionMatrix.GetOrthonormalized() * pos;
+            dest[i * 4] =     std::max(std::min(posResult[2] / posResult[3], 0.9f), -0.9f);
+            dest[i * 4 + 1] = 0;// posResult[2] / posResult[3];
+            dest[i * 4 + 2] = 0;// posResult[2] / posResult[3];
+            dest[i * 4 + 3] = 1.0f;
+
+            /*float norm = std::max(src[i * 4 + 3], 1.0f);
+            GfVec4f pos(src[i * 4] / norm, src[i * 4 + 1] / norm, src[i * 4 + 2] / norm, 1.0f);
             GfVec4f posResult = viewProjectionMatrix * pos;
-            dest[i] = posResult[2] / posResult[3];
+            float depth = posResult[2] / posResult[3];
+            dest[i * 4]     = depth;
+            dest[i * 4 + 1] = depth;
+            dest[i * 4 + 2] = depth;
+            dest[i * 4 + 3] = 1.0f;*/
         }
     });
 }
@@ -90,7 +102,10 @@ void CpuOpacityFilter(float* opacity, float* srcdest, size_t length) {
         [&](size_t begin, size_t end) {
         for (int i = begin; i < end; ++i) {
             float op = opacity[i * 4];
-            srcdest[i] *= op;
+            srcdest[i * 4]     *= op;
+            srcdest[i * 4 + 1] *= op;
+            srcdest[i * 4 + 2] *= op;
+            srcdest[i * 4 + 3]  = op;
         }
     });
 }
@@ -101,7 +116,10 @@ void CpuOpacityMaskFilter(float* opacity, float* srcdest, size_t length) {
         for (int i = begin; i < end; ++i) {
             float op = opacity[i * 4];
             if (op == 0.0f) {
-                srcdest[i] = 1.0f;
+                srcdest[i * 4] = 1.0f;
+                srcdest[i * 4 + 1] = 1.0f;
+                srcdest[i * 4 + 1] = 1.0f;
+                srcdest[i * 4 + 1] = 1.0f;
             }
         }
     });
@@ -134,10 +152,31 @@ void CpuFillMaskFilter(float* srcdest, size_t length) {
     });
 }
 
+void CpuResampleNearest(float* src, size_t srcWidth, size_t srcHeight, float* dest, size_t destWidth, size_t destHeight) {
+    if (destWidth <= 1 || destHeight <= 1) {
+        return;
+    }
+
+    float xratio = 1.0f * (srcWidth - 1.0f) / (destWidth - 1.0f);
+    float yratio = 1.0f * (srcHeight - 1.0f) / (destHeight - 1.0f);
+
+    WorkParallelForN(destHeight,
+        [&](size_t begin, size_t end) {
+        for (int y = begin; y < end; ++y) {
+            for (int x = 0; x < destWidth; ++x) {
+                int cx = xratio * x;
+                int cy = xratio * y;
+                dest[(y * destWidth + x) * 4] = src[(cy * srcWidth + cx) * 4];
+                dest[(y * destWidth + x) * 4 + 1] = src[(cy * srcWidth + cx) * 4 + 1];
+                dest[(y * destWidth + x) * 4 + 2] = src[(cy * srcWidth + cx) * 4 + 2];
+                dest[(y * destWidth + x) * 4 + 3] = src[(cy * srcWidth + cx) * 4 + 3];
+            }
+        }});
+}
+
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
     rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, std::unique_ptr<rif::Filter> filter)
     : m_aovDescriptor(HdRprAovRegistry::GetInstance().GetAovDesc(rprAovType, false))
-    , m_filter(std::move(filter))
     , m_format(format) {
     if (rif::Image::GetDesc(0, 0, format).type == 0) {
         RIF_THROW_ERROR_MSG("Unsupported format: " + TfEnum::GetName(format));
@@ -179,8 +218,17 @@ void HdRprApiAov::Resolve() {
         m_aov->Resolve(m_resolved.get());
     }
 
-    if (m_filter) {
-        m_filter->Resolve();
+    if (m_filterEnabled) {
+        assert(m_outputBuffer.size() > 0);
+        auto resolvedFb = GetResolvedFb();
+        if (!resolvedFb || !resolvedFb->GetData(m_outputBuffer.data(), m_outputBuffer.size())) {
+            return;
+        }
+
+        if (m_aov) {
+            auto fbDesc = m_aov->GetDesc();
+            CpuResampleNearest((float*)m_outputBuffer.data(), fbDesc.fb_width, fbDesc.fb_height, (float*)m_outputBuffer.data(), fbDesc.fb_width, fbDesc.fb_height);
+        }
     }
 }
 
@@ -192,8 +240,12 @@ void HdRprApiAov::Clear() {
 }
 
 bool HdRprApiAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
-    if (m_filter) {
-        return ReadRifImage(m_filter->GetOutput(), dstBuffer, dstBufferSize);
+    if (m_outputBuffer.size() > 0) {
+        if (dstBufferSize != m_outputBuffer.size()) {
+            return false;
+        }
+        memcpy(dstBuffer, m_outputBuffer.data(), dstBufferSize);
+        return true;
     }
 
     auto resolvedFb = GetResolvedFb();
@@ -206,7 +258,7 @@ bool HdRprApiAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
 
 bool HdRprApiAov::GetData(void* dstBuffer, size_t dstBufferSize) {
     auto getBuffer = dstBuffer;
-    if (!m_filter)
+    if (!m_filterEnabled)
     {
         bool needTmpBuffer = true;
         // Rpr always renders to HdFormatFloat32Vec4
@@ -235,7 +287,7 @@ bool HdRprApiAov::GetData(void* dstBuffer, size_t dstBufferSize) {
         }
     }
     if (GetDataImpl(getBuffer, dstBufferSize)) {
-        if (!m_filter)
+        if (!m_filterEnabled)
         {
             if (m_format == HdFormatFloat32) {
                 auto srcData = reinterpret_cast<const GfVec4f*>(getBuffer);
@@ -301,42 +353,23 @@ void HdRprApiAov::Resize(int width, int height, HdFormat format) {
 }
 
 void HdRprApiAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
-    if (m_dirtyBits & ChangeTracker::DirtyFormat) {
-        OnFormatChange(rifContext);
-    }
     if (m_dirtyBits & ChangeTracker::DirtySize) {
-        OnSizeChange(rifContext);
+        m_filterEnabled = m_aov && m_format != HdFormatFloat32Vec4;
+        if (m_filterEnabled) {
+            auto fbDesc = m_aov->GetDesc();
+            if (fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float) != m_outputBuffer.size()) {
+                m_outputBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float));
+            }
+        }
+        else {
+            m_outputBuffer.clear();
+        }
     }
     m_dirtyBits = ChangeTracker::Clean;
-
-    if (m_filter) {
-        m_filter->Update();
-    }
 }
 
 HdRprApiFramebuffer* HdRprApiAov::GetResolvedFb() {
     return (m_resolved ? m_resolved : m_aov).get();
-}
-
-void HdRprApiAov::OnFormatChange(rif::Context* rifContext) {
-    m_filter = nullptr;
-    if (rifContext && m_format != HdFormatFloat32Vec4) {
-        m_filter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_RESAMPLE, rifContext);
-        m_filter->SetParam("interpOperator", (int)RIF_IMAGE_INTERPOLATION_NEAREST);
-
-        // Reset inputs
-        m_dirtyBits |= ChangeTracker::DirtySize;
-    }
-}
-
-void HdRprApiAov::OnSizeChange(rif::Context* rifContext) {
-    if (m_filter) {
-        auto fbDesc = m_aov->GetDesc();
-        m_filter->Resize(fbDesc.fb_width, fbDesc.fb_height);
-        m_filter->SetInput(rif::Color, GetResolvedFb());
-        m_filter->SetOutput(rif::Image::GetDesc(fbDesc.fb_width, fbDesc.fb_height, m_format));
-        m_filter->SetParam("outSize", GfVec2i(fbDesc.fb_width, fbDesc.fb_height));
-    }
 }
 
 HdRprApiColorAov::HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata)
@@ -522,7 +555,7 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
     }
 
     if (m_dirtyBits & ChangeTracker::DirtySize) {
-        OnSizeChange(rifContext);
+        OnSizeChange();
     }
     m_dirtyBits = ChangeTracker::Clean;
 
@@ -582,7 +615,7 @@ void HdRprApiColorAov::ResizeFilter(int width, int height, Filter filterType, ri
     }
 }
 
-void HdRprApiColorAov::OnSizeChange(rif::Context* rifContext) {
+void HdRprApiColorAov::OnSizeChange() {
     if (!m_filter) {
         return;
     }
@@ -615,25 +648,30 @@ void HdRprApiNormalAov::OnFormatChange(rif::Context* rifContext) {
     m_dirtyBits |= ChangeTracker::DirtySize;
 }
 
-bool HdRprApiNormalAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
-    auto fbDesc = m_aov->GetDesc();
-    if (fbDesc.fb_width * fbDesc.fb_height * 4 != m_cpuFilterBuffer.size()) {
-        m_cpuFilterBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4);
+void HdRprApiNormalAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
+    if (m_dirtyBits & ChangeTracker::DirtySize) {
+        auto fbDesc = m_aov->GetDesc();
+        if (fbDesc.fb_width * fbDesc.fb_height * 3 * sizeof(float) != m_outputBuffer.size()) {
+            m_outputBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 3 * sizeof(float));
+        }
+        if (fbDesc.fb_width * fbDesc.fb_height * 4 != m_cpuFilterBuffer.size()) {
+            m_cpuFilterBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4);
+        }
     }
-    static size_t numPixels = dstBufferSize / (3 * sizeof(float));
-    if (m_cpuFilterBuffer.size() / 4 != numPixels)
-    {
-        return false;
-    }
+    m_dirtyBits = ChangeTracker::Clean;
+}
+
+void HdRprApiNormalAov::Resolve() {
+    HdRprApiAov::Resolve();
 
     auto resolvedFb = GetResolvedFb();
     if (!resolvedFb || !resolvedFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
-        return false;
+        return;
     }
 
-    CpuVec4toVec3Filter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels);
-    CpuRemapFilter((float*)dstBuffer, (float*)dstBuffer, numPixels * 3, 0.0, 1.0, -1.0, 1.0);
-    return true;
+    size_t numPixels = m_cpuFilterBuffer.size() / 4;
+    CpuVec4toVec3Filter(m_cpuFilterBuffer.data(), (float*)m_outputBuffer.data(), numPixels);
+    CpuRemapFilter((float*)m_outputBuffer.data(), (float*)m_outputBuffer.data(), numPixels * 3, 0.0, 1.0, -1.0, 1.0);
 }
 
 void HdRprApiComputedAov::Resize(int width, int height, HdFormat format) {
@@ -669,7 +707,7 @@ bool HdRprApiDepthAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
     if (cpuFilterBufferSize() != m_cpuFilterBuffer.size()) {
         m_cpuFilterBuffer.resize(cpuFilterBufferSize());
     }
-    static size_t numPixels = dstBufferSize / sizeof(float);
+    static size_t numPixels = dstBufferSize / 4 / sizeof(float);
     if (m_cpuFilterBuffer.size() / 4 != numPixels)
     {
         return false;
@@ -681,6 +719,7 @@ bool HdRprApiDepthAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
     }
     
     CpuNdcFilter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels, m_viewProjectionMatrix);
+    //memcpy(dstBuffer, m_cpuFilterBuffer.data(), dstBufferSize);
     
     auto opacityFb = m_retainedOpacityAov->GetResolvedFb();
     if (!opacityFb || !opacityFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
@@ -688,7 +727,7 @@ bool HdRprApiDepthAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
     }
     
     CpuOpacityMaskFilter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels);
-    CpuRemapFilter((float*)dstBuffer, (float*)dstBuffer, numPixels, -1, 1, 0, 1.0);
+    CpuRemapFilter((float*)dstBuffer, (float*)dstBuffer, numPixels * 4, -1, 1, 0, 1.0f);
     return true;
 }
 
@@ -703,16 +742,24 @@ HdRprApiIdMaskAov::HdRprApiIdMaskAov(
     }
 }
 
-bool HdRprApiIdMaskAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
-    static size_t numPixels = dstBufferSize / (4 * sizeof(float));
-    
+void HdRprApiIdMaskAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
+    if (m_dirtyBits & ChangeTracker::DirtySize) {
+        auto fbDesc = m_baseIdAov->GetAovFb()->GetDesc();
+        if (fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float) != m_outputBuffer.size()) {
+            m_outputBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float));
+        }
+    }
+    m_dirtyBits = ChangeTracker::Clean;
+}
+
+void HdRprApiIdMaskAov::Resolve() {
     auto resolvedFb = m_baseIdAov->GetResolvedFb();
-    if (!resolvedFb || !resolvedFb->GetData(dstBuffer, dstBufferSize)) {
-        return false;
+    if (!resolvedFb || !resolvedFb->GetData(m_outputBuffer.data(), m_outputBuffer.size())) {
+        return;
     }
 
-    CpuFillMaskFilter((float*)dstBuffer, numPixels);
-    return true;
+    size_t numPixels = m_outputBuffer.size() / 4 / sizeof(float);
+    CpuFillMaskFilter((float*)m_outputBuffer.data(), numPixels);
 }
 
 HdRprApiScCompositeAOV::HdRprApiScCompositeAOV(int width, int height, HdFormat format,
