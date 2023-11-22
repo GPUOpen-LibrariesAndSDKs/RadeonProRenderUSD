@@ -50,9 +50,6 @@ public:
 protected:
     HdRprApiAov(HdRprAovDescriptor const& aovDescriptor, HdFormat format)
         : m_aovDescriptor(aovDescriptor), m_format(format) {};
-
-    //virtual void OnFormatChange(rif::Context* rifContext);
-    //virtual void OnSizeChange();
 protected:
     HdRprAovDescriptor const& m_aovDescriptor;
     HdFormat m_format;
@@ -116,6 +113,7 @@ public:
     };
     void SetGamma(GammaParams const& params);
 
+    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
 protected:
     void OnFormatChange(rif::Context* rifContext);// override;
     void OnSizeChange();// override;
@@ -139,12 +137,11 @@ private:
     bool CanComposeAlpha();
 
 private:
-    std::unique_ptr<rif::Filter> m_filter;
-
     std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
 
     Filter m_mainFilterType = kFilterNone;
+    std::unique_ptr<rif::Filter> m_filter;
     std::vector<std::pair<Filter, std::unique_ptr<rif::Filter>>> m_auxFilters;
 
     uint32_t m_enabledFilters = kFilterNone;
@@ -193,8 +190,9 @@ public:
     ~HdRprApiDepthAov() override = default;
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
-protected:
-    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
+    void Resolve() override;
+//protected:
+    //bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
 private:
     inline size_t cpuFilterBufferSize() const { return m_width * m_height * 4; }    // Vec4f for each pixel
 

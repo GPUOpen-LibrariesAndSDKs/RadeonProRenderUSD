@@ -79,20 +79,12 @@ void CpuNdcFilter(float* src, float* dest, size_t length, const GfMatrix4f& view
         for (int i = begin; i < end; ++i) {
             float norm = std::max(src[i * 4 + 3], 1.0f);
             GfVec4f pos(src[i * 4] / norm, src[i * 4 + 1] / norm, src[i * 4 + 2] / norm, 1.0f);
-            GfVec4f posResult = viewProjectionMatrix.GetOrthonormalized() * pos;
-            dest[i * 4] =     std::max(std::min(posResult[2] / posResult[3], 0.9f), -0.9f);
-            dest[i * 4 + 1] = 0;// posResult[2] / posResult[3];
-            dest[i * 4 + 2] = 0;// posResult[2] / posResult[3];
-            dest[i * 4 + 3] = 1.0f;
-
-            /*float norm = std::max(src[i * 4 + 3], 1.0f);
-            GfVec4f pos(src[i * 4] / norm, src[i * 4 + 1] / norm, src[i * 4 + 2] / norm, 1.0f);
             GfVec4f posResult = viewProjectionMatrix * pos;
             float depth = posResult[2] / posResult[3];
-            dest[i * 4]     = depth;
+            dest[i * 4] =     depth;
             dest[i * 4 + 1] = depth;
             dest[i * 4 + 2] = depth;
-            dest[i * 4 + 3] = 1.0f;*/
+            dest[i * 4 + 3] = 1.0f;
         }
     });
 }
@@ -353,16 +345,18 @@ void HdRprApiAov::Resize(int width, int height, HdFormat format) {
 }
 
 void HdRprApiAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
+    if (m_dirtyBits & ChangeTracker::DirtyFormat) {
+        m_filterEnabled = (rifContext && m_format != HdFormatFloat32Vec4);
+        if (m_filterEnabled) {
+            m_dirtyBits |= ChangeTracker::DirtySize;
+        }
+    }
     if (m_dirtyBits & ChangeTracker::DirtySize) {
-        m_filterEnabled = m_aov && m_format != HdFormatFloat32Vec4;
         if (m_filterEnabled) {
             auto fbDesc = m_aov->GetDesc();
             if (fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float) != m_outputBuffer.size()) {
                 m_outputBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float));
             }
-        }
-        else {
-            m_outputBuffer.clear();
         }
     }
     m_dirtyBits = ChangeTracker::Clean;
@@ -446,6 +440,13 @@ void HdRprApiColorAov::SetGamma(GammaParams const& params) {
             }
         }
     }
+}
+
+bool HdRprApiColorAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
+    if (m_filter) {
+        return ReadRifImage(m_filter->GetOutput(), dstBuffer, dstBufferSize);
+    }
+    return HdRprApiAov::GetDataImpl(dstBuffer, dstBufferSize);
 }
 
 void HdRprApiColorAov::SetTonemapFilterParams(rif::Filter* filter) {
@@ -583,6 +584,9 @@ bool HdRprApiColorAov::GetData(void* dstBuffer, size_t dstBufferSize) {
 
 void HdRprApiColorAov::Resolve() {
     HdRprApiAov::Resolve();
+    if (m_filter) {
+        m_filter->Resolve();
+    }
 
     for (auto& auxFilter : m_auxFilters) {
         auxFilter.second->Resolve();
@@ -696,39 +700,42 @@ HdRprApiDepthAov::HdRprApiDepthAov(int width, int height, HdFormat format,
 
     , m_retainedOpacityAov(opacityAov)
     , m_viewProjectionMatrix(GfMatrix4f()) {
-    m_cpuFilterBuffer.resize(cpuFilterBufferSize());
+    // m_cpuFilterBuffer.resize(cpuFilterBufferSize());
 }
 
 void HdRprApiDepthAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) {
     m_viewProjectionMatrix = GfMatrix4f(rprApi->GetCameraViewMatrix() * rprApi->GetCameraProjectionMatrix()).GetTranspose();
+    if (m_dirtyBits & ChangeTracker::DirtySize) {
+        auto fbDesc = m_retainedWorldCoordinateAov->GetAovFb()->GetDesc();
+        if (fbDesc.fb_width * fbDesc.fb_height * 4 != m_cpuFilterBuffer.size()) {
+            m_cpuFilterBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4);
+        }
+        if (fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float) != m_outputBuffer.size()) {
+            m_outputBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float));
+        }
+    }
+    m_dirtyBits = ChangeTracker::Clean;
 }
 
-bool HdRprApiDepthAov::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
-    if (cpuFilterBufferSize() != m_cpuFilterBuffer.size()) {
-        m_cpuFilterBuffer.resize(cpuFilterBufferSize());
-    }
-    static size_t numPixels = dstBufferSize / 4 / sizeof(float);
-    if (m_cpuFilterBuffer.size() / 4 != numPixels)
-    {
-        return false;
-    }
+void HdRprApiDepthAov::Resolve() {
+    HdRprApiAov::Resolve();
 
+    static size_t numPixels = m_cpuFilterBuffer.size() / 4;
+    
     auto coordinateFb = m_retainedWorldCoordinateAov->GetResolvedFb();
-    if (!coordinateFb || !coordinateFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
-        return false;
+    if (!coordinateFb || !coordinateFb->GetData(m_outputBuffer.data(), m_outputBuffer.size())) {
+        return;
     }
     
-    CpuNdcFilter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels, m_viewProjectionMatrix);
-    //memcpy(dstBuffer, m_cpuFilterBuffer.data(), dstBufferSize);
+    CpuNdcFilter((float*)m_outputBuffer.data(), (float*)m_outputBuffer.data(), numPixels, m_viewProjectionMatrix);
     
     auto opacityFb = m_retainedOpacityAov->GetResolvedFb();
     if (!opacityFb || !opacityFb->GetData(m_cpuFilterBuffer.data(), m_cpuFilterBuffer.size() * sizeof(float))) {
-        return false;
+        return;
     }
     
-    CpuOpacityMaskFilter(m_cpuFilterBuffer.data(), (float*)dstBuffer, numPixels);
-    CpuRemapFilter((float*)dstBuffer, (float*)dstBuffer, numPixels * 4, -1, 1, 0, 1.0f);
-    return true;
+    CpuOpacityMaskFilter(m_cpuFilterBuffer.data(), (float*)m_outputBuffer.data(), numPixels);
+    CpuRemapFilter((float*)m_outputBuffer.data(), (float*)m_outputBuffer.data(), numPixels * 4, -1, 1, 0, 1.0f);
 }
 
 HdRprApiIdMaskAov::HdRprApiIdMaskAov(
