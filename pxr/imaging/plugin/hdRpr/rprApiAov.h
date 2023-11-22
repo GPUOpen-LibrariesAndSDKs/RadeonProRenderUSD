@@ -25,6 +25,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 class HdRprApi;
 struct RprUsdContextMetadata;
 
+void CpuResampleNearest(float* src, size_t srcWidth, size_t srcHeight, float* dest, size_t destWidth, size_t destHeight);
+
 class HdRprApiAov {
 public:
     HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
@@ -121,8 +123,6 @@ private:
     enum Filter {
         kFilterNone = 0,
         kFilterResample = 1 << 0,
-        //kFilterAIDenoise = 1 << 1,
-        //kFilterEAWDenoise = 1 << 2,
         kFilterComposeOpacity = 1 << 3,
         kFilterTonemap = 1 << 4,
         kFilterGamma = 1 << 5
@@ -152,6 +152,8 @@ private:
 
     int m_width = 0;
     int m_height = 0;
+
+    std::vector<float> m_opacityBuffer;
 };
 
 class HdRprApiNormalAov : public HdRprApiAov {
@@ -191,8 +193,6 @@ public:
 
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
     void Resolve() override;
-//protected:
-    //bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
 private:
     inline size_t cpuFilterBufferSize() const { return m_width * m_height * 4; }    // Vec4f for each pixel
 
@@ -214,24 +214,6 @@ public:
 private:
     std::shared_ptr<HdRprApiAov> m_baseIdAov;
     std::vector<float> m_cpuFilterBuffer;
-};
-
-class HdRprApiScCompositeAOV : public HdRprApiAov {
-public:
-    HdRprApiScCompositeAOV(int width, int height, HdFormat format,
-                         std::shared_ptr<HdRprApiAov> rawColorAov,
-                         std::shared_ptr<HdRprApiAov> opacityAov,
-                         std::shared_ptr<HdRprApiAov> scAov,
-                         rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext);
-    bool GetDataImpl(void* dstBuffer, size_t dstBufferSize) override;
-private:
-    std::shared_ptr<HdRprApiAov> m_retainedRawColorAov;
-    std::shared_ptr<HdRprApiAov> m_retainedOpacityAov;
-    std::shared_ptr<HdRprApiAov> m_retainedScAov;
-
-    std::vector<GfVec4f> m_tempColorBuffer;
-    std::vector<GfVec4f> m_tempOpacityBuffer;
-    std::vector<GfVec4f> m_tempScBuffer;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

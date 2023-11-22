@@ -62,10 +62,10 @@ void CpuRemapFilter(float* src, float* dest, size_t length, float srcLo, float s
         }});
 }
 
-void CpuVec4toVec3Filter(float* src, float* dest, size_t length) {
-    WorkParallelForN(length,
+void CpuVec4toVec3Filter(float* src, float* dest, size_t numPixels) {
+    WorkParallelForN(numPixels,
         [&](size_t begin, size_t end) {
-        for (int i = 0; i < length; ++i) {
+        for (int i = 0; i < numPixels; ++i) {
             dest[i * 3] = src[i * 4];
             dest[i * 3 + 1] = src[i * 4 + 1];
             dest[i * 3 + 2] = src[i * 4 + 2];
@@ -73,8 +73,8 @@ void CpuVec4toVec3Filter(float* src, float* dest, size_t length) {
     });
 }
 
-void CpuNdcFilter(float* src, float* dest, size_t length, const GfMatrix4f& viewProjectionMatrix) {
-    WorkParallelForN(length,
+void CpuNdcFilter(float* src, float* dest, size_t numPixels, const GfMatrix4f& viewProjectionMatrix) {
+    WorkParallelForN(numPixels,
         [&](size_t begin, size_t end) {
         for (int i = begin; i < end; ++i) {
             float norm = std::max(src[i * 4 + 3], 1.0f);
@@ -89,8 +89,8 @@ void CpuNdcFilter(float* src, float* dest, size_t length, const GfMatrix4f& view
     });
 }
 
-void CpuOpacityFilter(float* opacity, float* srcdest, size_t length) {
-    WorkParallelForN(length,
+void CpuOpacityFilter(float* opacity, float* srcdest, size_t numPixels) {
+    WorkParallelForN(numPixels,
         [&](size_t begin, size_t end) {
         for (int i = begin; i < end; ++i) {
             float op = opacity[i * 4];
@@ -102,8 +102,8 @@ void CpuOpacityFilter(float* opacity, float* srcdest, size_t length) {
     });
 }
 
-void CpuOpacityMaskFilter(float* opacity, float* srcdest, size_t length) {
-    WorkParallelForN(length,
+void CpuOpacityMaskFilter(float* opacity, float* srcdest, size_t numPixels) {
+    WorkParallelForN(numPixels,
         [&](size_t begin, size_t end) {
         for (int i = begin; i < end; ++i) {
             float op = opacity[i * 4];
@@ -117,8 +117,8 @@ void CpuOpacityMaskFilter(float* opacity, float* srcdest, size_t length) {
     });
 }
 
-void CpuFillMaskFilter(float* srcdest, size_t length) {
-    WorkParallelForN(length,
+void CpuFillMaskFilter(float* srcdest, size_t numPixels) {
+    WorkParallelForN(numPixels,
         [&](size_t begin, size_t end) {
         for (int i = begin; i < end; ++i) {
             unsigned int idDecoded = (unsigned int)(srcdest[i * 4] * 256) + (unsigned int)(srcdest[i * 4 + 1] * 256 * 256) + (unsigned int)(srcdest[i * 4 + 2] * 256 * 256 * 256);
@@ -157,13 +157,46 @@ void CpuResampleNearest(float* src, size_t srcWidth, size_t srcHeight, float* de
         for (int y = begin; y < end; ++y) {
             for (int x = 0; x < destWidth; ++x) {
                 int cx = xratio * x;
-                int cy = xratio * y;
+                int cy = yratio * y;
                 dest[(y * destWidth + x) * 4] = src[(cy * srcWidth + cx) * 4];
                 dest[(y * destWidth + x) * 4 + 1] = src[(cy * srcWidth + cx) * 4 + 1];
                 dest[(y * destWidth + x) * 4 + 2] = src[(cy * srcWidth + cx) * 4 + 2];
                 dest[(y * destWidth + x) * 4 + 3] = src[(cy * srcWidth + cx) * 4 + 3];
             }
         }});
+}
+
+void CpuGammaCorrection(float* srcdest, size_t numPixels, float gamma) {
+    if (gamma == 0) {
+        return;
+    }
+    float _1_g = 1 / gamma;
+    WorkParallelForN(numPixels,
+        [&](size_t begin, size_t end) {
+        for (int i = begin; i < end; ++i) {
+            srcdest[i * 4]     = std::powf(srcdest[i * 4], _1_g);
+            srcdest[i * 4 + 1] = std::powf(srcdest[i * 4 + 1], _1_g);
+            srcdest[i * 4 + 2] = std::powf(srcdest[i * 4 + 2], _1_g);
+            // skiping alpha
+        }
+    });
+}
+
+void CpuTonemap(float* srcdest, size_t numPixels, float gamma, float exposureTime, float sensitivity, float fstop) {
+    if (gamma == 0 || fstop == 0) {
+        return;
+    }
+    float h = (0.65f * sensitivity * exposureTime) / (fstop * fstop);
+    float _1_g = 1 / gamma;
+    WorkParallelForN(numPixels,
+        [&](size_t begin, size_t end) {
+        for (int i = begin; i < end; ++i) {
+            srcdest[i * 4] = std::powf(srcdest[i * 4] * h, _1_g);
+            srcdest[i * 4 + 1] = std::powf(srcdest[i * 4 + 1] * h, _1_g);
+            srcdest[i * 4 + 2] = std::powf(srcdest[i * 4 + 2] * h, _1_g);
+            // skiping alpha
+        }
+    });
 }
 
 HdRprApiAov::HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,
@@ -557,6 +590,19 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
 
     if (m_dirtyBits & ChangeTracker::DirtySize) {
         OnSizeChange();
+
+        auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
+        if (fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float) != m_outputBuffer.size()) {
+            m_outputBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4 * sizeof(float));
+        }
+        if (m_enabledFilters & kFilterComposeOpacity) {
+            if (fbDesc.fb_width * fbDesc.fb_height * 4 != m_opacityBuffer.size()) {
+                m_opacityBuffer.resize(fbDesc.fb_width * fbDesc.fb_height * 4);
+            }
+        }
+        else {
+            m_opacityBuffer.clear();
+        }
     }
     m_dirtyBits = ChangeTracker::Clean;
 
@@ -590,6 +636,36 @@ void HdRprApiColorAov::Resolve() {
 
     for (auto& auxFilter : m_auxFilters) {
         auxFilter.second->Resolve();
+    }
+
+    auto resolvedFb = m_retainedRawColor->GetResolvedFb();
+    if (!resolvedFb || !resolvedFb->GetData(m_outputBuffer.data(), m_outputBuffer.size())) {
+        return;
+    }
+
+    size_t numPixels = m_outputBuffer.size() / 4 / sizeof(float);
+    if ((m_enabledFilters & kFilterComposeOpacity) ||
+        (m_enabledFilters & kFilterTonemap) ||
+        (m_enabledFilters & kFilterGamma)) {
+
+        if (m_enabledFilters & kFilterTonemap) {
+            CpuTonemap((float*)m_outputBuffer.data(), numPixels, m_tonemap.gamma, m_tonemap.exposureTime, m_tonemap.sensitivity, m_tonemap.fstop);
+        }
+        if (m_enabledFilters & kFilterGamma) {
+            CpuGammaCorrection((float*)m_outputBuffer.data(), numPixels, m_gamma.value);
+        }
+        if (m_enabledFilters & kFilterComposeOpacity) {
+            auto resolvedOpFb = m_retainedOpacity->GetResolvedFb();
+            if (!resolvedOpFb || !resolvedOpFb->GetData(m_opacityBuffer.data(), m_opacityBuffer.size() * sizeof(float))) {
+                return;
+            }
+
+            CpuOpacityFilter(m_opacityBuffer.data(), (float*)m_outputBuffer.data(), numPixels);
+        }
+    }
+    else if (m_enabledFilters & kFilterResample) {
+        auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
+        CpuResampleNearest((float*)m_outputBuffer.data(), fbDesc.fb_width, fbDesc.fb_height, (float*)m_outputBuffer.data(), fbDesc.fb_width, fbDesc.fb_height);
     }
 }
 
@@ -767,63 +843,6 @@ void HdRprApiIdMaskAov::Resolve() {
 
     size_t numPixels = m_outputBuffer.size() / 4 / sizeof(float);
     CpuFillMaskFilter((float*)m_outputBuffer.data(), numPixels);
-}
-
-HdRprApiScCompositeAOV::HdRprApiScCompositeAOV(int width, int height, HdFormat format,
-    std::shared_ptr<HdRprApiAov> rawColorAov,
-    std::shared_ptr<HdRprApiAov> opacityAov,
-    std::shared_ptr<HdRprApiAov> scAov,
-    rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata, rif::Context* rifContext)
-    : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kScTransparentBackground), true), format)
-    , m_retainedRawColorAov(rawColorAov)
-    , m_retainedOpacityAov(opacityAov)
-    , m_retainedScAov(scAov)
-{
-}
-
-bool HdRprApiScCompositeAOV::GetDataImpl(void* dstBuffer, size_t dstBufferSize) {
-    if (m_tempColorBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
-        m_tempColorBuffer.resize(dstBufferSize / sizeof(GfVec4f));
-    }
-    if (m_tempOpacityBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
-        m_tempOpacityBuffer.resize(dstBufferSize / sizeof(GfVec4f));
-    }
-    if (m_tempScBuffer.size() < dstBufferSize / sizeof(GfVec4f)) {
-        m_tempScBuffer.resize(dstBufferSize / sizeof(GfVec4f));
-    }
-
-    if (!m_retainedRawColorAov->GetDataImpl((void*)m_tempColorBuffer.data(), dstBufferSize)) {
-        return false;
-    }
-    if (!m_retainedOpacityAov->GetDataImpl((void*)m_tempOpacityBuffer.data(), dstBufferSize)) {
-        return false;
-    }
-    if (!m_retainedScAov->GetDataImpl((void*)m_tempScBuffer.data(), dstBufferSize)) {
-        return false;
-    }
-
-    auto dstValue = reinterpret_cast<GfVec4f*>(dstBuffer);
-
-    // On this stage format is always HdFormatFloat32Vec4
-#pragma omp parallel for
-    for (int i = 0; i < dstBufferSize / sizeof(GfVec4f); i++)
-    {
-        float opacity = m_tempOpacityBuffer[i][0];
-        float sc = m_tempScBuffer[i][0];
-        constexpr float OneMinusEpsilon = 1.0f - 1e-5f;
-
-        if (opacity > OneMinusEpsilon)
-        {
-            dstValue[i] = { m_tempColorBuffer[i][0], m_tempColorBuffer[i][1], m_tempColorBuffer[i][2], opacity };
-        }
-        else
-        {
-            // Add shadows from the shadow catcher to the final image + Make the background transparent;
-            dstValue[i] = { 0.0f, 0.0f, 0.0f, sc };
-        }
-    }
-
-    return true;
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

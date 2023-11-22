@@ -56,6 +56,7 @@ using json = nlohmann::json;
 #include "pxr/base/work/loops.h"
 #include "pxr/base/arch/env.h"
 #include "pxr/base/tf/envSetting.h"
+#include "pxr/base/work/loops.h"
 
 #include "notify/message.h"
 
@@ -4343,92 +4344,34 @@ private:
 
             auto textureMetadata = textureData->GetGLMetadata();
 
-            uint8_t bytesPerComponent;
-            if (textureMetadata.glType == GL_UNSIGNED_BYTE) {
-                imageDesc.type = RIF_COMPONENT_TYPE_UINT8;
-                bytesPerComponent = 1;
-            } else if (textureMetadata.glType == GL_HALF_FLOAT) {
-                imageDesc.type = RIF_COMPONENT_TYPE_FLOAT16;
-                bytesPerComponent = 2;
-            } else if (textureMetadata.glType == GL_FLOAT) {
-                imageDesc.type = RIF_COMPONENT_TYPE_FLOAT32;
-                bytesPerComponent = 2;
-            } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel channel type: %#x", path.c_str(), textureMetadata.glType);
+            if (textureMetadata.glType != GL_UNSIGNED_BYTE || textureMetadata.glFormat != GL_RGBA) {
+                TF_RUNTIME_ERROR("\"%s\" image has unsupported format. Should be RGBA PNG", path.c_str());
                 return false;
             }
+            const uint8_t bytesPerComponent = 1;
+            imageDesc.num_components = 4;
 
-            if (textureMetadata.glFormat == GL_RGBA) {
-                imageDesc.num_components = 4;
-            } else if (textureMetadata.glFormat == GL_RGB) {
-                imageDesc.num_components = 3;
-            } else if (textureMetadata.glFormat == GL_RED) {
-                imageDesc.num_components = 1;
-            } else {
-                TF_RUNTIME_ERROR("\"%s\" image has unsupported pixel format: %#x", path.c_str(), textureMetadata.glFormat);
-                return false;
-            }
-
-            auto rifImage = m_rifContext->CreateImage(imageDesc);
-
-            void* mappedData;
-            if (RIF_ERROR_CHECK(rifImageMap(rifImage->GetHandle(), RIF_IMAGE_MAP_WRITE, &mappedData), "Failed to map rif image") || !mappedData) {
-                return false;
-            }
-            size_t imageSize = bytesPerComponent * imageDesc.num_components * imageDesc.image_width * imageDesc.image_height;
-            std::memcpy(mappedData, textureData->GetData(), imageSize);
-            RIF_ERROR_CHECK(rifImageUnmap(rifImage->GetHandle(), mappedData), "Failed to unmap rif image");
+            size_t totalNumComponents = imageDesc.num_components * imageDesc.image_width * imageDesc.image_height;
+            size_t imageSize = bytesPerComponent * totalNumComponents;
+            std::vector<unsigned char> mappedData(imageSize);
+            std::memcpy(mappedData.data(), textureData->GetData(), imageSize);
+            std::vector<float> mappedDataFloat(totalNumComponents);
+            WorkParallelForN(imageDesc.num_components * imageDesc.image_width * imageDesc.image_height,
+                [&](size_t begin, size_t end) {
+                for (int i = begin; i < end; ++i) {
+                    mappedDataFloat[i] = (float)mappedData[i] / 256.0f;
+                }
+            });
 
             auto colorRb = static_cast<HdRprRenderBuffer*>(colorOutputRb->aovBinding->renderBuffer);
-
-            try {
-                auto blitFilter = rif::Filter::CreateCustom(RIF_IMAGE_FILTER_USER_DEFINED, m_rifContext.get());
-                auto blitKernelCode = std::string(R"(
-                    const int2 outSize = GET_BUFFER_SIZE(outputImage);
-
-                    int2 coord;
-                    GET_COORD_OR_RETURN(coord, outSize);
-
-                    vec2 uv = (convert_vec2(coord) + 0.5f)/convert_vec2(outSize);
-                    float aspectRatio = (float)(outSize.x)/outSize.y;
-
-                    vec2 srcUv;
-                    if (aspectRatio > 1.0f) {
-                        float scale = 1.0f/aspectRatio;
-                        srcUv = make_vec2((uv.x - (1.0f - scale)*0.5f)/scale, uv.y);
-                    } else {
-                        srcUv = make_vec2(uv.x, (uv.y - (1.0f - aspectRatio)*0.5f)/aspectRatio);
-                    }
-
-                    const int2 inSize = GET_BUFFER_SIZE(srcImage);
-                    int2 srcCoord = convert_int2(srcUv*convert_vec2(inSize));
-                    srcCoord = clamp(srcCoord, make_int2(0, 0), inSize - 1);
-                    vec4 color = ReadPixelTyped(srcImage, srcCoord.x, srcCoord.y);
-
-                    WritePixelTyped(outputImage, coord.x, coord.y, color);
-                )");
-                blitFilter->SetInput("srcImage", rifImage->GetHandle());
-                blitFilter->SetParam("code", blitKernelCode);
-                blitFilter->SetOutput(rif::Image::GetDesc(colorRb->GetWidth(), colorRb->GetHeight(), colorRb->GetFormat()));
-                blitFilter->SetInput(rif::Color, blitFilter->GetOutput());
-                blitFilter->Update();
-
-                m_rifContext->ExecuteCommandQueue();
-
-                if (RIF_ERROR_CHECK(rifImageMap(blitFilter->GetOutput(), RIF_IMAGE_MAP_READ, &mappedData), "Failed to map rif image") || !mappedData) {
-                    return false;
-                }
-                size_t size = HdDataSizeOfFormat(colorRb->GetFormat()) * colorRb->GetWidth() * colorRb->GetHeight();
-                if (auto colorRbData = colorRb->GetPointerForWriting()) {
-                    std::memcpy(colorRbData, mappedData, size);
-                }
-
-                RIF_ERROR_CHECK(rifImageUnmap(blitFilter->GetOutput(), mappedData), "Failed to unmap rif image");
-                return true;
-            } catch (rif::Error const& e) {
-                TF_RUNTIME_ERROR("Failed to blit image: %s", e.what());
+            if (auto colorRbData = colorRb->GetPointerForWriting()) {
+                CpuResampleNearest(mappedDataFloat.data(), imageDesc.image_width, imageDesc.image_height, (float*)colorRbData, colorRb->GetWidth(), colorRb->GetHeight());
+            }
+            else {
                 return false;
             }
+
+            return true;
         } else {
             TF_RUNTIME_ERROR("Failed to load \"%s\" image", path.c_str());
             return false;
