@@ -75,7 +75,6 @@ PXR_NAMESPACE_OPEN_SCOPE
     (materialIdMask) \
     (objectIdMask) \
     (objectGroupIdMask) \
-    (colorWithTransparency) \
 
 TF_DECLARE_PUBLIC_TOKENS(HdRprAovTokens, HDRPR_AOV_TOKENS);
 
