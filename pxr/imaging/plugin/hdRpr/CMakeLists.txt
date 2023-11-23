@@ -79,15 +79,6 @@ add_custom_command(
     OUTPUT ${GENERATED_FILES}
     COMMENT "Generating files")
 
-file(GLOB_RECURSE RIF_MODEL_FILES "${RIF_MODELS_DIR}/*")
-foreach(file ${RIF_MODEL_FILES})
-    file(RELATIVE_PATH rel_file ${RIF_MODELS_DIR} ${file})
-    list(APPEND RIF_MODEL_RESOURCE_FILES "${file}${_sep}rif_models/${rel_file}")
-endforeach()
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
-list(APPEND RIF_MODEL_RESOURCE_FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
-
 pxr_plugin(hdRpr
     DISABLE_PRECOMPILED_HEADERS
 
@@ -110,13 +101,11 @@ pxr_plugin(hdRpr
         rprUsd
         json
         murmurhash
-        ${RIF_LIBRARY}
         ${OPENEXR_LIBRARIES}
 
         ${OptLibs}
 
     INCLUDE_DIRS
-        ${RIF_LOCATION_INCLUDE}
         ${CMAKE_CURRENT_BINARY_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
         ${OPENEXR_INCLUDE_DIRS}
@@ -157,7 +146,6 @@ pxr_plugin(hdRpr
     RESOURCE_FILES
         plugInfo.json
         ${RESTART_REQUIRED_RESOURCE_FILE}
-        ${RIF_MODEL_RESOURCE_FILES}
         ${SCRIPT_RESOURCE_FILES}
 
     CPPFILES
@@ -189,7 +177,6 @@ else()
         ${CMAKE_CURRENT_SOURCE_DIR}/notify/message.cpp)
 endif()
 
-add_subdirectory(rifcpp)
 add_subdirectory(houdini)
 if(NOT HoudiniUSD_FOUND)
     add_subdirectory(usdviewMenu)
@@ -210,12 +197,12 @@ if(WIN32)
         list(APPEND RPR_BINARIES ${RPR_BIN_LOCATION}/RprLoadStore64.dll)
     endif()
     install(
-        FILES ${RPR_BINARIES} ${RPR_PLUGINS} ${RIF_BINARIES} ${OptBin}
+        FILES ${RPR_BINARIES} ${RPR_PLUGINS} ${OptBin}
         DESTINATION lib)
 else(WIN32)
     # install() does not follow symlinks, so we do it manually
     set(RESOLVED_LIBRARIES "")
-    foreach (file ${RPR_LIBRARY} ${RPR_LOADSTORE_LIBRARY} ${RPR_PLUGINS} ${RIF_LIBRARY} ${RIF_DEPENDENCY_LIBRARIES})
+    foreach (file ${RPR_LIBRARY} ${RPR_LOADSTORE_LIBRARY} ${RPR_PLUGINS})
         while(IS_SYMLINK ${file})
             file(READ_SYMLINK ${file} symfile)
             if(NOT IS_ABSOLUTE "${symfile}")
