@@ -146,6 +146,7 @@ pxr_plugin(hdRpr
         debugCodes
         primvarUtil
         points
+        cpuFilters
         
         ${OptClass}
 

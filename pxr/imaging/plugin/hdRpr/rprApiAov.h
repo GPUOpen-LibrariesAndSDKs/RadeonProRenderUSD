@@ -24,8 +24,6 @@ PXR_NAMESPACE_OPEN_SCOPE
 class HdRprApi;
 struct RprUsdContextMetadata;
 
-void CpuResampleNearest(GfVec4f* src, size_t srcWidth, size_t srcHeight, GfVec4f* dest, size_t destWidth, size_t destHeight);
-
 class HdRprApiAov {
 public:
     HdRprApiAov(rpr_aov rprAovType, int width, int height, HdFormat format,

@@ -17,6 +17,7 @@ using json = nlohmann::json;
 #include "rprApi.h"
 #include "rprApiAov.h"
 #include "aovDescriptor.h"
+#include "cpuFilters.h"
 
 #include "config.h"
 #include "camera.h"
