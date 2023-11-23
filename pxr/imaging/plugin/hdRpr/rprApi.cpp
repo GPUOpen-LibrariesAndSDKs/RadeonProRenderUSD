@@ -18,10 +18,6 @@ using json = nlohmann::json;
 #include "rprApiAov.h"
 #include "aovDescriptor.h"
 
-#include "rifcpp/rifFilter.h"
-#include "rifcpp/rifImage.h"
-#include "rifcpp/rifError.h"
-
 #include "config.h"
 #include "camera.h"
 #include "debugCodes.h"
@@ -468,7 +464,6 @@ public:
         try {
             m_cacheCreationRequired = !CacheCreated();
             InitRpr();
-            InitRif();
             InitAovs();
 
             {
@@ -1752,10 +1747,6 @@ public:
             }
         });
 
-        if (m_rifContext) {
-            m_rifContext->ExecuteCommandQueue();
-        }
-
         for (auto& outRb : m_outputRenderBuffers) {
             if (outRb.mappedData && (m_isFirstSample || outRb.isMultiSampled)) {
                 outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
@@ -2585,7 +2576,7 @@ public:
 
         auto rprApi = rprRenderParam->GetRprApi();
         m_resolveData.ForAllAovs([=](ResolveData::AovEntry const& e) {
-            e.aov->Update(rprApi, m_rifContext.get());
+            e.aov->Update(rprApi);
             if (clearAovs) {
                 e.aov->Clear();
             }
@@ -3839,35 +3830,6 @@ private:
         m_isAbortingEnabled.store(false);
     }
 
-    bool ValidateRifModels(std::string const& modelsPath) {
-        // To ensure that current RIF implementation will use correct models we check for the file that points to models version
-        std::ifstream versionFile(modelsPath + "/rif_models.version");
-        if (versionFile.is_open()) {
-            std::stringstream buffer;
-            buffer << versionFile.rdbuf();
-            auto rifVersionString = std::to_string(RIF_VERSION_MAJOR) + "." + std::to_string(RIF_VERSION_MINOR) + "." + std::to_string(RIF_VERSION_REVISION);
-            return rifVersionString == buffer.str();
-        }
-
-        return false;
-    }
-
-    void InitRif() {
-        if (RprUsdIsCpuOnly()) {
-            return; // We can't create RIF context in CPU only mode
-        }
-        PlugPluginPtr plugin = PLUG_THIS_PLUGIN;
-        auto modelsPath = PlugFindPluginResource(plugin, "rif_models", false);
-        if (modelsPath.empty()) {
-            TF_RUNTIME_ERROR("Failed to find RIF models in plugin package");
-        } else if (!ValidateRifModels(modelsPath)) {
-            modelsPath = "";
-            TF_RUNTIME_ERROR("RIF version and AI models version mismatch");
-        }
-
-        m_rifContext = rif::Context::Create(m_rprContext.get(), m_rprContextMetadata, modelsPath);
-    }
-
     void InitAovs() {
         m_colorAov = std::static_pointer_cast<HdRprApiColorAov>(CreateAov(HdAovTokens->color));
 
@@ -4206,7 +4168,7 @@ private:
 
                     newAov = colorAov;
                 } else if (aovName == HdAovTokens->normal) {
-                    newAov = new HdRprApiNormalAov(width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiNormalAov(width, height, format, m_rprContext.get(), m_rprContextMetadata);
                 } else if (aovName == HdAovTokens->depth) {
                     auto worldCoordinateAov = GetAov(HdRprAovTokens->worldCoordinate, width, height, HdFormatFloat32Vec4);
                     if (!worldCoordinateAov) {
@@ -4221,7 +4183,7 @@ private:
 
                     newAov = new HdRprApiDepthAov(width, height, format, std::move(worldCoordinateAov), std::move(opacityAov), m_rprContext.get(), m_rprContextMetadata);
                 } else if (TfStringStartsWith(aovName.GetString(), "lpe")) {
-                    newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata);
                     aovCustomDestructor = [this](HdRprApiAov* aov) {
                         // Each LPE AOV reserves RPR's LPE AOV id (RPR_AOV_LPE_0, ...)
                         // As soon as LPE AOV is released we want to return reserved id to the pool
@@ -4247,10 +4209,10 @@ private:
                         return nullptr;
                     }
 
-                    newAov = new HdRprApiIdMaskAov(aovDesc, baseAov, width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                    newAov = new HdRprApiIdMaskAov(aovDesc, baseAov, width, height, format, m_rprContext.get(), m_rprContextMetadata);
                 } else {
                     if (!aovDesc.computed) {
-                        newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata, m_rifContext.get());
+                        newAov = new HdRprApiAov(rpr::Aov(aovDesc.id), width, height, format, m_rprContext.get(), m_rprContextMetadata);
                     } else {
                         TF_CODING_ERROR("Failed to create %s AOV: unprocessed computed AOV", aovName.GetText());
                     }
@@ -4304,10 +4266,6 @@ private:
     }
 
     bool RenderImage(std::string const& path) {
-        if (!m_rifContext) {
-            return false;
-        }
-
         auto colorOutputRb = GetOutputRenderBuffer(HdAovTokens->color);
         if (!colorOutputRb) {
             return false;
@@ -4315,13 +4273,8 @@ private:
 
         auto textureData = RprUsdTextureData::New(path);
         if (textureData) {
-            rif_image_desc imageDesc = {};
-            imageDesc.image_width = textureData->GetWidth();
-            imageDesc.image_height = textureData->GetHeight();
-            imageDesc.image_depth = 1;
-            imageDesc.image_row_pitch = 0;
-            imageDesc.image_slice_pitch = 0;
-
+            const size_t imageWidth = textureData->GetWidth();
+            const size_t imageHeight = textureData->GetHeight();
             auto textureMetadata = textureData->GetGLMetadata();
 
             if (textureMetadata.glType != GL_UNSIGNED_BYTE || textureMetadata.glFormat != GL_RGBA) {
@@ -4329,14 +4282,14 @@ private:
                 return false;
             }
             const uint8_t bytesPerComponent = 1;
-            imageDesc.num_components = 4;
+            const size_t numComponents = 4;
 
-            size_t totalNumComponents = imageDesc.num_components * imageDesc.image_width * imageDesc.image_height;
+            size_t totalNumComponents = numComponents * imageWidth * imageHeight;
             size_t imageSize = bytesPerComponent * totalNumComponents;
             std::vector<unsigned char> mappedData(imageSize);
             std::memcpy(mappedData.data(), textureData->GetData(), imageSize);
             std::vector<float> mappedDataFloat(totalNumComponents);
-            WorkParallelForN(imageDesc.num_components * imageDesc.image_width * imageDesc.image_height,
+            WorkParallelForN(numComponents * imageWidth * imageHeight,
                 [&](size_t begin, size_t end) {
                 for (int i = begin; i < end; ++i) {
                     mappedDataFloat[i] = (float)mappedData[i] / 256.0f;
@@ -4345,7 +4298,7 @@ private:
 
             auto colorRb = static_cast<HdRprRenderBuffer*>(colorOutputRb->aovBinding->renderBuffer);
             if (auto colorRbData = colorRb->GetPointerForWriting()) {
-                CpuResampleNearest(mappedDataFloat.data(), imageDesc.image_width, imageDesc.image_height, (float*)colorRbData, colorRb->GetWidth(), colorRb->GetHeight());
+                CpuResampleNearest((GfVec4f*)mappedDataFloat.data(), imageWidth, imageHeight, (GfVec4f*)colorRbData, colorRb->GetWidth(), colorRb->GetHeight());
             }
             else {
                 return false;
@@ -4405,8 +4358,6 @@ private:
     bool m_isOutputFlipped;
 
     float m_firstIterationRenderTime = 0.0f;
-
-    std::unique_ptr<rif::Context> m_rifContext;
 
     std::unique_ptr<rpr::Scene> m_scene;
     std::unique_ptr<rpr::Camera> m_camera;
