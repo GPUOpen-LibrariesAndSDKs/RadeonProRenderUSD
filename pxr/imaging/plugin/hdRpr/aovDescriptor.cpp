@@ -158,7 +158,6 @@ HdRprAovRegistry::HdRprAovRegistry() {
     addAovNameLookup(HdRprAovTokens->materialIdMask, m_computedAovDescriptors[kMaterialIdMask]);
     addAovNameLookup(HdRprAovTokens->objectIdMask, m_computedAovDescriptors[kObjectIdMask]);
     addAovNameLookup(HdRprAovTokens->objectGroupIdMask, m_computedAovDescriptors[kObjectGroupIdMask]);
-    addAovNameLookup(HdRprAovTokens->colorWithTransparency, m_computedAovDescriptors[kScTransparentBackground]);
 }
 
 HdRprAovDescriptor const& HdRprAovRegistry::GetAovDesc(TfToken const& name) {
