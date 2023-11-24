@@ -16,6 +16,7 @@ limitations under the License.
 #include "primvarUtil.h"
 #include "renderParam.h"
 #include "material.h"
+#include "instancer.h"
 
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/hd/extComputationUtils.h"
@@ -149,13 +150,37 @@ void HdRprPoints::Sync(
         }
     }
 
+    if (*dirtyBits & HdChangeTracker::DirtyInstancer){
+        m_instanceTransforms.clear();
+#ifdef USE_DECOUPLED_INSTANCER
+        _UpdateInstancer(sceneDelegate, dirtyBits);
+        HdInstancer::_SyncInstancerAndParents(sceneDelegate->GetRenderIndex(), sceneDelegate->GetInstancerId(id));
+#endif
+        auto instancer = static_cast<HdRprInstancer*>(sceneDelegate->GetRenderIndex().GetInstancer(sceneDelegate->GetInstancerId(id)));
+        if (instancer) {
+            auto instanceTransforms = instancer->SampleInstanceTransforms(id);
+            auto newNumInstances = (instanceTransforms.count > 0) ? instanceTransforms.values[0].size() : 0;
+            if(newNumInstances > 0){
+                m_instanceTransforms.reserve(newNumInstances);
+                for (auto t : instanceTransforms.values[0]){
+                    m_instanceTransforms.emplace_back(GfMatrix4f(t));
+                }
+            }
+        }
+        if(m_instanceTransforms.empty()){
+            m_instanceTransforms.emplace_back(1.0);
+        }
+    }
+
+    size_t numInstances = m_points.size() * m_instanceTransforms.size();
+
     bool dirtyPrototypeMesh = false;
     bool dirtyInstances = false;
-    if (m_instances.size() != m_points.size()) {
+    if (m_instances.size() != numInstances) {
         if (m_points.empty()) {
             rprApi->Release(m_prototypeMesh);
             m_prototypeMesh = nullptr;
-        } else {
+        } else if (!m_prototypeMesh){
             auto& topology = UsdImagingGetUnitSphereMeshTopology();
             auto& points = UsdImagingGetUnitSphereMeshPoints();
 
@@ -170,16 +195,16 @@ void HdRprPoints::Sync(
             }
         }
 
-        if (m_instances.size() > m_points.size()) {
-            for (size_t i = m_points.size(); i < m_instances.size(); ++i) {
+        if (m_instances.size() > numInstances) {
+            for (size_t i = numInstances; i < m_instances.size(); ++i) {
                 rprApi->Release(m_instances[i]);
             }
-            m_instances.resize(m_points.size());
+            m_instances.resize(numInstances);
         } else {
-            m_instances.reserve(m_points.size());
-            for (size_t i = m_instances.size(); i < m_points.size(); ++i) {
+            m_instances.reserve(numInstances);
+            for (size_t i = m_instances.size(); i < numInstances; ++i) {
                 if (auto instance = rprApi->CreateMeshInstance(m_prototypeMesh)) {
-                    rprApi->SetMeshId(instance, i);
+                    rprApi->SetMeshId(instance, i % m_points.size());
                     m_instances.push_back(instance);
 
                     if (RprUsdIsLeakCheckEnabled()) {
@@ -200,6 +225,7 @@ void HdRprPoints::Sync(
 
         if ((*dirtyBits & HdChangeTracker::DirtyTransform) ||
             (*dirtyBits & HdChangeTracker::DirtyWidths) ||
+            (*dirtyBits & HdChangeTracker::DirtyInstancer) ||
             dirtyPoints || dirtyInstances) {
 
             std::function<float(size_t)> sampleWidth;
@@ -212,12 +238,15 @@ void HdRprPoints::Sync(
                 TF_WARN("[%s] Unsupported widths interpolation. Fallback value is 1.0f with a constant interpolation", id.GetText());
             }
 
-            for (size_t i = 0; i < m_instances.size(); ++i) {
-                auto& position = m_points[i];
-                auto width = sampleWidth(i);
-                auto transform = GfMatrix4f(1.0f).SetScale(GfVec3f(width)).SetTranslateOnly(position) * m_transform;
+            for (int i = 0; i < m_instanceTransforms.size(); ++i){
+                for (size_t j = 0; j < m_points.size(); ++j) {
+                    auto& position = m_points[j];
+                    auto width = sampleWidth(j);
+                    auto transform = GfMatrix4f(1.0f).SetScale(GfVec3f(width)).SetTranslateOnly(position);
+                    transform *= m_transform * m_instanceTransforms[i];
 
-                rprApi->SetTransform(m_instances[i], transform);
+                    rprApi->SetTransform(m_instances[j + m_points.size() * i], transform);
+                }
             }
         }
 
@@ -276,7 +305,8 @@ HdDirtyBits HdRprPoints::GetInitialDirtyBitsMask() const {
         HdChangeTracker::DirtyWidths |
         HdChangeTracker::DirtyTransform |
         HdChangeTracker::DirtyPrimvar |
-        HdChangeTracker::DirtyVisibility;
+        HdChangeTracker::DirtyVisibility |
+        HdChangeTracker::DirtyInstancer;
 }
 
 HdDirtyBits HdRprPoints::_PropagateDirtyBits(HdDirtyBits bits) const {

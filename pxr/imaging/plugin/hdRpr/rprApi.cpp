@@ -440,6 +440,9 @@ private:
 
 class HdRprApiImpl {
 public:
+    static const int colorPrimvarKey = 0;
+    static const int transparencyPrimvarKey = 1;
+
     HdRprApiImpl(HdRprDelegate* delegate)
         : m_delegate(delegate) {
         // Postpone initialization as further as possible to allow Hydra user to set custom render settings before creating a context
@@ -863,11 +866,33 @@ public:
         }
     }
 
+    bool convertInterpolation(HdInterpolation interpolation, rpr::PrimvarInterpolationType& rprInterpolation) {
+        switch (interpolation)
+        {
+        case HdInterpolationConstant:
+            rprInterpolation = RPR_PRIMVAR_INTERPOLATION_CONSTANT;
+            break;
+        case HdInterpolationUniform:
+            rprInterpolation = RPR_PRIMVAR_INTERPOLATION_UNIFORM;
+            break;
+        case HdInterpolationVertex:
+            rprInterpolation = RPR_PRIMVAR_INTERPOLATION_VERTEX;
+            break;
+        case HdInterpolationVarying:
+            rprInterpolation = RPR_PRIMVAR_INTERPOLATION_FACEVARYING_NORMAL;
+            break;
+        case HdInterpolationFaceVarying:
+            rprInterpolation = RPR_PRIMVAR_INTERPOLATION_FACEVARYING_UV;
+            break;
+        default:
+            // Rpr does not support HdInterpolationInstance
+            return false;
+        }
+
+        return true;
+    }
+
     bool SetMeshVertexColor(rpr::Shape* mesh, VtArray<VtVec3fArray> const& primvarSamples, HdInterpolation interpolation) {
-
-        // We use zero primvar channel to store vertex colors
-        const int colorPrimvarKey = 0;
-
         if (primvarSamples.empty()) {
             return false;
         }
@@ -875,26 +900,7 @@ public:
             LockGuard rprLock(m_rprContext->GetMutex());
 
             rpr::PrimvarInterpolationType rprInterpolation;
-
-            switch (interpolation)
-            {
-            case HdInterpolationConstant:
-                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_CONSTANT;
-                break;
-            case HdInterpolationUniform:
-                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_UNIFORM;
-                break;
-            case HdInterpolationVertex:
-                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_VERTEX;
-                break;
-            case HdInterpolationVarying:
-                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_FACEVARYING_NORMAL;
-                break;
-            case HdInterpolationFaceVarying:
-                rprInterpolation = RPR_PRIMVAR_INTERPOLATION_FACEVARYING_UV;
-                break;
-            default:
-                // Rpr does not support HdInterpolationInstance
+            if (!convertInterpolation(interpolation, rprInterpolation)) {
                 return false;
             }
             try {
@@ -902,6 +908,36 @@ public:
             }
             catch (RprUsdError& e) {
                 TF_RUNTIME_ERROR("Failed to set vertex color: %s", e.what());
+                return false;
+            }
+
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
+            return true;
+        }
+        return false;
+    }
+
+    bool SetMeshVertexOpacity(rpr::Shape* mesh, VtArray<VtFloatArray> const& primvarSamples, HdInterpolation interpolation) {
+        if (primvarSamples.empty()) {
+            return false;
+        }
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar) {
+            LockGuard rprLock(m_rprContext->GetMutex());
+
+            rpr::PrimvarInterpolationType rprInterpolation;
+            if (!convertInterpolation(interpolation, rprInterpolation)) {
+                return false;
+            }
+            try {
+                // converting opacity to transparency
+                VtFloatArray opacitySamples = primvarSamples[0];
+                for (size_t i = 0; i < opacitySamples.size(); ++i) {
+                    opacitySamples[i] = 1.0f - opacitySamples[i];
+                }
+                RPR_ERROR_CHECK_THROW(mesh->SetPrimvar(transparencyPrimvarKey, (rpr_float const*)opacitySamples.cdata(), opacitySamples.size(), 1, rprInterpolation), "Failed to set color primvars");
+            }
+            catch (RprUsdError& e) {
+                TF_RUNTIME_ERROR("Failed to set vertex opacity: %s", e.what());
                 return false;
             }
 
@@ -1416,47 +1452,56 @@ public:
         }
     }
 
-    RprUsdMaterial* CreatePrimvarColorLookupMaterial() {
+    RprUsdMaterial* CreatePrimvarColorLookupMaterial(bool isColorSet, bool isOpacitySet) {
         if (!m_rprContext) {
             return nullptr;
         }
 
         LockGuard rprLock(m_rprContext->GetMutex());
 
-        class HdRprApiPrimvarColorLookupMaterial : public RprUsdMaterial {
+        class HdRprApiPrimvarLookupMaterial : public RprUsdMaterial {
         public:
-            HdRprApiPrimvarColorLookupMaterial(rpr::Context* context) {
+            HdRprApiPrimvarLookupMaterial(rpr::Context* context, bool isColorSet, bool isOpacitySet) {
                 rpr::Status status;
-
-                m_primvarLookupNode.reset(context->CreateMaterialNode(RPR_MATERIAL_NODE_PRIMVAR_LOOKUP, &status));
-                if (!m_primvarLookupNode) {
-                    RPR_ERROR_CHECK_THROW(status, "Failed to create primvar lookup node");
-                }
-
-                // we use zero primvar channel to store vertex color values
-                status = m_primvarLookupNode->SetInput(RPR_MATERIAL_INPUT_VALUE, (rpr_uint) 0);
-                if (status != RPR_SUCCESS) {
-                    RPR_ERROR_CHECK_THROW(status, "Failed to set lookup node input value");
-                }
-
                 m_uberNode.reset(context->CreateMaterialNode(RPR_MATERIAL_NODE_UBERV2, &status));
                 if (!m_uberNode) {
                     RPR_ERROR_CHECK_THROW(status, "Failed to create uber node");
                 }
-                RPR_ERROR_CHECK_THROW(m_uberNode->SetInput(RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR, m_primvarLookupNode.get()), "Failed to set root material diffuse color");
+                
+                if (isColorSet) {
+                    createLookupNode(context, m_primvarColorLookupNode, colorPrimvarKey);
+                    RPR_ERROR_CHECK_THROW(m_uberNode->SetInput(RPR_MATERIAL_INPUT_UBER_DIFFUSE_COLOR, m_primvarColorLookupNode.get()), "Failed to set root material diffuse color");
+                }
+                if (isOpacitySet) {
+                    createLookupNode(context, m_primvarOpacityLookupNode, transparencyPrimvarKey);
+                    RPR_ERROR_CHECK_THROW(m_uberNode->SetInput(RPR_MATERIAL_INPUT_UBER_TRANSPARENCY, m_primvarOpacityLookupNode.get()), "Failed to set root material transparancy");
+                }
 
                 m_surfaceNode = m_uberNode.get();
             };
 
-            ~HdRprApiPrimvarColorLookupMaterial() final = default;
+            ~HdRprApiPrimvarLookupMaterial() final = default;
 
         private:
-            std::unique_ptr<rpr::MaterialNode> m_primvarLookupNode;
+            void createLookupNode(rpr::Context* context, std::unique_ptr<rpr::MaterialNode>& lookupNode, rpr_uint key) {
+                rpr::Status status;
+                lookupNode.reset(context->CreateMaterialNode(RPR_MATERIAL_NODE_PRIMVAR_LOOKUP, &status));
+                if (!lookupNode) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to create primvar lookup node");
+                }
+                status = lookupNode->SetInput(RPR_MATERIAL_INPUT_VALUE, key);
+                if (status != RPR_SUCCESS) {
+                    RPR_ERROR_CHECK_THROW(status, "Failed to set lookup node input value");
+                }
+            }
+
+            std::unique_ptr<rpr::MaterialNode> m_primvarColorLookupNode;
+            std::unique_ptr<rpr::MaterialNode> m_primvarOpacityLookupNode;
             std::unique_ptr<rpr::MaterialNode> m_uberNode;
         };
 
         try {
-            return new HdRprApiPrimvarColorLookupMaterial(m_rprContext.get());
+            return new HdRprApiPrimvarLookupMaterial(m_rprContext.get(), isColorSet, isOpacitySet);
         }
         catch (RprUsdError& e) {
             TF_RUNTIME_ERROR("Failed to create points material: %s", e.what());
@@ -2062,6 +2107,11 @@ public:
                 }
 #endif // RPR_EXR_EXPORT_ENABLED
             }
+        }
+        if (preferences.IsDirty(HdRprConfig::DirtyRenderQuality) || force) {
+            int enableNormalization = preferences.GetCoreLegacyToon() ? 0 : 1;
+            RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_NORMALIZE_LIGHT_INTENSITY_ENABLED, enableNormalization), "Failed to set toon mode");
+            m_dirtyFlags |= ChangeTracker::DirtyScene;
         }
     }
 
@@ -4690,9 +4740,9 @@ RprUsdMaterial* HdRprApi::CreateDiffuseMaterial(GfVec3f const& color) {
     });
 }
 
-RprUsdMaterial* HdRprApi::CreatePrimvarColorLookupMaterial(){
+RprUsdMaterial* HdRprApi::CreatePrimvarLookupMaterial(bool isColorSet, bool isOpacitySet){
     m_impl->InitIfNeeded();
-    return m_impl->CreatePrimvarColorLookupMaterial();
+    return m_impl->CreatePrimvarColorLookupMaterial(isColorSet, isOpacitySet);
 }
 
 void HdRprApi::SetMeshRefineLevel(rpr::Shape* mesh, int level, const float creaseWeight) {
@@ -4721,6 +4771,10 @@ void HdRprApi::SetMeshIgnoreContour(rpr::Shape* mesh, bool ignoreContour) {
 
 bool HdRprApi::SetMeshVertexColor(rpr::Shape* mesh, VtArray<VtVec3fArray> const& primvarSamples, HdInterpolation interpolation) {
     return m_impl->SetMeshVertexColor(mesh, primvarSamples, interpolation);
+}
+
+bool HdRprApi::SetMeshVertexOpacity(rpr::Shape* mesh, VtArray<VtFloatArray> const& primvarSamples, HdInterpolation interpolation) {
+    return m_impl->SetMeshVertexOpacity(mesh, primvarSamples, interpolation);
 }
 
 void HdRprApi::SetCurveMaterial(rpr::Curve* curve, RprUsdMaterial const* material) {

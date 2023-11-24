@@ -10,7 +10,7 @@
 # limitations under the License.
 # 
 import os
-import re
+import stat
 import sys
 import shlex
 import shutil
@@ -44,6 +44,12 @@ def current_working_directory(dir):
     try: yield
     finally: os.chdir(curdir)
 
+def on_rm_error(func, path, exc_info):
+    # path contains the path of the file that couldn't be removed
+    # let's just assume that it's read-only and unlink it.
+    os.chmod(path, stat.S_IWRITE)
+    os.unlink(path)
+
 self_dir = os.path.abspath(self_path())
 hdrpr_root_path = os.path.abspath(os.path.join(self_path(), '../../../../..'))
 
@@ -53,6 +59,8 @@ parser.add_argument('-o', '--output_dir', type=str, default='.')
 parser.add_argument('-c', '--config', type=str, default='Release')
 parser.add_argument('--cmake_options', type=str, default='')
 parser.add_argument('--disable_auto_cleanup', default=False, action='store_true')
+parser.add_argument('--build_resolver', default=False, help="Windows only", action='store_true')
+parser.add_argument('--resolver_cmake_options', type=str, default='', help="Windows only")
 args = parser.parse_args()
 
 output_dir = os.path.abspath(args.output_dir)
@@ -60,11 +68,13 @@ output_dir = os.path.abspath(args.output_dir)
 package_dir = '_package'
 cmake_configure_cmd = ['cmake', '-DCMAKE_INSTALL_PREFIX='+package_dir, '-DDUMP_PACKAGE_FILE_NAME=ON']
 cmake_configure_cmd += shlex.split(args.cmake_options)
+if args.build_resolver:
+    cmake_configure_cmd += ["-DRESOLVER_SUPPORT=ON"]
 cmake_configure_cmd += ['..']
 
 build_dir = 'build_generatePackage_tmp_dir'
 if not args.disable_auto_cleanup and os.path.isdir(build_dir):
-    shutil.rmtree(build_dir)
+    shutil.rmtree(build_dir, onerror=on_rm_error)
 
 os.makedirs(build_dir, exist_ok=True)
 
@@ -82,6 +92,10 @@ with current_working_directory(build_dir):
     if return_code != 0:
         exit(return_code)
 
+    if args.build_resolver:
+        from buildResolver import build_resolver
+        build_resolver(os.path.abspath(package_dir), args.resolver_cmake_options, format_multi_procs(get_cpu_count()))
+
     with tarfile.open('tmpPackage.tar.gz', 'w:gz') as tar:
         tar.add(package_dir, package_name)
     output_package = os.path.join(output_dir, package_name+'.tar.gz')
@@ -89,4 +103,4 @@ with current_working_directory(build_dir):
 print('{} has been created'.format(os.path.relpath(output_package)))
 
 if not args.disable_auto_cleanup:
-    shutil.rmtree(build_dir)
+    shutil.rmtree(build_dir, onerror=on_rm_error)

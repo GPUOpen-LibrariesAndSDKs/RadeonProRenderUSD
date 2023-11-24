@@ -82,6 +82,14 @@ render_setting_categories = [
                 'houdini': {
                     'hidewhen': hidewhen_not_northstar
                 }
+            },
+            {
+                'name': 'core:legacyToon',
+                'ui_name': 'Use Legacy RPR Toon',
+                'defaultValue': False,
+                'houdini': {
+                    'hidewhen': hidewhen_not_northstar
+                }
             }
         ]
     },

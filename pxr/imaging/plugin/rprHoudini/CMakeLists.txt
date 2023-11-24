@@ -62,6 +62,7 @@ install(
         ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_exportRpr1.hda
         ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_standard_rendervars.hda
     DESTINATION "houdini/otls")
+
 install(
     FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/__init__.py
@@ -81,7 +82,33 @@ install(
         houdini/config/Icons)
 install(
     FILES
-        ui/MainMenuCommon.xml
         UsdRenderers.json
     DESTINATION
         houdini)
+
+if(RESOLVER_SUPPORT)
+    install(
+        FILES
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/python/houRpr/resolver.py
+        DESTINATION
+            houdini/scripts/python/houRpr)
+    install(
+        FILES
+            ui/MainMenuCommon_resolver.xml
+        DESTINATION
+            houdini
+        RENAME
+            MainMenuCommon.xml)
+    install(
+        FILES
+            ${CMAKE_CURRENT_SOURCE_DIR}/hda/rpr_exportToRenderStudio.hda
+        DESTINATION
+            houdini/otls)
+    target_compile_definitions(activateHoudiniPlugin PRIVATE RESOLVER_SUPPORT)
+else ()
+    install(
+        FILES
+            ui/MainMenuCommon.xml
+        DESTINATION
+            houdini)
+endif ()

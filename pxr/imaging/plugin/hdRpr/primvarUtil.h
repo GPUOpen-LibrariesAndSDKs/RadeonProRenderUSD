@@ -88,10 +88,19 @@ bool HdRprSamplePrimvar(
     VtArray<T>* sampleValuesPtr) {
     std::vector<float> sampleTimes(maxSampleCount);
     std::vector<VtValue> sampleVtValues(maxSampleCount);
-
+    
     size_t authoredSampleCount = sceneDelegate->SamplePrimvar(id, key, maxSampleCount, sampleTimes.data(), sampleVtValues.data());
     if (!authoredSampleCount) {
         return false;
+    }
+
+    // for maxSampleCount == 1 and animated scene SamplePrimvar returns 3 frames, and we have to get 2nd one
+    if (maxSampleCount == 1 && authoredSampleCount > 2) {
+        std::vector<float> sampleTimesTmp(authoredSampleCount);
+        std::vector<VtValue> sampleVtValuesTmp(authoredSampleCount);
+        sceneDelegate->SamplePrimvar(id, key, authoredSampleCount, sampleTimesTmp.data(), sampleVtValuesTmp.data());
+        sampleTimes[0] = sampleTimesTmp[1];
+        sampleVtValues[0] = sampleVtValuesTmp[1];
     }
 
     if (authoredSampleCount < maxSampleCount) {
