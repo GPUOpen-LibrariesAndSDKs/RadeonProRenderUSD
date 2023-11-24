@@ -205,23 +205,6 @@ class "RprRendererSettingsAPI" (
         rprMinValue = 0
     )
 
-
-    # not for < High
-    uniform bool rpr:denoising:enable = false (
-        displayGroup = "Postprocessing|Denoise"
-        displayName = "Enable AI Denoise"
-    )
-    uniform int rpr:denoising:minIter = 4 (
-        displayGroup = "Postprocessing|Denoise"
-        displayName = "Min Iteration"
-        rprMinValue = 1
-    )
-    uniform int rpr:denoising:iterStep = 32 (
-        displayGroup = "Postprocessing|Denoise"
-        displayName = "Iteration Step"
-        rprMinValue = 1
-    )
-
     # not for low
     uniform int rpr:maxSamples = 128 (
         displayGroup = "Sampling"
@@ -359,6 +342,12 @@ class "RprRendererSettingsAPI" (
         displayGroup = "Hybrid|Postprocessing"
     )
 
+    uniform bool rpr:hybrid:displacement = false (
+        displayName = "Enable Hybrid Displacement"
+        displayGroup = "Hybrid"
+        doc = "Enables displecement in Hybrid Pro. Render restart might be required."
+    )
+
     uniform uint rpr:hybrid:acceleration_memory_size_mb = 2048 (
         displayName = "Hybrid Acceleration Structure Memory Size"
         displayGroup = "Hybrid|Memory"
@@ -476,13 +465,9 @@ class "RprRendererSettingsAPI" (
         displayGroup = "Export .rpr"
         rprHidden = 1
     )
-    
-    uniform bool rpr:viewportUpscaling = false (
-        displayGroup = "Postprocessing|Upscale"
-        displayName = "Viewport Upscaling"
-    )
+
     # Hybrid only
-    uniform token rpr:viewportUpscalingQuality = "Ultra Performance" (
+    uniform token rpr:hybrid:upscalingQuality = "Ultra Performance" (
         allowedTokens = ["Ultra Quality", "Quality", "Balance", "Performance", "Ultra Performance"]
         displayName = "Viewport Upscaling Quality"
         displayGroup = "Postprocessing|Upscale"

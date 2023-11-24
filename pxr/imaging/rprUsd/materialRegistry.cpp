@@ -53,7 +53,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 mx::DocumentPtr
 HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
     HdMaterialNetwork2 const& hdNetwork,
-    HdMaterialNode2 const& hdMaterialXNode,
+    HdMaterialNode2 const* hdMaterialXSurfaceNodePtr,
+    HdMaterialNode2 const* hdMaterialXDisplacementNodePtr,
     SdfPath const& materialPath,
     mx::DocumentPtr const& libraries,
     std::set<SdfPath>* hdTextureNodes,
@@ -397,13 +398,9 @@ void DumpMaterialNetwork(HdMaterialNetworkMap const& networkMap) {
     }
 }
 
-RprUsdMaterial* CreateMaterialXFromUsdShade(
-    SdfPath const& materialPath,
-    RprUsd_MaterialBuilderContext const& context,
-    mx::DocumentPtr& stdLibraries) {
-
 #ifdef USE_USDSHADE_MTLX
-    auto terminalIt = context.materialNetwork->terminals.find(UsdShadeTokens->surface);
+HdMaterialNode2 const* GetTerminalNodeByToken(SdfPath const& materialPath, RprUsd_MaterialBuilderContext const& context, const TfToken& type){
+    auto terminalIt = context.materialNetwork->terminals.find(type);
     if (terminalIt == context.materialNetwork->terminals.end()) {
         return nullptr;
     }
@@ -424,6 +421,28 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
         return nullptr;
     }
 
+    return &nodeIt->second;
+}
+#endif // USE_USDSHADE_MTLX
+
+RprUsdMaterial* CreateMaterialXFromUsdShade(
+    SdfPath const& materialPath,
+    RprUsd_MaterialBuilderContext const& context,
+    mx::DocumentPtr& stdLibraries,
+    bool enableDisplacement) {
+
+#ifdef USE_USDSHADE_MTLX
+    HdMaterialNode2 const* surfaceTerminalNode = GetTerminalNodeByToken(materialPath, context, UsdShadeTokens->surface);
+    HdMaterialNode2 const* displacementTerminalNode = GetTerminalNodeByToken(materialPath, context, UsdShadeTokens->displacement);
+    if(!surfaceTerminalNode){
+        return nullptr;
+    }
+
+    // Ignore displacement node if displacement is not allowed
+    if(!enableDisplacement){
+        displacementTerminalNode = nullptr;
+    }
+
     // TODO: move lib initialization to class constructor
     if (!stdLibraries) {
         std::string materialXStdlibPath;
@@ -434,6 +453,9 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
             std::string usdLibPath = usdPlugin->GetPath();
             std::string usdDir = TfNormPath(TfGetPathName(usdLibPath) + "..");
             materialXStdlibPath = usdDir;
+#ifdef __APPLE__
+            materialXStdlibPath += "/Resources";
+#endif
         }
 
         stdLibraries = mx::createDocument();
@@ -452,7 +474,8 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     try {
         mtlxDoc = HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
             *context.materialNetwork,
-            terminalNode,
+            surfaceTerminalNode,
+            displacementTerminalNode,
             materialPath,
             stdLibraries,
             &hdTextureNodes,
@@ -469,15 +492,16 @@ RprUsdMaterial* CreateMaterialXFromUsdShade(
     }
 
     struct RprUsdMaterial_RprApiMtlx : public RprUsdMaterial {
-        RprUsdMaterial_RprApiMtlx(rpr::MaterialNode* retainedNode)
+        RprUsdMaterial_RprApiMtlx(rpr::MaterialNode* retainedNode, bool containsDisplacement)
             : m_retainedNode(retainedNode) {
             // TODO: fill m_uvPrimvarName
             m_surfaceNode = m_retainedNode.get();
+            m_isMaterialXDisplacement = containsDisplacement;
         }
 
         std::unique_ptr<rpr::MaterialNode> m_retainedNode;
     };
-    return new RprUsdMaterial_RprApiMtlx(mtlxNode);
+    return new RprUsdMaterial_RprApiMtlx(mtlxNode, displacementTerminalNode);
 #else
     return nullptr;
 #endif // USE_USDSHADE_MTLX
@@ -490,7 +514,9 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     HdSceneDelegate* sceneDelegate,
     HdMaterialNetworkMap const& legacyNetworkMap,
     rpr::Context* rprContext,
-    RprUsdImageCache* imageCache) {
+    RprUsdImageCache* imageCache,
+    bool isHybrid,
+    bool hybridEnableDisplacement) {
 
     if (TfDebug::IsEnabled(RPR_USD_DEBUG_DUMP_MATERIALS)) {
         DumpMaterialNetwork(legacyNetworkMap);
@@ -515,7 +541,8 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
 #endif // USE_CUSTOM_MATERIALX_LOADER
 
     if (!isVolume) {
-        if (auto usdShadeMtlxMaterial = CreateMaterialXFromUsdShade(materialId, context, m_stdLibraries)) {
+        bool enableDisplacement = !isHybrid | hybridEnableDisplacement;
+        if (auto usdShadeMtlxMaterial = CreateMaterialXFromUsdShade(materialId, context, m_stdLibraries, enableDisplacement)) {
             return usdShadeMtlxMaterial;
         }
     }
@@ -529,7 +556,9 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             VtValue const& displacementOutput,
             VtValue const& volumeOutput,
             const char* cryptomatteName,
-            int materialId) {
+            int materialId,
+            bool isHybrid,
+            rpr::Context* rprContext) {
 
             auto getTerminalRprNode = [](VtValue const& terminalOutput) -> rpr::MaterialNode* {
                 if (!terminalOutput.IsEmpty()) {
@@ -546,6 +575,29 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
             m_volumeNode = getTerminalRprNode(volumeOutput);
             m_surfaceNode = getTerminalRprNode(surfaceOutput);
             m_displacementNode = getTerminalRprNode(displacementOutput);
+
+            m_isHybrid = isHybrid;
+            if (isHybrid) {
+                rpr::Status status;
+                m_hybridDisplacementMul.reset(rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_ARITHMETIC, &status));
+                if (!m_hybridDisplacementMul) {
+                    RPR_ERROR_CHECK(status, "Failed to create arithmetic node");
+                    return false;
+                }
+                m_hybridDisplacementMul->SetInput(RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_MUL);
+                m_hybridDisplacementMul->SetInput(RPR_MATERIAL_INPUT_COLOR0, m_displacementNode);
+                m_hybridDisplacementMul->SetInput(RPR_MATERIAL_INPUT_COLOR1, 1.0f, 0.0f, 0.0f, 0.0f);
+
+                m_hybridDisplacementAdd.reset(rprContext->CreateMaterialNode(RPR_MATERIAL_NODE_ARITHMETIC, &status));
+                if (!m_hybridDisplacementAdd) {
+                    RPR_ERROR_CHECK(status, "Failed to create arithmetic node");
+                    m_hybridDisplacementMul.release();
+                    return false;
+                }
+                m_hybridDisplacementAdd->SetInput(RPR_MATERIAL_INPUT_OP, RPR_MATERIAL_NODE_OP_ADD);
+                m_hybridDisplacementAdd->SetInput(RPR_MATERIAL_INPUT_COLOR0, m_hybridDisplacementMul.get());
+                m_hybridDisplacementAdd->SetInput(RPR_MATERIAL_INPUT_COLOR1, 0.0f, 0.0f, 0.0f, 0.0f);
+            }
 
             m_isShadowCatcher = context.isShadowCatcher;
             m_isReflectionCatcher = context.isReflectionCatcher;
@@ -685,13 +737,18 @@ RprUsdMaterial* RprUsdMaterialRegistry::CreateMaterial(
     auto surfaceOutput = getTerminalOutput(UsdShadeTokens->surface);
     auto displacementOutput = getTerminalOutput(UsdShadeTokens->displacement);
 
+    // Ignore displacement node if displacement is not allowed
+    if(!hybridEnableDisplacement && isHybrid){
+        displacementOutput = VtValue();
+    }
+
     int materialRprId = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialId).GetWithDefault(-1);
     std::string cryptomatteName = sceneDelegate->GetLightParamValue(materialId, RprUsdTokens->rprMaterialAssetName).GetWithDefault(std::string{});
     if (cryptomatteName.empty()) {
         cryptomatteName = materialId.GetString();
     }
 
-    if (out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId)) {
+    if (out->Finalize(context, surfaceOutput, displacementOutput, volumeOutput, cryptomatteName.c_str(), materialRprId, isHybrid, rprContext)) {
         return out.release();
     }
 

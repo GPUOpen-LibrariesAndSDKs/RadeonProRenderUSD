@@ -229,7 +229,14 @@ _AddMaterialXNode(
     // For each of the HdNode parameters add the corresponding parameter/input 
     // to the mxNode
     for (auto const& currParam : hdNode.parameters) {
-        
+
+        // USD does not provide colorspace attribute on file
+        // Add new input attribute to handle texture file colorspace
+        if ("rs:colorspace" == currParam.first) {
+            mxNode->setColorSpace(currParam.second.UncheckedGet<std::string>());
+            continue;
+        }
+
         // Get the MaterialX Parameter info
         std::string mxInputName, mxInputValue, mxInputType;
         _GetMxInputInfo(currParam, mxNodeDef, &mxInputName,
@@ -277,7 +284,7 @@ _GatherUpstreamNodes(
 
     // Initilize the mxNodeGraph if needed
     if (!(*mxNodeGraph)) {
-        const std::string & nodeGraphName  = hdNodePath.GetParentPath().GetName() + "_Graph";
+        const std::string & nodeGraphName  = hdNodePath.GetParentPath().GetName() + "_" + connectionName + "_Graph";
         *mxNodeGraph = mxDoc->addNodeGraph(nodeGraphName);
     }
     
@@ -308,10 +315,16 @@ _GatherUpstreamNodes(
             // Connect mxCurrNode to the mxUpstreamNode
             mx::NodePtr mxNextNode = *mxUpstreamNode;
 
-            // Make sure to not add the same input twice 
+            mx::OutputPtr mxOutput = mxNextNode->getOutput(currConnection.upstreamOutputName);
+            if (!mxOutput && mxNextNode->getType() == "multioutput") {
+                mxOutput = mxNextNode->addOutput(currConnection.upstreamOutputName);
+            }
+
+            // Make sure to not add the same input twice
             mx::InputPtr mxInput = mxCurrNode->getInput(connName);
             if (!mxInput){
-                mxInput = mxCurrNode->addInput(connName, mxNextNode->getType());
+                mxInput = mxCurrNode->addInput(connName, mxNextNode->getType() == "multioutput" ?
+                  mxOutput->getType() : mxNextNode->getType());
             }
             mxInput->setConnectedNode(mxNextNode);
         }
@@ -320,28 +333,24 @@ _GatherUpstreamNodes(
     *mxUpstreamNode = mxCurrNode;
 }
 
-
-// Create a MaterialX Document from the given HdMaterialNetwork
-mx::DocumentPtr 
-HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
+mx::NodePtr
+_CreateShaderNode(
+    mx::DocumentPtr const& mxDoc,
     HdMaterialNetwork2 const& hdNetwork,
     HdMaterialNode2 const& hdMaterialXNode,
-    SdfPath const& materialPath,
-    mx::DocumentPtr const& libraries,
+    std::string const& materialName,
     std::set<SdfPath> * hdTextureNodes, // Paths to the Hd Texture Nodes
-    mx::StringMap * mxHdTextureMap)     // Mx-Hd texture name counterparts
+    mx::StringMap * mxHdTextureMap,     // Mx-Hd texture name counterparts
+    bool isDisplacementShader = false)
 {
-    // Initialize a MaterialX Document
-    mx::DocumentPtr mxDoc = mx::createDocument();
-    mxDoc->importLibrary(libraries);
-    
     // Create a material that instantiates the shader
-    const std::string & materialName = materialPath.GetName();
+    const std::string nodeNamePrefix = isDisplacementShader ? "DS_" : "SR_";
+    const std::string nodeType = isDisplacementShader ? "displacementshader" : "surfaceshader";
+
     TfToken mxType = _GetMxNodeType(mxDoc, hdMaterialXNode.nodeTypeId);
     mx::NodePtr mxShaderNode = mxDoc->addNode(mxType.GetString(),
-                                              "SR_" + materialName,
-                                              "surfaceshader");
-    mx::NodePtr mxMaterial = mxDoc->addMaterialNode(materialName, mxShaderNode);
+                                              nodeNamePrefix + materialName,
+                                              nodeType);
 
     // Create mxNodeGraph from the inputConnections in the HdMaterialNetwork
     mx::NodeGraphPtr mxNodeGraph;
@@ -420,9 +429,39 @@ HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
         else {
             mxShaderNode->removeInput(mxInputName);
             TF_WARN("Unsupported Input Type '%s' for mxNode '%s' of type '%s'",
-                    hdParamValue.GetTypeName().c_str(), mxInputName.c_str(), 
+                    hdParamValue.GetTypeName().c_str(), mxInputName.c_str(),
                     mxType.GetText());
         }
+    }
+
+    return mxShaderNode;
+}
+
+
+// Create a MaterialX Document from the given HdMaterialNetwork
+mx::DocumentPtr 
+HdMtlxCreateMtlxDocumentFromHdNetwork_Fixed(
+    HdMaterialNetwork2 const& hdNetwork,
+    HdMaterialNode2 const* hdMaterialXSurfaceNodePtr,
+    HdMaterialNode2 const* hdMaterialXDisplacementNodePtr,
+    SdfPath const& materialPath,
+    mx::DocumentPtr const& libraries,
+    std::set<SdfPath> * hdTextureNodes, // Paths to the Hd Texture Nodes
+    mx::StringMap * mxHdTextureMap)     // Mx-Hd texture name counterparts
+{
+    // Initialize a MaterialX Document
+    mx::DocumentPtr mxDoc = mx::createDocument();
+    mxDoc->importLibrary(libraries);
+
+    const std::string & materialName = materialPath.GetName();
+
+    mx::NodePtr mxMaterial = mxDoc->addMaterialNode(materialName);
+    mx::NodePtr mxSurfaceShader = _CreateShaderNode(mxDoc, hdNetwork, *hdMaterialXSurfaceNodePtr, materialName, hdTextureNodes, mxHdTextureMap);
+    mxMaterial->setConnectedNode("surfaceshader", mxSurfaceShader);
+
+    if(hdMaterialXDisplacementNodePtr){
+        mx::NodePtr mxDisplacementShader = _CreateShaderNode(mxDoc, hdNetwork, *hdMaterialXDisplacementNodePtr, materialName, hdTextureNodes, mxHdTextureMap, true);
+        mxMaterial->setConnectedNode("displacementshader", mxDisplacementShader);
     }
 
     // Validate the MaterialX Document.
