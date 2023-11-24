@@ -186,9 +186,9 @@ void CpuGammaCorrection(GfVec4f* srcdest, size_t numPixels, float gamma) {
     WorkParallelForN(numPixels,
         [&](size_t begin, size_t end) {
         for (int i = begin; i < end; ++i) {
-            srcdest[i][0] = std::powf(srcdest[i][0], _1_g);
-            srcdest[i][1] = std::powf(srcdest[i][1], _1_g);
-            srcdest[i][2] = std::powf(srcdest[i][2], _1_g);
+            srcdest[i][0] = powf(srcdest[i][0], _1_g);
+            srcdest[i][1] = powf(srcdest[i][1], _1_g);
+            srcdest[i][2] = powf(srcdest[i][2], _1_g);
             // skiping alpha
         }
     });
@@ -203,9 +203,9 @@ void CpuTonemap(GfVec4f* srcdest, size_t numPixels, float gamma, float exposureT
     WorkParallelForN(numPixels,
         [&](size_t begin, size_t end) {
         for (int i = begin; i < end; ++i) {
-            srcdest[i][0] = std::powf(srcdest[i][0] * h, _1_g);
-            srcdest[i][1] = std::powf(srcdest[i][1] * h, _1_g);
-            srcdest[i][2] = std::powf(srcdest[i][2] * h, _1_g);
+            srcdest[i][0] = powf(srcdest[i][0] * h, _1_g);
+            srcdest[i][1] = powf(srcdest[i][1] * h, _1_g);
+            srcdest[i][2] = powf(srcdest[i][2] * h, _1_g);
             // skiping alpha
         }
     });
