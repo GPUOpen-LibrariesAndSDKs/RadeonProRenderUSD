@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<materialx version="1.37">
+  <nodedef name="ND_rpr_primvar_lookup" node="rpr_primvar_lookup" uiname="RPR Primvar Lookup" doc="Reads a value from Primvar channel.">
+      <input name="value" type="string" value="displayColor" enum="displayColor,displayOpacity" uiname="Value" doc="Value to lookup."/>
+      <output name="out" type="vector3" />
+  </nodedef>
+</materialx>
