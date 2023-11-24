@@ -77,6 +77,13 @@ class "RprRendererSettingsAPI" (
         doc = "Use OpenCL Northstar backed instead of HIP/CUDA"
     )
 
+    # northstar only
+    uniform bool rpr:core:legacyToon = false (
+        displayName = "Use Legacy RPR Toon"
+        displayGroup = "General"
+        doc = "Enable backward compatibility of RPR Toon shader appearance"
+    )
+
     # tahoe only
     uniform float rpr:ambientOcclusion:radius = 1.0 (
         displayName = "Ambient Occlusion Radius"

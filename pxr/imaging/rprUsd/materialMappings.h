@@ -141,6 +141,7 @@ bool ToRpr(TfToken const& id, uint32_t* out, bool pedantic = true);
     (checker_texture) \
     (constant_texture) \
     (input_lookup) \
+    (primvar_lookup) \
     (blend_value) \
     (passthrough) \
     (orennayar) \
@@ -182,6 +183,9 @@ bool ToRpr(TfToken const& id, uint32_t* out, bool pedantic = true);
     ((localPosition, "Local Position")) \
     ((shapeRandomColor, "Shape Random Color")) \
     ((objectId, "Object Id")) \
+    /* Lookup primvar */ \
+    ((displayColor, "displayColor")) \
+    ((displayOpacity, "displayOpacity")) \
     /* UV Type */ \
     ((planar, "Flat Plane")) \
     ((cylindical, "Cylinder (in xy direction)")) \

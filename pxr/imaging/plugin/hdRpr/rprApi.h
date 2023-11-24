@@ -118,7 +118,7 @@ public:
     RprUsdMaterial* CreateMaterial(SdfPath const& materialId, HdSceneDelegate* sceneDelegate, HdMaterialNetworkMap const& materialNetwork);
     RprUsdMaterial* CreatePointsMaterial(VtVec3fArray const& colors);
     RprUsdMaterial* CreateDiffuseMaterial(GfVec3f const& color);
-    RprUsdMaterial* CreatePrimvarColorLookupMaterial();
+    RprUsdMaterial* CreatePrimvarLookupMaterial(bool isColorSet, bool isOpacitySet);
     void Release(RprUsdMaterial* material);
 
     rpr::Shape* CreateMesh(VtVec3fArray const& points, VtIntArray const& pointIndexes, VtVec3fArray const& normals, VtIntArray const& normalIndexes, VtVec2fArray const& uvs, VtIntArray const& uvIndexes, VtIntArray const& vpf, TfToken const& polygonWinding);
@@ -131,6 +131,7 @@ public:
     void SetMeshId(rpr::Shape* mesh, uint32_t id);
     void SetMeshIgnoreContour(rpr::Shape* mesh, bool ignoreContour);
     bool SetMeshVertexColor(rpr::Shape* mesh, VtArray<VtVec3fArray> const& primvarSamples, HdInterpolation interpolation);
+    bool SetMeshVertexOpacity(rpr::Shape* mesh, VtArray<VtFloatArray> const& primvarSamples, HdInterpolation interpolation);
     void Release(rpr::Shape* shape);
 
     rpr::Curve* CreateCurve(VtVec3fArray const& points, VtIntArray const& indices, VtFloatArray const& radiuses, VtVec2fArray const& uvs, VtIntArray const& segmentPerCurve);

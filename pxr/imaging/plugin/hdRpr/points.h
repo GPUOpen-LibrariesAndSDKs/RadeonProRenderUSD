@@ -54,6 +54,7 @@ private:
     RprUsdMaterial* m_material = nullptr;
 
     GfMatrix4f m_transform;
+    std::vector<GfMatrix4f> m_instanceTransforms;
 
     VtVec3fArray m_points;
 
