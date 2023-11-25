@@ -29,6 +29,7 @@ limitations under the License.
 #include "pxr/base/arch/env.h"
 
 #ifdef BUILD_AS_HOUDINI_PLUGIN
+#include <UT/UT_HDKVersion.h>
 #include <HOM/HOM_Module.h>
 #include <HOM/HOM_ui.h>
 #include <HOM/HOM_text.h>
@@ -64,15 +65,25 @@ static float computeLightIntensity(float intensity, float exposure) {
 
 #ifdef BUILD_AS_HOUDINI_PLUGIN
 
-HOM_Node* FindNodeById(HOM_Node* node, const std::string& id) {
+#if HDK_API_VERSION < 20000000
+#define HOM_NODE HOM_Node
+#else
+#define HOM_NODE HOM_OpNode
+#endif
+
+HOM_NODE* FindNodeById(HOM_Node* node, const std::string& id) {
     auto schildren = node->children();
     for (HOM_ElemPtr<HOM_Node>& sc : schildren) {
-        HOM_Parm* p = sc.myPointer->parm("primpath");
+        HOM_NODE* nd = dynamic_cast<HOM_NODE*>(sc.myPointer);
+        if (!nd) {
+            continue;
+        }
+        HOM_Parm* p = nd->parm("primpath");
         if (p && p->evalAsString() == id) {
-            return sc.myPointer;
+            return nd;
         }
 
-        HOM_Node* foundInSubnodes = FindNodeById(sc.myPointer, id);
+        HOM_NODE* foundInSubnodes = FindNodeById(sc.myPointer, id);
         if (foundInSubnodes) {
             return foundInSubnodes;
         }
@@ -80,12 +91,12 @@ HOM_Node* FindNodeById(HOM_Node* node, const std::string& id) {
     return nullptr;
 }
 
-HOM_Node* FindNodeById(HOM_Module& hou, const std::string& id) {
+HOM_NODE* FindNodeById(HOM_Module& hou, const std::string& id) {
     HOM_Node* sceneNode = hou.node("/stage");
     return FindNodeById(sceneNode, id);
 }
 
-void CreateSceneBackgroundOverrideParms(HOM_Module& hou, HOM_Node* node) {
+void CreateSceneBackgroundOverrideParms(HOM_Module& hou, HOM_NODE* node) {
     HOM_StdMapStringString enableTags;
     enableTags.insert(std::pair<std::string, std::string>("usdvaluetype", "bool"));
     HOM_StdMapStringString colorTags;
@@ -111,7 +122,7 @@ void CreateSceneBackgroundOverrideParms(HOM_Module& hou, HOM_Node* node) {
     node->setParmTemplateGroup(*group);
 }
 
-void SetSceneBackgroundOverride(HOM_Module& hou, HOM_Node* node, HdRprApi::BackgroundOverride & override) {
+void SetSceneBackgroundOverride(HOM_Module& hou, HOM_NODE* node, HdRprApi::BackgroundOverride & override) {
     if (!node) {
         return;
     }
@@ -173,7 +184,7 @@ HdRprApi::BackgroundOverride BackgroundOverrideSettings(HdSceneDelegate* sceneDe
                 result.color = GfVec3f(1.0f);
             }
         }
-        HOM_Node* node = FindNodeById(hou, nodeId.GetAsString());
+        HOM_NODE* node = FindNodeById(hou, nodeId.GetAsString());
         if (node) {
             SetSceneBackgroundOverride(hou, node, result);
         }
@@ -191,7 +202,7 @@ void CreateOverrideEnableParmIfNeeded(const SdfPath& nodeId) {
         return;
     }
 
-    HOM_Node* node = FindNodeById(hou, nodeId.GetAsString());
+    HOM_NODE* node = FindNodeById(hou, nodeId.GetAsString());
     if (node) {
         HOM_text& text = hou.text();
         HOM_Parm* enableParm = node->parm(text.encode("rpr:backgroundOverride:enable").c_str());
