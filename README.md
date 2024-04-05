@@ -51,7 +51,7 @@ Cloning into 'RadeonProRenderUSD'...
 Provide USD in one of two ways:
 
 * An installation of USD. Define pxr_DIR to point to it when running cmake, if required. You can download USD to build yourself from [GitHub](https://www.github.com/PixarAnimationStudios/USD). It should be built with OpenEXR libraries and usdGenSchema tool.
-* The USD which is provided with Houdini. The HFS environment variable should point to the Houdini installation (the correct way is to run cmake from Houdini's `Command Line Tools` or by sourcing `houdini_setup`). You can download Houdini installer from [Downloads | SideFX](https://www.sidefx.com/download).
+* The USD which is provided with Houdini. The HFS environment variable should point to the Houdini installation (the correct way is to run cmake from Houdini's `Command Line Tools` or by sourcing `houdini_setup`). You can download Houdini installer from [Downloads | SideFX](https://www.sidefx.com/download). Providing correct `HFS` environment variable should also supply the Python version according to the Houdini engine.
 
 ##### MaterialX Component
 

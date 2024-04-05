@@ -41,7 +41,7 @@ endif(APPLE)
 set(Houdini_Python_VARS Houdini_Python_INCLUDE_DIR Houdini_Python_LIB Houdini_Boostpython_LIB)
 list(APPEND HUSD_REQ_VARS ${Houdini_Python_VARS})
 
-foreach(python_major_minor "3;9" "3;7" "2;7")
+foreach(python_major_minor "3;12" "3;11" "3;10" "3;9" "3;7" "2;7")
     list(GET python_major_minor 0 py_major)
     list(GET python_major_minor 1 py_minor)
 
