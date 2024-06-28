@@ -300,7 +300,6 @@ bool ResolveRat(std::string& path) {
 
 HdRprDomeLight::HdRprDomeLight(SdfPath const& id)
     : HdSprim(id) {
-    CreateOverrideEnableParmIfNeeded(id);
 }
 
 void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
@@ -310,6 +309,11 @@ void HdRprDomeLight::Sync(HdSceneDelegate* sceneDelegate,
     auto rprApi = rprRenderParam->AcquireRprApiForEdit();
 
     SdfPath const& id = GetId();
+    // Lazy parm initialization to avoid synchronization issue https://amdrender.atlassian.net/browse/RPRHOUD-112
+    if (!m_parmCreated) {
+        CreateOverrideEnableParmIfNeeded(id);
+        m_parmCreated = true;
+    }
     HdDirtyBits bits = *dirtyBits;
 
     if (bits & HdLight::DirtyTransform) {
