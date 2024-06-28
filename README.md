@@ -90,6 +90,14 @@ Supported Platforms
 * linux(experimental)
 * macOS(experimental)
 
+Automatic Houdini build on Windows
+-----------------------------
+Run `pxr\imaging\plugin\hdRpr\package\buildPackageWin.bat` with the target version of Houdini
+##### Example
+```
+pxr\imaging\plugin\hdRpr\package\buildPackageWin.bat 19.5.805
+```
+
 Try it out
 -----------------------------
 
