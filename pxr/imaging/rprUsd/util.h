@@ -16,6 +16,10 @@ limitations under the License.
 
 #include "pxr/imaging/rprUsd/api.h"
 
+#ifndef PXR_VERSION
+#include "pxr/pxr.h"
+#endif
+
 #if PXR_VERSION >= 2102
 #include "pxr/imaging/garch/glApi.h"
 #else
