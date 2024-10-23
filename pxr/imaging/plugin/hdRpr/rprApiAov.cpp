@@ -592,7 +592,7 @@ HdRprApiDepthAov::HdRprApiDepthAov(
                             vec4 alpha = ReadPixelTyped(alphaImage, coord.x, coord.y);
                             vec4 color = ReadPixelTyped(inputImage, coord.x, coord.y);
                             if (alpha.x == 0) {
-                                color = make_vec4(1.f, 1.f, 1.f, 1.f);
+                                color = make_vec4(0.99f, 0.99f, 0.99f, 0.99f);
                             }
                             WritePixelTyped(outputImage, coord.x, coord.y, color);
                         )");
