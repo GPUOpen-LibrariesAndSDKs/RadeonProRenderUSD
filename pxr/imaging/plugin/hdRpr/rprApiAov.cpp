@@ -592,6 +592,7 @@ HdRprApiDepthAov::HdRprApiDepthAov(
                             vec4 alpha = ReadPixelTyped(alphaImage, coord.x, coord.y);
                             vec4 color = ReadPixelTyped(inputImage, coord.x, coord.y);
                             if (alpha.x == 0) {
+                                // Using 1.0 does not work with compositing in viewport
                                 color = make_vec4(0.99f, 0.99f, 0.99f, 0.99f);
                             }
                             WritePixelTyped(outputImage, coord.x, coord.y, color);
