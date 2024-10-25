@@ -77,7 +77,6 @@ if(NOT USD_SCHEMA_GENERATOR)
 endif()
 
 find_package(Rpr REQUIRED)
-find_package(Rif REQUIRED)
 
 # Core USD Package Requirements
 # ----------------------------------------------
