@@ -146,7 +146,7 @@ void SetSceneBackgroundOverride(HOM_Module& hou, HOM_NODE* node, HdRprApi::Backg
         }
     }
 
-    enableParm->_set(override.enable ? 1 : 0);
+    enableParm->_set(override.enable ? 1.0f : 0.0f);
     colorParmR->_set(override.color[0]);
     colorParmG->_set(override.color[1]);
     colorParmB->_set(override.color[2]);
