@@ -39,6 +39,7 @@ public:
 protected:
     HdRprApiEnvironmentLight* m_rprLight = nullptr;
     GfMatrix4f m_transform;
+    bool m_parmCreated = false;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
