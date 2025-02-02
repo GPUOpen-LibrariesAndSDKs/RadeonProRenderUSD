@@ -33,6 +33,9 @@ More info here https://www.sidefx.com/docs/houdini/ref/plugins.html
 
 `activateHoudiniPlugin` executable can do the same for you automatically - it will try to find your houdini preference dir and add hdRpr package that will point to the current directory.
 
+> [!TIP]
+> On Linux, certain file copies that execute as part of `activateHoudiniPlugin` might require `sudo` elevated user, however that can end up writing the JSON file to home directory of another user than the current. Make sure that desired user's home directory contains the JSON file in the respective `packages` directory within `~/houdiniX.Y/` directory.
+
 ### Usdview plugin
 
 Here and next, HDRPR_PACKAGE_DIR is a path to the root of the package.
