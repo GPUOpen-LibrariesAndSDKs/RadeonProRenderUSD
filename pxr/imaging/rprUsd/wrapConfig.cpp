@@ -14,12 +14,12 @@ limitations under the License.
 #include "config.h"
 #include "boostIncludePath.h"
 
-#include BOOST_INCLUDE_PATH(python.hpp)
-#include BOOST_INCLUDE_PATH(python/class.hpp)
-#include BOOST_INCLUDE_PATH(python/def.hpp)
-#include BOOST_INCLUDE_PATH(python/scope.hpp)
+#include RPR_BOOST_PYTHON_INCLUDE(python.hpp)
+#include RPR_BOOST_PYTHON_INCLUDE(python/class.hpp)
+#include RPR_BOOST_PYTHON_INCLUDE(python/def.hpp)
+#include RPR_BOOST_PYTHON_INCLUDE(python/scope.hpp)
 
-using namespace BOOST_NS::python;
+using namespace RPR_BOOST_PYTHON_NS;
 
 PXR_NAMESPACE_USING_DIRECTIVE
 
@@ -41,7 +41,7 @@ void wrapConfig() {
     }) \
     .staticmethod(#getter)
 
-    scope s = class_<RprUsdConfig, BOOST_NS::noncopyable>("Config", no_init)
+    scope s = class_<RprUsdConfig, RPR_BOOST_NONCOPYABLE>("Config", no_init)
         CONFIG_SETTER(SetRestartWarning, bool)
         CONFIG_SETTER(SetTextureCacheDir, std::string)
         CONFIG_SETTER(SetKernelCacheDir, std::string)

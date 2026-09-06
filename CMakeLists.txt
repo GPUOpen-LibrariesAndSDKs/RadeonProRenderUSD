@@ -1,8 +1,10 @@
-project(hdRpr)
-
 cmake_minimum_required(VERSION 3.15)
 
-set(CMAKE_CXX_STANDARD 17)
+project(hdRpr)
+
+if(NOT CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 17)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
@@ -12,6 +14,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/defaults
 include(Options)
 include(ProjectDefaults)
 include(Packages)
+include(ApiCapabilities)
 
 # This has to be defined after Packages is included, because it relies on the
 # discovered path to the python executable.

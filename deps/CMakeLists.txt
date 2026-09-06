@@ -89,3 +89,21 @@ add_library(murmurhash STATIC
     ${MURMURHASH_DIR}/MurmurHash3.cpp)
 target_include_directories(murmurhash PUBLIC ${MURMURHASH_DIR})
 set_target_properties(murmurhash PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# This optional shim never enters the default library search path. The caller
+# explicitly selects it with RPRUSD_HIP_LIBRARY before creating an RPR context.
+if(RPR_ROCM7_ROOT)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "RPR_ROCM7_ROOT is a Linux-only optional loader")
+    endif()
+    find_library(RPR_HIP7_LIBRARY NAMES libamdhip64.so.7
+        PATHS "${RPR_ROCM7_ROOT}/lib" "${RPR_ROCM7_ROOT}/lib64"
+        NO_DEFAULT_PATH REQUIRED)
+    get_filename_component(_rpr_hip7_libdir "${RPR_HIP7_LIBRARY}" DIRECTORY)
+    add_library(rprHipRuntimeShim SHARED hipRuntimeShim.c)
+    target_link_libraries(rprHipRuntimeShim PRIVATE "${RPR_HIP7_LIBRARY}")
+    set_target_properties(rprHipRuntimeShim PROPERTIES
+        PREFIX "lib" OUTPUT_NAME amdhip64 SOVERSION 6
+        INSTALL_RPATH "${_rpr_hip7_libdir}")
+    install(TARGETS rprHipRuntimeShim LIBRARY DESTINATION lib/hip7-loader)
+endif()

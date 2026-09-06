@@ -53,6 +53,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_ENV_SETTING(RPRUSD_ENABLE_TRACING, false, "Enable tracing of RPR core");
 TF_DEFINE_ENV_SETTING(RPRUSD_TRACING_DIR, "", "Where to store RPR core tracing files. Must be a path to valid directory");
+TF_DEFINE_ENV_SETTING(RPRUSD_HIP_LIBRARY, "",
+    "Optional absolute HIP runtime/loader library path on Linux. Uses HIP and queries its device count; empty preserves SDK defaults.");
 TF_DEFINE_ENV_SETTING(RPRUSD_CPU_ONLY, false,
     "Disable RIF API and GPU context creation.  This will allow running on CPU only machines, but some AOV will no longer work");
 
@@ -122,6 +124,46 @@ void SetupRprTracing() {
     }
 }
 
+// Retain the selected library for the lifetime of every renderer context.
+// This path is opt-in and is unrelated to the Houdini/USD API version.
+struct ExplicitHipRuntime {
+    bool requested = false;
+    bool valid = false;
+    int deviceCount = 0;
+    void* handle = nullptr;
+    ExplicitHipRuntime() {
+#if defined(__linux__)
+        const auto path = TfGetEnvSetting(RPRUSD_HIP_LIBRARY);
+        requested = !path.empty();
+        if (!requested) return;
+        if (path.front() != '/') {
+            TF_RUNTIME_ERROR("RPRUSD_HIP_LIBRARY must be an absolute path");
+            return;
+        }
+        // Northstar/Orochi exports HIP function-pointer variables with the
+        // same names as HIP functions. Global loading would interpose them.
+        handle = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+        if (!handle) {
+            TF_RUNTIME_ERROR("Cannot load selected HIP runtime %s: %s", path.c_str(), dlerror());
+            return;
+        }
+        using GetDeviceCount = int (*)(int*);
+        auto getDeviceCount = reinterpret_cast<GetDeviceCount>(dlsym(handle, "hipGetDeviceCount"));
+        if (!getDeviceCount || getDeviceCount(&deviceCount) != 0 || deviceCount < 0) {
+            TF_RUNTIME_ERROR("Cannot enumerate devices using selected HIP runtime %s", path.c_str());
+            return;
+        }
+        valid = true;
+        PRINT_CONTEXT_CREATION_DEBUG_INFO("Explicit HIP runtime %s: %d devices\n", path.c_str(), deviceCount);
+#endif
+    }
+};
+
+const ExplicitHipRuntime& GetExplicitHipRuntime() {
+    static const ExplicitHipRuntime runtime;
+    return runtime;
+}
+
 const rpr::CreationFlags kGpuCreationFlags[] = {
     RPR_CREATION_FLAGS_ENABLE_GPU0,
     RPR_CREATION_FLAGS_ENABLE_GPU1,
@@ -156,6 +198,10 @@ const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
 };
 
 rpr_int GetPluginID(RprUsdPluginType pluginType) {
+    if (pluginType == kPluginNorthstar) {
+        const auto& runtime = GetExplicitHipRuntime();
+        if (runtime.requested && !runtime.valid) return -1;
+    }
     auto pluginLibNameIter = kPluginLibNames.find(pluginType);
     if (pluginLibNameIter == kPluginLibNames.end()) {
         TF_RUNTIME_ERROR("Plugin is not supported: %d", pluginType);
@@ -176,12 +222,25 @@ rpr_int GetPluginID(RprUsdPluginType pluginType) {
 
 std::string GetGpuName(RprUsdPluginType pluginType, rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
     rpr::CreationFlags additionalFlags = 0x0;
+    if (pluginType == kPluginNorthstar && GetExplicitHipRuntime().requested) {
+        additionalFlags |= RPR_CREATION_FLAGS_ENABLE_HIP;
+    }
 
 #if defined(__APPLE__)
     additionalFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
 #endif
 
     std::vector<rpr_context_properties> properties;
+    // Device discovery creates real contexts too. Supply the same native
+    // kernels as rendering, avoiding an unintended runtime-compiler path.
+    std::string precompiledKernelsPath;
+    if (pluginType == kPluginNorthstar) {
+        RprUsdConfig* config;
+        auto configLock = RprUsdConfig::GetInstance(&config);
+        precompiledKernelsPath = config->GetPrecompiledKernelDir();
+        properties.push_back((rpr_context_properties)RPR_CONTEXT_PRECOMPILED_BINARY_PATH);
+        properties.push_back((rpr_context_properties)precompiledKernelsPath.c_str());
+    }
 
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     // This fix is required since for 4GB VRAM default Hybrid allocation might be too big
@@ -202,6 +261,7 @@ std::string GetGpuName(RprUsdPluginType pluginType, rpr_int pluginID, rpr::Creat
 
     properties.push_back(nullptr);
 
+    PRINT_CONTEXT_CREATION_DEBUG_INFO("Discovering GPU flags=%u kernels=%s\n", creationFlag | additionalFlags, precompiledKernelsPath.c_str());
     try {
         rpr::Status status;
         std::unique_ptr<rpr::Context> context(rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlag | additionalFlags, properties.data(), cachePath, &status));
@@ -219,6 +279,7 @@ template <typename Func>
 void ForEachGpu(RprUsdPluginType pluginType, rpr_int pluginID, const char* cachePath, Func&& func) {
 #define GPU_ACTION(index) \
     do { \
+        if (pluginType == kPluginNorthstar && GetExplicitHipRuntime().requested && index >= GetExplicitHipRuntime().deviceCount) return; \
         rpr::CreationFlags gpuFlag = RPR_CREATION_FLAGS_ENABLE_GPU ## index; \
         std::string name = GetGpuName(pluginType, pluginID, gpuFlag, RPR_CONTEXT_GPU ## index ## _NAME, cachePath); \
         func(index, gpuFlag, name); \
@@ -387,6 +448,13 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
     // set up HIP/CUDA support
     if (metadata->pluginType == kPluginNorthstar) {
+        if (GetExplicitHipRuntime().requested) {
+            if (metadata->useOpenCL) {
+                TF_RUNTIME_ERROR("The explicit HIP runtime conflicts with the legacy OpenCL render setting");
+                return nullptr;
+            }
+            creationFlags |= RPR_CREATION_FLAGS_ENABLE_HIP;
+        }
         if (metadata->useOpenCL) {
             creationFlags |= RPR_CREATION_FLAGS_ENABLE_OPENCL;
         }

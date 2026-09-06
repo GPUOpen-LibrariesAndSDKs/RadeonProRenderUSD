@@ -42,6 +42,16 @@ private:
     VOP_RPRMaterialOperator(RprUsdMaterialNodeInfo const* shaderInfo, OP_Constructor construct, PRM_Template* templates);
 };
 
+#include "pxr/imaging/rprUsd/apiCapabilities.h"
+
+#if RPR_HOUDINI_TYPED_PORT_INDICES
+using RprInputIdx = OP_InputIdx;
+using RprOutputIdx = OP_OutputIdx;
+#else
+using RprInputIdx = unsigned;
+using RprOutputIdx = unsigned;
+#endif
+
 class VOP_RPRMaterial : public VOP_Node {
 public:
     /// Returns the templates for the shader's input parameters
@@ -50,9 +60,9 @@ public:
     VOP_RPRMaterial(OP_Network* parent, const char* name, OP_Operator* entry);
 
     /// Returns the label for input port at index i_idx
-    const char* inputLabel(unsigned i_idx) const override;
+    const char* inputLabel(RprInputIdx i_idx) const override;
     /// Returns the label for output port at index i_idx
-    const char* outputLabel(unsigned i_idx) const override;
+    const char* outputLabel(RprOutputIdx i_idx) const override;
 
     /// Minimum inputs that must be connected to a node for it to cook.
     unsigned minInputs() const override;

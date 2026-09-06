@@ -167,6 +167,10 @@ public:
     void Restart();
 
     struct RenderStats {
+        int numSamples;
+        int maxSamples;
+        int previewDownscale;
+        GfVec2i viewportSize;
         double percentDone;
         double averageRenderTimePerSample;
         double averageResolveTimePerSample;

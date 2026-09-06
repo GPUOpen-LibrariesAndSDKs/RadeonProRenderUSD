@@ -44,6 +44,7 @@ limitations under the License.
 #include <iomanip>
 #include <sstream>
 #include <cstdio>
+#include <cmath>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -355,7 +356,10 @@ HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const
 std::string join(const std::vector<std::string>& vec, const std::string& delim)
 {
     std::stringstream res;
-    copy(vec.begin(), vec.end(), std::ostream_iterator<std::string>(res, delim.c_str()));
+    for (size_t i = 0; i < vec.size(); ++i) {
+        if (i) res << delim;
+        res << vec[i];
+    }
     return res.str();
 }
 
@@ -378,6 +382,20 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     
     stats["cacheCreationTime"] = rprStats.cacheCreationTime;
     stats["syncTime"] = rprStats.syncTime;
+    const double samplesPerSecond = rprStats.averageRenderTimePerSample > 0.0
+        ? 1.0 / rprStats.averageRenderTimePerSample : 0.0;
+    stats["samplesPerSecond"] = samplesPerSecond;
+    stats["numSamples"] = rprStats.numSamples;
+    stats["maxSamples"] = rprStats.maxSamples;
+    stats["outputResolution"] = rprStats.viewportSize;
+    // Northstar uses 2^n downscaling. Hybrid chooses its scale internally.
+    const std::string previewScale = rprStats.previewDownscale < 0
+        ? "automatic"
+        : TfStringPrintf("%.1f%%", 100.0 / std::pow(2.0, rprStats.previewDownscale));
+    stats["previewScale"] = previewScale;
+    stats["renderProgressAnnotation"] = TfStringPrintf("%d / %d samples",
+        rprStats.numSamples, rprStats.maxSamples);
+    stats["renderStatsAnnotation"] = std::string();
 
     return stats;
 }

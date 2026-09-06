@@ -18,12 +18,12 @@ limitations under the License.
 #include "pxr/base/tf/registryManager.h"
 #include "pxr/base/tf/pyResultConversions.h"
 
-#include BOOST_INCLUDE_PATH(python.hpp)
-#include BOOST_INCLUDE_PATH(python/class.hpp)
-#include BOOST_INCLUDE_PATH(python/def.hpp)
-#include BOOST_INCLUDE_PATH(python/scope.hpp)
+#include RPR_BOOST_PYTHON_INCLUDE(python.hpp)
+#include RPR_BOOST_PYTHON_INCLUDE(python/class.hpp)
+#include RPR_BOOST_PYTHON_INCLUDE(python/def.hpp)
+#include RPR_BOOST_PYTHON_INCLUDE(python/scope.hpp)
 
-using namespace BOOST_NS::python;
+using namespace RPR_BOOST_PYTHON_NS;
 
 PXR_NAMESPACE_USING_DIRECTIVE
 

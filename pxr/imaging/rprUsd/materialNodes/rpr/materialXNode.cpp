@@ -419,7 +419,7 @@ private:
     std::shared_ptr<rpr::MaterialNode> m_displacementNode;
 };
 
-ARCH_CONSTRUCTOR(RprUsd_InitMaterialXNode, 255, void) {
+RPRUSD_ARCH_CONSTRUCTOR(RprUsd_InitMaterialXNode, 255) {
     auto nodeInfo = RprUsd_RprMaterialXNode::GetInfo();
     RprUsdMaterialRegistry::GetInstance().Register(
         RprUsdRprMaterialXNodeTokens->rpr_materialx_node,

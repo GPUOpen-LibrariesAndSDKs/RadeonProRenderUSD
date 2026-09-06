@@ -15,6 +15,24 @@ if(OpenVDB_FOUND)
     set(OptClass ${OptClass} field volume)
 endif(OpenVDB_FOUND)
 
+set(RPR_SCENE_INDEX_PLUGIN_INFO "")
+if(RPR_USD_IMPLICIT_SURFACE_SCENE_INDEX)
+    list(APPEND OptClass implicitSurfaceSceneIndexPlugin)
+    if(TARGET hdsi)
+        list(APPEND OptLibs hdsi)
+    else()
+        list(APPEND OptLibs usd_monolithic)
+    endif()
+    set(RPR_SCENE_INDEX_PLUGIN_INFO [=[
+                    "HdRprImplicitSurfaceSceneIndexPlugin": {
+                        "bases": ["HdSceneIndexPlugin"],
+                        "loadWithRenderer": "RPR",
+                        "priority": 0,
+                        "displayName": "RPR Implicit Surface Conversion"
+                    },
+]=])
+endif()
+
 find_package(OpenMP)
 if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -88,6 +106,16 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
 list(APPEND RIF_MODEL_RESOURCE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
 
+if(RPR_USD_SDR_DISCOVERY)
+    set(RPR_DISCOVERY_BASE SdrDiscoveryPlugin)
+    set(RPR_PARSER_BASE SdrParserPlugin)
+    set(RPR_DISCOVERY_LIB sdr)
+else()
+    set(RPR_DISCOVERY_BASE NdrDiscoveryPlugin)
+    set(RPR_PARSER_BASE NdrParserPlugin)
+    set(RPR_DISCOVERY_LIB ndr)
+endif()
+
 pxr_plugin(hdRpr
     DISABLE_PRECOMPILED_HEADERS
 
@@ -98,7 +126,7 @@ pxr_plugin(hdRpr
         tf
         gf
         hf
-        ndr
+        ${RPR_DISCOVERY_LIB}
         usdVol
         usdLux
         usdUtils

@@ -2058,9 +2058,11 @@ public:
                 if (m_isInteractive) {
                     downscale = preferences.GetQualityInteractiveDownscaleResolution();
                 }
+                m_previewDownscale = downscale;
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
             } else {
                 bool enableDownscale = m_isInteractive && preferences.GetQualityInteractiveDownscaleEnable();
+                m_previewDownscale = enableDownscale ? -1 : 0;
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(enableDownscale)), "Failed to set preview mode");
             }
 
@@ -2270,9 +2272,11 @@ public:
                 if (m_isInteractive) {
                     downscale = preferences.GetQualityInteractiveDownscaleResolution();
                 }
+                m_previewDownscale = downscale;
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
             } else {
                 bool enableDownscale = m_isInteractive && preferences.GetQualityInteractiveDownscaleEnable();
+                m_previewDownscale = enableDownscale ? -1 : 0;
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(enableDownscale)), "Failed to set preview mode");
             }
 
@@ -2453,7 +2457,7 @@ public:
                 projection = HdRprCamera::Orthographic;
 
                 GfVec3f ndcTopLeft(-1.0f, 1.0f, 0.0f);
-                GfVec3f nearPlaneTrace = m_cameraProjectionMatrix.GetInverse().Transform(ndcTopLeft);
+                GfVec3f nearPlaneTrace(m_cameraProjectionMatrix.GetInverse().Transform(ndcTopLeft));
 
                 sensorWidth = std::abs(nearPlaneTrace[0]) * 2.0;
                 sensorHeight = std::abs(nearPlaneTrace[1]) * 2.0;
@@ -2542,7 +2546,11 @@ public:
             auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(name);
             if (aovDesc.id != kAovNone && aovDesc.format != HdFormatInvalid) {
                 *aovName = name;
-                *format = ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
+                // The logical RenderVar type can differ from the host buffer
+                // (Houdini may request RGB LPE data in an RGBA display AOV).
+                // Conversion must match the storage receiving the pixels.
+                *format = aovBinding.renderBuffer ? aovBinding.renderBuffer->GetFormat()
+                    : ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
                 return *format != HdFormatInvalid;
             } else {
                 TF_RUNTIME_ERROR("Unsupported UsdRenderVar sourceName: %s", name.GetText());
@@ -2553,10 +2561,16 @@ public:
                 return false;
             }
 
-            *format = ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
+            // The logical RenderVar type can differ from the host buffer
+            // (Houdini may request RGB LPE data in an RGBA display AOV).
+            // Conversion must match the storage receiving the pixels.
+            *format = aovBinding.renderBuffer ? aovBinding.renderBuffer->GetFormat()
+                : ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
 
-            if (sourceName == "C.*") {
-                // We can use RPR_AOV_COLOR here instead of reserving one of the available LPE AOV slots
+            if (sourceName == "C.*" || sourceName == "C.*[LO]") {
+                // Houdini supplies C.*[LO] for its default beauty RenderVar.
+                // Use native beauty, preserving its material/lighting response,
+                // instead of allocating an equivalent custom LPE AOV.
                 *aovName = HdAovTokens->color;
             } else {
                 if (m_rprContextMetadata.pluginType != kPluginNorthstar) {
@@ -3561,6 +3575,10 @@ Don't show this message again?
 
     HdRprApi::RenderStats GetRenderStats() const {
         HdRprApi::RenderStats stats = {};
+        stats.numSamples = m_numSamples;
+        stats.maxSamples = m_maxSamples;
+        stats.previewDownscale = m_previewDownscale;
+        stats.viewportSize = m_viewportSize;
 
         // rprsExport has no progress callback
         if (!m_rprSceneExportPath.empty()) {
@@ -3577,7 +3595,8 @@ Don't show this message again?
         stats.percentDone = 100.0 * progress;
 
         if (m_numSamples > 0) {
-            double numRenderedSamples = progress * m_maxSamples;
+            // Adaptive pixel convergence is not a count of rendered samples.
+            double numRenderedSamples = m_numSamples;
             auto resolveTime = m_frameResolveTotalTime / numRenderedSamples;
             auto renderTime = m_frameRenderTotalTime / numRenderedSamples;
 
@@ -4659,6 +4678,7 @@ private:
     uint32_t m_frameCount = 0;
 
     bool m_isInteractive = false;
+    int m_previewDownscale = 0;
     int m_numSamples = 0;
     int m_numSamplesPerIter = 0;
     int m_activePixels = -1;

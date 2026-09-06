@@ -1,8 +1,29 @@
 {
-    "HdRprPlugin" : {
-        "valid" : true,
-        "menulabel" : "RPR",
-        "menupriority" : 0,
-        "restartrendersettings" : ["rpr:core:renderQuality"]
+    "HdRprPlugin": {
+        "valid": true,
+        "menulabel": "RPR",
+        "menupriority": 0,
+        "restartrendersettings": [
+            "rpr:core:renderQuality"
+        ],
+        "pauseonupdate": false,
+        "allowbackgroundupdate": true,
+        "viewstats": [
+            "Render GPU",
+            "CPU render threads",
+            "Samples per second",
+            "Output resolution",
+            "RPR preview scale"
+        ],
+        "statsdatapaths": {
+            "totalClockTime": "frameRenderTotalTime",
+            "percentDone": "percentDone",
+            "renderProgressAnnotation": "renderProgressAnnotation",
+            "Render GPU": "gpuUsedNames",
+            "CPU render threads": "threadCountUsed",
+            "Samples per second": "samplesPerSecond",
+            "Output resolution": "outputResolution",
+            "RPR preview scale": "previewScale"
+        }
     }
 }

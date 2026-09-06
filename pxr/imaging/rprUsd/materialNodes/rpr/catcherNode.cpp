@@ -94,7 +94,7 @@ private:
 };
 
 #define REGISTER_CATCHER_NODE(CATCHER_TYPE)                                                  \
-ARCH_CONSTRUCTOR(RprUsd_Init ## CATCHER_TYPE ## CatcherNode, 255, void) {                    \
+RPRUSD_ARCH_CONSTRUCTOR(RprUsd_Init ## CATCHER_TYPE ## CatcherNode, 255) {                    \
     auto nodeInfo = RprUsd_RprCatcherNode::GetInfo(#CATCHER_TYPE);                           \
     RprUsdMaterialRegistry::GetInstance().Register(                                          \
         TfToken(nodeInfo->name, TfToken::Immortal),                                          \

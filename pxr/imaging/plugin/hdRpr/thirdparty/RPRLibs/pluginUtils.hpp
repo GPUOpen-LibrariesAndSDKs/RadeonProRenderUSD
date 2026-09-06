@@ -9,6 +9,9 @@
 #include <memory>
 
 #include <openvdb/openvdb.h>
+#if OPENVDB_LIBRARY_MAJOR_VERSION_NUMBER >= 13
+#include <openvdb/tools/Count.h>
+#endif
 #include "pluginUtils.h"
 
 // These are the functions that are used in Maya plug-in to read vdb files thus far
@@ -100,7 +103,13 @@ bool ProcessVDBGrid(
         values.push_back(value + gridBackgroundVal);
     }
 
+#if OPENVDB_LIBRARY_MAJOR_VERSION_NUMBER >= 13
+    const auto extrema = openvdb::tools::minMax(grid->tree());
+    outGrid.minValue = extrema.min();
+    outGrid.maxValue = extrema.max();
+#else
     grid->evalMinMax(outGrid.minValue, outGrid.maxValue);
+#endif
 
     return true;
 }

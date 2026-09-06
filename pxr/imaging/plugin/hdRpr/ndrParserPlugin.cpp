@@ -11,9 +11,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ************************************************************************/
 
+#include "pxr/imaging/rprUsd/apiCapabilities.h"
+
+#if RPR_USD_SDR_DISCOVERY
+#include "pxr/usd/sdr/shaderNode.h"
+#include "pxr/usd/sdr/parserPlugin.h"
+#include "pxr/usd/sdr/shaderNodeDiscoveryResult.h"
+#else
 #include "pxr/usd/ndr/node.h"
 #include "pxr/usd/ndr/parserPlugin.h"
 #include "pxr/usd/ndr/nodeDiscoveryResult.h"
+#endif
 
 #include "pxr/base/tf/staticTokens.h"
 
@@ -25,8 +33,24 @@ PXR_NAMESPACE_OPEN_SCOPE
 ///
 /// This does the minimal amount of work so Hydra will let us have our shaders.
 ///
-class HdRprNdrParserPlugin final : public NdrParserPlugin {
+#if RPR_USD_SDR_DISCOVERY
+using RprParserBase = SdrParserPlugin;
+using RprParserTypes = SdrTokenVec;
+#else
+using RprParserBase = NdrParserPlugin;
+using RprParserTypes = NdrTokenVec;
+#endif
+
+class HdRprNdrParserPlugin final : public RprParserBase {
 public:
+#if RPR_USD_SDR_DISCOVERY
+    SdrShaderNodeUniquePtr ParseShaderNode(const SdrShaderNodeDiscoveryResult& d) override {
+        return std::make_unique<SdrShaderNode>(
+            d.identifier, d.version, d.name, d.family,
+            RprUsdTokens->rpr, RprUsdTokens->rpr, d.uri, d.resolvedUri,
+            SdrShaderPropertyUniquePtrVec{}, d.metadata, d.sourceCode);
+    }
+#else
     NdrNodeUniquePtr Parse(const NdrNodeDiscoveryResult& discoveryResult) override {
         return std::make_unique<NdrNode>(
             /* identifier  = */ discoveryResult.identifier,
@@ -45,8 +69,10 @@ public:
         );
     }
 
-    const NdrTokenVec& GetDiscoveryTypes() const override {
-        static NdrTokenVec s_discoveryTypes{RprUsdTokens->rpr};
+#endif
+
+    const RprParserTypes& GetDiscoveryTypes() const override {
+        static RprParserTypes s_discoveryTypes{RprUsdTokens->rpr};
         return s_discoveryTypes;
     }
 
@@ -55,6 +81,10 @@ public:
     }
 };
 
+#if RPR_USD_SDR_DISCOVERY
+SDR_REGISTER_PARSER_PLUGIN(HdRprNdrParserPlugin);
+#else
 NDR_REGISTER_PARSER_PLUGIN(HdRprNdrParserPlugin);
+#endif
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -15,6 +15,7 @@ limitations under the License.
 #define HDRPR_RENDERER_PLUGIN_H
 
 #include "pxr/imaging/hd/rendererPlugin.h"
+#include "pxr/imaging/rprUsd/apiCapabilities.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -32,7 +33,10 @@ public:
 
     void DeleteRenderDelegate(HdRenderDelegate* renderDelegate) override;
 
-#if PXR_VERSION < 2302
+#if RPR_USD_RENDERER_CREATE_ARGS
+    bool IsSupported(const HdRendererCreateArgs& args,
+                     std::string* reasonWhyNot = nullptr) const override { return true; }
+#elif PXR_VERSION < 2302
     bool IsSupported() const override { return true; }
 #else
     bool IsSupported(bool gpuEnabled = true) const override { return true; }

@@ -3,7 +3,7 @@
         {
             "Info": {
                 "Types": {
-                    "HdRprPlugin": {
+@RPR_SCENE_INDEX_PLUGIN_INFO@                    "HdRprPlugin": {
                         "bases": [
                             "HdRendererPlugin"
                         ],
@@ -11,11 +11,11 @@
                         "priority": 99
                     },
                     "HdRprNdrDiscoveryPlugin": {
-                        "bases": ["NdrDiscoveryPlugin"],
+                        "bases": ["@RPR_DISCOVERY_BASE@"],
                         "displayName": "RPR Node Discovery"
                     },
                     "HdRprNdrParserPlugin": {
-                        "bases": ["NdrParserPlugin"],
+                        "bases": ["@RPR_PARSER_BASE@"],
                         "displayName": "RPR Node Parser"
                     }
                 }
