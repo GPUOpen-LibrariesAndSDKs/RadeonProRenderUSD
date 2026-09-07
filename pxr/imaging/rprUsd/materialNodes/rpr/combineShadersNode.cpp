@@ -106,7 +106,7 @@ private:
     std::map<TfToken, VtValue> m_outputs;
 };
 
-ARCH_CONSTRUCTOR(RprUsd_InitCombineShadersNode, 255, void) {
+RPRUSD_ARCH_CONSTRUCTOR(RprUsd_InitCombineShadersNode, 255) {
     auto nodeInfo = RprUsd_RprCombineShadersNode::GetInfo();
     RprUsdMaterialRegistry::GetInstance().Register(
         TfToken(nodeInfo->name, TfToken::Immortal),

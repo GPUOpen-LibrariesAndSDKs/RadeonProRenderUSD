@@ -613,9 +613,8 @@ public:
         }
 
         if (numMeshSamples > 1) {
-            meshProperties[0] = (rpr_mesh_info)RPR_MESH_MOTION_DIMENSION;
-            meshProperties[1] = (rpr_mesh_info)numMeshSamples;
-            meshProperties[2] = (rpr_mesh_info)0;
+            meshProperties = {rpr_mesh_info(RPR_MESH_MOTION_DIMENSION),
+                              rpr_mesh_info(numMeshSamples), rpr_mesh_info(0)};
 
             mergedPoints = MergeSamples(&pointSamples, numMeshSamples, &pointsData, &numPoints);
             mergedNormals = MergeSamples(&normalSamples, numMeshSamples, &normalsData, &numNormals);
@@ -1788,7 +1787,9 @@ public:
     }
 
     void ResolveFramebuffers() {
+        if (m_state == kStateInvalid) return;
         auto startTime = std::chrono::high_resolution_clock::now();
+        m_colorAov->SetDenoisingSampleCount(m_numSamples);
 
         m_resolveData.ForAllAovs([&](ResolveData::AovEntry& e) {
             if (m_isFirstSample || e.isMultiSampled) {
@@ -1802,7 +1803,11 @@ public:
 
         for (auto& outRb : m_outputRenderBuffers) {
             if (outRb.mappedData && (m_isFirstSample || outRb.isMultiSampled)) {
-                outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
+                if (!outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize)) {
+                    TF_RUNTIME_ERROR("Failed to resolve %s render buffer; context requires restart", outRb.aovName.GetText());
+                    m_state = kStateInvalid;
+                    return;
+                }
             }
         }
 
@@ -1872,7 +1877,9 @@ public:
                 auto newPlugin = GetPluginType(m_currentRenderQuality);
                 auto activePlugin = m_rprContextMetadata.pluginType;
                 bool backendChanged = activePlugin == kPluginNorthstar && m_rprContextMetadata.useOpenCL != config->GetCoreUseOpenCL();
-                m_state = (newPlugin != activePlugin || backendChanged) ? kStateRestartRequired : kStateRender;
+                bool deviceChanged = RprUsdIsHybrid(activePlugin) &&
+                    m_rprContextMetadata.hybridGpuIndex != config->GetCoreHybridGpuIndex();
+                m_state = (newPlugin != activePlugin || backendChanged || deviceChanged) ? kStateRestartRequired : kStateRender;
             }
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
@@ -2058,9 +2065,11 @@ public:
                 if (m_isInteractive) {
                     downscale = preferences.GetQualityInteractiveDownscaleResolution();
                 }
+                m_previewDownscale = downscale;
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
             } else {
                 bool enableDownscale = m_isInteractive && preferences.GetQualityInteractiveDownscaleEnable();
+                m_previewDownscale = enableDownscale ? -1 : 0;
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(enableDownscale)), "Failed to set preview mode");
             }
 
@@ -2174,10 +2183,12 @@ public:
             }
             
             if (preferences.IsDirty(HdRprConfig::DirtyHybrid) || force) {
-                if (preferences.GetHybridDenoising() != HdRprHybridDenoisingTokens->None) {
+                const auto qualityToken = preferences.GetHybridUpscalingQuality();
+                const bool enableUpscaling = preferences.GetHybridDenoising() != HdRprHybridDenoisingTokens->None
+                    && qualityToken != HdRprHybridUpscalingQualityTokens->None;
+                if (enableUpscaling) {
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_UPSCALER), RPR_UPSCALER_FSR2), "Failed to set upscaler");
                     rpr_uint upscaleQuality = RPR_FSR2_QUALITY_MODE_ULTRA_PERFORMANCE;
-                    TfToken qualityToken = preferences.GetHybridUpscalingQuality();
                     if (qualityToken == HdRprHybridUpscalingQualityTokens->UltraQuality) {
                         upscaleQuality = RPR_FSR2_QUALITY_ULTRA_QUALITY;
                     } else if (qualityToken == HdRprHybridUpscalingQualityTokens->Quality) {
@@ -2194,6 +2205,7 @@ public:
                 else {
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_UPSCALER), RPR_UPSCALER_NONE), "Failed to set upscaler");
                 }
+                m_upscalingMode = enableUpscaling ? "FSR2 " + qualityToken.GetString() : "None";
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         }
@@ -2228,6 +2240,7 @@ public:
             }
 
             auto hybridDenoising = preferences.GetHybridDenoising();
+            m_denoisingMode = hybridDenoising.GetString();
             if (hybridDenoising == HdRprHybridDenoisingTokens->None) {
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_NONE), "Failed to set denoiser");
             } else if (hybridDenoising == HdRprHybridDenoisingTokens->SVGF) {
@@ -2270,9 +2283,11 @@ public:
                 if (m_isInteractive) {
                     downscale = preferences.GetQualityInteractiveDownscaleResolution();
                 }
+                m_previewDownscale = downscale;
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(downscale)), "Failed to set preview mode");
             } else {
                 bool enableDownscale = m_isInteractive && preferences.GetQualityInteractiveDownscaleEnable();
+                m_previewDownscale = enableDownscale ? -1 : 0;
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(RPR_CONTEXT_PREVIEW, uint32_t(enableDownscale)), "Failed to set preview mode");
             }
 
@@ -2295,6 +2310,17 @@ public:
             UpdateNorthstarSettings(preferences, force);
         } else if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             UpdateHybridSettings(preferences, force);
+        }
+
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar &&
+            (preferences.IsDirty(HdRprConfig::DirtyDenoising) || force)) {
+            const bool requested = preferences.GetDenoisingEnable();
+            const bool enabled = requested && HdRprApiColorAov::IsDenoisingAvailable();
+            auto albedo = enabled ? CreateAov(HdRprAovTokens->albedo) : nullptr;
+            auto normal = enabled ? CreateAov(HdRprAovTokens->viewShadingNormal) : nullptr;
+            m_colorAov->SetDenoising(enabled, preferences.GetDenoisingMinSamples(), albedo, normal);
+            m_denoisingMode = enabled ? "OIDN CPU" : (requested ? "OIDN unavailable" : "None");
+            m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force ||
@@ -2431,8 +2457,11 @@ public:
         float sensorHeight;
         float focalLength;
 
-        float nearPlane;
-        float farPlane;
+        // Physical lens parameters can be present without clippingRange.
+        // Keep the same fallback range in that case instead of sending garbage
+        // to the SDK after a viewport/delegate camera is reconstructed.
+        float nearPlane = 0.01f;
+        float farPlane = 100000000.0f;
 
         GfVec2f apertureSize;
         GfVec2f apertureOffset(0.0f);
@@ -2453,7 +2482,7 @@ public:
                 projection = HdRprCamera::Orthographic;
 
                 GfVec3f ndcTopLeft(-1.0f, 1.0f, 0.0f);
-                GfVec3f nearPlaneTrace = m_cameraProjectionMatrix.GetInverse().Transform(ndcTopLeft);
+                GfVec3f nearPlaneTrace(m_cameraProjectionMatrix.GetInverse().Transform(ndcTopLeft));
 
                 sensorWidth = std::abs(nearPlaneTrace[0]) * 2.0;
                 sensorHeight = std::abs(nearPlaneTrace[1]) * 2.0;
@@ -2542,7 +2571,11 @@ public:
             auto& aovDesc = HdRprAovRegistry::GetInstance().GetAovDesc(name);
             if (aovDesc.id != kAovNone && aovDesc.format != HdFormatInvalid) {
                 *aovName = name;
-                *format = ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
+                // The logical RenderVar type can differ from the host buffer
+                // (Houdini may request RGB LPE data in an RGBA display AOV).
+                // Conversion must match the storage receiving the pixels.
+                *format = aovBinding.renderBuffer ? aovBinding.renderBuffer->GetFormat()
+                    : ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
                 return *format != HdFormatInvalid;
             } else {
                 TF_RUNTIME_ERROR("Unsupported UsdRenderVar sourceName: %s", name.GetText());
@@ -2553,10 +2586,16 @@ public:
                 return false;
             }
 
-            *format = ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
+            // The logical RenderVar type can differ from the host buffer
+            // (Houdini may request RGB LPE data in an RGBA display AOV).
+            // Conversion must match the storage receiving the pixels.
+            *format = aovBinding.renderBuffer ? aovBinding.renderBuffer->GetFormat()
+                : ConvertUsdRenderVarDataType(GetAovSetting(UsdRenderTokens->dataType, aovBinding).Get<TfToken>());
 
-            if (sourceName == "C.*") {
-                // We can use RPR_AOV_COLOR here instead of reserving one of the available LPE AOV slots
+            if (sourceName == "C.*" || sourceName == "C.*[LO]") {
+                // Houdini supplies C.*[LO] for its default beauty RenderVar.
+                // Use native beauty, preserving its material/lighting response,
+                // instead of allocating an equivalent custom LPE AOV.
                 *aovName = HdAovTokens->color;
             } else {
                 if (m_rprContextMetadata.pluginType != kPluginNorthstar) {
@@ -2646,6 +2685,7 @@ public:
         });
 
         if (clearAovs) {
+            m_colorAov->ResetDenoising();
             m_numSamples = 0;
             m_activePixels = -1;
             m_isFirstSample = true;
@@ -2978,7 +3018,7 @@ public:
         // active pixels as often as possible
         const bool isAdaptiveSamplingEnabled = IsAdaptiveSamplingEnabled();
 
-        while (!IsConverged()) {
+        while (m_state == kStateRender && !IsConverged()) {
             if (renderThread->IsStopRequested()) {
                 break;
             }
@@ -2995,6 +3035,9 @@ public:
 
             if (status != RPR_SUCCESS && status != RPR_ERROR_ABORTED) {
                 RPR_ERROR_CHECK(status, "Failed to render", m_rprContext.get());
+                // A failed context must not be submitted again on the next
+                // viewport update (in particular after Vulkan device loss).
+                m_state = kStateInvalid;
                 break;
             }
 
@@ -3041,7 +3084,9 @@ public:
             }
         }
 
-        ResolveFramebuffers();
+        if (m_state == kStateRender) {
+            ResolveFramebuffers();
+        }
     }
 
     static void RenderUpdateCallback(float progress, void* dataPtr) {
@@ -3097,7 +3142,7 @@ public:
             cd.SetForTile(m_camera, m_hdCamera, windowNDC);
         }
 
-        while (!IsConverged()) {
+        while (m_state == kStateRender && !IsConverged()) {
             // In interactive mode, always render at least one frame, otherwise
             // disturbing full-screen-flickering will be visible or
             // viewport will not update because of fast exit due to abort
@@ -3112,7 +3157,8 @@ public:
 
             if (progressivelyIncreaseSamplesPerIter) {
                 // 1, 1, 2, 4, 8, ...
-                int numSamplesPerIter = std::max(int(pow(2, int(log2(m_numSamples)))), 1);
+                int numSamplesPerIter = m_numSamples > 0
+                    ? std::max(int(pow(2, int(log2(m_numSamples)))), 1) : 1;
 
                 // Make sure we will not oversample the image
                 int numSamplesLeft = std::min(numSamplesPerIter, m_maxSamples - m_numSamples);
@@ -3142,6 +3188,9 @@ public:
 
             if (status != RPR_SUCCESS && status != RPR_ERROR_ABORTED) {
                 RPR_ERROR_CHECK(status, "Failed to render", m_rprContext.get());
+                // A failed context must not be submitted again on the next
+                // viewport update (in particular after Vulkan device loss).
+                m_state = kStateInvalid;
                 break;
             }
 
@@ -3151,6 +3200,9 @@ public:
 
             if (m_resolveMode == kResolveAfterRender) {
                 ResolveFramebuffers();
+            }
+            if (m_state != kStateRender) {
+                break;
             }
 
             if (IsAdaptiveSamplingEnabled() && m_numSamples >= m_minSamples &&
@@ -3212,7 +3264,7 @@ public:
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     void RenderFrame(HdRprRenderThread* renderThread) {
-        if (!m_rprContext) {
+        if (!m_rprContext || m_state == kStateInvalid) {
             return;
         }
 
@@ -3220,6 +3272,7 @@ public:
             Update();
         } catch (std::runtime_error const& e) {
             TF_RUNTIME_ERROR("Failed to update: %s", e.what());
+            m_state = kStateInvalid;
             m_dirtyFlags = ChangeTracker::Clean;
             if (m_hdCamera) {
                 m_hdCamera->CleanDirtyBits();
@@ -3249,9 +3302,12 @@ public:
                         RenderImpl(renderThread);
                     }
                 }
-                SaveCryptomatte();
+                if (m_state == kStateRender) {
+                    SaveCryptomatte();
+                }
             } catch (std::runtime_error const& e) {
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
+                m_state = kStateInvalid;
             }
         } else if (m_state == kStateRestartRequired) {
             {
@@ -3535,9 +3591,12 @@ Don't show this message again?
         m_startTime = std::chrono::high_resolution_clock::now();
         RenderFrame(renderThread);
 
+        // Returning from the worker is not proof of convergence: it may have
+        // stopped for a camera/settings edit, a required restart, or an error.
+        const bool converged = m_state == kStateRender && IsConverged();
         for (auto& aovBinding : m_aovBindings) {
             if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
-                rb->SetConverged(true);
+                rb->SetConverged(converged);
             }
         }
     }
@@ -3561,13 +3620,25 @@ Don't show this message again?
 
     HdRprApi::RenderStats GetRenderStats() const {
         HdRprApi::RenderStats stats = {};
+        stats.numSamples = m_numSamples;
+        stats.maxSamples = m_maxSamples;
+        stats.previewDownscale = m_previewDownscale;
+        stats.viewportSize = m_viewportSize;
+        stats.rendererBackend = m_rprContextMetadata.pluginType == kPluginNorthstar ? "Northstar"
+            : (m_rprContextMetadata.pluginType == kPluginHybridPro ? "HybridPro" : "Hybrid");
+        stats.denoisingMode = m_denoisingMode;
+        stats.upscalingMode = m_upscalingMode;
+        stats.renderStatus = m_state == kStateInvalid ? "Error - restart required"
+            : m_state == kStateRestartRequired ? "Restart required"
+            : m_state == kStateUninitialized ? "Initializing"
+            : IsConverged() ? "Converged" : "Rendering";
 
         // rprsExport has no progress callback
         if (!m_rprSceneExportPath.empty()) {
             return stats;
         }
 
-        double progress = double(m_numSamples) / m_maxSamples;
+        double progress = m_maxSamples > 0 ? double(m_numSamples) / m_maxSamples : 0.0;
         if (m_activePixels != -1) {
             int numPixels = m_viewportSize[0] * m_viewportSize[1];
             progress = std::max(progress, double(numPixels - m_activePixels) / numPixels);
@@ -3577,7 +3648,8 @@ Don't show this message again?
         stats.percentDone = 100.0 * progress;
 
         if (m_numSamples > 0) {
-            double numRenderedSamples = progress * m_maxSamples;
+            // Adaptive pixel convergence is not a count of rendered samples.
+            double numRenderedSamples = m_numSamples;
             auto resolveTime = m_frameResolveTotalTime / numRenderedSamples;
             auto renderTime = m_frameRenderTotalTime / numRenderedSamples;
 
@@ -3588,7 +3660,10 @@ Don't show this message again?
 
         stats.frameRenderTotalTime = (double)m_frameRenderTotalTime.count() / 1000000000.0;
         stats.frameResolveTotalTime = (double)m_frameResolveTotalTime.count() / 1000000000.0;
-        stats.totalRenderTime = (double)(std::chrono::high_resolution_clock::now().time_since_epoch() - m_startTime.time_since_epoch()).count() / 1000000000.0;
+        if (m_startTime != std::chrono::high_resolution_clock::time_point()) {
+            stats.totalRenderTime = std::chrono::duration<double>(
+                std::chrono::high_resolution_clock::now() - m_startTime).count();
+        }
 
         stats.syncTime = (double)m_syncTime.count() / 1000000000.0;
         stats.cacheCreationTime = (double)m_cacheCreationTime.count() / 1000000000.0;
@@ -3621,7 +3696,8 @@ Don't show this message again?
             return m_numSamples == 1;
         }
 
-        return (m_numSamples >= m_maxSamples) || (m_activePixels == 0);
+        return (m_numSamples >= m_maxSamples) ||
+            (IsAdaptiveSamplingEnabled() && m_numSamples >= m_minSamples && m_activePixels == 0);
     }
 
     bool IsAdaptiveSamplingEnabled() const {
@@ -3722,7 +3798,10 @@ Don't show this message again?
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     void Restart() {
-        m_numSamples = 0;
+        // Let UpdateAovs clear every SDK framebuffer and reset sample count,
+        // adaptive coverage, first-sample AOVs, iteration size and denoising as
+        // one operation, before the next accumulation starts.
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 private:
     static RprUsdPluginType GetPluginType(TfToken const& renderQuality) {
@@ -3824,6 +3903,7 @@ private:
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
             useGmon = config->GetCoreUseGmon();
             m_rprContextMetadata.useOpenCL = config->GetCoreUseOpenCL();
+            m_rprContextMetadata.hybridGpuIndex = config->GetCoreHybridGpuIndex();
 
             m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
 
@@ -4659,6 +4739,9 @@ private:
     uint32_t m_frameCount = 0;
 
     bool m_isInteractive = false;
+    int m_previewDownscale = 0;
+    std::string m_denoisingMode = "None";
+    std::string m_upscalingMode = "None";
     int m_numSamples = 0;
     int m_numSamplesPerIter = 0;
     int m_activePixels = -1;
@@ -4666,15 +4749,15 @@ private:
     int m_minSamples = 0;
     float m_varianceThreshold = 0.0f;
     TfToken m_currentRenderQuality;
-    bool m_hybridDisplacement;
+    bool m_hybridDisplacement = false;
 
     using Duration = std::chrono::high_resolution_clock::duration;
-    Duration m_frameRenderTotalTime;
-    Duration m_frameResolveTotalTime;
+    Duration m_frameRenderTotalTime = {};
+    Duration m_frameResolveTotalTime = {};
     std::chrono::high_resolution_clock::time_point m_startTime = {};
     std::chrono::high_resolution_clock::time_point m_syncStartTime = {};
-    Duration m_syncTime;
-    Duration m_cacheCreationTime;
+    Duration m_syncTime = {};
+    Duration m_cacheCreationTime = {};
     bool m_cacheCreationRequired = false;
 
     struct RenderUpdateCallbackData {

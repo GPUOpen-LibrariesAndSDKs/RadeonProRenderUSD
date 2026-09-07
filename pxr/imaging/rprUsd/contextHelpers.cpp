@@ -23,6 +23,7 @@ using json = nlohmann::json;
 #include "pxr/imaging/rprUsd/util.h"
 
 #include "pxr/base/arch/env.h"
+#include "pxr/base/arch/library.h"
 #include "pxr/base/tf/diagnostic.h"
 #include "pxr/base/tf/envSetting.h"
 
@@ -42,7 +43,9 @@ using json = nlohmann::json;
 #include <link.h>
 #endif // __APPLE__
 
+#include <algorithm>
 #include <fstream>
+#include <memory>
 #include <thread>
 #include <map>
 
@@ -53,6 +56,8 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 TF_DEFINE_ENV_SETTING(RPRUSD_ENABLE_TRACING, false, "Enable tracing of RPR core");
 TF_DEFINE_ENV_SETTING(RPRUSD_TRACING_DIR, "", "Where to store RPR core tracing files. Must be a path to valid directory");
+TF_DEFINE_ENV_SETTING(RPRUSD_HIP_LIBRARY, "",
+    "Optional absolute HIP runtime/loader library path on Linux. Uses HIP and queries its device count; empty preserves SDK defaults.");
 TF_DEFINE_ENV_SETTING(RPRUSD_CPU_ONLY, false,
     "Disable RIF API and GPU context creation.  This will allow running on CPU only machines, but some AOV will no longer work");
 
@@ -122,6 +127,46 @@ void SetupRprTracing() {
     }
 }
 
+// Retain the selected library for the lifetime of every renderer context.
+// This path is opt-in and is unrelated to the Houdini/USD API version.
+struct ExplicitHipRuntime {
+    bool requested = false;
+    bool valid = false;
+    int deviceCount = 0;
+    void* handle = nullptr;
+    ExplicitHipRuntime() {
+#if defined(__linux__)
+        const auto path = TfGetEnvSetting(RPRUSD_HIP_LIBRARY);
+        requested = !path.empty();
+        if (!requested) return;
+        if (path.front() != '/') {
+            TF_RUNTIME_ERROR("RPRUSD_HIP_LIBRARY must be an absolute path");
+            return;
+        }
+        // Northstar/Orochi exports HIP function-pointer variables with the
+        // same names as HIP functions. Global loading would interpose them.
+        handle = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+        if (!handle) {
+            TF_RUNTIME_ERROR("Cannot load selected HIP runtime %s: %s", path.c_str(), dlerror());
+            return;
+        }
+        using GetDeviceCount = int (*)(int*);
+        auto getDeviceCount = reinterpret_cast<GetDeviceCount>(dlsym(handle, "hipGetDeviceCount"));
+        if (!getDeviceCount || getDeviceCount(&deviceCount) != 0 || deviceCount < 0) {
+            TF_RUNTIME_ERROR("Cannot enumerate devices using selected HIP runtime %s", path.c_str());
+            return;
+        }
+        valid = true;
+        PRINT_CONTEXT_CREATION_DEBUG_INFO("Explicit HIP runtime %s: %d devices\n", path.c_str(), deviceCount);
+#endif
+    }
+};
+
+const ExplicitHipRuntime& GetExplicitHipRuntime() {
+    static const ExplicitHipRuntime runtime;
+    return runtime;
+}
+
 const rpr::CreationFlags kGpuCreationFlags[] = {
     RPR_CREATION_FLAGS_ENABLE_GPU0,
     RPR_CREATION_FLAGS_ENABLE_GPU1,
@@ -150,12 +195,17 @@ const std::map<RprUsdPluginType, const char*> kPluginLibNames = {
 #elif defined __linux__
     {kPluginNorthstar, "libNorthstar64.so"},
     {kPluginHybrid, "Hybrid.so"},
+    {kPluginHybridPro, "HybridPro.so"},
 #elif defined __APPLE__
     {kPluginNorthstar, "libNorthstar64.dylib"},
 #endif
 };
 
 rpr_int GetPluginID(RprUsdPluginType pluginType) {
+    if (pluginType == kPluginNorthstar) {
+        const auto& runtime = GetExplicitHipRuntime();
+        if (runtime.requested && !runtime.valid) return -1;
+    }
     auto pluginLibNameIter = kPluginLibNames.find(pluginType);
     if (pluginLibNameIter == kPluginLibNames.end()) {
         TF_RUNTIME_ERROR("Plugin is not supported: %d", pluginType);
@@ -174,14 +224,75 @@ rpr_int GetPluginID(RprUsdPluginType pluginType) {
     return pluginID;
 }
 
+std::vector<int> GetHybridGpuIndices(RprUsdPluginType pluginType) {
+    auto pluginLibNameIter = kPluginLibNames.find(pluginType);
+    if (pluginLibNameIter == kPluginLibNames.end()) {
+        return {};
+    }
+    const std::string sdkPath = GetRprSdkPath();
+    const std::string pluginPath = sdkPath.empty() ? pluginLibNameIter->second : sdkPath + "/" + pluginLibNameIter->second;
+    std::unique_ptr<void, decltype(&ArchLibraryClose)> library(
+        ArchLibraryOpen(pluginPath, ARCH_LIBRARY_NOW | ARCH_LIBRARY_LOCAL), &ArchLibraryClose);
+
+    // This optional Hybrid export is absent from older SDKs. Resolve it from
+    // the registered backend, without requiring Vulkan interop or newer headers.
+    using GetSupportedDevices = rpr_status (*)(int*, size_t*);
+    auto getSupportedDevices = library ? reinterpret_cast<GetSupportedDevices>(
+        ArchLibraryGetSymbolAddress(library.get(), "rprGetSupportedDevices")) : nullptr;
+    if (!getSupportedDevices) {
+        PRINT_CONTEXT_CREATION_DEBUG_INFO("Hybrid device enumeration is unavailable; discovering GPU0 only\n");
+        return {0};
+    }
+
+    int indices[kMaxNumGpus];
+    std::fill_n(indices, kMaxNumGpus, -1);
+    size_t count = kMaxNumGpus;
+    rpr_status status = getSupportedDevices(indices, &count);
+    if (status == RPR_ERROR_UNSUPPORTED) {
+        return {0};
+    }
+    if (status != RPR_SUCCESS || count > size_t(kMaxNumGpus)) {
+        TF_RUNTIME_ERROR("Hybrid device enumeration failed (status %d, device count %zu)", status, count);
+        return {};
+    }
+
+    std::vector<int> ret;
+    bool seen[kMaxNumGpus] = {};
+    for (size_t i = 0; i < count; ++i) {
+        const int index = indices[i];
+        if (index < 0 || index >= kMaxNumGpus) {
+            TF_WARN("Ignoring invalid Hybrid GPU index %d", index);
+            continue;
+        }
+        if (!seen[index]) {
+            seen[index] = true;
+            ret.push_back(index);
+        }
+    }
+    return ret;
+}
+
 std::string GetGpuName(RprUsdPluginType pluginType, rpr_int pluginID, rpr::CreationFlags creationFlag, rpr::ContextInfo gpuNameId, const char* cachePath) {
     rpr::CreationFlags additionalFlags = 0x0;
+    if (pluginType == kPluginNorthstar && GetExplicitHipRuntime().requested) {
+        additionalFlags |= RPR_CREATION_FLAGS_ENABLE_HIP;
+    }
 
 #if defined(__APPLE__)
     additionalFlags |= RPR_CREATION_FLAGS_ENABLE_METAL;
 #endif
 
     std::vector<rpr_context_properties> properties;
+    // Device discovery creates real contexts too. Supply the same native
+    // kernels as rendering, avoiding an unintended runtime-compiler path.
+    std::string precompiledKernelsPath;
+    if (pluginType == kPluginNorthstar) {
+        RprUsdConfig* config;
+        auto configLock = RprUsdConfig::GetInstance(&config);
+        precompiledKernelsPath = config->GetPrecompiledKernelDir();
+        properties.push_back((rpr_context_properties)RPR_CONTEXT_PRECOMPILED_BINARY_PATH);
+        properties.push_back((rpr_context_properties)precompiledKernelsPath.c_str());
+    }
 
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
     // This fix is required since for 4GB VRAM default Hybrid allocation might be too big
@@ -202,6 +313,7 @@ std::string GetGpuName(RprUsdPluginType pluginType, rpr_int pluginID, rpr::Creat
 
     properties.push_back(nullptr);
 
+    PRINT_CONTEXT_CREATION_DEBUG_INFO("Discovering GPU flags=%u kernels=%s\n", creationFlag | additionalFlags, precompiledKernelsPath.c_str());
     try {
         rpr::Status status;
         std::unique_ptr<rpr::Context> context(rpr::Context::Create(RPR_API_VERSION, &pluginID, 1, creationFlag | additionalFlags, properties.data(), cachePath, &status));
@@ -219,6 +331,7 @@ template <typename Func>
 void ForEachGpu(RprUsdPluginType pluginType, rpr_int pluginID, const char* cachePath, Func&& func) {
 #define GPU_ACTION(index) \
     do { \
+        if (pluginType == kPluginNorthstar && GetExplicitHipRuntime().requested && index >= GetExplicitHipRuntime().deviceCount) return; \
         rpr::CreationFlags gpuFlag = RPR_CREATION_FLAGS_ENABLE_GPU ## index; \
         std::string name = GetGpuName(pluginType, pluginID, gpuFlag, RPR_CONTEXT_GPU ## index ## _NAME, cachePath); \
         func(index, gpuFlag, name); \
@@ -251,6 +364,7 @@ RprUsdDevicesInfo LoadDevicesConfiguration(RprUsdPluginType pluginType, std::str
     }
 
     RprUsdDevicesInfo ret;
+    size_t configuredHybridGpuCount = 0;
 
     auto isLoaded = [&]() {
         try {
@@ -274,6 +388,19 @@ RprUsdDevicesInfo LoadDevicesConfiguration(RprUsdPluginType pluginType, std::str
             }
 
             auto& pluginDevicesConfig = *pluginDevicesConfigIt;
+
+            if (RprUsdIsHybrid(pluginType)) {
+                // Check before validating names: stale entries must not turn an
+                // explicit multi-GPU selection into a silent GPU0 fallback.
+                for (auto& gpuConfig : pluginDevicesConfig.at("gpu_configs")) {
+                    if (gpuConfig.at("is_enabled").get<bool>()) {
+                        ++configuredHybridGpuCount;
+                    }
+                }
+                if (configuredHybridGpuCount > 1) {
+                    return false;
+                }
+            }
 
             auto& cpuConfig = pluginDevicesConfig.at("cpu_config");
 
@@ -302,6 +429,15 @@ RprUsdDevicesInfo LoadDevicesConfiguration(RprUsdPluginType pluginType, std::str
             return false;
         }
     }();
+
+    if (!isLoaded && configuredHybridGpuCount > 0) {
+        if (configuredHybridGpuCount > 1) {
+            TF_RUNTIME_ERROR("Hybrid supports one GPU per context; enable only one GPU in %s", deviceConfigurationFilepath.c_str());
+        } else {
+            TF_RUNTIME_ERROR("The configured Hybrid GPU is unavailable or its configuration is invalid: %s", deviceConfigurationFilepath.c_str());
+        }
+        return {};
+    }
 
     if (!isLoaded ||
         (ret.cpu.numThreads == 0 && ret.gpus.empty())) {
@@ -341,7 +477,20 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         return nullptr;
     }
 
-    RprUsdDevicesInfo devicesConfiguration = LoadDevicesConfiguration(metadata->pluginType, deviceConfigurationFilepath);
+    RprUsdDevicesInfo devicesConfiguration;
+    const bool explicitHybridGpu = RprUsdIsHybrid(metadata->pluginType) && metadata->hybridGpuIndex >= 0;
+    if (explicitHybridGpu) {
+        // A per-delegate selection is atomic with backend creation. Do not create
+        // temporary discovery contexts on every other GPU during a live switch.
+        const auto supported = GetHybridGpuIndices(metadata->pluginType);
+        if (RprUsdIsCpuOnly() || std::find(supported.begin(), supported.end(), metadata->hybridGpuIndex) == supported.end()) {
+            TF_RUNTIME_ERROR("Hybrid GPU index %d is unavailable", metadata->hybridGpuIndex);
+            return nullptr;
+        }
+        devicesConfiguration.gpus.push_back({metadata->hybridGpuIndex, {}});
+    } else {
+        devicesConfiguration = LoadDevicesConfiguration(metadata->pluginType, deviceConfigurationFilepath);
+    }
 
     std::vector<rpr_context_properties> contextProperties;
     auto appendContextProperty = [&contextProperties](uint64_t propertyKey, void* propertyValue) {
@@ -387,6 +536,13 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
     // set up HIP/CUDA support
     if (metadata->pluginType == kPluginNorthstar) {
+        if (GetExplicitHipRuntime().requested) {
+            if (metadata->useOpenCL) {
+                TF_RUNTIME_ERROR("The explicit HIP runtime conflicts with the legacy OpenCL render setting");
+                return nullptr;
+            }
+            creationFlags |= RPR_CREATION_FLAGS_ENABLE_HIP;
+        }
         if (metadata->useOpenCL) {
             creationFlags |= RPR_CREATION_FLAGS_ENABLE_OPENCL;
         }
@@ -423,6 +579,10 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
         RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, textureCachePath.c_str()), "Failed to set texture cache path");
 
+        if (explicitHybridGpu) {
+            // Name queries use the active ordinal, even for physical GPU1+.
+            devicesConfiguration.gpus.front().name = RprUsdGetStringInfo(context, RPR_CONTEXT_GPU0_NAME);
+        }
         metadata->creationFlags = creationFlags;
         metadata->devicesActuallyUsed = devicesConfiguration;
     } else {
@@ -451,9 +611,14 @@ RprUsdDevicesInfo RprUsdGetDevicesInfo(RprUsdPluginType pluginType) {
         ret.cpu.numThreads = 0;
 
         if (!RprUsdIsCpuOnly()) {
-            std::string name = GetGpuName(pluginType, pluginID, RPR_CREATION_FLAGS_ENABLE_GPU0, RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
-            if (!name.empty()) {
-                ret.gpus.push_back({ 0, name });
+            for (int index : GetHybridGpuIndices(pluginType)) {
+                // Hybrid's name queries address active devices in the context.
+                // Each discovery context uses one physical GPU, so its name is
+                // always GPU0_NAME even when the creation flag selects GPU1+.
+                std::string name = GetGpuName(pluginType, pluginID, kGpuCreationFlags[index], RPR_CONTEXT_GPU0_NAME, cachePath.c_str());
+                if (!name.empty()) {
+                    ret.gpus.push_back({index, name});
+                }
             }
         }
     } else {

@@ -22,8 +22,8 @@ HdRprRenderThread::HdRprRenderThread()
     , m_renderCallback([]() { TF_CODING_ERROR("StartThread() called without a render callback set"); })
     , m_shutdownCallback([]() {})
     , m_requestedState(StateInitial)
-    , m_stopRequested(false)
     , m_pauseRender(false)
+    , m_stopRequested(false)
     , m_rendering(false) {
 
 }
@@ -51,6 +51,7 @@ void HdRprRenderThread::SetShutdownCallback(std::function<void()> shutdownCallba
 }
 
 void HdRprRenderThread::StartThread() {
+    std::lock_guard<std::mutex> controlLock(m_controlMutex);
     if (m_renderThread.joinable()) {
         TF_CODING_ERROR("StartThread() called while render thread is already running");
         return;
@@ -61,44 +62,68 @@ void HdRprRenderThread::StartThread() {
 }
 
 void HdRprRenderThread::StopThread() {
+    std::lock_guard<std::mutex> controlLock(m_controlMutex);
     if (!m_renderThread.joinable()) {
         return;
     }
 
+    // Wake a paused callback and request SDK abort before waiting for the
+    // callback's state mutex. All delegate members are still alive here.
+    RequestStop();
     {
-        m_enableRender.clear();
         std::unique_lock<std::mutex> lock(m_requestedStateMutex);
         m_requestedState = StateTerminated;
-        m_requestedStateCV.notify_one();
     }
+    m_requestedStateCV.notify_one();
     m_renderThread.join();
 }
 
 bool HdRprRenderThread::IsThreadRunning() {
+    std::lock_guard<std::mutex> controlLock(m_controlMutex);
     return m_renderThread.joinable();
 }
 
 void HdRprRenderThread::StartRender() {
-    if (!IsRendering()) {
-        std::unique_lock<std::mutex> lock(m_requestedStateMutex);
-        m_enableRender.test_and_set();
-        m_requestedState = StateRendering;
-        m_rendering.store(true);
-        m_requestedStateCV.notify_one();
+    std::lock_guard<std::mutex> controlLock(m_controlMutex);
+    if (IsRendering()) {
+        return;
+    }
+    std::unique_lock<std::mutex> lock(m_requestedStateMutex);
+    if (m_requestedState != StateIdle) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> pauseLock(m_pauseWaitMutex);
+        m_stopRequested.store(false);
+    }
+    m_requestedState = StateRendering;
+    m_rendering.store(true);
+    m_requestedStateCV.notify_one();
+}
+
+void HdRprRenderThread::RequestStop() {
+    {
+        // The wait predicate and notification share this mutex, preventing a
+        // stop request from being lost between the pause check and wait.
+        std::lock_guard<std::mutex> lock(m_pauseWaitMutex);
+        m_stopRequested.store(true);
+    }
+    m_pauseWaitCV.notify_all();
+    if (IsRendering()) {
+        m_stopCallback();
     }
 }
 
-void HdRprRenderThread::StopRender() {
-    if (IsRendering()) {
-        m_enableRender.clear();
-        if (m_pauseRender) {
-            // In case rendering thread was blocked by WaitUntilPaused, notify that stop is requested
-            m_pauseWaitCV.notify_one();
-        }
-        // In case rendering thread currently inside of some sort of rendering task that could be stopped call stopCallback to speed up return from renderCallback
-        m_stopCallback();
+void HdRprRenderThread::StopRender(bool blocking) {
+    std::lock_guard<std::mutex> controlLock(m_controlMutex);
+    RequestStop();
+    if (blocking) {
+        // RenderLoop holds this mutex throughout the callback. Acquiring it
+        // guarantees that the callback has finished before scene edits begin.
         std::unique_lock<std::mutex> lock(m_requestedStateMutex);
-        m_requestedState = StateIdle;
+        if (m_requestedState == StateRendering) {
+            m_requestedState = StateIdle;
+        }
         m_rendering.store(false);
     }
 }
@@ -108,33 +133,32 @@ bool HdRprRenderThread::IsRendering() {
 }
 
 bool HdRprRenderThread::IsStopRequested() {
-    if (!m_enableRender.test_and_set()) {
-        m_stopRequested = true;
-    }
-
-    return m_stopRequested;
+    return m_stopRequested.load();
 }
 
 void HdRprRenderThread::PauseRender() {
-    std::unique_lock<std::mutex> lock(m_pauseWaitMutex);
+    std::lock_guard<std::mutex> lock(m_pauseWaitMutex);
     m_pauseRender = true;
 }
 
 void HdRprRenderThread::ResumeRender() {
-    std::unique_lock<std::mutex> lock(m_pauseWaitMutex);
-    m_pauseRender = false;
-    m_pauseWaitCV.notify_one();
+    {
+        std::lock_guard<std::mutex> lock(m_pauseWaitMutex);
+        m_pauseRender = false;
+    }
+    m_pauseWaitCV.notify_all();
+}
+
+bool HdRprRenderThread::IsPaused() const {
+    std::lock_guard<std::mutex> lock(m_pauseWaitMutex);
+    return m_pauseRender;
 }
 
 void HdRprRenderThread::WaitUntilPaused() {
-    if (!m_pauseRender || IsStopRequested()) {
-        return;
-    }
-
     std::unique_lock<std::mutex> lock(m_pauseWaitMutex);
-    while (m_pauseRender && !IsStopRequested()) {
-        m_pauseWaitCV.wait(lock);
-    }
+    m_pauseWaitCV.wait(lock, [this]() {
+        return !m_pauseRender || IsStopRequested();
+    });
 }
 
 void HdRprRenderThread::RenderLoop() {
@@ -145,7 +169,6 @@ void HdRprRenderThread::RenderLoop() {
         });
         if (m_requestedState == StateRendering) {
             m_renderCallback();
-            m_stopRequested = false;
             m_rendering.store(false);
             m_requestedState = StateIdle;
         } else if (m_requestedState == StateTerminated) {

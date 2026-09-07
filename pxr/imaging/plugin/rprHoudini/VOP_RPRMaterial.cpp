@@ -312,11 +312,11 @@ VOP_RPRMaterial::VOP_RPRMaterial(OP_Network* parent, const char* name, OP_Operat
     }
 }
 
-const char* VOP_RPRMaterial::inputLabel(unsigned i_idx) const {
+const char* VOP_RPRMaterial::inputLabel(RprInputIdx i_idx) const {
     return m_shaderInfo->GetInput(i_idx)->GetName();
 }
 
-const char* VOP_RPRMaterial::outputLabel(unsigned i_idx) const {
+const char* VOP_RPRMaterial::outputLabel(RprOutputIdx i_idx) const {
     return m_shaderInfo->GetOutput(i_idx)->GetName();
 }
 

@@ -128,6 +128,7 @@ pxr_library(rprUsd
         lightRegistry
 
     PUBLIC_HEADERS
+        ${PROJECT_BINARY_DIR}/apiCapabilities.h
         contextMetadata.h
         error.h
         helpers.h

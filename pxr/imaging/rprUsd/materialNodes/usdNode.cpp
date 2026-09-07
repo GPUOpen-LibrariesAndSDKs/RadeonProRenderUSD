@@ -591,7 +591,7 @@ void RprUsd_RegisterUsdNode(const char* id) {
         &RprUsd_CreateUsdNode<T>);
 }
 
-ARCH_CONSTRUCTOR(RprUsd_RegisterUsdNodes, 255, void) {
+RPRUSD_ARCH_CONSTRUCTOR(RprUsd_RegisterUsdNodes, 255) {
     RprUsd_RegisterUsdNode<RprUsd_UsdPreviewSurface>("UsdPreviewSurface");
     RprUsd_RegisterUsdNode<RprUsd_UsdPrimvarReader>("UsdPrimvarReader_float2");
     RprUsd_RegisterUsdNode<RprUsd_UsdTransform2d>("UsdTransform2d");

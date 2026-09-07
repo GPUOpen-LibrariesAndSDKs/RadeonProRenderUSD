@@ -25,4 +25,16 @@ limitations under the License.
 # define BOOST_INCLUDE_PATH(suffix) __STRINGIZE_PATH(boost/suffix)
 #endif
 
+// Modern USD vendors Python bindings only; other Boost utilities still use
+// the host's Boost installation.
+#if __has_include("pxr/external/boost/python.hpp")
+# define RPR_BOOST_PYTHON_NS PXR_NS::pxr_boost::python
+# define RPR_BOOST_PYTHON_INCLUDE(suffix) __STRINGIZE_PATH(pxr/external/boost/suffix)
+# define RPR_BOOST_NONCOPYABLE RPR_BOOST_PYTHON_NS::noncopyable
+#else
+# define RPR_BOOST_PYTHON_NS BOOST_NS::python
+# define RPR_BOOST_PYTHON_INCLUDE(suffix) BOOST_INCLUDE_PATH(suffix)
+# define RPR_BOOST_NONCOPYABLE BOOST_NS::noncopyable
+#endif
+
 #endif // BOOST_INCLUDE_PATH_H

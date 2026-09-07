@@ -41,7 +41,7 @@ endif(APPLE)
 set(Houdini_Python_VARS Houdini_Python_INCLUDE_DIR Houdini_Python_LIB Houdini_Boostpython_LIB)
 list(APPEND HUSD_REQ_VARS ${Houdini_Python_VARS})
 
-foreach(python_major_minor "3;12" "3;11" "3;10" "3;9" "3;7" "2;7")
+foreach(python_major_minor "3;13" "3;12" "3;11" "3;10" "3;9" "3;7" "2;7")
     list(GET python_major_minor 0 py_major)
     list(GET python_major_minor 1 py_minor)
 
@@ -73,6 +73,9 @@ foreach(python_major_minor "3;12" "3;11" "3;10" "3;9" "3;7" "2;7")
 
     find_file(
         Houdini_Boostpython_LIB
+        NAMES
+        "libpxr_python${CMAKE_SHARED_LIBRARY_SUFFIX}" # Modern USD vendored Boost.Python
+        "libpxr_python.lib" # Windows
         "libhboost_python-mt${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
         "libhboost_python${py_major}${py_minor}-mt-x64${CMAKE_SHARED_LIBRARY_SUFFIX}" # Unix
         "libhboost_python${py_major}${py_minor}-mt-a64${CMAKE_SHARED_LIBRARY_SUFFIX}" # MacOS ARM
@@ -105,7 +108,9 @@ if(NOT HYTHON_EXECUTABLE)
     message(FATAL "Could not find hython executable")
 endif()
 list(APPEND HUSD_REQ_VARS "HYTHON_EXECUTABLE")
-set(PYTHON_EXECUTABLE ${HYTHON_EXECUTABLE})
+if(NOT PYTHON_EXECUTABLE)
+    set(PYTHON_EXECUTABLE ${HYTHON_EXECUTABLE})
+endif()
 
 if(WIN32)
     set(Houdini_LIB_DIR ${HOUDINI_ROOT}/custom/houdini/dsolib)
@@ -179,9 +184,12 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
     foreach(targetName
         arch tf gf js trace work plug vt ar kind sdf ndr sdr pcp usd usdGeom
         usdVol usdLux usdMedia usdShade usdRender usdHydra usdRi usdSkel usdUI
-        usdUtils garch hf hio cameraUtil pxOsd glf hgi hgiGL hd hdSt hdMtlx hdx
-        usdImaging usdImagingGL usdRiImaging usdSkelImaging usdVolI maging
+        usdUtils garch hf hio cameraUtil pxOsd glf hgi hgiGL hd hdSt hdsi hdMtlx hdx
+        usdImaging usdImagingGL usdRiImaging usdSkelImaging usdVolImaging
         usdAppUtils usdviewq)
+        if(NOT EXISTS "${Houdini_USD_LIB_DIR}/libpxr_${targetName}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+            continue()
+        endif()
         add_library(${targetName} SHARED IMPORTED)
         set_target_properties(${targetName} PROPERTIES
             IMPORTED_LOCATION "${Houdini_USD_LIB_DIR}/libpxr_${targetName}${CMAKE_SHARED_LIBRARY_SUFFIX}"
@@ -199,10 +207,6 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
                 INTERFACE "${HOUDINI_ROOT}/custom/houdini/dsolib")
         endif()
     endforeach()
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        # Houdini builds with the old ABI. We need to match.
-        add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
-    endif()
     # Add python to tf, usdImagingGL targets.
     target_include_directories(tf INTERFACE ${Houdini_Python_INCLUDE_DIR})
     target_link_libraries(tf INTERFACE ${Houdini_Python_LIB})
@@ -228,6 +232,6 @@ if(HoudiniUSD_FOUND AND NOT TARGET hd)
         REQUIRED
         NO_DEFAULT_PATH)
     if(USD_SCHEMA_GENERATOR)
-        set(USD_SCHEMA_GENERATOR ${HOUDINI_BIN}/hython ${USD_SCHEMA_GENERATOR})
+        set(USD_SCHEMA_GENERATOR ${PYTHON_EXECUTABLE} ${USD_SCHEMA_GENERATOR})
     endif()
 endif()

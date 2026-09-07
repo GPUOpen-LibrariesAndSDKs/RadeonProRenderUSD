@@ -150,7 +150,7 @@ protected: \
     rpr::MaterialNodeArithmeticOperation GetOp() const final { return kOp; } \
     VtValue EvalOperation() const final { eval } \
 }; \
-ARCH_CONSTRUCTOR(RprUsd_InitArithmeticNode ## op, 255, void) { \
+RPRUSD_ARCH_CONSTRUCTOR(RprUsd_InitArithmeticNode ## op, 255) { \
     RprUsd_RprArithmeticNodeRegistry::GetInstance().Register<RprUsd_ ## op ## Node>(op); \
 }
 

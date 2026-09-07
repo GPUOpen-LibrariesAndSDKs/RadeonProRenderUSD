@@ -167,6 +167,14 @@ public:
     void Restart();
 
     struct RenderStats {
+        int numSamples;
+        int maxSamples;
+        int previewDownscale;
+        GfVec2i viewportSize;
+        std::string rendererBackend;
+        std::string denoisingMode;
+        std::string upscalingMode;
+        std::string renderStatus;
         double percentDone;
         double averageRenderTimePerSample;
         double averageResolveTimePerSample;

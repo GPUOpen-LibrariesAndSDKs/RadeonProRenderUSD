@@ -5,6 +5,8 @@ This plugin allows fast GPU or CPU accelerated viewport rendering on all OpenCL 
 
 You can build this plugin as usdview plugin or as houdini plugin.
 
+See [Building the Houdini port](BUILD_HOUDINI.md) for the tested H22 setup, passive older compatibility, and optional HIP 7 runtime selection.
+
 For more details on USD, please visit the web site [here](http://openusd.org).
 
 Getting and Building the Code
@@ -56,7 +58,7 @@ Provide USD in one of two ways:
 ##### MaterialX Component
 
 By default, MaterialX library will be compiled from the sources located under a MaterialX submodule `deps/MaterialX`.
-You can override this behavior by providing a complete build of MaterialX to cmake. Please note, on Linux for Houdini plugin, MaterialX should be compiled with `-D_GLIBCXX_USE_CXX11_ABI=0` definition as it is required by Houdini.
+You can override this behavior by providing a complete build of MaterialX to cmake. On Linux, MaterialX must use the C++ ABI required by the selected Houdini HDK. Older builds use ABI 0; the tested H22 SDK uses ABI 1. Prefer the matching MaterialX shipped with that Houdini installation.
 
 ##### Optional Components
 

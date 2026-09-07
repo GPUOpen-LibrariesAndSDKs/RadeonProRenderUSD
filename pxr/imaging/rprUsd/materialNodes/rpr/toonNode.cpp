@@ -335,7 +335,7 @@ private:
     }
 };
 
-ARCH_CONSTRUCTOR(RprUsd_InitToonNode, 255, void) {
+RPRUSD_ARCH_CONSTRUCTOR(RprUsd_InitToonNode, 255) {
     auto nodeInfo = RprUsd_RprToonNode::GetInfo();
     RprUsdMaterialRegistry::GetInstance().Register(
         TfToken(nodeInfo->name, TfToken::Immortal),

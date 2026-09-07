@@ -6,6 +6,11 @@ set(OptBin ${ARGN})
 set(OptIncludeDir ${ARGN})
 set(OptClass${ARGN})
 
+option(HDRPR_ENABLE_OIDN "Enable optional Open Image Denoise 2 CPU denoising" ON)
+if(HDRPR_ENABLE_OIDN)
+    find_package(OpenImageDenoise 2 QUIET MODULE)
+endif()
+
 if(OpenVDB_FOUND)
     add_definitions(-DUSE_VOLUME -DOPENVDB_DLL)
     
@@ -14,6 +19,24 @@ if(OpenVDB_FOUND)
     set(OptIncludeDir ${OptIncludeDir} ${OpenVDB_INCLUDE_DIR})
     set(OptClass ${OptClass} field volume)
 endif(OpenVDB_FOUND)
+
+set(RPR_SCENE_INDEX_PLUGIN_INFO "")
+if(RPR_USD_IMPLICIT_SURFACE_SCENE_INDEX)
+    list(APPEND OptClass implicitSurfaceSceneIndexPlugin)
+    if(TARGET hdsi)
+        list(APPEND OptLibs hdsi)
+    else()
+        list(APPEND OptLibs usd_monolithic)
+    endif()
+    set(RPR_SCENE_INDEX_PLUGIN_INFO [=[
+                    "HdRprImplicitSurfaceSceneIndexPlugin": {
+                        "bases": ["HdSceneIndexPlugin"],
+                        "loadWithRenderer": "RPR",
+                        "priority": 0,
+                        "displayName": "RPR Implicit Surface Conversion"
+                    },
+]=])
+endif()
 
 find_package(OpenMP)
 if (OPENMP_FOUND)
@@ -88,6 +111,16 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rif_models.version ${RIF_VERSION_STRING})
 list(APPEND RIF_MODEL_RESOURCE_FILES
     "${CMAKE_CURRENT_BINARY_DIR}/rif_models.version${_sep}rif_models/rif_models.version")
 
+if(RPR_USD_SDR_DISCOVERY)
+    set(RPR_DISCOVERY_BASE SdrDiscoveryPlugin)
+    set(RPR_PARSER_BASE SdrParserPlugin)
+    set(RPR_DISCOVERY_LIB sdr)
+else()
+    set(RPR_DISCOVERY_BASE NdrDiscoveryPlugin)
+    set(RPR_PARSER_BASE NdrParserPlugin)
+    set(RPR_DISCOVERY_LIB ndr)
+endif()
+
 pxr_plugin(hdRpr
     DISABLE_PRECOMPILED_HEADERS
 
@@ -98,7 +131,7 @@ pxr_plugin(hdRpr
         tf
         gf
         hf
-        ndr
+        ${RPR_DISCOVERY_LIB}
         usdVol
         usdLux
         usdUtils
@@ -133,6 +166,7 @@ pxr_plugin(hdRpr
         renderParam
         rprApi
         rprApiAov
+        cpuDenoiser
         rprApiFramebuffer
         mesh
         instancer
@@ -164,6 +198,21 @@ pxr_plugin(hdRpr
         ndrDiscoveryPlugin.cpp
         ndrParserPlugin.cpp
 )
+
+if(HDRPR_ENABLE_OIDN AND OpenImageDenoise_FOUND)
+    target_compile_definitions(hdRpr PRIVATE HDRPR_HAS_OIDN)
+    target_include_directories(hdRpr PRIVATE ${OpenImageDenoise_INCLUDE_DIR})
+    target_link_libraries(hdRpr ${OpenImageDenoise_LIBRARY})
+    if(UNIX)
+        # The USD install helpers omit external link directories from the RPATH.
+        # Keep the selected host or standalone OIDN discoverable after install.
+        get_filename_component(_oidn_library_dir "${OpenImageDenoise_LIBRARY}" DIRECTORY)
+        set_property(TARGET hdRpr APPEND PROPERTY INSTALL_RPATH "${_oidn_library_dir}")
+    endif()
+    message(STATUS "Northstar spatial denoising: Open Image Denoise ${OpenImageDenoise_VERSION} (CPU)")
+else()
+    message(STATUS "Northstar spatial denoising: disabled (optional Open Image Denoise 2 not found or disabled)")
+endif()
 
 if(RPR_EXR_EXPORT_ENABLED)
     target_compile_definitions(hdRpr PRIVATE -DRPR_EXR_EXPORT_ENABLED)

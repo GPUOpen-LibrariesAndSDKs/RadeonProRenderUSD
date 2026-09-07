@@ -18,6 +18,9 @@ limitations under the License.
 
 #include "rprApi.h"
 
+#include <cstdint>
+#include <vector>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprRenderParam;
@@ -37,6 +40,7 @@ public:
 
 private:
     HdRprRenderParam* m_renderParam;
+    std::vector<std::uint64_t> m_aovBufferVersions;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

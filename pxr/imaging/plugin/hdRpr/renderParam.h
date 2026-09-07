@@ -37,7 +37,7 @@ private:
     RprApiSafeWrapper(const RprApiSafeWrapper& other) = delete;
 
 public:
-    RprApiSafeWrapper(RprApiSafeWrapper&& other);
+    RprApiSafeWrapper(RprApiSafeWrapper&& other) noexcept;
 
 public:
     virtual ~RprApiSafeWrapper();
@@ -50,8 +50,6 @@ public:
 private:
     HdRprRenderParam* m_renderParam;
     HdRprApi* m_rprApi;
-    static size_t m_ptrCounter;
-    static std::mutex m_threadControlMutex;
 };
 
 class HdRprRenderParam final : public HdRenderParam {
@@ -85,6 +83,10 @@ public:
     bool IsRenderShouldBeRestarted() { return m_restartRender.exchange(false); }
 
 private:
+    friend class RprApiSafeWrapper;
+    std::mutex m_threadControlMutex;
+    size_t m_editCount = 0;
+
     HdRprApi* m_rprApi;
     HdRprRenderThread* m_renderThread;
 
@@ -94,7 +96,7 @@ private:
     std::mutex m_materialSubscriptionsMutex;
     std::map<SdfPath, std::set<SdfPath>> m_materialSubscriptions;
 
-    std::atomic<bool> m_restartRender;
+    std::atomic<bool> m_restartRender {false};
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

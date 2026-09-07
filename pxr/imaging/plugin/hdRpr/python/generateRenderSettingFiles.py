@@ -84,6 +84,17 @@ render_setting_categories = [
                 }
             },
             {
+                'name': 'core:hybridGpuIndex',
+                'ui_name': 'Hybrid GPU Index',
+                'help': 'Select one machine-local Hybrid GPU index. -1 uses the saved Devices configuration. Changing this requires a render restart.',
+                'defaultValue': -1,
+                'minValue': -1,
+                'maxValue': 15,
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('==', 'Northstar', settings)
+                }
+            },
+            {
                 'name': 'core:legacyToon',
                 'ui_name': 'Use Legacy RPR Toon',
                 'defaultValue': False,
@@ -279,6 +290,26 @@ render_setting_categories = [
                 'maxValue': 2 ** 16
             }
         ]
+    },
+    {
+        'name': 'Denoising',
+        'houdini': {'hidewhen': hidewhen_not_northstar},
+        'settings': [
+            {
+                'name': 'denoising:enable',
+                'ui_name': 'Enable OIDN Denoising',
+                'help': 'Apply optional Open Image Denoise 2 on the CPU to Northstar beauty before display transforms. Unavailable builds retain the raw image.',
+                'defaultValue': False,
+            },
+            {
+                'name': 'denoising:minSamples',
+                'ui_name': 'Denoising Start Samples',
+                'help': 'Show the raw image until this many samples have accumulated.',
+                'defaultValue': 16,
+                'minValue': 1,
+                'maxValue': 2 ** 16,
+            },
+        ],
     },
     {
         'name': 'AdaptiveSampling',
@@ -531,9 +562,10 @@ render_setting_categories = [
             {
                 'name': 'hybrid:upscalingQuality',
                 'ui_name': 'Upscaling Quality',
-                'help': '',
+                'help': 'None keeps native resolution while allowing SVGF/ASVGF denoising. Other modes enable FSR2 reconstruction.',
                 'defaultValue': 'Ultra Performance',
                 'values': [
+                    SettingValue('None'),
                     SettingValue('Ultra Quality'),
                     SettingValue('Quality'),
                     SettingValue('Balance'),
@@ -1149,7 +1181,7 @@ void HdRprConfig::Set{name_title}({c_type} {c_name}) {{
     if generate_ds_files:
         production_render_setting_categories = [category for category in render_setting_categories if category['name'] != 'ViewportSettings']
         generate_houdini_ds(install_path, 'Global', production_render_setting_categories)
-        viewport_render_setting_categories = [category for category in render_setting_categories if category['name'] in ('RenderQuality', 'Sampling', 'AdaptiveSampling', 'Hybrid', 'ViewportSettings')]
+        viewport_render_setting_categories = [category for category in render_setting_categories if category['name'] in ('RenderQuality', 'Sampling', 'AdaptiveSampling', 'Denoising', 'Hybrid', 'ViewportSettings')]
         for category in (cat for cat in viewport_render_setting_categories if cat['name'] == 'RenderQuality'):
             for setting in (s for s in category['settings'] if s['name'] == 'core:renderQuality'):
                 setting['values'] = [SettingValue(value.get_key(), value.get_key() if value.get_key() != 'Northstar' else 'Full') for value in setting['values']]

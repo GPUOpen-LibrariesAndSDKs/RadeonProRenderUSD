@@ -44,10 +44,12 @@ limitations under the License.
 #include <iomanip>
 #include <sstream>
 #include <cstdio>
+#include <cmath>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 static HdRprApi* g_rprApi = nullptr;
+static std::atomic<std::uint64_t> g_renderContextId {0};
 
 class HdRprDiagnosticMgrDelegate : public TfDiagnosticMgr::Delegate {
 public:
@@ -154,7 +156,8 @@ const TfTokenVector HdRprDelegate::SUPPORTED_BPRIM_TYPES = {
 
 HdRprDelegate* HdRprDelegate::m_lastCreatedInstance = nullptr;
 
-HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
+HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings)
+    : m_renderContextId(g_renderContextId.fetch_add(1) + 1) {
     for (auto& entry : renderSettings) {
         SetRenderSetting(entry.first, entry.second);
     }
@@ -190,8 +193,15 @@ HdRprDelegate::HdRprDelegate(HdRenderSettingsMap const& renderSettings) {
 }
 
 HdRprDelegate::~HdRprDelegate() {
-    g_rprApi = nullptr;
-    m_lastCreatedInstance = nullptr;
+    // In particular, m_configInstance is declared after m_renderThread and
+    // would otherwise be destroyed while the callback can still access it.
+    m_renderThread.StopThread();
+    if (g_rprApi == m_rprApi.get()) {
+        g_rprApi = nullptr;
+    }
+    if (m_lastCreatedInstance == this) {
+        m_lastCreatedInstance = nullptr;
+    }
 }
 
 HdRenderParam* HdRprDelegate::GetRenderParam() const {
@@ -355,7 +365,10 @@ HdRenderSettingDescriptorList HdRprDelegate::GetRenderSettingDescriptors() const
 std::string join(const std::vector<std::string>& vec, const std::string& delim)
 {
     std::stringstream res;
-    copy(vec.begin(), vec.end(), std::ostream_iterator<std::string>(res, delim.c_str()));
+    for (size_t i = 0; i < vec.size(); ++i) {
+        if (i) res << delim;
+        res << vec[i];
+    }
     return res.str();
 }
 
@@ -363,6 +376,8 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     auto rprStats = m_rprApi->GetRenderStats();
 
     VtDictionary stats;
+    stats["renderContextId"] = m_renderContextId;
+    stats["renderStatus"] = rprStats.renderStatus;
     stats[_tokens->percentDone.GetString()] = rprStats.percentDone;
     stats["averageRenderTimePerSample"] = rprStats.averageRenderTimePerSample;
     stats["averageResolveTimePerSample"] = rprStats.averageResolveTimePerSample;
@@ -378,12 +393,40 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     
     stats["cacheCreationTime"] = rprStats.cacheCreationTime;
     stats["syncTime"] = rprStats.syncTime;
+    const double samplesPerSecond = rprStats.averageRenderTimePerSample > 0.0
+        ? 1.0 / rprStats.averageRenderTimePerSample : 0.0;
+    stats["samplesPerSecond"] = samplesPerSecond;
+    stats["numSamples"] = rprStats.numSamples;
+    stats["maxSamples"] = rprStats.maxSamples;
+    stats["outputResolution"] = rprStats.viewportSize;
+    // Northstar uses 2^n downscaling. Hybrid chooses its scale internally.
+    const std::string previewScale = rprStats.previewDownscale < 0
+        ? "automatic"
+        : TfStringPrintf("%.1f%%", 100.0 / std::pow(2.0, rprStats.previewDownscale));
+    stats["previewScale"] = rprStats.upscalingMode != "None"
+        ? rprStats.upscalingMode : previewScale;
+    stats["rendererBackend"] = rprStats.rendererBackend;
+    stats["denoisingMode"] = rprStats.denoisingMode;
+    stats["upscalingMode"] = rprStats.upscalingMode;
+    stats["renderProgressAnnotation"] = TfStringPrintf("%d / %d samples",
+        rprStats.numSamples, rprStats.maxSamples);
+    stats["renderStatsAnnotation"] =
+        (rprStats.renderStatus == "Error - restart required" ||
+         rprStats.renderStatus == "Restart required") ? rprStats.renderStatus : std::string();
 
     return stats;
 }
 
 bool HdRprDelegate::IsPauseSupported() const {
     return true;
+}
+
+bool HdRprDelegate::IsPaused() const {
+    return m_renderThread.IsPaused();
+}
+
+bool HdRprDelegate::IsStopped() const {
+    return m_isStopped.load();
 }
 
 bool HdRprDelegate::Pause() {
@@ -407,13 +450,26 @@ bool HdRprDelegate::Stop(bool blocking) {
 #else
 bool HdRprDelegate::Stop() {
 #endif
+    m_isStopped.store(true);
+#if PXR_VERSION >= 2203
+    m_renderThread.StopRender(blocking);
+#else
     m_renderThread.StopRender();
+#endif
     return true;
 }
 
 bool HdRprDelegate::Restart() {
+    // Finish a possibly nonblocking Stop before resetting convergence. The
+    // render pass will synchronize pending settings/AOVs before starting again.
+    m_renderThread.StopRender();
     m_renderParam->RestartRender();
-    m_renderThread.StartRender();
+    for (auto const& binding : m_rprApi->GetAovBindings()) {
+        if (binding.renderBuffer) {
+            static_cast<HdRprRenderBuffer*>(binding.renderBuffer)->SetConverged(false);
+        }
+    }
+    m_isStopped.store(false);
     return true;
 }
 

@@ -18,6 +18,15 @@ limitations under the License.
 #include "pxr/imaging/rprUsd/debugCodes.h"
 #include "pxr/imaging/hd/material.h"
 #include "pxr/base/arch/demangle.h"
+#include "pxr/base/arch/attributes.h"
+
+#include "pxr/imaging/rprUsd/apiCapabilities.h"
+
+#if RPR_USD_ARCH_CONSTRUCTOR_TWO_ARGS
+#define RPRUSD_ARCH_CONSTRUCTOR(name, priority) ARCH_CONSTRUCTOR(name, priority)
+#else
+#define RPRUSD_ARCH_CONSTRUCTOR(name, priority) ARCH_CONSTRUCTOR(name, priority, void)
+#endif
 #include "pxr/base/tf/singleton.h"
 
 #include <MaterialXCore/Document.h>
