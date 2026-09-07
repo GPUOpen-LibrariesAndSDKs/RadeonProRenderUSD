@@ -392,7 +392,11 @@ VtDictionary HdRprDelegate::GetRenderStats() const {
     const std::string previewScale = rprStats.previewDownscale < 0
         ? "automatic"
         : TfStringPrintf("%.1f%%", 100.0 / std::pow(2.0, rprStats.previewDownscale));
-    stats["previewScale"] = previewScale;
+    stats["previewScale"] = rprStats.upscalingMode != "None"
+        ? rprStats.upscalingMode : previewScale;
+    stats["rendererBackend"] = rprStats.rendererBackend;
+    stats["denoisingMode"] = rprStats.denoisingMode;
+    stats["upscalingMode"] = rprStats.upscalingMode;
     stats["renderProgressAnnotation"] = TfStringPrintf("%d / %d samples",
         rprStats.numSamples, rprStats.maxSamples);
     stats["renderStatsAnnotation"] = std::string();

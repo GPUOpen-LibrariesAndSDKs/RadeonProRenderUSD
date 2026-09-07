@@ -171,6 +171,9 @@ public:
         int maxSamples;
         int previewDownscale;
         GfVec2i viewportSize;
+        std::string rendererBackend;
+        std::string denoisingMode;
+        std::string upscalingMode;
         double percentDone;
         double averageRenderTimePerSample;
         double averageResolveTimePerSample;

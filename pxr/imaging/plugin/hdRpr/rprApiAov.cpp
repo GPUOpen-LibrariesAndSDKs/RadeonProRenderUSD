@@ -14,7 +14,12 @@ limitations under the License.
 #include "rprApiAov.h"
 #include "rprApi.h"
 #include "rprApiFramebuffer.h"
+#include "cpuDenoiser.h"
 #include "rifcpp/rifError.h"
+
+#include <algorithm>
+#include <exception>
+#include <limits>
 
 #include "pxr/imaging/rprUsd/contextMetadata.h"
 #include "pxr/imaging/rprUsd/error.h"
@@ -267,8 +272,60 @@ void HdRprApiAov::OnSizeChange(rif::Context* rifContext) {
 
 HdRprApiColorAov::HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata)
     : HdRprApiAov(HdRprAovRegistry::GetInstance().GetAovDesc(rpr::Aov(kColorAlpha), true), format)
-    , m_retainedRawColor(std::move(rawColorAov)) {
+    , m_retainedRawColor(std::move(rawColorAov))
+    , m_isNorthstar(rprContextMetadata.pluginType == kPluginNorthstar) {
 
+}
+
+HdRprApiColorAov::~HdRprApiColorAov() {
+    // Detach consumers before destroying the CPU-denoised RIF source image.
+    m_filter.reset();
+    m_auxFilters.clear();
+}
+
+bool HdRprApiColorAov::IsDenoisingAvailable() {
+    return HdRprCpuDenoiser::IsAvailable();
+}
+
+void HdRprApiColorAov::SetDenoising(bool enable, uint32_t minSamples,
+                                    std::shared_ptr<HdRprApiAov> albedo,
+                                    std::shared_ptr<HdRprApiAov> normal) {
+    if (enable && m_isNorthstar && !IsDenoisingAvailable() && !m_denoisingUnavailableWarned) {
+        TF_WARN("Northstar denoising requires optional Open Image Denoise 2 support; using raw beauty");
+        m_denoisingUnavailableWarned = true;
+    }
+    enable = enable && m_isNorthstar && IsDenoisingAvailable();
+    minSamples = std::max(uint32_t(1), minSamples);
+    if (!enable) {
+        albedo.reset();
+        normal.reset();
+    }
+    if (enable != m_denoisingEnabled || minSamples != m_denoisingMinSamples ||
+        albedo != m_denoisingAlbedo || normal != m_denoisingNormal) {
+        m_denoisingEnabled = enable;
+        m_denoisingMinSamples = minSamples;
+        m_denoisingAlbedo = std::move(albedo);
+        m_denoisingNormal = std::move(normal);
+        m_dirtyBits |= ChangeTracker::DirtySize;
+        ResetDenoising();
+        if (!enable) {
+            m_cpuDenoiser.reset();
+            std::vector<float>().swap(m_denoisingColorBuffer);
+            std::vector<float>().swap(m_denoisingAlbedoBuffer);
+            std::vector<float>().swap(m_denoisingNormalBuffer);
+            std::vector<float>().swap(m_denoisedColorBuffer);
+        }
+    }
+}
+
+void HdRprApiColorAov::SetDenoisingSampleCount(uint32_t samples) {
+    m_denoisingSampleCount = samples;
+}
+
+void HdRprApiColorAov::ResetDenoising() {
+    m_denoisingOutputValid = false;
+    m_denoisingFailed = false;
+    m_denoisingSampleCount = 0;
 }
 
 void HdRprApiColorAov::SetFilter(Filter filter, bool enable) {
@@ -461,6 +518,16 @@ void HdRprApiColorAov::Update(HdRprApi const* rprApi, rif::Context* rifContext) 
 }
 
 bool HdRprApiColorAov::GetData(void* dstBuffer, size_t dstBufferSize) {
+    if (m_denoisingEnabled && m_denoisingOutputValid && !m_filter) {
+        const size_t bytes = m_denoisedColorBuffer.size() * sizeof(float);
+        if (!dstBuffer || m_format != HdFormatFloat32Vec4 || dstBufferSize < bytes) return false;
+        std::memcpy(dstBuffer, m_denoisedColorBuffer.data(), bytes);
+        return true;
+    }
+    if (m_denoisingEnabled && !m_denoisingOutputValid) {
+        auto rawColor = m_retainedRawColor->GetResolvedFb();
+        return rawColor && rawColor->GetData(dstBuffer, dstBufferSize);
+    }
     if (!m_filter) {
         if (auto resolvedRawColorFb = m_retainedRawColor->GetResolvedFb()) {
             return resolvedRawColorFb->GetData(dstBuffer, dstBufferSize);
@@ -475,10 +542,83 @@ bool HdRprApiColorAov::GetData(void* dstBuffer, size_t dstBufferSize) {
 }
 
 void HdRprApiColorAov::Resolve() {
+    if (m_denoisingEnabled) {
+        ResolveDenoising();
+    }
     HdRprApiAov::Resolve();
 
     for (auto& auxFilter : m_auxFilters) {
         auxFilter.second->Resolve();
+    }
+}
+
+void HdRprApiColorAov::ResolveDenoising() {
+    // Raw AOVs have already been resolved before computed color AOVs. Cache only
+    // completed denoising; ResetDenoising invalidates this on scene/camera edits.
+    if (m_denoisingOutputValid && !m_denoisingFailed &&
+        m_denoisingSampleCount >= m_denoisingMinSamples &&
+        m_denoisingOutputSampleCount == m_denoisingSampleCount) return;
+    m_denoisingOutputValid = false;
+    auto rawColor = m_retainedRawColor->GetResolvedFb();
+    if (!rawColor) return;
+    const auto desc = rawColor->GetDesc();
+    const size_t width = desc.fb_width, height = desc.fb_height;
+    if (!width || !height ||
+        width > std::numeric_limits<size_t>::max() / height / 4 / sizeof(float)) return;
+    const size_t count = width * height * 4;
+    const size_t bytes = count * sizeof(float);
+    try {
+        m_denoisingColorBuffer.resize(count);
+        if (!rawColor->GetData(m_denoisingColorBuffer.data(), bytes)) return;
+        m_denoisedColorBuffer = m_denoisingColorBuffer;
+        if (!m_denoisingFailed && m_denoisingSampleCount >= m_denoisingMinSamples) {
+            auto readGuide = [=](std::shared_ptr<HdRprApiAov> const& aov,
+                                 std::vector<float>& buffer) -> bool {
+                if (!aov) return true;
+                auto framebuffer = aov->GetResolvedFb();
+                if (!framebuffer || !aov->GetAovFb()) return false;
+                const auto guideDesc = framebuffer->GetDesc();
+                if (guideDesc.fb_width != width || guideDesc.fb_height != height) return false;
+                // Normals are marked single-sampled in the registry. Refresh the
+                // underlying float4 guide at the current accumulated sample count.
+                aov->GetAovFb()->Resolve(framebuffer);
+                buffer.resize(count);
+                return framebuffer->GetData(buffer.data(), bytes);
+            };
+            std::string error;
+            if (!readGuide(m_denoisingAlbedo, m_denoisingAlbedoBuffer) ||
+                !readGuide(m_denoisingNormal, m_denoisingNormalBuffer)) {
+                error = "Cannot read denoising guide AOV";
+            } else {
+                if (!m_cpuDenoiser) m_cpuDenoiser.reset(new HdRprCpuDenoiser);
+                if (!m_cpuDenoiser->Execute(m_denoisingColorBuffer.data(),
+                        m_denoisingAlbedo ? m_denoisingAlbedoBuffer.data() : nullptr,
+                        m_denoisingNormal ? m_denoisingNormalBuffer.data() : nullptr,
+                        m_denoisedColorBuffer.data(), width, height, &error) && error.empty()) {
+                    error = "Open Image Denoise failed";
+                }
+            }
+            if (!error.empty()) {
+                TF_WARN("Northstar denoising failed: %s; using raw beauty until accumulation resets", error.c_str());
+                m_denoisingFailed = true;
+                m_denoisedColorBuffer = m_denoisingColorBuffer;
+            }
+        }
+        // Only post-processing needs a RIF image. Float4 output without display
+        // filters can use the CPU result directly, including CPU-only rendering.
+        if (m_denoisedImage) {
+            void* mapped = nullptr;
+            RIF_ERROR_CHECK_THROW(rifImageMap(m_denoisedImage->GetHandle(), RIF_IMAGE_MAP_WRITE, &mapped),
+                                  "Cannot map denoised beauty image");
+            std::memcpy(mapped, m_denoisedColorBuffer.data(), bytes);
+            RIF_ERROR_CHECK_THROW(rifImageUnmap(m_denoisedImage->GetHandle(), mapped),
+                                  "Cannot unmap denoised beauty image");
+        }
+        m_denoisingOutputSampleCount = m_denoisingSampleCount;
+        m_denoisingOutputValid = true;
+    } catch (std::exception const& e) {
+        if (!m_denoisingFailed) TF_WARN("Northstar denoising failed: %s; using raw beauty", e.what());
+        m_denoisingFailed = true;
     }
 }
 
@@ -489,10 +629,10 @@ void HdRprApiColorAov::OnFormatChange(rif::Context* rifContext) {
 }
 
 template <typename T>
-void HdRprApiColorAov::ResizeFilter(int width, int height, Filter filterType, rif::Filter* filter, T input) {
+void HdRprApiColorAov::ResizeFilter(int width, int height, Filter filterType, rif::Filter* filter, T input, HdFormat outputFormat) {
     filter->Resize(width, height);
     filter->SetInput(rif::Color, input);
-    filter->SetOutput(rif::Image::GetDesc(width, height, m_format));
+    filter->SetOutput(rif::Image::GetDesc(width, height, outputFormat));
 
     if (filterType == kFilterComposeOpacity) {
         filter->SetInput("alphaImage", m_retainedOpacity->GetResolvedFb());
@@ -509,25 +649,48 @@ void HdRprApiColorAov::ResizeFilter(int width, int height, Filter filterType, ri
 }
 
 void HdRprApiColorAov::OnSizeChange(rif::Context* rifContext) {
+    m_denoisingOutputValid = false;
+    m_denoisingFailed = false;
+    m_denoisedImage.reset();
     if (!m_filter) {
         return;
     }
 
     auto fbDesc = m_retainedRawColor->GetAovFb()->GetDesc();
+    if (m_denoisingEnabled && rifContext && fbDesc.fb_width && fbDesc.fb_height) {
+        try {
+            m_denoisedImage = rifContext->CreateImage(
+                rif::Image::GetDesc(fbDesc.fb_width, fbDesc.fb_height, HdFormatFloat32Vec4));
+        } catch (std::exception const& e) {
+            TF_WARN("Cannot allocate denoised beauty image: %s; using raw beauty", e.what());
+            m_denoisingEnabled = false;
+        }
+    }
+    auto resizeFirstFilter = [&](Filter filterType, rif::Filter* filter, HdFormat outputFormat) {
+        if (m_denoisedImage) {
+            ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, filterType, filter,
+                         m_denoisedImage->GetHandle(), outputFormat);
+        } else {
+            ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, filterType, filter,
+                         m_retainedRawColor->GetResolvedFb(), outputFormat);
+        }
+    };
     if (m_auxFilters.empty()) {
-        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_mainFilterType, m_filter.get(), m_retainedRawColor->GetResolvedFb());
+        resizeFirstFilter(m_mainFilterType, m_filter.get(), m_format);
     }
     else {
         // Ideally we would use "Filter combining" functionality, but it does not work with user-defined filter
         // So we attach each filter separately
 
         auto filter = m_auxFilters.front().second.get();
-        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters.front().first, filter, m_retainedRawColor->GetResolvedFb());
+        // Preserve HDR until tone mapping, and cast only the final display output.
+        const HdFormat intermediateFormat = m_denoisingEnabled ? HdFormatFloat32Vec4 : m_format;
+        resizeFirstFilter(m_auxFilters.front().first, filter, intermediateFormat);
         for (int i = 1; i < m_auxFilters.size(); ++i) {
             auto filterInput = m_auxFilters[i - 1].second->GetOutput();
-            ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters[i].first, m_auxFilters[i].second.get(), filterInput);
+            ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_auxFilters[i].first, m_auxFilters[i].second.get(), filterInput, intermediateFormat);
         }
-        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_mainFilterType, m_filter.get(), m_auxFilters.back().second->GetOutput());
+        ResizeFilter(fbDesc.fb_width, fbDesc.fb_height, m_mainFilterType, m_filter.get(), m_auxFilters.back().second->GetOutput(), m_format);
     }
 }
 

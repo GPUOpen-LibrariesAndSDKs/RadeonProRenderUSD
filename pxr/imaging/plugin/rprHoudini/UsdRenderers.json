@@ -9,11 +9,13 @@
         "pauseonupdate": false,
         "allowbackgroundupdate": true,
         "viewstats": [
+            "Render backend",
             "Render GPU",
             "CPU render threads",
             "Samples per second",
             "Output resolution",
-            "RPR preview scale"
+            "RPR preview scale",
+            "Denoising"
         ],
         "statsdatapaths": {
             "totalClockTime": "frameRenderTotalTime",
@@ -23,7 +25,9 @@
             "CPU render threads": "threadCountUsed",
             "Samples per second": "samplesPerSecond",
             "Output resolution": "outputResolution",
-            "RPR preview scale": "previewScale"
+            "RPR preview scale": "previewScale",
+            "Render backend": "rendererBackend",
+            "Denoising": "denoisingMode"
         }
     }
 }

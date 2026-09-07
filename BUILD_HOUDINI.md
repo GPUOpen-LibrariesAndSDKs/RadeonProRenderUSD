@@ -84,3 +84,64 @@ In H22.0.429, repeated `hou.SceneViewer.setRendererPaused(False)` calls toggled
 the renderer instead of acting idempotently. Check `isRendererPaused()` first
 and call the setter only if the state differs. This workaround also works with
 normal setters; it should not replace the user's deliberate pause choice.
+
+
+## Optional preview paths
+
+`HDRPR_ENABLE_OIDN` defaults to ON but is optional. CMake looks for Open Image
+Denoise 2, preferring the selected Houdini installation. If disabled or absent,
+the renderer still builds and shows the raw image. When available, Northstar can
+apply the CPU OIDN filter to beauty with albedo/normal guides before tone mapping
+and gamma. Alpha is preserved. GPU ray tracing stays on the selected render
+GPU; the CPU only runs this spatial filter. The installed plugin retains the
+selected OIDN library directory in its runtime search path. Rebuild for a moved
+or different host installation.
+
+Northstar exposes `rpr:denoising:enable` (default false) and
+`rpr:denoising:minSamples` (default 16). Adaptive sampling can be used with this
+filter. Filtering can soften fine reflected or transmitted features, so compare
+against a higher-sample raw reference when approving materials.
+
+Linux now registers the SDK's HybridPro backend. Its SVGF/ASVGF denoising can run
+at native resolution by selecting `None` for `rpr:hybrid:upscalingQuality`.
+The existing FSR2 quality modes remain available when a temporal denoiser is
+enabled. This separates denoising from upscaling without changing the upstream
+default quality selection. The HUD identifies the active backend, denoiser and
+FSR2 mode; display updates are not completed rendered frames.
+
+Hybrid/HybridPro device discovery uses the optional SDK supported-device export.
+Each advertised physical index is probed with one GPU flag; its name is read as
+active device zero. Older SDKs without that export retain GPU0 discovery.
+Hybrid supports one selected GPU per context. Explicit multiple or stale device
+selections fail rather than silently falling back to a different GPU. Device
+configuration is reread when a context is created, so switching devices needs a
+renderer-context restart, not a Houdini restart.
+
+Both GPUs must be visible to Vulkan for index selection. On the tested Linux
+workstation, `MESA_VK_DEVICE_SELECT=10de:1e84` prefers NVIDIA for Houdini's display
+while leaving AMD available to HybridPro. A trailing `!` or
+`MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE` hides other devices. Restricting
+`VK_DRIVER_FILES` to a single driver likewise changes discovery. These are
+workstation environment choices, not mandatory plugin settings.
+
+Local checks include a normal-launcher load with bundled OIDN 2.3.3, matched
+128-sample Northstar raw/OIDN captures, and adaptive sampling plus OIDN. A
+standalone helper check verified finite HDR output, preserved alpha, resolution
+changes, and operation with/without guides. Configure also succeeds with both
+`HDRPR_ENABLE_OIDN=OFF` and `RPR_ROCM7_ROOT` empty. Other Houdini/OS combinations
+remain passively supported but untested.
+
+
+HybridPro device-index discovery was checked on NVIDIA RTX 2070 Super, AMD
+Radeon AI PRO R9700 and llvmpipe. AMD selection survived an in-GUI context
+restart with an unchanged camera. However, a later AMD HybridPro render/switch
+on RADV 25.2.8 hit VK_ERROR_DEVICE_LOST, hard GPU recovery and a Houdini crash.
+Treat this AMD Vulkan path as experimental; a device-name query or an earlier
+completed frame does not establish stability. Northstar/HIP is the validated
+AMD path for this workstation. No matched AMD/NVIDIA performance claim is made
+from the incomplete HybridPro sequence.
+
+NVIDIA HybridPro also completed a fixed-camera128-sample SVGF capture at native
+resolution. It reduced noise in some regions while leaving substantial noise in
+reflections/transmission. ASVGF/FSR2 image quality and temporal behavior remain
+unvalidated in the GUI; those controls are exposed but not production-approved.

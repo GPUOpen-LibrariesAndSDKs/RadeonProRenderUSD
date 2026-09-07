@@ -1789,6 +1789,7 @@ public:
 
     void ResolveFramebuffers() {
         auto startTime = std::chrono::high_resolution_clock::now();
+        m_colorAov->SetDenoisingSampleCount(m_numSamples);
 
         m_resolveData.ForAllAovs([&](ResolveData::AovEntry& e) {
             if (m_isFirstSample || e.isMultiSampled) {
@@ -2176,10 +2177,12 @@ public:
             }
             
             if (preferences.IsDirty(HdRprConfig::DirtyHybrid) || force) {
-                if (preferences.GetHybridDenoising() != HdRprHybridDenoisingTokens->None) {
+                const auto qualityToken = preferences.GetHybridUpscalingQuality();
+                const bool enableUpscaling = preferences.GetHybridDenoising() != HdRprHybridDenoisingTokens->None
+                    && qualityToken != HdRprHybridUpscalingQualityTokens->None;
+                if (enableUpscaling) {
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_UPSCALER), RPR_UPSCALER_FSR2), "Failed to set upscaler");
                     rpr_uint upscaleQuality = RPR_FSR2_QUALITY_MODE_ULTRA_PERFORMANCE;
-                    TfToken qualityToken = preferences.GetHybridUpscalingQuality();
                     if (qualityToken == HdRprHybridUpscalingQualityTokens->UltraQuality) {
                         upscaleQuality = RPR_FSR2_QUALITY_ULTRA_QUALITY;
                     } else if (qualityToken == HdRprHybridUpscalingQualityTokens->Quality) {
@@ -2196,6 +2199,7 @@ public:
                 else {
                     RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_UPSCALER), RPR_UPSCALER_NONE), "Failed to set upscaler");
                 }
+                m_upscalingMode = enableUpscaling ? "FSR2 " + qualityToken.GetString() : "None";
                 m_dirtyFlags |= ChangeTracker::DirtyScene;
             }
         }
@@ -2230,6 +2234,7 @@ public:
             }
 
             auto hybridDenoising = preferences.GetHybridDenoising();
+            m_denoisingMode = hybridDenoising.GetString();
             if (hybridDenoising == HdRprHybridDenoisingTokens->None) {
                 RPR_ERROR_CHECK(m_rprContext->SetParameter(rpr::ContextInfo(RPR_CONTEXT_PT_DENOISER), RPR_DENOISER_NONE), "Failed to set denoiser");
             } else if (hybridDenoising == HdRprHybridDenoisingTokens->SVGF) {
@@ -2299,6 +2304,17 @@ public:
             UpdateNorthstarSettings(preferences, force);
         } else if (RprUsdIsHybrid(m_rprContextMetadata.pluginType)) {
             UpdateHybridSettings(preferences, force);
+        }
+
+        if (m_rprContextMetadata.pluginType == kPluginNorthstar &&
+            (preferences.IsDirty(HdRprConfig::DirtyDenoising) || force)) {
+            const bool requested = preferences.GetDenoisingEnable();
+            const bool enabled = requested && HdRprApiColorAov::IsDenoisingAvailable();
+            auto albedo = enabled ? CreateAov(HdRprAovTokens->albedo) : nullptr;
+            auto normal = enabled ? CreateAov(HdRprAovTokens->viewShadingNormal) : nullptr;
+            m_colorAov->SetDenoising(enabled, preferences.GetDenoisingMinSamples(), albedo, normal);
+            m_denoisingMode = enabled ? "OIDN CPU" : (requested ? "OIDN unavailable" : "None");
+            m_dirtyFlags |= ChangeTracker::DirtyAOVRegistry;
         }
 
         if (preferences.IsDirty(HdRprConfig::DirtyAlpha) || force ||
@@ -2660,6 +2676,7 @@ public:
         });
 
         if (clearAovs) {
+            m_colorAov->ResetDenoising();
             m_numSamples = 0;
             m_activePixels = -1;
             m_isFirstSample = true;
@@ -3579,6 +3596,10 @@ Don't show this message again?
         stats.maxSamples = m_maxSamples;
         stats.previewDownscale = m_previewDownscale;
         stats.viewportSize = m_viewportSize;
+        stats.rendererBackend = m_rprContextMetadata.pluginType == kPluginNorthstar ? "Northstar"
+            : (m_rprContextMetadata.pluginType == kPluginHybridPro ? "HybridPro" : "Hybrid");
+        stats.denoisingMode = m_denoisingMode;
+        stats.upscalingMode = m_upscalingMode;
 
         // rprsExport has no progress callback
         if (!m_rprSceneExportPath.empty()) {
@@ -3741,6 +3762,7 @@ Don't show this message again?
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     void Restart() {
+        if (m_colorAov) m_colorAov->ResetDenoising();
         m_numSamples = 0;
     }
 private:
@@ -4679,6 +4701,8 @@ private:
 
     bool m_isInteractive = false;
     int m_previewDownscale = 0;
+    std::string m_denoisingMode = "None";
+    std::string m_upscalingMode = "None";
     int m_numSamples = 0;
     int m_numSamplesPerIter = 0;
     int m_activePixels = -1;

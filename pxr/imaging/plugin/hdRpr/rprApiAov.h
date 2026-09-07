@@ -23,6 +23,7 @@ limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 
 class HdRprApi;
+class HdRprCpuDenoiser;
 struct RprUsdContextMetadata;
 
 class HdRprApiAov {
@@ -74,7 +75,7 @@ protected:
 class HdRprApiColorAov : public HdRprApiAov {
 public:
     HdRprApiColorAov(HdFormat format, std::shared_ptr<HdRprApiAov> rawColorAov, rpr::Context* rprContext, RprUsdContextMetadata const& rprContextMetadata);
-    ~HdRprApiColorAov() override = default;
+    ~HdRprApiColorAov() override;
 
     void Resize(int width, int height, HdFormat format) override;
     void Update(HdRprApi const* rprApi, rif::Context* rifContext) override;
@@ -82,6 +83,16 @@ public:
     void Resolve() override;
 
     void SetOpacityAov(std::shared_ptr<HdRprApiAov> opacity);
+
+    static bool IsDenoisingAvailable();
+    // Optional Northstar spatial denoising. Guide framebuffers must contain
+    // resolved RPR float4 albedo and [0,1]-encoded shading/view shading normals.
+    void SetDenoising(bool enable, uint32_t minSamples,
+                      std::shared_ptr<HdRprApiAov> albedo = nullptr,
+                      std::shared_ptr<HdRprApiAov> normal = nullptr);
+    void SetDenoisingSampleCount(uint32_t samples);
+    // Call whenever render accumulation is cleared, even at unchanged size.
+    void ResetDenoising();
 
     struct TonemapParams {
         bool enable;
@@ -131,15 +142,33 @@ private:
     void SetFilter(Filter filter, bool enable);
     
     template <typename T>
-    void ResizeFilter(int width, int height, Filter filterType, rif::Filter* filter, T input);
+    void ResizeFilter(int width, int height, Filter filterType, rif::Filter* filter, T input, HdFormat outputFormat);
 
     void SetTonemapFilterParams(rif::Filter* filter);
 
     bool CanComposeAlpha();
+    void ResolveDenoising();
 
 private:
     std::shared_ptr<HdRprApiAov> m_retainedRawColor;
     std::shared_ptr<HdRprApiAov> m_retainedOpacity;
+
+    const bool m_isNorthstar;
+    bool m_denoisingEnabled = false;
+    bool m_denoisingFailed = false;
+    bool m_denoisingOutputValid = false;
+    bool m_denoisingUnavailableWarned = false;
+    uint32_t m_denoisingMinSamples = 1;
+    uint32_t m_denoisingSampleCount = 0;
+    uint32_t m_denoisingOutputSampleCount = 0;
+    std::shared_ptr<HdRprApiAov> m_denoisingAlbedo;
+    std::shared_ptr<HdRprApiAov> m_denoisingNormal;
+    std::unique_ptr<HdRprCpuDenoiser> m_cpuDenoiser;
+    std::unique_ptr<rif::Image> m_denoisedImage;
+    std::vector<float> m_denoisingColorBuffer;
+    std::vector<float> m_denoisingAlbedoBuffer;
+    std::vector<float> m_denoisingNormalBuffer;
+    std::vector<float> m_denoisedColorBuffer;
 
     Filter m_mainFilterType = kFilterNone;
     std::vector<std::pair<Filter, std::unique_ptr<rif::Filter>>> m_auxFilters;
