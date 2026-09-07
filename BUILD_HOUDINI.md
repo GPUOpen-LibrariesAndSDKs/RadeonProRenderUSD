@@ -164,7 +164,7 @@ frames and expose an error status. `renderContextId` identifies delegate
 recreation for integration checks. CPU-only regression tests are documented in
 `pxr/imaging/plugin/hdRpr/testenv/README.md`.
 
-Live validation remains incomplete. A later NVIDIA HybridPro test on the RTX
+Earlier live validation failed. An NVIDIA HybridPro test on the RTX
 2070 Super/595.84 driver stopped after two successful samples with a Vulkan
 device loss; the kernel recorded Xid 109 (`CTX SWITCH TIMEOUT`). Attempting to
 switch from that lost context crashed inside the SDK's HybridPro context
@@ -173,7 +173,7 @@ establish that this SDK can recover from device loss. Earlier successful
 captures must not be taken as proof of switching stability on either GPU.
 
 
-The latest fixed-view sequence is **not accepted image/stability validation**.
+The earlier build23 fixed-view sequence is **not accepted image/stability validation**.
 AMD HybridPro completed 32 samples, switched to Northstar and back, and later
 reported 128 samples; its floor pixels after increasing the sample cap were
 exactly one quarter of the previous 32-sample values. Another return from Karma
@@ -187,8 +187,8 @@ The initiating cause remains unisolated; neither SDK nor driver blame is proven.
 Source inspection also corrected motion-mesh property storage that allocated one
 entry but wrote three, initialized light transforms/displacement state and timing
 counters, and supplied defined clipping defaults when a reconstructed camera has
-lens parameters without a clipping range. These corrections need live validation;
-they are not presented as a demonstrated fix for the HybridPro GPU resets.
+lens parameters without a clipping range. The bounded build25 check below includes
+these corrections; it does not establish a fix for recovery after GPU resets.
 The darkening now reproduces outside Houdini in the standalone HybridPro SDK
 fixture, including after reboot. On the R9700/RADV 25.2.8 configuration, one
 iteration per SDK render call gives mean RGB 0.00254655682 at 32 samples,
@@ -202,8 +202,9 @@ whether the missing synchronization is an SDK or driver defect. With this flag,
 six fresh HybridPro contexts alternated AMD/NVIDIA in one process, rendered
 metal/glass spheres, procedural texture and emissive lighting at 512x512/128
 samples, accepted light/camera edits, and completed all teardowns. Their mean
-absolute RGB difference was 4.77e-6. These results do not validate Houdini
-renderer switches, recovery from device loss, or production-scene stability.
+absolute RGB difference was 4.77e-6. These SDK-only results do not validate
+recovery from device loss or production-scene stability; the separate Houdini
+check is described below.
 An earlier synchronized geometry-edit test still lost the AMD device; later
 immediate and deferred deletion controls both passed. No speculative deferred
 release queue was added to the delegate.
@@ -211,3 +212,42 @@ release queue was added to the delegate.
 The standalone SDK fixture, image/teardown checker and reproduction instructions
 are in `pxr/imaging/plugin/hdRpr/testenv/SDK_TESTS.md`. They require no Houdini
 engine or window. CPU synchronization tests remain separate and use no GPU.
+
+
+## Bounded GUI validation with the synchronization workaround
+
+Installed build25 (renderer source commit `8367d5b`) was tested in one existing
+H22.0.429 GUI launched with `RADV_DEBUG=syncshaders`, on the R9700/RADV 25.2.8.
+The isolated scene contains chrome and glass spheres, a procedural striped
+material and emissive geometry. Raw color AOVs were read directly through Hydra;
+these checks did not use screen captures or additional Houdini engines.
+
+At a fixed 935x1099 free-camera view, AMD HybridPro completed 32 then 128 samples
+in the same context. Mean RGB changed from 0.187160 to 0.196604 (ratio 1.0505),
+rather than the earlier quarter-brightness error. Switching to Northstar and
+back created fresh RPR delegates and preserved the image. Switching to Karma CPU
+and back also recreated HybridPro successfully: its mean RGB was 0.196844, with
+no opaque white bands. Karma's selection/unpaused state was checked, but its
+pixels were not inspected. No automatic pause, crash or new kernel GPU fault
+was observed during this sequence. Denoising, upscaling and adaptive stopping
+were disabled for the HybridPro checks.
+
+A native Solaris camera translation and restore each generated new 128-sample
+images without recreating the delegate. H22 HOM `setDefaultCamera()` and live
+camera setters changed the reported viewport transform but left Hydra's free
+camera and output unchanged, even with `draw()` and a redraw fence. Those probes
+were rejected as evidence of camera-render progress. The successful test used
+`viewtransform desktop.pane.solaris.viewport txyz ( x y z )`; `viewls -n -v`
+identifies the actual Solaris viewport. The separate `.world.` view is not the
+LOP camera. This is a host-notification observation, not an SDK camera fix.
+
+The restored 128-sample frame accumulated 0.119 s in SDK render calls versus
+1.422 s in resolve/readback. HUD samples/second excludes resolve, while
+`totalRenderTime` continues growing after convergence; neither should be used
+as complete frame latency. No resolve-throttling optimization was introduced.
+
+This is a bounded material-scene pass with a diagnostic launch flag, not general
+stability certification. Continuous navigation, GUI GPU changes, long playback,
+ASVGF/FSR2, production fluid geometry and recovery from device loss remain
+unvalidated with the workaround. The plugin does not enable `syncshaders`
+automatically or require it on other driver/SDK configurations.
