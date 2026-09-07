@@ -20,6 +20,8 @@ limitations under the License.
 
 #include "pxr/imaging/hd/renderDelegate.h"
 
+#include <cstdint>
+
 PXR_NAMESPACE_OPEN_SCOPE
 
 #if PXR_VERSION >= 2102
@@ -89,6 +91,9 @@ public:
     VtDictionary GetRenderStats() const override;
 
     bool IsPauseSupported() const override;
+    // These queries also compile with USD versions predating their virtual API.
+    bool IsPaused() const;
+    bool IsStopped() const;
     bool Pause() override;
     bool Resume() override;
 
@@ -114,6 +119,8 @@ private:
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
     static const TfTokenVector SUPPORTED_BPRIM_TYPES;
 
+    const std::uint64_t m_renderContextId;
+    std::atomic<bool> m_isStopped {false};
     std::unique_ptr<HdRprApi> m_rprApi;
     std::unique_ptr<HdRprRenderParam> m_renderParam;
     HdRenderSettingDescriptorList m_settingDescriptors;

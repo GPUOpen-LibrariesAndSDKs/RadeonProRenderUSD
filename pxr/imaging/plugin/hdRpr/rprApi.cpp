@@ -613,9 +613,8 @@ public:
         }
 
         if (numMeshSamples > 1) {
-            meshProperties[0] = (rpr_mesh_info)RPR_MESH_MOTION_DIMENSION;
-            meshProperties[1] = (rpr_mesh_info)numMeshSamples;
-            meshProperties[2] = (rpr_mesh_info)0;
+            meshProperties = {rpr_mesh_info(RPR_MESH_MOTION_DIMENSION),
+                              rpr_mesh_info(numMeshSamples), rpr_mesh_info(0)};
 
             mergedPoints = MergeSamples(&pointSamples, numMeshSamples, &pointsData, &numPoints);
             mergedNormals = MergeSamples(&normalSamples, numMeshSamples, &normalsData, &numNormals);
@@ -1788,6 +1787,7 @@ public:
     }
 
     void ResolveFramebuffers() {
+        if (m_state == kStateInvalid) return;
         auto startTime = std::chrono::high_resolution_clock::now();
         m_colorAov->SetDenoisingSampleCount(m_numSamples);
 
@@ -1803,7 +1803,11 @@ public:
 
         for (auto& outRb : m_outputRenderBuffers) {
             if (outRb.mappedData && (m_isFirstSample || outRb.isMultiSampled)) {
-                outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize);
+                if (!outRb.rprAov->GetData(outRb.mappedData, outRb.mappedDataSize)) {
+                    TF_RUNTIME_ERROR("Failed to resolve %s render buffer; context requires restart", outRb.aovName.GetText());
+                    m_state = kStateInvalid;
+                    return;
+                }
             }
         }
 
@@ -1873,7 +1877,9 @@ public:
                 auto newPlugin = GetPluginType(m_currentRenderQuality);
                 auto activePlugin = m_rprContextMetadata.pluginType;
                 bool backendChanged = activePlugin == kPluginNorthstar && m_rprContextMetadata.useOpenCL != config->GetCoreUseOpenCL();
-                m_state = (newPlugin != activePlugin || backendChanged) ? kStateRestartRequired : kStateRender;
+                bool deviceChanged = RprUsdIsHybrid(activePlugin) &&
+                    m_rprContextMetadata.hybridGpuIndex != config->GetCoreHybridGpuIndex();
+                m_state = (newPlugin != activePlugin || backendChanged || deviceChanged) ? kStateRestartRequired : kStateRender;
             }
 
             if (m_state == kStateRender && config->IsDirty(HdRprConfig::DirtyRenderQuality)) {
@@ -2451,8 +2457,11 @@ public:
         float sensorHeight;
         float focalLength;
 
-        float nearPlane;
-        float farPlane;
+        // Physical lens parameters can be present without clippingRange.
+        // Keep the same fallback range in that case instead of sending garbage
+        // to the SDK after a viewport/delegate camera is reconstructed.
+        float nearPlane = 0.01f;
+        float farPlane = 100000000.0f;
 
         GfVec2f apertureSize;
         GfVec2f apertureOffset(0.0f);
@@ -3009,7 +3018,7 @@ public:
         // active pixels as often as possible
         const bool isAdaptiveSamplingEnabled = IsAdaptiveSamplingEnabled();
 
-        while (!IsConverged()) {
+        while (m_state == kStateRender && !IsConverged()) {
             if (renderThread->IsStopRequested()) {
                 break;
             }
@@ -3026,6 +3035,9 @@ public:
 
             if (status != RPR_SUCCESS && status != RPR_ERROR_ABORTED) {
                 RPR_ERROR_CHECK(status, "Failed to render", m_rprContext.get());
+                // A failed context must not be submitted again on the next
+                // viewport update (in particular after Vulkan device loss).
+                m_state = kStateInvalid;
                 break;
             }
 
@@ -3072,7 +3084,9 @@ public:
             }
         }
 
-        ResolveFramebuffers();
+        if (m_state == kStateRender) {
+            ResolveFramebuffers();
+        }
     }
 
     static void RenderUpdateCallback(float progress, void* dataPtr) {
@@ -3128,7 +3142,7 @@ public:
             cd.SetForTile(m_camera, m_hdCamera, windowNDC);
         }
 
-        while (!IsConverged()) {
+        while (m_state == kStateRender && !IsConverged()) {
             // In interactive mode, always render at least one frame, otherwise
             // disturbing full-screen-flickering will be visible or
             // viewport will not update because of fast exit due to abort
@@ -3143,7 +3157,8 @@ public:
 
             if (progressivelyIncreaseSamplesPerIter) {
                 // 1, 1, 2, 4, 8, ...
-                int numSamplesPerIter = std::max(int(pow(2, int(log2(m_numSamples)))), 1);
+                int numSamplesPerIter = m_numSamples > 0
+                    ? std::max(int(pow(2, int(log2(m_numSamples)))), 1) : 1;
 
                 // Make sure we will not oversample the image
                 int numSamplesLeft = std::min(numSamplesPerIter, m_maxSamples - m_numSamples);
@@ -3173,6 +3188,9 @@ public:
 
             if (status != RPR_SUCCESS && status != RPR_ERROR_ABORTED) {
                 RPR_ERROR_CHECK(status, "Failed to render", m_rprContext.get());
+                // A failed context must not be submitted again on the next
+                // viewport update (in particular after Vulkan device loss).
+                m_state = kStateInvalid;
                 break;
             }
 
@@ -3182,6 +3200,9 @@ public:
 
             if (m_resolveMode == kResolveAfterRender) {
                 ResolveFramebuffers();
+            }
+            if (m_state != kStateRender) {
+                break;
             }
 
             if (IsAdaptiveSamplingEnabled() && m_numSamples >= m_minSamples &&
@@ -3243,7 +3264,7 @@ public:
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     void RenderFrame(HdRprRenderThread* renderThread) {
-        if (!m_rprContext) {
+        if (!m_rprContext || m_state == kStateInvalid) {
             return;
         }
 
@@ -3251,6 +3272,7 @@ public:
             Update();
         } catch (std::runtime_error const& e) {
             TF_RUNTIME_ERROR("Failed to update: %s", e.what());
+            m_state = kStateInvalid;
             m_dirtyFlags = ChangeTracker::Clean;
             if (m_hdCamera) {
                 m_hdCamera->CleanDirtyBits();
@@ -3280,9 +3302,12 @@ public:
                         RenderImpl(renderThread);
                     }
                 }
-                SaveCryptomatte();
+                if (m_state == kStateRender) {
+                    SaveCryptomatte();
+                }
             } catch (std::runtime_error const& e) {
                 TF_RUNTIME_ERROR("Failed to render frame: %s", e.what());
+                m_state = kStateInvalid;
             }
         } else if (m_state == kStateRestartRequired) {
             {
@@ -3566,9 +3591,12 @@ Don't show this message again?
         m_startTime = std::chrono::high_resolution_clock::now();
         RenderFrame(renderThread);
 
+        // Returning from the worker is not proof of convergence: it may have
+        // stopped for a camera/settings edit, a required restart, or an error.
+        const bool converged = m_state == kStateRender && IsConverged();
         for (auto& aovBinding : m_aovBindings) {
             if (auto rb = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer)) {
-                rb->SetConverged(true);
+                rb->SetConverged(converged);
             }
         }
     }
@@ -3600,13 +3628,17 @@ Don't show this message again?
             : (m_rprContextMetadata.pluginType == kPluginHybridPro ? "HybridPro" : "Hybrid");
         stats.denoisingMode = m_denoisingMode;
         stats.upscalingMode = m_upscalingMode;
+        stats.renderStatus = m_state == kStateInvalid ? "Error - restart required"
+            : m_state == kStateRestartRequired ? "Restart required"
+            : m_state == kStateUninitialized ? "Initializing"
+            : IsConverged() ? "Converged" : "Rendering";
 
         // rprsExport has no progress callback
         if (!m_rprSceneExportPath.empty()) {
             return stats;
         }
 
-        double progress = double(m_numSamples) / m_maxSamples;
+        double progress = m_maxSamples > 0 ? double(m_numSamples) / m_maxSamples : 0.0;
         if (m_activePixels != -1) {
             int numPixels = m_viewportSize[0] * m_viewportSize[1];
             progress = std::max(progress, double(numPixels - m_activePixels) / numPixels);
@@ -3628,7 +3660,10 @@ Don't show this message again?
 
         stats.frameRenderTotalTime = (double)m_frameRenderTotalTime.count() / 1000000000.0;
         stats.frameResolveTotalTime = (double)m_frameResolveTotalTime.count() / 1000000000.0;
-        stats.totalRenderTime = (double)(std::chrono::high_resolution_clock::now().time_since_epoch() - m_startTime.time_since_epoch()).count() / 1000000000.0;
+        if (m_startTime != std::chrono::high_resolution_clock::time_point()) {
+            stats.totalRenderTime = std::chrono::duration<double>(
+                std::chrono::high_resolution_clock::now() - m_startTime).count();
+        }
 
         stats.syncTime = (double)m_syncTime.count() / 1000000000.0;
         stats.cacheCreationTime = (double)m_cacheCreationTime.count() / 1000000000.0;
@@ -3661,7 +3696,8 @@ Don't show this message again?
             return m_numSamples == 1;
         }
 
-        return (m_numSamples >= m_maxSamples) || (m_activePixels == 0);
+        return (m_numSamples >= m_maxSamples) ||
+            (IsAdaptiveSamplingEnabled() && m_numSamples >= m_minSamples && m_activePixels == 0);
     }
 
     bool IsAdaptiveSamplingEnabled() const {
@@ -3762,8 +3798,10 @@ Don't show this message again?
 #endif // HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 
     void Restart() {
-        if (m_colorAov) m_colorAov->ResetDenoising();
-        m_numSamples = 0;
+        // Let UpdateAovs clear every SDK framebuffer and reset sample count,
+        // adaptive coverage, first-sample AOVs, iteration size and denoising as
+        // one operation, before the next accumulation starts.
+        m_dirtyFlags |= ChangeTracker::DirtyScene;
     }
 private:
     static RprUsdPluginType GetPluginType(TfToken const& renderQuality) {
@@ -3865,6 +3903,7 @@ private:
             flipRequestedByRenderSetting = config->GetCoreFlipVertical();
             useGmon = config->GetCoreUseGmon();
             m_rprContextMetadata.useOpenCL = config->GetCoreUseOpenCL();
+            m_rprContextMetadata.hybridGpuIndex = config->GetCoreHybridGpuIndex();
 
             m_rprContextMetadata.pluginType = GetPluginType(m_currentRenderQuality);
 
@@ -4710,15 +4749,15 @@ private:
     int m_minSamples = 0;
     float m_varianceThreshold = 0.0f;
     TfToken m_currentRenderQuality;
-    bool m_hybridDisplacement;
+    bool m_hybridDisplacement = false;
 
     using Duration = std::chrono::high_resolution_clock::duration;
-    Duration m_frameRenderTotalTime;
-    Duration m_frameResolveTotalTime;
+    Duration m_frameRenderTotalTime = {};
+    Duration m_frameResolveTotalTime = {};
     std::chrono::high_resolution_clock::time_point m_startTime = {};
     std::chrono::high_resolution_clock::time_point m_syncStartTime = {};
-    Duration m_syncTime;
-    Duration m_cacheCreationTime;
+    Duration m_syncTime = {};
+    Duration m_cacheCreationTime = {};
     bool m_cacheCreationRequired = false;
 
     struct RenderUpdateCallbackData {

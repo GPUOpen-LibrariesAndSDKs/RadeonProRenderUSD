@@ -38,17 +38,19 @@ public:
     bool IsThreadRunning();
 
     void StartRender();
-    void StopRender();
+    void StopRender(bool blocking = true);
     bool IsStopRequested();
     bool IsRendering();
 
     void PauseRender();
     void ResumeRender();
+    bool IsPaused() const;
 
     void WaitUntilPaused();
 
 private:
     void RenderLoop();
+    void RequestStop();
 
     std::function<void()> m_stopCallback;
     std::function<void()> m_renderCallback;
@@ -61,16 +63,17 @@ private:
         StateTerminated,
     };
 
+    // Serialize control calls without holding a mutex needed by the worker.
+    std::mutex m_controlMutex;
     State m_requestedState;
     std::mutex m_requestedStateMutex;
     std::condition_variable m_requestedStateCV;
 
-    std::mutex m_pauseWaitMutex;
+    mutable std::mutex m_pauseWaitMutex;
     std::condition_variable m_pauseWaitCV;
     bool m_pauseRender;
 
-    std::atomic_flag m_enableRender;
-    bool m_stopRequested;
+    std::atomic<bool> m_stopRequested;
 
     std::atomic<bool> m_rendering;
     std::thread m_renderThread;

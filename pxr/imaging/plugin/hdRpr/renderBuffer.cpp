@@ -17,6 +17,8 @@ limitations under the License.
 
 #include "pxr/imaging/hd/sceneDelegate.h"
 
+#include <limits>
+
 #ifdef HDRPR_ENABLE_VULKAN_INTEROP_SUPPORT
 #include <vulkan/vulkan.h>
 #include <RadeonProRender.hpp>
@@ -39,7 +41,9 @@ void HdRprRenderBuffer::Sync(HdSceneDelegate* sceneDelegate,
     if (*dirtyBits & DirtyDescription) {
         // hdRpr has the background thread write directly into render buffers,
         // so we need to stop the render thread before reallocating them.
-        static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
+        auto edit = static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
+        HdRenderBuffer::Sync(sceneDelegate, renderParam, dirtyBits);
+        return;
     }
 
     HdRenderBuffer::Sync(sceneDelegate, renderParam, dirtyBits);
@@ -48,7 +52,7 @@ void HdRprRenderBuffer::Sync(HdSceneDelegate* sceneDelegate,
 void HdRprRenderBuffer::Finalize(HdRenderParam* renderParam) {
     // hdRpr has the background thread write directly into render buffers,
     // so we need to stop the render thread before reallocating them.
-    static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
+    auto edit = static_cast<HdRprRenderParam*>(renderParam)->AcquireRprApiForEdit();
 
     HdRenderBuffer::Finalize(renderParam);
 }
@@ -56,10 +60,20 @@ void HdRprRenderBuffer::Finalize(HdRenderParam* renderParam) {
 bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
                                  HdFormat format,
                                  bool multiSampled) {
-    if (dimensions[2] != 1) {
-        TF_WARN("HdRprRenderBuffer supports 2D buffers only");
+    if (dimensions[0] < 0 || dimensions[1] < 0 || dimensions[2] != 1 || format == HdFormatInvalid) {
+        TF_WARN("HdRprRenderBuffer requires nonnegative 2D dimensions and a valid format");
         return false;
     }
+
+    const size_t pixelSize = HdDataSizeOfFormat(format);
+    const size_t width = dimensions[0];
+    const size_t height = dimensions[1];
+    if (width && height && (!pixelSize ||
+        width > std::numeric_limits<size_t>::max() / pixelSize / height)) {
+        TF_WARN("HdRprRenderBuffer allocation size overflows");
+        return false;
+    }
+    const size_t dataByteSize = width * height * pixelSize;
 
 #ifdef ENABLE_MULTITHREADED_RENDER_BUFFER
     std::unique_lock<std::mutex> lock(m_mapMutex);
@@ -72,13 +86,8 @@ bool HdRprRenderBuffer::Allocate(GfVec3i const& dimensions,
     m_multiSampled = multiSampled;
     m_isConverged.store(false);
 
-    size_t dataByteSize = m_width * m_height * HdDataSizeOfFormat(m_format);
-    if (dataByteSize) {
-        m_mappedBuffer.reserve(dataByteSize);
-        std::memset(m_mappedBuffer.data(), 0, dataByteSize);
-    } else {
-        m_mappedBuffer = std::vector<uint8_t>();
-    }
+    m_mappedBuffer.assign(dataByteSize, uint8_t(0));
+    m_allocationVersion.fetch_add(1);
 
     return true;
 }
@@ -95,6 +104,7 @@ void HdRprRenderBuffer::_Deallocate() {
     m_format = HdFormatInvalid;
     m_isConverged.store(false);
     m_mappedBuffer = std::vector<uint8_t>();
+    m_allocationVersion.fetch_add(1);
 }
 
 void* HdRprRenderBuffer::Map() {

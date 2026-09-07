@@ -82,45 +82,32 @@ void HdRprRenderParam::MaterialDidChange(HdSceneDelegate* sceneDelegate, SdfPath
     }
 }
 
-size_t RprApiSafeWrapper::m_ptrCounter = 0;
-std::mutex RprApiSafeWrapper::m_threadControlMutex;
-
 RprApiSafeWrapper::RprApiSafeWrapper(HdRprRenderParam* renderParam, HdRprApi* rprApi)
     : m_renderParam(renderParam)
-    , m_rprApi(rprApi)
-{
-    std::lock_guard<std::mutex> lock(m_threadControlMutex);
-    if (m_ptrCounter == 0)
-    {
+    , m_rprApi(rprApi) {
+    std::lock_guard<std::mutex> lock(m_renderParam->m_threadControlMutex);
+    if (m_renderParam->m_editCount == 0) {
         m_renderParam->GetRenderThread()->StopRender();
     }
-
-    ++m_ptrCounter;
+    ++m_renderParam->m_editCount;
 }
 
-RprApiSafeWrapper::RprApiSafeWrapper(RprApiSafeWrapper&& other)
-{
-    std::lock_guard<std::mutex> lock(m_threadControlMutex);
-    if (this == &other)
-        return;
-
-    m_renderParam = other.m_renderParam;
+RprApiSafeWrapper::RprApiSafeWrapper(RprApiSafeWrapper&& other) noexcept
+    : m_renderParam(other.m_renderParam)
+    , m_rprApi(other.m_rprApi) {
+    // Transfer the existing edit ownership; a moved-from guard owns no count.
     other.m_renderParam = nullptr;
-
-    m_rprApi = other.m_rprApi;
     other.m_rprApi = nullptr;
-
-    ++m_ptrCounter;
 }
 
-RprApiSafeWrapper::~RprApiSafeWrapper()
-{
-    std::lock_guard<std::mutex> lock(m_threadControlMutex);
-    if (--m_ptrCounter != 0)
+RprApiSafeWrapper::~RprApiSafeWrapper() {
+    if (!m_renderParam) {
         return;
-
-    if (m_renderParam)
+    }
+    std::lock_guard<std::mutex> lock(m_renderParam->m_threadControlMutex);
+    if (--m_renderParam->m_editCount == 0) {
         m_renderParam->RestartRender();
+    }
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

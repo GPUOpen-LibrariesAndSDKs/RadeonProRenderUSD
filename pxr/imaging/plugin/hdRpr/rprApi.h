@@ -174,6 +174,7 @@ public:
         std::string rendererBackend;
         std::string denoisingMode;
         std::string upscalingMode;
+        std::string renderStatus;
         double percentDone;
         double averageRenderTimePerSample;
         double averageResolveTimePerSample;

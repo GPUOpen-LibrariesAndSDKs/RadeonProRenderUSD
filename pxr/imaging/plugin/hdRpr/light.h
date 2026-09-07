@@ -77,8 +77,8 @@ private:
     struct LightReleaser;
 
     GfVec3f m_emisionColor = GfVec3f(0.0f);
-    GfMatrix4f m_transform;
-    GfMatrix4f m_localTransform;
+    GfMatrix4f m_transform = GfMatrix4f(1.0f);
+    GfMatrix4f m_localTransform = GfMatrix4f(1.0f);
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

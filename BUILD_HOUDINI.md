@@ -145,3 +145,50 @@ NVIDIA HybridPro also completed a fixed-camera128-sample SVGF capture at native
 resolution. It reduced noise in some regions while leaving substantial noise in
 reflections/transmission. ASVGF/FSR2 image quality and temporal behavior remain
 unvalidated in the GUI; those controls are exposed but not production-approved.
+
+Renderer lifecycle changes make Houdini the single restart owner. The optional
+`rpr:core:hybridGpuIndex` render setting selects one machine-local Hybrid GPU
+index; `-1` retains the saved Devices configuration. An explicit index creates
+only the selected context and reads its actual GPU name, without creating
+throwaway contexts on the other GPUs. Houdini's `restartrendersettings` includes
+this setting, render quality, and the legacy OpenCL backend choice. A controller
+should author those settings together and must not also queue timed explicit
+restarts. These additions do not require Houdini 22 or ROCm 7.
+
+The delegate joins its worker before destroying configuration, wakes a paused
+worker during shutdown, honors blocking/nonblocking stop, and synchronizes AOVs
+before restarting. Edit guards now belong to individual delegates. Reallocating
+an existing output buffer refreshes its SDK binding and write pointer. Interrupted
+or failed renders no longer claim convergence; failed contexts stop submitting
+frames and expose an error status. `renderContextId` identifies delegate
+recreation for integration checks. CPU-only regression tests are documented in
+`pxr/imaging/plugin/hdRpr/testenv/README.md`.
+
+Live validation remains incomplete. A later NVIDIA HybridPro test on the RTX
+2070 Super/595.84 driver stopped after two successful samples with a Vulkan
+device loss; the kernel recorded Xid 109 (`CTX SWITCH TIMEOUT`). Attempting to
+switch from that lost context crashed inside the SDK's HybridPro context
+cleanup before AMD rendering began. Joining the worker correctly does not
+establish that this SDK can recover from device loss. Earlier successful
+captures must not be taken as proof of switching stability on either GPU.
+
+
+The latest fixed-view sequence is **not accepted image/stability validation**.
+AMD HybridPro completed 32 samples, switched to Northstar and back, and later
+reported 128 samples; its floor pixels after increasing the sample cap were
+exactly one quarter of the previous 32-sample values. Another return from Karma
+produced large opaque white HDR bands with unchanged scene/view transform.
+Completion counters alone must not pass this test. At 21:37:52 on September 6,
+2026, AMD gfx ring timeouts/reset began in the same Houdini process. Switching
+subsequently crashed at 21:38:37 in the same HybridPro context deletion stack.
+Thus the failure is not confined to the NVIDIA device or merely color management.
+The initiating cause remains unisolated; neither SDK nor driver blame is proven.
+
+Source inspection also corrected motion-mesh property storage that allocated one
+entry but wrote three, initialized light transforms/displacement state and timing
+counters, and supplied defined clipping defaults when a reconstructed camera has
+lens parameters without a clipping range. These corrections need live validation;
+they are not presented as a demonstrated fix for the HybridPro GPU resets.
+A small direct-SDK accumulation/teardown reproduction has been compiled locally,
+but has not yet run. No application restart, screenshot, or GPU test is needed
+for the standalone CPU synchronization tests above.

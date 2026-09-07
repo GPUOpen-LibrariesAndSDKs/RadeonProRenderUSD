@@ -84,6 +84,17 @@ render_setting_categories = [
                 }
             },
             {
+                'name': 'core:hybridGpuIndex',
+                'ui_name': 'Hybrid GPU Index',
+                'help': 'Select one machine-local Hybrid GPU index. -1 uses the saved Devices configuration. Changing this requires a render restart.',
+                'defaultValue': -1,
+                'minValue': -1,
+                'maxValue': 15,
+                'houdini': {
+                    'hidewhen': lambda settings: hidewhen_render_quality('==', 'Northstar', settings)
+                }
+            },
+            {
                 'name': 'core:legacyToon',
                 'ui_name': 'Use Legacy RPR Toon',
                 'defaultValue': False,

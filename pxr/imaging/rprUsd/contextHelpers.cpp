@@ -477,7 +477,20 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
         return nullptr;
     }
 
-    RprUsdDevicesInfo devicesConfiguration = LoadDevicesConfiguration(metadata->pluginType, deviceConfigurationFilepath);
+    RprUsdDevicesInfo devicesConfiguration;
+    const bool explicitHybridGpu = RprUsdIsHybrid(metadata->pluginType) && metadata->hybridGpuIndex >= 0;
+    if (explicitHybridGpu) {
+        // A per-delegate selection is atomic with backend creation. Do not create
+        // temporary discovery contexts on every other GPU during a live switch.
+        const auto supported = GetHybridGpuIndices(metadata->pluginType);
+        if (RprUsdIsCpuOnly() || std::find(supported.begin(), supported.end(), metadata->hybridGpuIndex) == supported.end()) {
+            TF_RUNTIME_ERROR("Hybrid GPU index %d is unavailable", metadata->hybridGpuIndex);
+            return nullptr;
+        }
+        devicesConfiguration.gpus.push_back({metadata->hybridGpuIndex, {}});
+    } else {
+        devicesConfiguration = LoadDevicesConfiguration(metadata->pluginType, deviceConfigurationFilepath);
+    }
 
     std::vector<rpr_context_properties> contextProperties;
     auto appendContextProperty = [&contextProperties](uint64_t propertyKey, void* propertyValue) {
@@ -566,6 +579,10 @@ rpr::Context* RprUsdCreateContext(RprUsdContextMetadata* metadata) {
 
         RPR_ERROR_CHECK(context->SetParameter(RPR_CONTEXT_TEXTURE_CACHE_PATH, textureCachePath.c_str()), "Failed to set texture cache path");
 
+        if (explicitHybridGpu) {
+            // Name queries use the active ordinal, even for physical GPU1+.
+            devicesConfiguration.gpus.front().name = RprUsdGetStringInfo(context, RPR_CONTEXT_GPU0_NAME);
+        }
         metadata->creationFlags = creationFlags;
         metadata->devicesActuallyUsed = devicesConfiguration;
     } else {

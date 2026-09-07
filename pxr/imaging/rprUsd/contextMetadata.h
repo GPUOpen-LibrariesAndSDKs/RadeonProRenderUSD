@@ -60,6 +60,8 @@ struct RprUsdContextMetadata {
     RprUsdPluginType pluginType = kPluginInvalid;
     bool isGlInteropEnabled = false;
     bool useOpenCL = false;
+    // -1 preserves the saved device configuration; nonnegative selects one Hybrid GPU.
+    int hybridGpuIndex = -1;
     void* interopInfo = nullptr;
     rpr::CreationFlags creationFlags = 0;
     // additional info about hardware actually used in render context creation

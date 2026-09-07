@@ -16,6 +16,8 @@ limitations under the License.
 
 #include "pxr/imaging/hd/renderBuffer.h"
 
+#include <cstdint>
+
 #include <condition_variable>
 
 PXR_NAMESPACE_OPEN_SCOPE
@@ -58,6 +60,7 @@ public:
     bool IsConverged() const override;
 
     void SetConverged(bool converged);
+    std::uint64_t GetAllocationVersion() const { return m_allocationVersion.load(); }
 
     void* GetPointerForWriting() { return m_mappedBuffer.data(); }
 
@@ -76,6 +79,7 @@ private:
     bool m_multiSampled = false;
 
     std::atomic<bool> m_isConverged;
+    std::atomic<std::uint64_t> m_allocationVersion {0};
 
     HdRprApi* m_rprApi = nullptr;
     

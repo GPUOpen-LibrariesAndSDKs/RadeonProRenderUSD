@@ -58,10 +58,10 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
     // It could be solved in another way by using shared_mutex and
     // marking current write-lock as read-only after successful config->Sync
     // in such a way main and render threads would have read-only-locks that could coexist
+    auto renderDelegate = static_cast<HdRprDelegate*>(GetRenderIndex()->GetRenderDelegate());
     bool stopRender = false;
     {
         HdRprConfig* config;
-        auto renderDelegate = reinterpret_cast<HdRprDelegate*>(GetRenderIndex()->GetRenderDelegate());
         auto configInstanceLock = renderDelegate->LockConfigInstance(&config);
         config->Sync(renderDelegate);
         if (config->IsDirty(HdRprConfig::DirtyAll)) {
@@ -80,16 +80,25 @@ void HdRprRenderPass::_Execute(HdRenderPassStateSharedPtr const& renderPassState
         m_renderParam->AcquireRprApiForEdit()->SetViewportSize(newViewportSize);
     }
 
-    if (rprApiConst->GetAovBindings() != renderPassState->GetAovBindings()) {
+    // Hydra may reallocate a buffer without replacing the binding or changing
+    // the viewport. Rebind to refresh both its CPU pointer and RPR AOV format.
+    std::vector<std::uint64_t> aovBufferVersions;
+    for (auto const& binding : renderPassState->GetAovBindings()) {
+        auto buffer = static_cast<HdRprRenderBuffer*>(binding.renderBuffer);
+        aovBufferVersions.push_back(buffer ? buffer->GetAllocationVersion() : 0);
+    }
+    if (rprApiConst->GetAovBindings() != renderPassState->GetAovBindings() ||
+        m_aovBufferVersions != aovBufferVersions) {
         m_renderParam->AcquireRprApiForEdit()->SetAovBindings(renderPassState->GetAovBindings());
+        m_aovBufferVersions = std::move(aovBufferVersions);
     }
 
     if (rprApiConst->GetCamera() != renderPassState->GetCamera()) {
         m_renderParam->AcquireRprApiForEdit()->SetCamera(renderPassState->GetCamera());
     }
 
-    if (m_renderParam->IsRenderShouldBeRestarted() ||
-        rprApiConst->IsChanged()) {
+    if (!renderDelegate->IsStopped() &&
+        (m_renderParam->IsRenderShouldBeRestarted() || rprApiConst->IsChanged())) {
         for (auto& aovBinding : renderPassState->GetAovBindings()) {
             if (aovBinding.renderBuffer) {
                 auto rprRenderBuffer = static_cast<HdRprRenderBuffer*>(aovBinding.renderBuffer);

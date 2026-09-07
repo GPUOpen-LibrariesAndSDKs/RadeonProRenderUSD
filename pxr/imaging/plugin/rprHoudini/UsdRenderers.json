@@ -4,11 +4,14 @@
         "menulabel": "RPR",
         "menupriority": 0,
         "restartrendersettings": [
-            "rpr:core:renderQuality"
+            "rpr:core:renderQuality",
+            "rpr:core:useOpenCL",
+            "rpr:core:hybridGpuIndex"
         ],
         "pauseonupdate": false,
         "allowbackgroundupdate": true,
         "viewstats": [
+            "Render state",
             "Render backend",
             "Render GPU",
             "CPU render threads",
@@ -27,7 +30,8 @@
             "Output resolution": "outputResolution",
             "RPR preview scale": "previewScale",
             "Render backend": "rendererBackend",
-            "Denoising": "denoisingMode"
+            "Denoising": "denoisingMode",
+            "Render state": "renderStatus"
         }
     }
 }
