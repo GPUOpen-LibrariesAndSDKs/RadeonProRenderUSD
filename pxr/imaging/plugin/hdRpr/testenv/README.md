@@ -35,3 +35,7 @@ methods.
 These tests exercise thread ownership and synchronization. Actual delegate
 recreation, SDK device-loss cleanup, AOV allocation/rebinding, and rendering
 need separate host integration checks.
+
+Standalone GPU accumulation, image-reset and context-lifecycle diagnostics are
+documented separately in [SDK_TESTS.md](SDK_TESTS.md). They link only the RPR
+SDK and are not run by the CPU test script.

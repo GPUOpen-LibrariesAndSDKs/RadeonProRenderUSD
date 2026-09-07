@@ -189,6 +189,25 @@ entry but wrote three, initialized light transforms/displacement state and timin
 counters, and supplied defined clipping defaults when a reconstructed camera has
 lens parameters without a clipping range. These corrections need live validation;
 they are not presented as a demonstrated fix for the HybridPro GPU resets.
-A small direct-SDK accumulation/teardown reproduction has been compiled locally,
-but has not yet run. No application restart, screenshot, or GPU test is needed
-for the standalone CPU synchronization tests above.
+The darkening now reproduces outside Houdini in the standalone HybridPro SDK
+fixture, including after reboot. On the R9700/RADV 25.2.8 configuration, one
+iteration per SDK render call gives mean RGB 0.00254655682 at 32 samples,
+0.000636639204 at 128 samples (exactly one quarter), then zero after clear and
+rerender. Native batching, reauthoring iterations and SVGF do not fix it.
+The same fixture renders correctly on the RTX 2070 Super/595.84 driver.
+
+`RADV_DEBUG=syncshaders` corrects accumulation and reset in these SDK fixtures.
+This Mesa diagnostic flag is not enabled by the plugin and does not establish
+whether the missing synchronization is an SDK or driver defect. With this flag,
+six fresh HybridPro contexts alternated AMD/NVIDIA in one process, rendered
+metal/glass spheres, procedural texture and emissive lighting at 512x512/128
+samples, accepted light/camera edits, and completed all teardowns. Their mean
+absolute RGB difference was 4.77e-6. These results do not validate Houdini
+renderer switches, recovery from device loss, or production-scene stability.
+An earlier synchronized geometry-edit test still lost the AMD device; later
+immediate and deferred deletion controls both passed. No speculative deferred
+release queue was added to the delegate.
+
+The standalone SDK fixture, image/teardown checker and reproduction instructions
+are in `pxr/imaging/plugin/hdRpr/testenv/SDK_TESTS.md`. They require no Houdini
+engine or window. CPU synchronization tests remain separate and use no GPU.
